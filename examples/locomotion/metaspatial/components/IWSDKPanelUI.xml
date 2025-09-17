@@ -1,0 +1,7 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="PanelUI" description="Component for 3D panel UI elements with file-based configuration">
+    <StringAttribute name="config" defaultValue=""/>
+    <FloatAttribute name="maxWidth" defaultValue="1f"/>
+    <FloatAttribute name="maxHeight" defaultValue="1f"/>
+  </Component>
+</ComponentSchema>

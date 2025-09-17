@@ -1,0 +1,74 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+    - components:
+        com.meta.components.AssetFolder:
+          assets:
+            - ref:step pyramids_BaseColor
+            - ref:step_pyramid
+            - ref:Cube.012
+        com.meta.components.Name:
+          name: chichen_itza
+  com.meta.models.AssetRoot:
+    - components:
+        com.meta.components.AssetMetadata:
+          {}
+        com.meta.components.AssetRoot:
+          defaultScene: ref:Scene
+          scenes:
+            - ref:Scene
+  com.meta.models.Geometry:
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry.bin
+          mode: Triangles
+      tag: Geometry
+  com.meta.models.Image:
+    - components:
+        com.meta.components.Asset:
+          path: assets/step pyramids_BaseColor.jpg
+        com.meta.components.Image:
+          height: 2048
+          mimeType: image/jpeg
+          width: 2048
+        com.meta.components.Name:
+          name: step pyramids_BaseColor
+      tag: step pyramids_BaseColor
+  com.meta.models.Material:
+    - uri: docref:materials/step_pyramid.metaspatialmaterial
+      tag: step_pyramid
+  com.meta.models.Mesh:
+    - components:
+        com.meta.components.Mesh:
+          morphTargetNames:
+            []
+          morphTargetWeights:
+            []
+          primitives:
+            - ref:Primitive
+        com.meta.components.Name:
+          name: Cube.012
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+      tag: Cube.012
+  com.meta.models.Primitive:
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry
+          material: ref:step_pyramid
+      tag: Primitive
+  com.meta.models.Sampler:
+    - components:
+        com.meta.components.Name:
+          name: sampler0
+        com.meta.components.Sampler:
+          magFilter: Linear
+          minFilter: LinearMipmapLinear
+          wrapS: Repeat
+          wrapT: Repeat
+      tag: sampler0
+  com.meta.models.Texture:
+    - uri: docref:textures/texture1.metaspatialtexture
+      tag: texture1
+metadata:
+  version: 1.34

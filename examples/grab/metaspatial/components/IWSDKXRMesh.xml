@@ -1,0 +1,9 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="XRMesh" description="Component for managing 3D meshes in the scene">
+    <BooleanAttribute name="isBounded3D" defaultValue="false"/>
+    <StringAttribute name="semanticLabel" defaultValue=""/>
+    <Vector3Attribute name="min" defaultValue="0f, 0f, 0f"/>
+    <Vector3Attribute name="max" defaultValue="0f, 0f, 0f"/>
+    <Vector3Attribute name="dimensions" defaultValue="0f, 0f, 0f"/>
+  </Component>
+</ComponentSchema>

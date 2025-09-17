@@ -1,0 +1,9 @@
+entities:
+  components:
+    com.meta.components.Name:
+      name: texture9
+    com.meta.components.Texture:
+      image: ref:leather_bump_v5
+      sampler: ref:sampler0
+metadata:
+  version: 1.33

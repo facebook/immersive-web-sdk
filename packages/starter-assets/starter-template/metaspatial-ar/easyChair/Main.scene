@@ -1,0 +1,38 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:EasyChair1
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: EasyChair
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 1
+            - 0
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0520486534
+            - -0.383959413
+            - 0
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:EasyChair_geo
+      tag: EasyChair1
+metadata:
+  version: 1.33

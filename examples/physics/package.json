@@ -1,0 +1,27 @@
+{
+  "name": "@iwsdk/physics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "fresh:install": "npx rimraf package-lock.json node_modules && npm install",
+    "fresh:ci": "npx rimraf node_modules && npm ci",
+    "fresh:dev": "npm run fresh:install && npm run dev",
+    "fresh:build": "npm run fresh:install && npm run build"
+  },
+  "dependencies": {
+    "@iwsdk/core": "file:../../packages/core/iwsdk-core.tgz",
+    "three": "npm:super-three@0.177.0"
+  },
+  "devDependencies": {
+    "@iwsdk/vite-plugin-gltf-optimizer": "file:../../packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz",
+    "@iwsdk/vite-plugin-iwer": "file:../../packages/vite-plugin-iwer/iwsdk-vite-plugin-iwer.tgz",
+    "@iwsdk/vite-plugin-metaspatial": "file:../../packages/vite-plugin-metaspatial/iwsdk-vite-plugin-metaspatial.tgz",
+    "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",
+    "vite": "^7.1.4",
+    "vite-plugin-mkcert": "^1.17.0"
+  }
+}

@@ -1,0 +1,38 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:SculptureLoop
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: SculptureLoop
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 1.57079637
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0
+            - -0.33843565
+            - 0
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:SculptureLoop_geo
+      tag: SculptureLoop
+metadata:
+  version: 1.33

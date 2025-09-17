@@ -1,0 +1,31 @@
+<style>
+  .panel-container {
+    align-items: flex-start;
+    padding: 2;
+    width: 50;
+    display: flex;
+    flex-direction: column;
+    background-color: #09090b;
+    border-color: #27272a;
+    border-width: 0.15;
+    border-radius: 3;
+  }
+
+  .heading {
+    font-size: 4;
+    font-weight: medium;
+    color: #fafafa;
+    text-align: left;
+  }
+
+  .sub-heading {
+    font-size: 2;
+    color: #a1a1aa;
+    text-align: left;
+    margin-top: 0.3;
+  }
+</style>
+<div class="panel-container">
+  <span class="heading"> Two Hand Grabbable </span>
+  <span class="sub-heading"> Grab the plant model with both your controllers and/or hands to grab and resize the model. Both ray and proximity will trigger the grabbing. </span>
+</div>

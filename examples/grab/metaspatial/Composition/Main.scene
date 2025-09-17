@@ -1,0 +1,293 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:pyramid
+            - ref:earth
+            - ref:Environment
+            - ref:pin1
+            - ref:pin2
+            - ref:pin3
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.iwsdk.components.LocomotionEnvironment:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:environmentDesk/Main.metaspatialobj
+        com.meta.components.Name:
+          name: Environment
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 3.14159274
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0
+            - -0.106921583
+            - 0
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: Environment
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          scale: false
+          movementMode: 3
+          translate: false
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:earth/Main.metaspatialobj
+        com.meta.components.Name:
+          name: earth
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1.5
+            - 1.5
+            - 1.5
+          translation:
+            - 0
+            - 1.4323957
+            - -2.27266979
+          componentVersion: 1
+          children:
+            - ref:opera_house
+            - ref:eiffel_tower
+            - ref:chichen_itza
+        com.meta.components.Visibility:
+          visible: true
+      tag: earth
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          {}
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:chichen_itza/Main.metaspatialobj
+        com.meta.components.Name:
+          name: chichen_itza
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.884614289
+            - -0.45890379
+            - -0.0209403001
+            - -0.0801651701
+          rotation.format: Quaternion
+          scale:
+            - 2
+            - 2
+            - 2
+          translation:
+            - 0.0666431487
+            - 0.212902188
+            - -0.298222184
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: chichen_itza
+    - components:
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:pin/Main.metaspatialobj
+        com.meta.components.Name:
+          name: pin1
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 3
+            - 3
+            - 3
+          translation:
+            - 0.584563196
+            - 0.965101957
+            - -1.64268732
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: pin1
+    - components:
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:pin/Main.metaspatialobj
+        com.meta.components.Name:
+          name: pin2
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 3
+            - 3
+            - 3
+          translation:
+            - 0.738285065
+            - 0.965101957
+            - -1.64268732
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: pin2
+    - components:
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:pin/Main.metaspatialobj
+        com.meta.components.Name:
+          name: pin3
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 3
+            - 3
+            - 3
+          translation:
+            - 0.903423667
+            - 0.965101957
+            - -1.64268732
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: pin3
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          {}
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:eiffel_tower/Main.metaspatialobj
+        com.meta.components.Name:
+          name: eiffel_tower
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.904333591
+            - 0.203509256
+            - 0.185634464
+            - 0.326043874
+          rotation.format: Quaternion
+          scale:
+            - 2
+            - 2.00000024
+            - 2
+          translation:
+            - -0.115483746
+            - 0.326958895
+            - 0.13850832
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: eiffel_tower
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          {}
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:opera_house/Main.metaspatialobj
+        com.meta.components.Name:
+          name: opera_house
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.530634403
+            - 0.306094944
+            - -0.201364756
+            - -0.764320076
+          rotation.format: Quaternion
+          scale:
+            - 1.99999988
+            - 1.99999976
+            - 2
+          translation:
+            - 0.238888308
+            - -0.141699791
+            - 0.252290606
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: opera_house
+    - components:
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.TwoHandsGrabbable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:pyramid/Main.metaspatialobj
+        com.meta.components.Name:
+          name: pyramid
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 5
+            - 5
+            - 5
+          translation:
+            - -1.05623722
+            - 0.744294405
+            - -1.95807576
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: pyramid
+metadata:
+  version: 1.34

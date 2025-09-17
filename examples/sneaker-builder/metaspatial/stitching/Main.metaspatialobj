@@ -1,0 +1,170 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+    - components:
+        com.meta.components.AssetFolder:
+          assets:
+            - ref:leather_bump_v5
+            - ref:backtab_stiching
+            - ref:eyestay_stiching
+            - ref:heel_counter_stiching
+            - ref:midsole_stiching
+            - ref:quarter_overlay_stiching
+            - ref:tip_stiching
+            - ref:tongue_stiching
+            - ref:Plane.020
+        com.meta.components.Name:
+          name: stiching
+  com.meta.models.AssetRoot:
+    - components:
+        com.meta.components.AssetMetadata:
+          {}
+        com.meta.components.AssetRoot:
+          defaultScene: ref:Scene
+          scenes:
+            - ref:Scene
+  com.meta.models.Geometry:
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry6.bin
+          mode: Triangles
+      tag: Geometry6
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry5.bin
+          mode: Triangles
+      tag: Geometry5
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry4.bin
+          mode: Triangles
+      tag: Geometry4
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry3.bin
+          mode: Triangles
+      tag: Geometry3
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry2.bin
+          mode: Triangles
+      tag: Geometry2
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry1.bin
+          mode: Triangles
+      tag: Geometry1
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry.bin
+          mode: Triangles
+      tag: Geometry
+  com.meta.models.Image:
+    - components:
+        com.meta.components.Asset:
+          path: assets/leather_bump_v5.png
+        com.meta.components.Image:
+          height: 567
+          mimeType: image/png
+          width: 567
+        com.meta.components.Name:
+          name: leather_bump_v5
+      tag: leather_bump_v5
+  com.meta.models.Material:
+    - uri: docref:materials/midsole_stiching.metaspatialmaterial
+      tag: midsole_stiching
+    - uri: docref:materials/tip_stiching.metaspatialmaterial
+      tag: tip_stiching
+    - uri: docref:materials/heel_counter_stiching.metaspatialmaterial
+      tag: heel_counter_stiching
+    - uri: docref:materials/quarter_overlay_stiching.metaspatialmaterial
+      tag: quarter_overlay_stiching
+    - uri: docref:materials/backtab_stiching.metaspatialmaterial
+      tag: backtab_stiching
+    - uri: docref:materials/eyestay_stiching.metaspatialmaterial
+      tag: eyestay_stiching
+    - uri: docref:materials/tongue_stiching.metaspatialmaterial
+      tag: tongue_stiching
+  com.meta.models.Mesh:
+    - components:
+        com.meta.components.Mesh:
+          morphTargetNames:
+            []
+          morphTargetWeights:
+            []
+          primitives:
+            - ref:Primitive2
+            - ref:Primitive6
+            - ref:Primitive1
+            - ref:Primitive
+            - ref:Primitive5
+            - ref:Primitive4
+            - ref:Primitive3
+        com.meta.components.Name:
+          name: Plane.020
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+      tag: Plane.020
+  com.meta.models.Primitive:
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry6
+          material: ref:tip_stiching
+      tag: Primitive6
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry4
+          material: ref:eyestay_stiching
+      tag: Primitive5
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry1
+          material: ref:tongue_stiching
+      tag: Primitive4
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry3
+          material: ref:backtab_stiching
+      tag: Primitive3
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry2
+          material: ref:midsole_stiching
+      tag: Primitive2
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry5
+          material: ref:heel_counter_stiching
+      tag: Primitive1
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry
+          material: ref:quarter_overlay_stiching
+      tag: Primitive
+  com.meta.models.Sampler:
+    - components:
+        com.meta.components.Name:
+          name: sampler0
+        com.meta.components.Sampler:
+          magFilter: Linear
+          minFilter: LinearMipmapLinear
+          wrapS: Repeat
+          wrapT: Repeat
+      tag: sampler0
+  com.meta.models.Texture:
+    - uri: docref:textures/texture2.metaspatialtexture
+      tag: texture2
+    - uri: docref:textures/texture3.metaspatialtexture
+      tag: texture3
+    - uri: docref:textures/texture4.metaspatialtexture
+      tag: texture4
+    - uri: docref:textures/texture6.metaspatialtexture
+      tag: texture6
+    - uri: docref:textures/texture1.metaspatialtexture
+      tag: texture1
+    - uri: docref:textures/texture7.metaspatialtexture
+      tag: texture7
+    - uri: docref:textures/texture5.metaspatialtexture
+      tag: texture5
+metadata:
+  version: 1.33

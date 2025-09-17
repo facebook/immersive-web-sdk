@@ -1,0 +1,502 @@
+{
+  "project_id": "ids_are_currently_unsupported",
+  "project_dir": "xplat/aether/libs/features/vr",
+  "version": "versions_are_currently_unsupported",
+  "components": [
+    {
+      "attributes": [
+        {
+          "keyString": "audioInternal",
+          "name": "audioInternal",
+          "type": {
+            "attributeType": "String"
+          }
+        },
+        {
+          "keyString": "volume",
+          "name": "volume",
+          "type": {
+            "attributeType": "Float"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Audio"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "width",
+          "name": "width",
+          "type": {
+            "attributeType": "Float"
+          }
+        },
+        {
+          "keyString": "depth",
+          "name": "depth",
+          "type": {
+            "attributeType": "Float"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Plane"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "panel",
+          "name": "panelRegistrationId",
+          "type": {
+            "attributeType": "Int"
+          }
+        },
+        {
+          "keyString": "hittable",
+          "name": "hittable",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.MeshCollision"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Panel"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "isVisible",
+          "name": "isVisible",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Visible"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "min",
+          "name": "min",
+          "type": {
+            "attributeType": "Vector2"
+          }
+        },
+        {
+          "keyString": "max",
+          "name": "max",
+          "type": {
+            "attributeType": "Vector2"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Quad"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "head",
+          "name": "head",
+          "type": {
+            "attributeType": "Entity"
+          }
+        },
+        {
+          "keyString": "leftHand",
+          "name": "leftHand",
+          "type": {
+            "attributeType": "Entity"
+          }
+        },
+        {
+          "keyString": "rightHand",
+          "name": "rightHand",
+          "type": {
+            "attributeType": "Entity"
+          }
+        },
+        {
+          "keyString": "root",
+          "name": "root",
+          "type": {
+            "attributeType": "Entity"
+          }
+        },
+        {
+          "keyString": "isPlayerControlled",
+          "name": "isPlayerControlled",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.AvatarBody"
+    },
+    {
+      "attributes": [],
+      "description": "\n Maps joints found in BodyJoint to a Pose in world space. If a bone is not present in the map, it\n means that the tracking is not currently valid for that pose.\n\n Will be present locally if the XR_FB_body_tracking is able to be loaded.\n",
+      "name": "com.meta.spatial.toolkit.TrackedBody"
+    },
+    {
+      "attributes": [],
+      "name": "com.meta.spatial.toolkit.SupportsLocomotion"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "type",
+          "name": "type",
+          "type": {
+            "attributeType": "String"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.AvatarAttachment"
+    },
+    {
+      "attributes": [
+        {
+          "description": "The radius of the sphere in meters ",
+          "keyString": "radius",
+          "name": "radius",
+          "type": {
+            "attributeType": "Float"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.ScenePlane"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "radius",
+          "name": "radius",
+          "type": {
+            "attributeType": "Float"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Dome"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "justifyContent",
+          "name": "justifyContent",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.AnchorJustifyContent"
+          }
+        },
+        {
+          "keyString": "alignItems",
+          "name": "alignItems",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.AnchorAlignItems"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Box"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "radius",
+          "name": "radius",
+          "type": {
+            "attributeType": "String"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Sphere"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "name",
+          "name": "name",
+          "type": {
+            "attributeType": "String"
+          }
+        },
+        {
+          "keyString": "type",
+          "name": "type",
+          "type": {
+            "attributeType": "String"
+          }
+        },
+        {
+          "keyString": "offset",
+          "name": "offset",
+          "type": {
+            "attributeType": "Vector3"
+          }
+        },
+        {
+          "keyString": "extents",
+          "name": "extents",
+          "type": {
+            "attributeType": "Vector3"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.SceneVolume"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "dimensions",
+          "name": "dimensions",
+          "type": {
+            "attributeType": "Vector2"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.PanelDimensions"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "min",
+          "name": "min",
+          "type": {
+            "attributeType": "Vector3"
+          }
+        },
+        {
+          "keyString": "max",
+          "name": "max",
+          "type": {
+            "attributeType": "Vector3"
+          }
+        },
+        {
+          "keyString": "radius",
+          "name": "radius",
+          "type": {
+            "attributeType": "Vector3"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.RoundedBox"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "buttonState",
+          "name": "buttonState",
+          "type": {
+            "attributeType": "Int"
+          }
+        },
+        {
+          "description": "\n Which buttons (represented by integer bits) have been changed (pressed or unpressed since the\n last frame)\n",
+          "keyString": "changedButtons",
+          "name": "changedButtons",
+          "type": {
+            "attributeType": "Int"
+          }
+        },
+        {
+          "keyString": "isActive",
+          "name": "isActive",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        },
+        {
+          "description": "What type of controller it is: 0->controller 1->hand 2->eye ",
+          "keyString": "type",
+          "name": "type",
+          "type": {
+            "attributeType": "Int"
+          }
+        },
+        {
+          "keyString": "directTouchEnabled",
+          "name": "directTouchEnabled",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        },
+        {
+          "description": "The state of the direct touch buttons ",
+          "keyString": "directTouchButtonState",
+          "name": "directTouchButtonState",
+          "type": {
+            "attributeType": "Int"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Controller"
+    },
+    {
+      "attributes": [],
+      "description": "\n Maps joints found in BodyJoint to a Pose in world space. If a bone is not present in the map, it\n means that the tracking is not currently valid for that pose.\n\n Will be present locally if the XR_FB_body_tracking is able to be loaded.\n",
+      "name": "com.meta.spatial.toolkit.TrackedBody"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "state",
+          "name": "state",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.CreatorVisibilityState"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.CreatorVisibility"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "startTime",
+          "name": "startTime",
+          "type": {
+            "attributeType": "Long"
+          }
+        },
+        {
+          "keyString": "pausedTime",
+          "name": "pausedTime",
+          "type": {
+            "attributeType": "Float"
+          }
+        },
+        {
+          "keyString": "playbackState",
+          "name": "playbackState",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.PlaybackState"
+          }
+        },
+        {
+          "keyString": "playbackType",
+          "name": "playbackType",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.PlaybackType"
+          }
+        },
+        {
+          "keyString": "track",
+          "name": "track",
+          "type": {
+            "attributeType": "Int"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Animated"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "clickStateInternal",
+          "name": "clickStateInternal",
+          "type": {
+            "attributeType": "Int"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.PanelClickState"
+    },
+    {
+      "attributes": [],
+      "description": "When added to an entity with a mesh, allows for default locomotion on the mesh ",
+      "name": "com.meta.spatial.toolkit.SupportsLocomotion"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "panel",
+          "name": "panelRegistrationId",
+          "type": {
+            "attributeType": "Int"
+          }
+        },
+        {
+          "keyString": "hittable",
+          "name": "hittable",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.MeshCollision"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Panel"
+    },
+    {
+      "attributes": [
+        {
+          "keyString": "hittable",
+          "name": "hittable",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.MeshCollision"
+          }
+        }
+      ],
+      "name": "com.meta.spatial.toolkit.Hittable"
+    },
+    {
+      "attributes": [
+        {
+          "description": "Defines whether the object can be grabbed or not. ",
+          "keyString": "enabled",
+          "name": "enabled",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        },
+        {
+          "keyString": "isGrabbed",
+          "name": "isGrabbed",
+          "type": {
+            "attributeType": "Boolean"
+          }
+        },
+        {
+          "keyString": "type",
+          "name": "type",
+          "type": {
+            "attributeType": "com.meta.spatial.toolkit.GrabbableType"
+          }
+        },
+        {
+          "keyString": "minHeight",
+          "name": "minHeight",
+          "type": {
+            "attributeType": "Float"
+          }
+        },
+        {
+          "keyString": "maxHeight",
+          "name": "maxHeight",
+          "type": {
+            "attributeType": "String"
+          }
+        }
+      ],
+      "description": "\n Grabbable is a component that allows an object to be grabbed by a controller. It requires the\n Mesh Component to be present.\n",
+      "name": "com.meta.spatial.toolkit.Grabbable"
+    }
+  ],
+  "enums": [
+    {
+      "name": "com.meta.spatial.toolkit.CreatorVisibilityState",
+      "values": ["CREATOR_ONLY_VISIBLE", "CREATOR_ONLY_INVISIBLE"]
+    },
+    {
+      "name": "com.meta.spatial.toolkit.GrabbableType",
+      "values": ["FACE", "PIVOT_Y", "RIGID"]
+    },
+    {
+      "name": "com.meta.spatial.toolkit.PlaybackState",
+      "values": ["PLAYING", "PAUSED"]
+    },
+    {
+      "name": "com.meta.spatial.toolkit.PlaybackType",
+      "values": ["LOOP", "CLAMP", "BOUNCE"]
+    },
+    {
+      "name": "com.meta.spatial.toolkit.MeshCollision",
+      "values": ["NoCollision", "LineTest"]
+    }
+  ]
+}

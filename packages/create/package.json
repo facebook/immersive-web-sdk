@@ -1,0 +1,51 @@
+{
+  "name": "@iwsdk/create",
+  "version": "0.1.0",
+  "description": "Interactive CLI to scaffold Immersive Web SDK starter apps",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "create-iwsdk": "dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "node scripts/gen-version.cjs",
+    "build": "rollup -c",
+    "dev": "pnpm -s build && node dist/cli.js",
+    "watch": "rollup -c --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "create",
+    "cli",
+    "iwsdk",
+    "starter",
+    "scaffold"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@pmndrs/chef": "^0.0.2",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.0",
+    "semver": "^7.6.3",
+    "ora": "^8.2.0",
+    "prompts": "^2.4.2",
+    "prettier": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/prompts": "^2.4.9",
+    "@types/semver": "^7.5.8"
+  }
+}

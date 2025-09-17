@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="Visibility" description="Component to control if an entity object is visible">
+    <BooleanAttribute name="isVisible" defaultValue="true"/>
+  </Component>
+</ComponentSchema>

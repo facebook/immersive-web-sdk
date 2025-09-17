@@ -1,0 +1,6 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="Elevator" description="EliCS component: Elevator">
+    <FloatAttribute name="deltaY" defaultValue="4f"/>
+    <FloatAttribute name="speed" defaultValue="0.5f"/>
+  </Component>
+</ComponentSchema>

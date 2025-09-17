@@ -1,0 +1,8 @@
+entities:
+  components:
+    com.meta.components.Name:
+      name: texture2
+    com.meta.components.Texture:
+      image: ref:DeskLamp_Color
+metadata:
+  version: 1.33

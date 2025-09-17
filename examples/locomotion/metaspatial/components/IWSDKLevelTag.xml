@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="LevelTag" description="Marker component for level membership">
+    <StringAttribute name="id" defaultValue=""/>
+  </Component>
+</ComponentSchema>

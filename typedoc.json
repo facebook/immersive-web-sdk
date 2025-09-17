@@ -1,0 +1,45 @@
+{
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "packages/core/src/index.ts",
+    "packages/xr-input/src/index.ts",
+    "packages/locomotor/src/index.ts",
+    "packages/glxf/src/index.ts",
+    "packages/vite-plugin-iwer/src/index.ts",
+    "packages/vite-plugin-metaspatial/src/index.ts",
+    "packages/vite-plugin-uikitml/src/index.ts",
+    "packages/vite-plugin-gltf-optimizer/src/index.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/lib/**",
+    "**/*.test.ts",
+    "**/rollup.config.js"
+  ],
+  "plugin": ["typedoc-plugin-markdown", "typedoc-vitepress-theme"],
+  "router": "member",
+  "entryFileName": "index",
+  "out": "docs/api",
+  "readme": "none",
+  "hideBreadcrumbs": true,
+  "includeVersion": true,
+  "skipErrorChecking": true,
+  "docsRoot": "docs",
+  "categoryOrder": [
+    "Runtime",
+    "Input",
+    "Locomotion",
+    "Grabbing",
+    "UI",
+    "Scene",
+    "Assets",
+    "Physics",
+    "SceneUnderstanding",
+    "Plugins",
+    "Other"
+  ],
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true
+}

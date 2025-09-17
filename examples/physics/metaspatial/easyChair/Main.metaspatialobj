@@ -1,0 +1,90 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+    - components:
+        com.meta.components.AssetFolder:
+          assets:
+            - ref:EasyChair_Color
+            - ref:EasyChair_Normal
+            - ref:EasyChair_ORM
+            - ref:EasyChair_mat
+            - ref:EasyChair_geo
+        com.meta.components.Name:
+          name: EasyChair
+  com.meta.models.AssetRoot:
+    - components:
+        com.meta.components.AssetMetadata:
+          {}
+        com.meta.components.AssetRoot:
+          defaultScene: ref:Scene
+          scenes:
+            - ref:Scene
+  com.meta.models.Geometry:
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry.bin
+          mode: Triangles
+      tag: Geometry
+  com.meta.models.Image:
+    - components:
+        com.meta.components.Asset:
+          path: assets/EasyChair_Normal.png
+        com.meta.components.Image:
+          height: 1024
+          mimeType: image/png
+          width: 1024
+        com.meta.components.Name:
+          name: EasyChair_Normal
+      tag: EasyChair_Normal
+    - components:
+        com.meta.components.Asset:
+          path: assets/EasyChair_Color.png
+        com.meta.components.Image:
+          height: 1024
+          mimeType: image/png
+          width: 1024
+        com.meta.components.Name:
+          name: EasyChair_Color
+      tag: EasyChair_Color
+    - components:
+        com.meta.components.Asset:
+          path: assets/EasyChair_ORM.png
+        com.meta.components.Image:
+          height: 1024
+          mimeType: image/png
+          width: 1024
+        com.meta.components.Name:
+          name: EasyChair_ORM
+      tag: EasyChair_ORM
+  com.meta.models.Material:
+    - uri: docref:materials/EasyChair_mat.metaspatialmaterial
+      tag: EasyChair_mat
+  com.meta.models.Mesh:
+    - components:
+        com.meta.components.Mesh:
+          morphTargetNames:
+            []
+          morphTargetWeights:
+            []
+          primitives:
+            - ref:Primitive
+        com.meta.components.Name:
+          name: EasyChair_geo
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+      tag: EasyChair_geo
+  com.meta.models.Primitive:
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry
+          material: ref:EasyChair_mat
+      tag: Primitive
+  com.meta.models.Texture:
+    - uri: docref:textures/texture2.metaspatialtexture
+      tag: texture2
+    - uri: docref:textures/texture3.metaspatialtexture
+      tag: texture3
+    - uri: docref:textures/texture1.metaspatialtexture
+      tag: texture1
+metadata:
+  version: 1.33

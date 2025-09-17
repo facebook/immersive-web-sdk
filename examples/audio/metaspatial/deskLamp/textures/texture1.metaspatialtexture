@@ -1,0 +1,8 @@
+entities:
+  components:
+    com.meta.components.Name:
+      name: texture1
+    com.meta.components.Texture:
+      image: ref:DeskLamp_Normal
+metadata:
+  version: 1.33

@@ -1,0 +1,47 @@
+{
+  "name": "@iwsdk/core",
+  "version": "0.1.0",
+  "description": "Javascript WebXR Runtime for Emulation",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts",
+    "build": "rollup -c",
+    "doc": "typedoc",
+    "format": "prettier --write ./src/**/*",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "contributor": "Jianmin Zheng <zjm@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "dependencies": {
+    "@babylonjs/havok": "^1.3.10",
+    "@iwsdk/glxf": "workspace:*",
+    "@iwsdk/locomotor": "workspace:*",
+    "@iwsdk/xr-input": "workspace:*",
+    "@pmndrs/handle": "^6.6.16",
+    "@pmndrs/pointer-events": "^6.6.22",
+    "@pmndrs/uikit": "^1.0.31",
+    "@pmndrs/uikitml": "^0.0.10",
+    "@preact/signals-core": "^1.11.0",
+    "elics": "^3.3.0",
+    "three": "npm:super-three@0.177.0",
+    "three-mesh-bvh": "^0.9.1"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

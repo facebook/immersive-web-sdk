@@ -1,0 +1,9 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Enum name="EnvironmentType">
+    <EnumValue value="static"/>
+    <EnumValue value="kinematic"/>
+  </Enum>
+  <Component name="LocomotionEnvironment" description="Locomotion environment component that holds the environment mesh group">
+    <EnumAttribute name="type" defaultValue="EnvironmentType.static"/>
+  </Component>
+</ComponentSchema>

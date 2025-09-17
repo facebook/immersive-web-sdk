@@ -1,0 +1,8 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="GradientDome" description="Component for controlling a gradient sky + environment lighting">
+    <FloatAttribute name="sky" defaultValue="8900331f"/>
+    <FloatAttribute name="equator" defaultValue="16753920f"/>
+    <FloatAttribute name="ground" defaultValue="2263842f"/>
+    <FloatAttribute name="environmentIntensity" defaultValue="1f"/>
+  </Component>
+</ComponentSchema>

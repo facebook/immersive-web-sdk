@@ -1,0 +1,632 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:vholes
+            - ref:quarter_overlay_stiching
+            - ref:heel_counter_stiching
+            - ref:lace
+            - ref:tip_stiching
+            - ref:midsole
+            - ref:vamp
+            - ref:eyestay_secondary
+            - ref:tip1
+            - ref:eyestay_stiching
+            - ref:tongue_secondary
+            - ref:sockliner
+            - ref:heel_counter1
+            - ref:quarter_overlay1
+            - ref:midsole_stiching1
+            - ref:collar
+            - ref:quarter
+            - ref:backtab_stiching1
+            - ref:backtab
+            - ref:eyestay
+            - ref:tongue1
+            - ref:outsole
+            - ref:tongue_stiching1
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: heel_counter
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0715829358
+            - 0.0619402826
+            - 6.5227272e-05
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.058
+      tag: heel_counter1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tongue_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.327157438
+            - 0.944969833
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0403271019
+            - 0.112213552
+            - 0.0254249312
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.004
+      tag: tongue_stiching1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: midsole_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0165327787
+            - 0.0259625372
+            - -0.00656829309
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.020
+      tag: midsole_stiching1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: quarter_overlay
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.999557614
+            - 0
+            - -0.0297417417
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0484192222
+            - 0.053750515
+            - 0.0300402828
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.060
+      tag: quarter_overlay1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tongue
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.5445044e-08
+            - 0.0374134965
+            - 0
+            - 0.999299884
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.00958198495
+            - -0.909505665
+            - -0.0103240265
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.016
+      tag: tongue1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: vamp
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0204871222
+            - -0.00296372175
+            - -0.0228079818
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.064
+      tag: vamp
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tongue_secondary
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.5445044e-08
+            - 0.0374134965
+            - 0
+            - 0.999299884
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.00958198495
+            - -0.909505665
+            - -0.0103240265
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.067
+      tag: tongue_secondary
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: backtab_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.865497351
+            - 0.50091356
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.115177236
+            - 0.100569203
+            - -0.0245633386
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.005
+      tag: backtab_stiching1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tip
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0969696119
+            - 0.0464039221
+            - -0.010006587
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.159
+      tag: tip1
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: eyestay_secondary
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.152949661
+            - -0.432346225
+            - 0.606627285
+            - -0.649373889
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0252690874
+            - 0.10367199
+            - 0.0316925123
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Torus
+      tag: eyestay_secondary
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: quarter
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0330583304
+            - 0.0572740361
+            - -2.70407181e-05
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.063
+      tag: quarter
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: outsole
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.00572396908
+            - 0.00474483892
+            - -0.0041995002
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.070
+      tag: outsole
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: midsole
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0165666714
+            - 0.0251331665
+            - -0.00655664038
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.071
+      tag: midsole
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: lace
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.50000006
+            - -0.5
+            - 0.5
+            - 0.49999994
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0784486681
+            - 0.0829426646
+            - -0.0103642596
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:NurbsPath.002
+      tag: lace
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: sockliner
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.00572396908
+            - 0.00869639963
+            - -0.0041995002
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.062
+      tag: sockliner
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: heel_counter_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0543515682
+            - 0.0290464051
+            - -0.0369421318
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.307
+      tag: heel_counter_stiching
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tip_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0700762644
+            - 0.0495745465
+            - -0.0552360043
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.303
+      tag: tip_stiching
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: quarter_overlay_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0644666255
+            - 0.0289856568
+            - 0.037445575
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.308
+      tag: quarter_overlay_stiching
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: collar
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.0330583304
+            - 0.0547932498
+            - -2.70407181e-05
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.065
+      tag: collar
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: eyestay_stiching
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.989227414
+            - -0.146387592
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0499018952
+            - 0.0663847551
+            - 0.0236851312
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:tip.003
+      tag: eyestay_stiching
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: vholes
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.11516849
+            - 0.0671407133
+            - -0.0263842903
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:vamp.035
+      tag: vholes
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: eyestay
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.974320948
+            - -0.19647646
+            - 0.107870772
+            - 0.021438092
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.0253051184
+            - 0.0869169161
+            - 0.018443618
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.069
+      tag: eyestay
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: backtab
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 7.54979013e-08
+            - 0
+            - 0
+            - -1
+          rotation.format: Quaternion
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -0.119173311
+            - 0.0981468856
+            - 0.00485918391
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Plane.066
+      tag: backtab
+metadata:
+  version: 1.33

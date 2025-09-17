@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="ShoePart" description="EliCS component: ShoePart">
+    <StringAttribute name="partName" defaultValue=""/>
+  </Component>
+</ComponentSchema>

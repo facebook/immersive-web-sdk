@@ -1,0 +1,38 @@
+{
+  "name": "@iwsdk/locomotor",
+  "version": "0.1.0",
+  "description": "Locomotion engine for WebXR applications - physics-based movement, teleportation, and collision detection for Three.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts",
+    "build": "rollup -c",
+    "format": "prettier --write ./src/**/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [
+    "webxr",
+    "locomotion",
+    "physics"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "peerDependencies": {
+    "three": ">=0.160.0",
+    "three-mesh-bvh": ">=0.9.1"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

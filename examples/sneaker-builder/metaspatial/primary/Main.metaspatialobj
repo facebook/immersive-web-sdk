@@ -1,0 +1,144 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+    - components:
+        com.meta.components.AssetFolder:
+          assets:
+            - ref:lace_tongue_normal
+            - ref:leather_bump_v5
+            - ref:white_rubber_normal_v2
+            - ref:midsole
+            - ref:quarter
+            - ref:tongue
+            - ref:vamp
+            - ref:Plane.071
+        com.meta.components.Name:
+          name: primary
+  com.meta.models.AssetRoot:
+    - components:
+        com.meta.components.AssetMetadata:
+          {}
+        com.meta.components.AssetRoot:
+          defaultScene: ref:Scene
+          scenes:
+            - ref:Scene
+  com.meta.models.Geometry:
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry3.bin
+          mode: Triangles
+      tag: Geometry3
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry2.bin
+          mode: Triangles
+      tag: Geometry2
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry1.bin
+          mode: Triangles
+      tag: Geometry1
+    - components:
+        com.meta.components.Geometry:
+          data: binary/Geometry.bin
+          mode: Triangles
+      tag: Geometry
+  com.meta.models.Image:
+    - components:
+        com.meta.components.Asset:
+          path: assets/white_rubber_normal_v2.png
+        com.meta.components.Image:
+          height: 256
+          mimeType: image/png
+          width: 256
+        com.meta.components.Name:
+          name: white_rubber_normal_v2
+      tag: white_rubber_normal_v2
+    - components:
+        com.meta.components.Asset:
+          path: assets/leather_bump_v5.png
+        com.meta.components.Image:
+          height: 567
+          mimeType: image/png
+          width: 567
+        com.meta.components.Name:
+          name: leather_bump_v5
+      tag: leather_bump_v5
+    - components:
+        com.meta.components.Asset:
+          path: assets/lace_tongue_normal.png
+        com.meta.components.Image:
+          height: 2048
+          mimeType: image/png
+          width: 2048
+        com.meta.components.Name:
+          name: lace_tongue_normal
+      tag: lace_tongue_normal
+  com.meta.models.Material:
+    - uri: docref:materials/vamp.metaspatialmaterial
+      tag: vamp
+    - uri: docref:materials/tongue.metaspatialmaterial
+      tag: tongue
+    - uri: docref:materials/midsole.metaspatialmaterial
+      tag: midsole
+    - uri: docref:materials/quarter.metaspatialmaterial
+      tag: quarter
+  com.meta.models.Mesh:
+    - components:
+        com.meta.components.Mesh:
+          morphTargetNames:
+            []
+          morphTargetWeights:
+            []
+          primitives:
+            - ref:Primitive1
+            - ref:Primitive3
+            - ref:Primitive2
+            - ref:Primitive
+        com.meta.components.Name:
+          name: Plane.071
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+      tag: Plane.071
+  com.meta.models.Primitive:
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry
+          material: ref:vamp
+      tag: Primitive3
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry3
+          material: ref:quarter
+      tag: Primitive2
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry1
+          material: ref:midsole
+      tag: Primitive1
+    - components:
+        com.meta.components.Primitive:
+          geometry: ref:Geometry2
+          material: ref:tongue
+      tag: Primitive
+  com.meta.models.Sampler:
+    - components:
+        com.meta.components.Name:
+          name: sampler0
+        com.meta.components.Sampler:
+          magFilter: Linear
+          minFilter: LinearMipmapLinear
+          wrapS: Repeat
+          wrapT: Repeat
+      tag: sampler0
+  com.meta.models.Texture:
+    - uri: docref:textures/texture1.metaspatialtexture
+      tag: texture1
+    - uri: docref:textures/texture3.metaspatialtexture
+      tag: texture3
+    - uri: docref:textures/texture4.metaspatialtexture
+      tag: texture4
+    - uri: docref:textures/texture2.metaspatialtexture
+      tag: texture2
+metadata:
+  version: 1.33

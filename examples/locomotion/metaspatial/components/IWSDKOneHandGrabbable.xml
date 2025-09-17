@@ -1,0 +1,10 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="OneHandGrabbable" description="Component for single-hand object grabbing and manipulation">
+    <BooleanAttribute name="rotate" defaultValue="true"/>
+    <Vector3Attribute name="rotateMax"/>
+    <Vector3Attribute name="rotateMin"/>
+    <BooleanAttribute name="translate" defaultValue="true"/>
+    <Vector3Attribute name="translateMax"/>
+    <Vector3Attribute name="translateMin"/>
+  </Component>
+</ComponentSchema>

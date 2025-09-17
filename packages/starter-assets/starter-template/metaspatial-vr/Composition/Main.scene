@@ -1,0 +1,135 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:welcomePanel
+            - ref:plantSansevieria
+            - ref:robot
+            - ref:Environment
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.iwsdk.components.LocomotionEnvironment:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:environmentDesk/Main.metaspatialobj
+        com.meta.components.Name:
+          name: Environment
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 3.14159274
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0
+            - -0.106921583
+            - 0
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: Environment
+    - components:
+        com.iwsdk.components.AudioSource:
+          maxInstances: 3
+          src: /audio/chime.mp3
+          playbackMode: 3
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.Robot:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:robot/Main.metaspatialobj
+        com.meta.components.Name:
+          name: robot
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 0.5
+            - 0.5
+            - 0.5
+          translation:
+            - -1.20000005
+            - 0.949999988
+            - -1.79999995
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: robot
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          movementMode: 0
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:plantSansevieria/Main.metaspatialobj
+        com.meta.components.Name:
+          name: plantSansevieria
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 1.20000005
+            - 0.850000024
+            - -1.79999995
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: plantSansevieria
+    - components:
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.PanelUI:
+          config: /ui/welcome.uikitml
+        com.iwsdk.components.ScreenSpace:
+          left: 20px
+          top: 20px
+          height: 40%
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: welcomePanel
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1.79999995
+            - 1
+            - 1
+          translation:
+            - 0
+            - 1.60000002
+            - -2
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: welcomePanel
+metadata:
+  version: 1.34

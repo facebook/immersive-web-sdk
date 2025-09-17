@@ -1,0 +1,107 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:floorBase_geo.002
+            - ref:backWall_geo
+            - ref:ceiling_geo.002
+            - ref:tableSurface_geo
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: backWall_geo
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.683012724
+            - 0.683012664
+            - 0.183012679
+            - -0.183012679
+          rotation.format: Quaternion
+          scale:
+            - 0.00999999978
+            - 0.00999999978
+            - 0.00999999885
+          translation:
+            - 0
+            - 0.0199999884
+            - 0
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Mesh.034
+      tag: backWall_geo
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: tableSurface_geo
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 0.00999999978
+            - 0.0100000007
+            - 0.0100000007
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Mesh.009
+      tag: tableSurface_geo
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: ceiling_geo.002
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 0.00999999978
+            - 0.0100000007
+            - 0.0100000007
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Mesh.036
+      tag: ceiling_geo.002
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: floorBase_geo.002
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0.70710665
+            - 0.707106888
+            - 0
+            - 0
+          rotation.format: Quaternion
+          scale:
+            - 0.00999999978
+            - 0.0100000007
+            - 0.0100000007
+          componentVersion: 1
+        com.meta.components.SceneNodeMesh:
+          mesh: ref:Mesh.037
+      tag: floorBase_geo.002
+metadata:
+  version: 1.33

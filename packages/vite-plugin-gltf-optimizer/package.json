@@ -1,0 +1,50 @@
+{
+  "name": "@iwsdk/vite-plugin-gltf-optimizer",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vite plugin for GLTF/GLB optimization during build using gltf-transform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "gltf",
+    "glb",
+    "optimization",
+    "compression",
+    "webxr",
+    "3d"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@gltf-transform/cli": "^4.2.1",
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
+    "draco3dgltf": "^1.5.7",
+    "fs-extra": "^11.2.0",
+    "glob": "^11.0.0",
+    "path": "^0.12.7",
+    "sharp": "^0.34.3"
+  },
+  "devDependencies": {
+    "@types/draco3dgltf": "^1.4.3",
+    "@types/fs-extra": "^11.0.4"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

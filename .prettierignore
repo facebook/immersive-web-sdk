@@ -1,0 +1,13 @@
+.yarn
+dist
+node_modules
+
+# pnpm files - don't format these
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# asset folders at any nesting level
+**/public/
+**/metaspatial/
+**/metaspatial-vr/
+**/metaspatial-ar/

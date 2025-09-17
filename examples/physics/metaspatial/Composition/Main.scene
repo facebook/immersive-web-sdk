@@ -1,0 +1,205 @@
+entities:
+  com.meta.models.Scene:
+    - components:
+        com.meta.components.Name:
+          {}
+        com.meta.components.Scene:
+          nodes:
+            - ref:spawnableObjects
+            - ref:Environment
+            - ref:libraryPanel
+      tag: Scene
+  com.meta.models.SceneNode:
+    - components:
+        com.iwsdk.components.RayIntersectable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: libraryPanel
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 3.14159274
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 2
+            - 1.5
+            - 1
+          translation:
+            - 2.35256469e-17
+            - 1.69210148
+            - 2.5
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+        com.meta.spatial.toolkit.Panel:
+          panel: /ui/settings.json
+        com.meta.spatial.toolkit.PanelDimensions:
+          {}
+      tag: libraryPanel
+    - components:
+        com.iwsdk.components.LocomotionEnvironment:
+          {}
+        com.iwsdk.components.PhysicsBody:
+          state: 0
+        com.iwsdk.components.PhysicsShape:
+          shape: 5
+          restitution: 0
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:environmentDesk/Main.metaspatialobj
+        com.meta.components.Name:
+          name: Environment
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0
+            - -0.106921583
+            - 0
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: Environment
+    - components:
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.Name:
+          name: spawnableObjects
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          componentVersion: 1
+          children:
+            - ref:robot
+            - ref:drone
+            - ref:plant
+        com.meta.components.Visibility:
+          visible: true
+      tag: spawnableObjects
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          movementMode: 0
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.PhysicsBody:
+          {}
+        com.iwsdk.components.PhysicsShape:
+          dimensions:
+            - 1
+            - 1
+            - 1
+          restitution: 0
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:drone/Main.metaspatialobj
+        com.meta.components.Name:
+          name: drone
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 3.14159274
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - 0.999999881
+            - 0.82065016
+            - 0.93326962
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: drone
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          movementMode: 0
+        com.iwsdk.components.Interactable:
+          {}
+        com.iwsdk.components.PhysicsBody:
+          gravityFactor: 2
+          linearDamping: 1
+        com.iwsdk.components.PhysicsShape:
+          restitution: 0
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:plantSansevieria/Main.metaspatialobj
+        com.meta.components.Name:
+          name: plant
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.format: Euler
+          scale:
+            - 1
+            - 1
+            - 1
+          translation:
+            - -1
+            - 1.41135287
+            - 1.50659847
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: plant
+    - components:
+        com.iwsdk.components.DistanceGrabbable:
+          movementMode: 0
+        com.iwsdk.components.Interactable:
+          {}
+        com.meta.components.Animatable:
+          {}
+        com.meta.components.DocumentReference:
+          transformType: None
+          documentReference: projref:robot/Main.metaspatialobj
+        com.meta.components.Name:
+          name: robot
+        com.meta.components.PointerNodeInverseComponent:
+          {}
+        com.meta.components.SceneNode:
+          rotation.data:
+            - 0
+            - 3.14159274
+            - 0
+            - 0
+          rotation.format: Euler
+          scale:
+            - 0.5
+            - 0.5
+            - 0.5
+          translation:
+            - 0
+            - 0.945512056
+            - 2
+          componentVersion: 1
+        com.meta.components.Visibility:
+          visible: true
+      tag: robot
+metadata:
+  version: 1.34

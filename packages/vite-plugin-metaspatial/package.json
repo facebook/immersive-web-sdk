@@ -1,0 +1,50 @@
+{
+  "name": "@iwsdk/vite-plugin-metaspatial",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vite plugins for Meta Spatial SDK integration: component discovery & GLXF generation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "component",
+    "xml",
+    "webxr",
+    "metaspatial",
+    "glxf"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "contributor": "Jianmin Zheng <zjm@meta.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.28.0",
+    "@babel/traverse": "^7.28.0",
+    "@babel/types": "^7.28.2",
+    "@types/node": "^20.19.9",
+    "chokidar": "^4.0.3",
+    "enhanced-resolve": "^5.18.2",
+    "fs-extra": "^11.2.0",
+    "xmlbuilder2": "^3.1.1"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.20.6",
+    "@types/chokidar": "^2.1.7",
+    "@types/fs-extra": "^11.0.4"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

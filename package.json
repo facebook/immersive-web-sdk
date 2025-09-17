@@ -1,0 +1,87 @@
+{
+  "name": "iwsdk-monorepo",
+  "version": "0.1.0",
+  "description": "Javascript WebXR Runtime for Emulation - Monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter '@iwsdk/core' run build",
+    "build:all": "pnpm -r run build",
+    "build:tgz": "./scripts/build-tgz.sh",
+    "bundle:sdk": "bash ./scripts/build-sdk-bundle.sh",
+    "docs:api": "typedoc && node scripts/postprocess-typedoc.cjs",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "pnpm docs:api && vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint-staged": "lint-staged",
+    "prepare": "node scripts/setup-git-hooks.cjs",
+    "setup-hooks": "node scripts/setup-git-hooks.cjs",
+    "engines:audit": "node scripts/check-engines.mjs",
+    "headers:check": "node scripts/check-headers.mjs --dry-run",
+    "headers:fix": "node scripts/check-headers.mjs --fix"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "contributor": "Jianmin Zheng <zjm@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.0.0",
+    "@types/three": "^0.177.0",
+    "@types/webxr": "^0.5.8",
+    "@typescript-eslint/eslint-plugin": "^5.55.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "eslint": "^8.36.0",
+    "eslint-config-prettier": "^8.10.0",
+    "eslint-plugin-import": "^2.32.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.4",
+    "prettier": "^3.0.3",
+    "rollup": "^4.46.2",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-worker64": "^0.2.1",
+    "semver": "^7.7.2",
+    "@types/semver": "^7.5.8",
+    "typedoc": "^0.28.12",
+    "typedoc-plugin-markdown": "^4.8.1",
+    "typedoc-vitepress-theme": "^1.1.2",
+    "typescript": "^5.8.3",
+    "vitepress": "1.6.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "three": "npm:super-three@0.177.0",
+      "three-mesh-bvh": "^0.9.1"
+    }
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

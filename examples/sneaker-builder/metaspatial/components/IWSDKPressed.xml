@@ -1,0 +1,3 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="Pressed" description="Indicates an object is currently pressed/activated by a pointer"/>
+</ComponentSchema>

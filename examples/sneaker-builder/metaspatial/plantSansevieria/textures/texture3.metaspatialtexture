@@ -1,0 +1,8 @@
+entities:
+  components:
+    com.meta.components.Name:
+      name: texture3
+    com.meta.components.Texture:
+      image: ref:PlantSansevieria_ORM
+metadata:
+  version: 1.33

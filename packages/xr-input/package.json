@@ -1,0 +1,43 @@
+{
+  "name": "@iwsdk/xr-input",
+  "version": "0.1.0",
+  "description": "WebXR input system with controller and hand tracking support, visual adapters, and input profiles for Three.js applications",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts && node scripts/generate-input-profiles.js",
+    "build": "rollup -c",
+    "format": "prettier --write ./src/**/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [
+    "webxr",
+    "input",
+    "controller",
+    "hand-tracking",
+    "three.js"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "dependencies": {
+    "@pmndrs/pointer-events": "^6.6.22",
+    "@preact/signals-core": "^1.11.0"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

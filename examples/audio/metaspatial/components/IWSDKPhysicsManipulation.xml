@@ -1,0 +1,7 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="PhysicsManipulation" description="Component to apply physics manipulations to an entity.">
+    <Vector3Attribute name="force" defaultValue="0f, 0f, 0f"/>
+    <Vector3Attribute name="linearVelocity" defaultValue="0f, 0f, 0f"/>
+    <Vector3Attribute name="angularVelocity" defaultValue="0f, 0f, 0f"/>
+  </Component>
+</ComponentSchema>

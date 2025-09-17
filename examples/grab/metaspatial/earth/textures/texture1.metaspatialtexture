@@ -1,0 +1,9 @@
+entities:
+  components:
+    com.meta.components.Name:
+      name: texture1
+    com.meta.components.Texture:
+      image: ref:earth1_ocean_Normal
+      sampler: ref:sampler0
+metadata:
+  version: 1.34

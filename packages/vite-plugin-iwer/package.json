@@ -1,0 +1,42 @@
+{
+  "name": "@iwsdk/vite-plugin-iwer",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vite plugin for WebXR emulation runtime injection using IWER",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.injection.config.js && rollup -c rollup.config.js",
+    "build:plugin": "rollup -c rollup.config.js",
+    "build:injection": "rollup -c rollup.injection.config.js",
+    "dev": "rollup -c --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "webxr",
+    "emulation",
+    "iwer",
+    "polyfill",
+    "meta",
+    "quest"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@iwer/devui": "^1.1.2",
+    "@iwer/sem": "^0.2.5",
+    "iwer": "^2.0.1"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

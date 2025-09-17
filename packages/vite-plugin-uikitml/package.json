@@ -1,0 +1,41 @@
+{
+  "name": "@iwsdk/vite-plugin-uikitml",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vite plugin for compiling UIKitML files to JSON",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "uikitml",
+    "ui",
+    "webxr"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^20.19.9",
+    "fs-extra": "^11.2.0",
+    "@pmndrs/uikitml": "^0.0.10",
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
