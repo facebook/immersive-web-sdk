@@ -23,11 +23,16 @@ const persistent = world.createTransformEntity(undefined, { persistent: true });
 ## Object3D Attachment
 
 ```ts
-const o = new (await import('@iwsdk/core')).Object3D();
-const withMesh = world.createTransformEntity(o);
+import { Mesh, BoxGeometry, MeshStandardMaterial } from '@iwsdk/core';
+
+const geometry = new BoxGeometry(1, 1, 1);
+const material = new MeshStandardMaterial({ color: 0x00ff00 });
+const mesh = new Mesh(geometry, material);
+
+const entity = world.createTransformEntity(mesh);
 ```
 
-`createTransformEntity` ensures `object3D` is detached when the entity is released.
+`createTransformEntity` is the recommended way to attach Three.js objects to entities. It ensures `object3D` is properly managed and detached when the entity is released.
 
 ## Component Operations
 

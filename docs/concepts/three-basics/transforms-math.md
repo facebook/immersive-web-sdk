@@ -43,16 +43,18 @@ IWSDK uses a right-handed coordinate system:
 ### Working with Position
 
 ```ts
-import { Transform } from '@iwsdk/core';
-
 // Set absolute position
-entity.setValue(Transform, 'position', [2, 1.7, -5]);
+entity.object3D.position.set(2, 1.7, -5);
 // Object appears 2m right, 1.7m up, 5m away
 
 // Move relative to current position
+entity.object3D.position.x += 1; // Move 1 meter right
+entity.object3D.position.y += 0; // Same height
+entity.object3D.position.z -= 2; // Move 2 meters away
+
+// Or using ECS Transform for data-driven updates
 const pos = entity.getVectorView(Transform, 'position');
 pos[0] += 1; // Move 1 meter right
-pos[1] += 0; // Same height
 pos[2] -= 2; // Move 2 meters away
 ```
 
@@ -61,44 +63,22 @@ pos[2] -= 2; // Move 2 meters away
 **Moving Forward Based on Orientation:**
 
 ```ts
-export class MovementSystem extends createSystem({
-  moving: { required: [Transform, Velocity] },
-}) {
-  update(dt: number) {
-    for (const entity of this.queries.moving.entities) {
-      const pos = entity.getVectorView(Transform, 'position');
-      const rot = entity.getVectorView(Transform, 'orientation');
-      const speed = entity.getValue(Velocity, 'speed')!;
+// Create forward vector from object's rotation
+const forward = new Vector3(0, 0, -1); // -Z is forward
+forward.applyQuaternion(entity.object3D.quaternion);
 
-      // Create forward vector from rotation
-      const forward = new Vector3(0, 0, -1); // -Z is forward
-      const quaternion = new Quaternion().fromArray(rot);
-      forward.applyQuaternion(quaternion);
-
-      // Move in that direction
-      pos[0] += forward.x * speed * dt;
-      pos[1] += forward.y * speed * dt;
-      pos[2] += forward.z * speed * dt;
-    }
-  }
-}
+// Move in that direction
+entity.object3D.position.add(forward.multiplyScalar(speed * deltaTime));
 ```
 
-**Positioning Relative to Player:**
+**Positioning Relative to Another Object:**
 
 ```ts
-// Place object 2 meters in front of user
-const playerPos = player.getVectorView(Transform, 'position');
-const playerRot = player.getVectorView(Transform, 'orientation');
-
+// Place object 2 meters in front of another object
 const forward = new Vector3(0, 0, -2); // 2 meters forward
-forward.applyQuaternion(new Quaternion().fromArray(playerRot));
+forward.applyQuaternion(referenceObject.quaternion);
 
-entity.setValue(Transform, 'position', [
-  playerPos[0] + forward.x,
-  playerPos[1] + forward.y,
-  playerPos[2] + forward.z,
-]);
+entity.object3D.position.copy(referenceObject.position).add(forward);
 ```
 
 ## Rotation (Orientation)
@@ -124,25 +104,21 @@ Rotation determines **how** an object is oriented in 3D space.
 
 ```ts
 // Identity rotation (no rotation)
-entity.setValue(Transform, 'orientation', [0, 0, 0, 1]);
+entity.object3D.quaternion.set(0, 0, 0, 1);
 
 // Rotate around Y-axis (yaw/turn)
 const yawQuat = new Quaternion().setFromAxisAngle(
   new Vector3(0, 1, 0), // Y-axis
   Math.PI / 4, // 45 degrees in radians
 );
-entity.setValue(Transform, 'orientation', yawQuat.toArray());
+entity.object3D.quaternion.copy(yawQuat);
 
 // Combine rotations
-const currentRot = new Quaternion().fromArray(
-  entity.getVectorView(Transform, 'orientation'),
-);
 const additionalRot = new Quaternion().setFromAxisAngle(
   new Vector3(0, 1, 0),
-  dt,
+  deltaTime,
 );
-currentRot.multiply(additionalRot); // Apply additional rotation
-entity.setValue(Transform, 'orientation', currentRot.toArray());
+entity.object3D.quaternion.multiply(additionalRot);
 ```
 
 ### Common Rotation Patterns
@@ -150,63 +126,32 @@ entity.setValue(Transform, 'orientation', currentRot.toArray());
 **Look At Target:**
 
 ```ts
-export class LookAtSystem extends createSystem({
-  lookers: { required: [Transform, LookAtTarget] },
-}) {
-  update() {
-    for (const entity of this.queries.lookers.entities) {
-      const pos = entity.getVectorView(Transform, 'position');
-      const targetId = entity.getValue(LookAtTarget, 'entityId')!;
-      const target = this.world.getEntityByIndex(targetId);
+// Make object look at a target position
+const targetPosition = new Vector3(5, 0, 0);
+entity.object3D.lookAt(targetPosition);
 
-      if (target) {
-        const targetPos = target.getVectorView(Transform, 'position');
+// Or calculate direction manually
+const direction = new Vector3()
+  .subVectors(targetPosition, entity.object3D.position)
+  .normalize();
 
-        // Calculate look-at rotation
-        const direction = new Vector3()
-          .fromArray(targetPos)
-          .sub(new Vector3().fromArray(pos))
-          .normalize();
-
-        const quaternion = new Quaternion().setFromUnitVectors(
-          new Vector3(0, 0, -1), // Forward vector
-          direction,
-        );
-
-        entity.setValue(Transform, 'orientation', quaternion.toArray());
-      }
-    }
-  }
-}
+const quaternion = new Quaternion().setFromUnitVectors(
+  new Vector3(0, 0, -1), // Forward vector
+  direction,
+);
+entity.object3D.quaternion.copy(quaternion);
 ```
 
-**Smooth Rotation Over Time:**
+**Rotation Over Time:**
 
 ```ts
-export class RotateSystem extends createSystem({
-  spinning: { required: [Transform, Spinner] },
-}) {
-  update(dt: number) {
-    for (const entity of this.queries.spinning.entities) {
-      const rotation = entity.getVectorView(Transform, 'orientation');
-      const speed = entity.getValue(Spinner, 'radiansPerSecond')!;
-
-      // Create rotation delta
-      const deltaQuat = new Quaternion().setFromAxisAngle(
-        new Vector3(0, 1, 0), // Spin around Y
-        speed * dt,
-      );
-
-      // Apply to current rotation
-      const currentQuat = new Quaternion().fromArray(rotation);
-      currentQuat.multiply(deltaQuat);
-
-      // Update component
-      const newRotation = currentQuat.toArray();
-      rotation.set(newRotation);
-    }
-  }
-}
+// Rotate continuously around Y-axis
+const rotationSpeed = Math.PI; // radians per second
+const deltaQuat = new Quaternion().setFromAxisAngle(
+  new Vector3(0, 1, 0), // Y-axis
+  rotationSpeed * deltaTime,
+);
+entity.object3D.quaternion.multiply(deltaQuat);
 ```
 
 **Convert from Euler Angles (when needed):**
@@ -226,11 +171,11 @@ Scale determines **how big** an object appears.
 
 ```ts
 // Uniform scale (same in all directions)
-entity.setValue(Transform, 'scale', [2, 2, 2]); // 2x bigger
-entity.setValue(Transform, 'scale', [0.5, 0.5, 0.5]); // Half size
+entity.object3D.scale.set(2, 2, 2); // 2x bigger
+entity.object3D.scale.set(0.5, 0.5, 0.5); // Half size
 
 // Non-uniform scale
-entity.setValue(Transform, 'scale', [2, 1, 0.5]);
+entity.object3D.scale.set(2, 1, 0.5);
 // 2x wider, same height, half depth
 ```
 
@@ -238,18 +183,18 @@ entity.setValue(Transform, 'scale', [2, 1, 0.5]);
 
 **Real-world considerations:**
 
-- Scale affects physics and collisions
 - Users expect consistent sizing (door ≈ 2m tall)
 - Very small/large scales can cause rendering issues
+- Consider user interaction when sizing objects
 
 ```ts
 // Make object child-sized for interaction
-entity.setValue(Transform, 'scale', [0.6, 0.6, 0.6]);
+entity.object3D.scale.set(0.6, 0.6, 0.6);
 
-// Make text readable at distance
-const distance = calculateDistanceToUser(entity);
+// Scale text based on distance for readability
+const distance = entity.object3D.position.distanceTo(camera.position);
 const textScale = Math.max(0.5, distance * 0.1);
-entity.setValue(Transform, 'scale', [textScale, textScale, textScale]);
+entity.object3D.scale.set(textScale, textScale, textScale);
 ```
 
 ## Local vs World Space
@@ -287,97 +232,62 @@ const localPoint = worldPoint.applyMatrix4(entity.object3D!.worldToLocal);
 ### Hierarchical Movement Example
 
 ```ts
-export class CarSystem extends createSystem({
-  cars: { required: [Transform, Vehicle] },
-  wheels: { required: [Transform, Wheel] },
-}) {
-  update(dt: number) {
-    for (const car of this.queries.cars.entities) {
-      // Move car in world space
-      const carPos = car.getVectorView(Transform, 'position');
-      const speed = car.getValue(Vehicle, 'speed')!;
-      carPos[0] += speed * dt;
+// Create a car with wheels as children
+const car = world.createTransformEntity();
+const wheel1 = new Mesh(wheelGeometry, wheelMaterial);
+const wheel2 = new Mesh(wheelGeometry, wheelMaterial);
 
-      // Rotate wheels in local space (relative to car)
-      for (const wheel of this.queries.wheels.entities) {
-        if (this.isChildOf(wheel, car)) {
-          const wheelRot = wheel.getVectorView(Transform, 'orientation');
-          const wheelSpeed = speed / 0.5; // wheel radius
+car.object3D.add(wheel1);
+car.object3D.add(wheel2);
 
-          const deltaRot = new Quaternion().setFromAxisAngle(
-            new Vector3(1, 0, 0), // rotate around X-axis
-            wheelSpeed * dt,
-          );
+// Position wheels relative to car
+wheel1.position.set(-1, -0.5, 1.2);
+wheel2.position.set(1, -0.5, 1.2);
 
-          const currentRot = new Quaternion().fromArray(wheelRot);
-          currentRot.multiply(deltaRot);
-          wheelRot.set(...currentRot.toArray());
-        }
-      }
-    }
-  }
-}
+// Move car - wheels follow automatically
+car.object3D.position.x += speed * deltaTime;
+
+// Rotate wheels in local space
+wheel1.rotateX((speed * deltaTime) / wheelRadius);
+wheel2.rotateX((speed * deltaTime) / wheelRadius);
 ```
 
 ## Performance Optimization
 
-### Use Vector Views for Hot Paths
+### Direct Object3D vs ECS Updates
 
 ```ts
-// ❌ Slower: creates new arrays
-entity.setValue(Transform, 'position', [x + dx, y + dy, z + dz]);
+// For frequent updates, direct Three.js can be faster
+entity.object3D.position.x += deltaX;
+entity.object3D.position.y += deltaY;
+entity.object3D.position.z += deltaZ;
 
-// ✅ Faster: direct array access
+// For data-driven updates, use ECS Transform
 const pos = entity.getVectorView(Transform, 'position');
-pos[0] += dx;
-pos[1] += dy;
-pos[2] += dz;
-```
-
-### Batch Transforms
-
-```ts
-export class BatchTransformSystem extends createSystem({
-  moving: { required: [Transform, Velocity] },
-}) {
-  update(dt: number) {
-    // Process all entities with same calculation pattern together
-    for (const entity of this.queries.moving.entities) {
-      const pos = entity.getVectorView(Transform, 'position');
-      const vel = entity.getValue(Velocity, 'vector')!;
-
-      // Simple vector math - very fast
-      pos[0] += vel[0] * dt;
-      pos[1] += vel[1] * dt;
-      pos[2] += vel[2] * dt;
-    }
-  }
-}
+pos[0] += deltaX;
+pos[1] += deltaY;
+pos[2] += deltaZ;
 ```
 
 ### Avoid Unnecessary Calculations
 
 ```ts
 // ❌ Recalculating every frame
-const forward = new Vector3(0, 0, -1).applyQuaternion(rotation);
+const forward = new Vector3(0, 0, -1).applyQuaternion(
+  entity.object3D.quaternion,
+);
 
-// ✅ Cache when rotation doesn't change
-export class CachedMovement extends createSystem({
-  movers: { required: [Transform, CachedForward] },
-}) {
-  init() {
-    this.queries.movers.subscribe('qualify', (entity) => {
-      this.updateCachedForward(entity);
-    });
-  }
+// ✅ Reuse vectors when possible
+const forward = new Vector3(0, 0, -1);
+forward.applyQuaternion(entity.object3D.quaternion);
 
-  updateCachedForward(entity: Entity) {
-    const rotation = entity.getVectorView(Transform, 'orientation');
-    const forward = new Vector3(0, 0, -1).applyQuaternion(
-      new Quaternion().fromArray(rotation),
-    );
-    entity.setValue(CachedForward, 'vector', forward.toArray());
-  }
+// ✅ Cache complex calculations
+let lastRotation = entity.object3D.quaternion.clone();
+let cachedForward = new Vector3(0, 0, -1).applyQuaternion(lastRotation);
+
+if (!entity.object3D.quaternion.equals(lastRotation)) {
+  lastRotation.copy(entity.object3D.quaternion);
+  cachedForward.set(0, 0, -1).applyQuaternion(lastRotation);
 }
 ```
 

@@ -8,19 +8,19 @@
 import {
   AssetManifest,
   AssetType,
-  DistanceGrabbable,
   Mesh,
   MeshBasicMaterial,
-  MovementMode,
   PlaneGeometry,
   SessionMode,
   SRGBColorSpace,
+  AssetManager,
   World,
 } from '@iwsdk/core';
 /* @template:if kind='manual' */
 import {
-  AssetManager,
   AudioSource,
+  DistanceGrabbable,
+  MovementMode,
   Interactable,
   PanelUI,
   PlaybackMode,

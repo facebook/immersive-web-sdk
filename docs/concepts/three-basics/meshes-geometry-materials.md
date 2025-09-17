@@ -96,7 +96,7 @@ geometry.setAttribute('normal', new BufferAttribute(normals, 3));
 geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
 ```
 
-### Geometry in ECS Context
+### Reusing Geometry
 
 ```ts
 // Create geometry once, reuse for multiple entities
@@ -111,7 +111,7 @@ for (let i = 0; i < 10; i++) {
   const entity = world.createTransformEntity(mesh);
 
   // Position each entity differently
-  entity.setValue(Transform, 'position', [i * 2, 0, 0]);
+  entity.object3D.position.set(i * 2, 0, 0);
 }
 ```
 
@@ -369,10 +369,10 @@ const entity = world.createTransformEntity(lod);
 
 ## Common Patterns for WebXR
 
-### Interactive Objects
+### Real-World Sized Objects
 
 ```ts
-// Create grabbable objects with proper materials
+// Create objects with appropriate VR/AR scale
 const geometry = new BoxGeometry(0.1, 0.1, 0.1); // 10cm cube
 const material = new MeshStandardMaterial({
   color: 0x4caf50,
@@ -383,15 +383,14 @@ const material = new MeshStandardMaterial({
 const mesh = new Mesh(geometry, material);
 const entity = world.createTransformEntity(mesh);
 
-// Add interaction components
-entity.addComponent(Grabbable);
-entity.addComponent(RigidBody, { mass: 0.5 });
+// Position at comfortable interaction height
+entity.object3D.position.set(0, 1.2, -0.5);
 ```
 
-### UI Elements
+### UI Panels
 
 ```ts
-// Use unlit materials for UI
+// Use unlit materials for UI elements
 const panelMaterial = new MeshBasicMaterial({
   color: 0xffffff,
   transparent: true,

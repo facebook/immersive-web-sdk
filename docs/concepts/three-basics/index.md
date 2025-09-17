@@ -48,28 +48,12 @@ Entity 12                      Object3D
 - [Transforms & 3D Math](/concepts/three-basics/transforms-math) — position, rotation, scale in 3D space
 - [Meshes, Geometry & Materials](/concepts/three-basics/meshes-geometry-materials) — the building blocks of 3D objects
 
-**Important Concepts:**
-
-- [Scene Graph](/concepts/three-basics/scene-graph) — how objects relate to each other in 3D hierarchies
-- [Cameras & Projections](/concepts/three-basics/cameras) — how 3D space appears on 2D screens
-- [Lights & Environment](/concepts/three-basics/lights-environment) — illuminating your 3D world
-
-**Advanced Topics:**
-
-- [Raycasting & Input](/concepts/three-basics/raycasting-input) — detecting what users point at or touch
-- [Rendering & Performance](/concepts/three-basics/rendering-performance) — keeping 90fps in VR/AR
-
 ## Quick Start: Your First 3D Object
 
 Here's how ECS and Three.js work together in IWSDK:
 
 ```ts
-import {
-  World,
-  Object3D,
-  BoxGeometry,
-  MeshStandardMaterial,
-} from '@iwsdk/core';
+import { World, Mesh, BoxGeometry, MeshStandardMaterial } from '@iwsdk/core';
 
 // 1) IWSDK creates renderer, scene, camera automatically
 const world = await World.create(container);
@@ -77,15 +61,13 @@ const world = await World.create(container);
 // 2) Create a mesh using Three.js classes
 const geometry = new BoxGeometry(1, 1, 1);
 const material = new MeshStandardMaterial({ color: 0x00ff00 });
-const mesh = new Object3D();
-mesh.add(new Mesh(geometry, material));
+const mesh = new Mesh(geometry, material);
 
 // 3) Create an entity and attach the Three.js object
 const boxEntity = world.createTransformEntity(mesh);
 
-// 4) ECS data controls the Three.js visuals automatically
-const transform = boxEntity.getComponent(Transform)!;
-transform.position = [2, 1, 0]; // Box moves in 3D space
+// 4) Position the object in 3D space
+boxEntity.object3D.position.set(2, 1, 0);
 ```
 
 **What happened?**

@@ -9,8 +9,9 @@
   ],
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p=['dist','variants-src','recipes','vr-manual-ts','vr-manual-js','vr-metaspatial-ts','vr-metaspatial-js','ar-manual-ts','ar-manual-js','ar-metaspatial-ts','ar-metaspatial-js'];for(const d of p){fs.rmSync(d,{recursive:true,force:true});}\"",
+    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > scripts/version.js",
     "starter:sync": "node scripts/generate-starters.mjs",
-    "build": "pnpm -s starter:sync && node scripts/build-assets.mjs",
+    "build": "pnpm -s prebuild && pnpm -s starter:sync && node scripts/build-assets.mjs",
     "chef:verify": "node scripts/chef-verify.mjs",
     "prepublishOnly": "pnpm -s build"
   },
@@ -25,7 +26,7 @@
   },
   "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
   "devDependencies": {
-    "@pmndrs/chef": "^0.0.2",
+    "@pmndrs/chef": "^0.1.9",
     "prettier": "^3.3.3",
     "sucrase": "^3.35.0"
   },

@@ -84,3 +84,4 @@ example-local-build/**/public/ui/
 
 # Auto generated version files
 **/version.ts
+**/version.js

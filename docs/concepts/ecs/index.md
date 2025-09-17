@@ -13,7 +13,6 @@ This is a practical, from‑zero introduction to Entity‑Component‑System (EC
   - [System](/concepts/ecs/systems)
   - [Queries](/concepts/ecs/queries)
   - [Lifecycle](/concepts/ecs/lifecycle)
-  - [Config & Signals](/concepts/ecs/config-signals)
   - [Patterns & Tips](/concepts/ecs/patterns)
 
 IWSDK’s ECS is powered by the elics runtime. IWSDK layers WebXR, Three.js scene ownership, and convenient helpers on top, but the core mental model is the same.
@@ -45,7 +44,6 @@ IWSDK’s ECS is powered by the elics runtime. IWSDK layers WebXR, Three.js scen
 
 - [Queries](/concepts/ecs/queries): live, efficient sets of entities that update automatically as components change. Support complex filtering with value predicates.
 - [Lifecycle](/concepts/ecs/lifecycle): understand when things happen — world boot sequence, system initialization, per-frame execution order, and cleanup.
-- [Config & Signals](/concepts/ecs/config-signals): reactive configuration that allows runtime tuning of system behavior from UI or debugging tools.
 - [Patterns & Tips](/concepts/ecs/patterns): proven composition patterns, performance optimizations, and debugging techniques for production use.
 
 ## Quick start: a complete feature in ~40 lines
@@ -360,7 +358,6 @@ export class InteractiveGlowSystem extends createSystem(
 - [Component](/concepts/ecs/components) — schemas, enums, vectors, defaults.
 - [System](/concepts/ecs/systems) — queries, lifecycle, config, cleanup.
 - [Queries](/concepts/ecs/queries) — required/excluded, qualify/disqualify events.
-- [Config & Signals](/concepts/ecs/config-signals) — reactive tuning at runtime.
 - [Patterns & Tips](/concepts/ecs/patterns) — common patterns, pitfalls, and performance notes.
 - [Architecture](/concepts/ecs/architecture) — deep dive into performance, memory layout, and WebXR integration.
 

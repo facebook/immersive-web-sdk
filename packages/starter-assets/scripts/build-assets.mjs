@@ -11,6 +11,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { VERSION } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -445,7 +446,7 @@ async function generateRecipeForStarter(
               if (k.startsWith('@iwsdk/')) {
                 const varName =
                   '@' + k.replace(/^@/, '').replace(/[\/\-]/g, '_');
-                edits[varName] = v; // default value
+                edits[varName] = VERSION; // use VERSION instead of package.json value
                 deps[k] = '{{ ' + varName + ' }}'; // placeholder string; JSON.stringify will add quotes
               }
             }

@@ -22,11 +22,28 @@ function loadTypedocSidebar() {
 export default defineConfig({
   // Build static site even if some cross-package API links are unresolved in early builds
   ignoreDeadLinks: true,
-  // base: '/immersive-web-sdk/',
   lang: 'en-US',
   title: 'Immersive Web SDK',
   description:
     'WebXR framework with ECS, input, locomotion, spatial UI, and tools.',
+
+  head: [
+    [
+      'script',
+      {
+        async: '',
+        src: 'https://www.googletagmanager.com/gtag/js?id=G-V03QDNGKY3',
+      },
+    ],
+    [
+      'script',
+      {},
+      `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-V03QDNGKY3');`,
+    ],
+  ],
 
   themeConfig: {
     logo: {
@@ -126,7 +143,6 @@ export default defineConfig({
             { text: 'System', link: '/concepts/ecs/systems' },
             { text: 'Queries', link: '/concepts/ecs/queries' },
             { text: 'Lifecycle', link: '/concepts/ecs/lifecycle' },
-            { text: 'Config & Signals', link: '/concepts/ecs/config-signals' },
             { text: 'Patterns & Tips', link: '/concepts/ecs/patterns' },
             { text: 'Architecture', link: '/concepts/ecs/architecture' },
           ],
@@ -139,7 +155,6 @@ export default defineConfig({
               text: 'Interop: ECS ↔ Three.js',
               link: '/concepts/three-basics/interop-ecs-three',
             },
-            { text: 'Scene Graph', link: '/concepts/three-basics/scene-graph' },
             {
               text: 'Transforms & 3D Math',
               link: '/concepts/three-basics/transforms-math',
@@ -147,22 +162,6 @@ export default defineConfig({
             {
               text: 'Meshes, Geometry & Materials',
               link: '/concepts/three-basics/meshes-geometry-materials',
-            },
-            {
-              text: 'Cameras & Projections',
-              link: '/concepts/three-basics/cameras',
-            },
-            {
-              text: 'Lights & Environment',
-              link: '/concepts/three-basics/lights-environment',
-            },
-            {
-              text: 'Raycasting & Input',
-              link: '/concepts/three-basics/raycasting-input',
-            },
-            {
-              text: 'Rendering & Performance',
-              link: '/concepts/three-basics/rendering-performance',
             },
           ],
         },

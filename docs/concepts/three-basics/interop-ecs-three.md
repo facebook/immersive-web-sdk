@@ -17,14 +17,11 @@ This is the **most important concept** to understand in IWSDK. Many developers g
 entity.object3D.position.x += 1;
 
 // ECS way:
-entity.setValue(Transform, 'position', [x + 1, y, z]);
-
-// Vector view way:
 const pos = entity.getVectorView(Transform, 'position');
 pos[0] += 1;
 ```
 
-**The Answer:** It depends on what you need, but **ECS is usually better** for game logic.
+**The Answer:** Both work, but **ECS Transform data is the source of truth** - IWSDK automatically syncs to Three.js visuals.
 
 ## Mental Model: Data-Driven Visuals
 
@@ -37,8 +34,8 @@ Transform { pos: [2,1,0] }  ────────→ object3D.position: Vecto
 Transform { rot: [0,0,0,1] } ────────→ object3D.quaternion: Quaternion(0,0,0,1)
 Transform { scale: [1,1,1] } ────────→ object3D.scale: Vector3(1,1,1)
 
-Health { current: 75 }               → (no visual equivalent)
-Mesh { geometry: 'box' }   ────────→ object3D.add(new Mesh(...))
+// ECS components store the authoritative state
+// Three.js objects provide the visual representation
 ```
 
 **Key Insight:** ECS components hold the **authoritative data**. Three.js objects are **synchronized views** of that data.
@@ -90,49 +87,27 @@ You never write this code - IWSDK handles it automatically.
 
 ### Use ECS APIs For:
 
-**✅ Game Logic and Systems:**
+**✅ Transform Updates:**
 
 ```ts
-export class MovementSystem extends createSystem({
-  moving: { required: [Transform, Velocity] },
-}) {
-  update(dt: number) {
-    for (const entity of this.queries.moving.entities) {
-      const pos = entity.getVectorView(Transform, 'position');
-      const vel = entity.getValue(Velocity, 'speed')!;
-
-      pos[0] += vel * dt; // ECS way - data-driven
-    }
-  }
-}
+// Update position through ECS - gets synced to Three.js automatically
+const pos = entity.getVectorView(Transform, 'position');
+pos[0] += deltaX;
+pos[1] += deltaY;
+pos[2] += deltaZ;
 ```
 
-**✅ Query-Driven Behavior:**
+**✅ Data-Driven Logic:**
 
 ```ts
-// Only process entities near the player
-export class ProximitySystem extends createSystem({
-  nearby: {
-    required: [Transform, Interactive],
-    where: [lt(Transform, 'distanceToPlayer', 5)],
-  },
-}) {
-  /* ... */
-}
-```
-
-**✅ Component-Based Features:**
-
-```ts
-// Any entity with these components becomes grabbable
-entity.addComponent(Grabbable);
-entity.addComponent(RigidBody, { mass: 1.5 });
-// GrabbingSystem automatically handles the rest
+// ECS Transform is the single source of truth
+entity.setValue(Transform, 'position', [2, 1, -5]);
+// Three.js object3D.position gets updated automatically
 ```
 
 ### Use Three.js APIs For:
 
-**✅ Setting Up Meshes and Materials:**
+**✅ Creating Meshes and Materials:**
 
 ```ts
 import { BoxGeometry, MeshStandardMaterial, Mesh } from '@iwsdk/core';
@@ -148,96 +123,56 @@ const entity = world.createTransformEntity(mesh);
 
 ```ts
 // Build a complex object with multiple parts
-const car = world.createTransformEntity();
+const parent = world.createTransformEntity();
 const body = new Mesh(bodyGeometry, bodyMaterial);
 const wheel1 = new Mesh(wheelGeometry, wheelMaterial);
 const wheel2 = new Mesh(wheelGeometry, wheelMaterial);
 
-car.object3D!.add(body);
-car.object3D!.add(wheel1);
-car.object3D!.add(wheel2);
+parent.object3D.add(body);
+parent.object3D.add(wheel1);
+parent.object3D.add(wheel2);
 
-// Position wheels relative to car body
+// Position wheels relative to parent
 wheel1.position.set(-1, -0.5, 1.2);
 wheel2.position.set(1, -0.5, 1.2);
 ```
 
-**✅ One-Time Setup:**
+**✅ Visual Properties:**
 
 ```ts
-// Set names, layers, or other Three.js properties
-entity.object3D!.name = 'PlayerWeapon';
-entity.object3D!.layers.set(1); // Render layer
-entity.object3D!.castShadow = true;
-entity.object3D!.receiveShadow = true;
+// Set Three.js-specific properties
+entity.object3D.name = 'MyObject';
+entity.object3D.layers.set(1); // Render layer
+entity.object3D.castShadow = true;
+entity.object3D.receiveShadow = true;
 ```
 
 ## Common Patterns
 
-### Pattern 1: ECS Controls, Three.js Renders
+### Pattern 1: Direct Three.js Updates (Recommended)
 
 ```ts
-// ECS system animates the data
-export class RotateSystem extends createSystem({
-  spinning: { required: [Transform, Spinner] },
-}) {
-  update(dt: number) {
-    for (const entity of this.queries.spinning.entities) {
-      const rotation = entity.getVectorView(Transform, 'orientation');
-      const speed = entity.getValue(Spinner, 'speed')!;
+// Update Three.js object directly - immediate and familiar
+entity.object3D.position.x += deltaX; // Move right
+entity.object3D.position.y += deltaY; // Move up
+entity.object3D.position.z += deltaZ; // Move forward
 
-      // Rotate around Y-axis
-      const quaternion = new Quaternion();
-      quaternion.setFromAxisAngle(new Vector3(0, 1, 0), speed * dt);
-
-      const current = new Quaternion().fromArray(rotation);
-      current.multiply(quaternion);
-      rotation.set(...current.toArray());
-    }
-  }
-}
-
-// Three.js automatically shows the rotation (no additional code needed)
+// Animate rotation over time
+const time = performance.now() * 0.001;
+entity.object3D.rotation.y = time; // Rotate around Y-axis
 ```
 
-### Pattern 2: Reactive Materials
+### Pattern 2: ECS Transform Updates
 
 ```ts
-export class HealthIndicatorSystem extends createSystem({
-  healthBars: { required: [Transform, Health, MeshMaterial] },
-}) {
-  update() {
-    for (const entity of this.queries.healthBars.entities) {
-      const health =
-        entity.getValue(Health, 'current')! / entity.getValue(Health, 'max')!;
-      const materialId = entity.getValue(MeshMaterial, 'id')!;
+// Update position through ECS - syncs to Three.js automatically
+const pos = entity.getVectorView(Transform, 'position');
+pos[0] += deltaX; // Move right
+pos[1] += deltaY; // Move up
+pos[2] += deltaZ; // Move forward
 
-      // Update Three.js material based on ECS data
-      const material = this.getMaterialById(materialId);
-      material.color.setRGB(1 - health, health, 0); // Red to green
-    }
-  }
-}
-```
-
-### Pattern 3: Physics Integration
-
-```ts
-export class PhysicsSync extends createSystem({
-  rigidbodies: { required: [Transform, RigidBody] },
-}) {
-  update() {
-    for (const entity of this.queries.rigidbodies.entities) {
-      // Physics engine updates RigidBody component
-      const physicsPos = entity.getValue(RigidBody, 'position')!;
-      const physicsRot = entity.getValue(RigidBody, 'rotation')!;
-
-      // Sync to ECS Transform (Three.js gets updated automatically)
-      entity.setValue(Transform, 'position', physicsPos);
-      entity.setValue(Transform, 'orientation', physicsRot);
-    }
-  }
-}
+// IWSDK's TransformSystem automatically updates:
+// entity.object3D.position.set(pos[0], pos[1], pos[2])
 ```
 
 ## Parenting and Hierarchies
@@ -256,15 +191,15 @@ const prop = world.createTransformEntity(); // default
 // Attached to: world.getActiveRoot() (current level)
 ```
 
-### Manual Parenting
+### Entity Parenting
 
 ```ts
 const parent = world.createTransformEntity();
 const child = world.createTransformEntity(undefined, { parent });
 
 // Both ECS Transform and Three.js hierarchy are set up:
-console.log(child.getComponent(Transform).parent === parent); // true
-console.log(child.object3D!.parent === parent.object3D); // true
+console.log(child.getValue(Transform, 'parent') === parent.index); // true
+console.log(child.object3D.parent === parent.object3D); // true
 ```
 
 ## Frame Order and Timing
@@ -297,40 +232,14 @@ const pos = entity.getVectorView(Transform, 'position');
 pos[0] = 5; // Three.js automatically updates
 ```
 
-### ❌ Pitfall: Bypassing Queries
-
-```ts
-// DON'T: Search for entities manually
-for (const entity of world.entities) {
-  if (entity.hasComponent(Health)) {
-    // Slow and breaks ECS patterns
-  }
-}
-
-// DO: Use queries in systems
-export class HealthSystem extends createSystem({
-  healthEntities: { required: [Health] },
-}) {
-  update() {
-    for (const entity of this.queries.healthEntities.entities) {
-      // Fast and ECS-friendly
-    }
-  }
-}
-```
-
 ### ❌ Pitfall: Component vs Object3D Confusion
 
 ```ts
-// DON'T: Store Three.js objects in components
-const BadComponent = createComponent('Bad', {
-  mesh: { type: Types.Object, default: null }, // Breaks ECS data orientation
-});
+// DON'T: Store Three.js objects directly in components
+// Keep ECS data separate from Three.js objects
 
-// DO: Reference by ID and lookup
-const GoodComponent = createComponent('Good', {
-  meshId: { type: Types.String, default: '' },
-});
+// DO: Use Transform component for position/rotation/scale
+// IWSDK handles the Object3D sync automatically
 ```
 
 ## Summary
