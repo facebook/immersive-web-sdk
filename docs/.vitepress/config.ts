@@ -22,7 +22,7 @@ function loadTypedocSidebar() {
 export default defineConfig({
   // Build static site even if some cross-package API links are unresolved in early builds
   ignoreDeadLinks: true,
-  base: '/immersive-web-sdk/',
+  // base: '/immersive-web-sdk/',
   lang: 'en-US',
   title: 'Immersive Web SDK',
   description:
