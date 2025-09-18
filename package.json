@@ -39,7 +39,10 @@
   },
   "keywords": [],
   "author": "Felix Zhang <fe1ix@meta.com>",
-  "contributor": "Jianmin Zheng <zjm@meta.com>",
+  "contributors": [
+    "Jianmin Zheng <zjm@meta.com>",
+    "Bela Bohlender <bela@bohlender.email>"
+  ],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/facebook/immersive-web-sdk/issues"
