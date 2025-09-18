@@ -61,6 +61,21 @@ function flattenOverview(list) {
   });
 }
 
+async function fixMainIndexFile() {
+  const mainIndexPath = path.join(apiRoot, 'index.md');
+  if (!fs.existsSync(mainIndexPath)) return;
+  
+  const content = await fsp.readFile(mainIndexPath, 'utf8');
+  const updated = content
+    .replace(/\[([^\]]+)\/src\]\(([^)]+)\/src\/index\.md\)/g, '[$1]($2/index.md)')
+    .replace(/\/src\//g, '/')
+    .replace(/\/src\]/g, ']');
+  
+  if (updated !== content) {
+    await fsp.writeFile(mainIndexPath, updated);
+  }
+}
+
 async function main() {
   const entries = await fsp.readdir(apiRoot, { withFileTypes: true });
   const packageDirs = entries.filter((e) => e.isDirectory());
@@ -75,6 +90,9 @@ async function main() {
     const updated = flattenOverview(rewriteSidebarLinks(json));
     await fsp.writeFile(sidebarPath, JSON.stringify(updated, null, 0));
   }
+
+  // Fix main API index file to remove src/ references
+  await fixMainIndexFile();
 
   // Custom: rewrite all System class pages into minimal, consistent schema-focused pages
   await minimizeAllSystemPages();

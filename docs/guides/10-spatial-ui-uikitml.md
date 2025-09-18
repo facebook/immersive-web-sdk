@@ -1,6 +1,10 @@
-# Chapter 10: Spatial UI with UIKitML (Bonus)
+---
+outline: [2, 4]
+---
 
-Traditional 2D interfaces don't work well in 3D space. Users expect spatial interfaces that feel natural in VR and AR environments. This bonus chapter teaches you how to create immersive spatial user interfaces using UIKitML - IWSDK's spatial UI system.
+# Chapter 10: Spatial UI with UIKitML
+
+This chapter teaches you how to create immersive spatial user interfaces using [pmndrs/uikit](https://pmndrs.github.io/uikit/docs/), specifically uikitml – IWSDK's spatial UI system.
 
 ## What You'll Learn
 
@@ -12,52 +16,41 @@ By the end of this chapter, you'll be able to:
 - Handle user interactions with spatial UI elements
 - Implement common UI patterns for WebXR
 
-## Understanding Spatial UI
-
-### Why Traditional UI Doesn't Work
-
-In WebXR, traditional flat UI interfaces have problems:
-
-- **Fixed positioning**: Doesn't adapt to 3D movement
-- **Poor readability**: Text can be too small or far away
-- **Awkward interaction**: Mouse/touch paradigms don't translate
-- **Breaks immersion**: Flat panels feel artificial in 3D space
-
-### Spatial UI Principles
+## Spatial UI Principles
 
 Great spatial interfaces follow these principles:
 
-1. **World-scale**: UI elements have physical presence in 3D space
+1. **World-scale**: UI elements have a physical presence in 3D space
 2. **Natural interaction**: Use pointing, grabbing, and gestures
 3. **Readable at distance**: Text and icons scale appropriately
 4. **Contextual placement**: UI appears near relevant objects
 5. **Comfortable viewing**: Positioned to avoid neck strain
 
-## Introduction to UIKitML
+## Introduction to Building Spatial User Interfaces in IWSDK
 
-UIKitML is IWSDK's spatial UI markup language, similar to HTML but designed for 3D interfaces.
+The unavailability of HTML in WebXR has been a big challenge for developers, since manually placing user interface elements is very cumbersome. That's why IWSDK uses [pmndrs/uikit](https://pmndrs.github.io/uikit/docs/), a GPU-accelerated UI rendering system that provides an API aligned with HTML and CSS, allowing developers to feel right at home. To make UI authoring even more natural, IWSDK uses the [uikitml](https://github.com/pmndrs/uikitml) language, which allows developers to write user interfaces using an HTML-like syntax, including features such as CSS classes. This integration allows IWSDK developers to reuse their HTML knowledge to quickly build high-performance, GPU-accelerated user interfaces for WebXR. Furthermore, IWSDK makes use of the pre-built component collections offered by the uikit project: the Default Kit (based on shadcn) and the Horizon Kit (based on the Reality Labs Design System).
 
 ### Key Features
 
 - **Declarative markup**: Describe UI structure, not implementation
 - **3D layout system**: Flexbox-like layouts in 3D space
-- **Component library**: Pre-built buttons, panels, sliders, etc.
+- **Component Kits**: Pre-built buttons, panels, sliders, etc.
 - **Event system**: Handle clicks, hovers, and other interactions
 - **Theming support**: Consistent styling across your application
 
 ### Basic Syntax
 
-UIKitML uses XML-style markup with 3D-specific properties:
+UIKitML uses HTML-style markup with CSS properties for styling and layouting:
 
-```xml
+```html
 <!-- Basic panel with text -->
-<panel width="400" height="300" backgroundColor="#2a2a2a">
-  <text fontSize="24" color="white">Hello WebXR!</text>
-  <button onClick="handleClick">Click Me</button>
+<div class="panel" style="width: 400; height:300; background-color: #2a2a2a">
+  <text style="fontSize:24px; color: white">Hello WebXR!</text>
+  <button>Click Me</button>
 </panel>
 ```
 
-## Setting Up UIKitML
+## Setting Up UIKitML with IWSDK
 
 ### Vite Plugin Configuration
 
@@ -83,616 +76,239 @@ export default defineConfig({
 
 ### Creating Your First UIKitML File
 
-Create `src/ui/main-menu.uikitml`:
+Create `src/ui/main-menu.uikitml` and insert the following content, which uses the Panel, Button, ButtonIcon, and LoginIcon components from the Horizon Kit to design a panel with a button:
 
-```xml
-<panel
-  id="mainMenu"
-  width="500"
-  height="600"
-  backgroundColor="#1a1a1a"
-  borderRadius="16"
-  padding="32"
->
-  <!-- Title -->
-  <text
-    fontSize="32"
-    color="white"
-    textAlign="center"
-    marginBottom="24"
-  >
-    WebXR Experience
-  </text>
-
-  <!-- Menu buttons -->
-  <container flexDirection="column" gap="16">
-    <button
-      id="startBtn"
-      width="400"
-      height="60"
-      backgroundColor="#007aff"
-      color="white"
-      fontSize="18"
-    >
-      Start Experience
-    </button>
-
-    <button
-      id="settingsBtn"
-      width="400"
-      height="60"
-      backgroundColor="#34c759"
-      color="white"
-      fontSize="18"
-    >
-      Settings
-    </button>
-
-    <button
-      id="exitBtn"
-      width="400"
-      height="60"
-      backgroundColor="#ff3b30"
-      color="white"
-      fontSize="18"
-    >
-      Exit
-    </button>
-  </container>
-</panel>
+```html
+<style>
+  .panel-root {
+    padding: 16px;
+    flex-direction: column;
+    width: 344px;
+  }
+</style>
+<Panel class="panel-root">
+  <button id="xr-button">
+    <ButtonIcon>
+      <LoginIcon></LoginIcon>
+    </ButtonIcon>
+    Enter XR
+  </button>
+</Panel>
 ```
 
 ### Loading UI in Your Application
 
+We can add our `panelWithButton` uikitml user interface to our IWSDK scene using the `PanelUI` and `PanelDocument` components:
+
 ```typescript
-import { createWorld } from '@iwsdk/core/runtime';
-import { UIDocument, UISystem } from '@iwsdk/core/ui';
-import mainMenuUI from './ui/main-menu.uikitml';
-
-const world = createWorld();
-
-// Register the UI system
-world.registerSystem(UISystem);
-
-// Create a UI document and load the menu
-const uiDoc = world.spawn(UIDocument, {
-  content: mainMenuUI,
-  position: [0, 1.5, -2], // 2 meters in front, at eye level
-  scale: 0.001, // Convert pixels to meters (1px = 1mm)
-});
+export class PanelSystem extends createSystem({
+  panelWithButton: {
+    required: [PanelUI, PanelDocument],
+    where: [eq(PanelUI, 'config', '/ui/main-menu.json')],
+  },
+}) {}
 ```
 
-## Layout System
+### Adding Component Kits to Your Spatial User Interface
 
-UIKitML uses a 3D-aware layout system based on CSS Flexbox principles.
+If you'd like to use a different or additional component kit for your uikitml file, you can configure the kits in the `spatialUI` feature list when creating a `World`:
 
-### Container Types
+```typescript
+import * as horizonKit from "@pmndrs/uikit-horizon";
 
-#### Panel
-
-Basic container with background and borders:
-
-```xml
-<panel
-  width="400"
-  height="300"
-  backgroundColor="#2a2a2a"
-  borderColor="#007aff"
-  borderWidth="2"
-  borderRadius="8"
->
-  <!-- Content here -->
-</panel>
+World.create(document.getElementById("scene-container"), {
+  ...
+  features: {
+    ...
+    spatialUI: { kits: [horizonKit] },
+  },
+})
 ```
 
-#### Container
+## Overview of Properties and Features Available for Building Spatial User Interfaces
 
-Layout container without visual styling:
+When authoring a User Interface with IWSDK, developers can use almost all the features they know and love from HTML.
+The following section shows all the available element types and styling methods for designing Spatial User Interfaces.
 
-```xml
-<container flexDirection="row" gap="16">
-  <button>Button 1</button>
-  <button>Button 2</button>
-  <button>Button 3</button>
-</container>
+### Element Types
+
+#### Container Elements
+
+Most HTML elements become containers that can hold children and text.
+
+```html
+<div>Layout container</div>
+<p>Paragraph text</p>
+<h1>Main heading</h1>
+<button>Click me</button>
+<ul>
+  <li>List item</li>
+</ul>
 ```
 
-### Layout Properties
+#### Image Elements
 
-#### Flex Direction
+Display bitmap images in your 3D UI.
 
-Controls the main axis of layout:
-
-```xml
-<!-- Horizontal layout -->
-<container flexDirection="row">
-  <item>A</item>
-  <item>B</item>
-  <item>C</item>
-</container>
-
-<!-- Vertical layout -->
-<container flexDirection="column">
-  <item>A</item>
-  <item>B</item>
-  <item>C</item>
-</container>
+```html
+<img src="photo.jpg" alt="Description" />
+<img src="icon.png" class="avatar" />
+<img src="icon.svg" />
 ```
 
-#### Alignment and Justification
+**Required:** `src` attribute
 
-```xml
-<container
-  flexDirection="row"
-  justifyContent="center"     <!-- space-between, space-around, flex-start, flex-end -->
-  alignItems="center"         <!-- flex-start, flex-end, stretch -->
-  gap="16"
->
-  <button>Centered Button 1</button>
-  <button>Centered Button 2</button>
-</container>
+#### Inline SVG Elements
+
+Embed SVG markup directly in your UI.
+
+```html
+<svg viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="40" fill="blue" />
+  <rect x="10" y="10" width="30" height="30" fill="red" />
+</svg>
 ```
 
-#### Sizing and Spacing
+**Content:** Raw SVG markup is preserved and rendered
 
-```xml
-<panel padding="24" margin="16">
-  <!-- Fixed size -->
-  <button width="200" height="60">Fixed Size</button>
+#### Video Elements
 
-  <!-- Flexible size -->
-  <button flex="1" height="60">Flexible Width</button>
+Display video content with standard HTML5 video attributes.
 
-  <!-- With margins -->
-  <button
-    width="150"
-    height="60"
-    marginTop="16"
-    marginBottom="16"
-  >
-    With Margins
-  </button>
-</panel>
+```html
+<video src="movie.mp4" controls autoplay /> <video src="demo.webm" loop muted />
 ```
 
-## UI Components
+**Required:** `src` attribute
+**Supports:** All standard HTML5 video attributes
 
-### Text Elements
+#### Input Elements
 
-```xml
-<!-- Basic text -->
-<text color="white" fontSize="18">Hello World</text>
+Create interactive input fields for user data.
 
-<!-- Styled text -->
-<text
-  color="#007aff"
-  fontSize="24"
-  fontWeight="bold"
-  textAlign="center"
-  maxWidth="300"
-  wordWrap="true"
->
-  This text will wrap and center align
-</text>
+```html
+<input type="text" placeholder="Enter your name" />
+<input type="email" value="user@example.com" />
+<textarea placeholder="Multi-line text input">Default content</textarea>
 ```
 
-### Interactive Elements
+#### Component Kits
 
-#### Buttons
+In addition to these elements, developers can also use the installed kits.
 
-```xml
-<!-- Basic button -->
-<button
-  id="myButton"
-  width="200"
-  height="60"
-  backgroundColor="#007aff"
-  color="white"
-  fontSize="18"
-  borderRadius="8"
-  onClick="handleButtonClick"
->
-  Click Me
-</button>
-
-<!-- Button with hover effects -->
-<button
-  backgroundColor="#007aff"
-  hoverBackgroundColor="#0056cc"
-  pressedBackgroundColor="#003d99"
-  transition="all 0.2s ease"
->
-  Hover Button
+```html
+<button id="xr-button">
+  <ButtonIcon>
+    <LoginIcon></LoginIcon>
+  </ButtonIcon>
+  Enter XR
 </button>
 ```
 
-#### Sliders
+## Styling System
 
-```xml
-<slider
-  id="volumeSlider"
-  width="300"
-  height="40"
-  min="0"
-  max="100"
-  value="75"
-  trackColor="#444444"
-  thumbColor="#007aff"
-  onChange="handleVolumeChange"
-/>
+### Inline Styles
+
+Use familiar CSS properties with kebab-casing directly on elements:
+
+```html
+<div style="background-color: blue; padding: 20px; border-radius: 8px;">
+  Styled container
+</div>
 ```
 
-#### Toggle Switches
+### CSS Classes
 
-```xml
-<toggle
-  id="soundToggle"
-  width="60"
-  height="30"
-  value="true"
-  onColor="#34c759"
-  offColor="#8e8e93"
-  onChange="handleSoundToggle"
-/>
+Define reusable styles with full pseudo-selector support using the `<style>` tag:
+
+```html
+<style>
+  .button {
+    background-color: #3b82f6;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .button:hover {
+    background-color: #2563eb;
+    transform: scale(1.05);
+  }
+
+  .button:active {
+    background-color: #1d4ed8;
+    transform: scale(0.95);
+  }
+
+  /* Responsive styles */
+  .button:sm {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .button:lg {
+    padding: 16px 32px;
+    font-size: 18px;
+  }
+</style>
+
+<button class="button">Interactive Button</button>
 ```
 
-### Images and Icons
+**Supported selectors:**
 
-```xml
-<!-- Image from URL -->
-<image
-  width="100"
-  height="100"
-  src="/icons/settings.png"
-  borderRadius="8"
-/>
+- **States:** `:hover`, `:active`, `:focus`
+- **Responsive:** `:sm`, `:md`, `:lg`, `:xl`, `:2xl`
 
-<!-- Icon font -->
-<icon
-  name="play"
-  size="24"
-  color="#007aff"
-/>
+### ID-Based Styling
+
+Style specific elements using ID selectors:
+
+```html
+<style>
+  #header {
+    background-color: #ff6b6b;
+    padding: 20px;
+    text-align: center;
+  }
+
+  #header:hover {
+    opacity: 0.9;
+  }
+</style>
+
+<div id="header">
+  <h1>Welcome to uikitml</h1>
+</div>
 ```
 
 ## Handling User Interactions
 
-### Event System
-
 UIKitML provides an event system for handling user interactions:
 
 ```typescript
-import { UIDocument, UIEvent } from '@iwsdk/core/ui';
-
-// Create UI document
-const uiDoc = world.spawn(UIDocument, {
-  content: mainMenuUI,
-  position: [0, 1.5, -2],
-  scale: 0.001,
-});
-
-// Handle button clicks
-uiDoc.addEventListener('click', (event: UIEvent) => {
-  switch (event.target.id) {
-    case 'startBtn':
-      console.log('Start button clicked!');
-      startExperience();
-      break;
-
-    case 'settingsBtn':
-      console.log('Settings button clicked!');
-      openSettings();
-      break;
-
-    case 'exitBtn':
-      console.log('Exit button clicked!');
-      exitApplication();
-      break;
-  }
-});
-
-// Handle slider changes
-uiDoc.addEventListener('change', (event: UIEvent) => {
-  if (event.target.id === 'volumeSlider') {
-    const volume = event.target.value;
-    setGlobalVolume(volume / 100);
-  }
-});
-```
-
-### Common Interaction Patterns
-
-#### Form Handling
-
-```xml
-<panel id="settingsForm" width="400" height="500">
-  <text fontSize="24" marginBottom="24">Settings</text>
-
-  <container flexDirection="column" gap="16">
-    <!-- Volume setting -->
-    <container flexDirection="row" alignItems="center" gap="16">
-      <text width="100">Volume:</text>
-      <slider
-        id="volume"
-        flex="1"
-        min="0"
-        max="100"
-        value="75"
-      />
-      <text id="volumeValue" width="40">75%</text>
-    </container>
-
-    <!-- Graphics quality -->
-    <container flexDirection="row" alignItems="center" gap="16">
-      <text width="100">Quality:</text>
-      <select id="quality" flex="1">
-        <option value="low">Low</option>
-        <option value="medium" selected="true">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </container>
-
-    <!-- Sound toggle -->
-    <container flexDirection="row" alignItems="center" gap="16">
-      <text width="100">Sound:</text>
-      <toggle id="sound" value="true"/>
-    </container>
-  </container>
-
-  <container flexDirection="row" gap="16" marginTop="32">
-    <button id="saveSettings" flex="1">Save</button>
-    <button id="cancelSettings" flex="1" backgroundColor="#8e8e93">Cancel</button>
-  </container>
-</panel>
-```
-
-#### Dynamic Content Updates
-
-```typescript
-// Update UI content dynamically
-const scoreText = uiDoc.querySelector('#score');
-if (scoreText) {
-  scoreText.textContent = `Score: ${currentScore}`;
-}
-
-// Show/hide elements
-const loadingPanel = uiDoc.querySelector('#loadingPanel');
-if (loadingPanel) {
-  loadingPanel.style.display = isLoading ? 'flex' : 'none';
-}
-
-// Update progress bars
-const progressBar = uiDoc.querySelector('#progressBar');
-if (progressBar) {
-  progressBar.value = (loadedAssets / totalAssets) * 100;
-}
-```
-
-## Positioning and Follow Behaviors
-
-### World-Space Positioning
-
-```typescript
-// Fixed position in world space
-const fixedUI = world.spawn(UIDocument, {
-  content: settingsUI,
-  position: [2, 1.5, -1], // Fixed location
-  rotation: [0, -30, 0], // Angled toward user
-  scale: 0.001,
-});
-```
-
-### Follow Behaviors
-
-Make UI elements follow the player or look at them:
-
-```typescript
-import { UIFollowBehavior } from '@iwsdk/core/ui';
-
-// UI that follows the player's head
-const followUI = world.spawn(UIDocument, {
-  content: hudUI,
-  scale: 0.001,
-});
-
-followUI.add(UIFollowBehavior, {
-  target: 'head', // Follow the player's head
-  offset: [0, 0.2, 0.5], // Offset from head position
-  maxDistance: 2.0, // Maximum distance before snapping
-  smoothing: 0.1, // How smoothly to follow (0-1)
-});
-```
-
-### Look-At Behavior
-
-```typescript
-import { UILookAtBehavior } from '@iwsdk/core/ui';
-
-// UI that always faces the player
-const facingUI = world.spawn(UIDocument, {
-  content: infoPanel,
-  position: [0, 1.5, -3],
-  scale: 0.001,
-});
-
-facingUI.add(UILookAtBehavior, {
-  target: 'head', // Always look at player's head
-  axis: 'y', // Only rotate around Y axis (no tilting)
-});
-```
-
-## Theming and Styling
-
-### Global Themes
-
-Create consistent styling across your UI:
-
-```xml
-<!-- Define theme at document root -->
-<document theme="darkTheme">
-  <panel>
-    <!-- All elements inherit theme properties -->
-    <button>Themed Button</button>
-  </panel>
-</document>
-```
-
-```typescript
-// Define theme in your application
-const darkTheme = {
-  primaryColor: '#007aff',
-  secondaryColor: '#34c759',
-  backgroundColor: '#1a1a1a',
-  textColor: '#ffffff',
-  borderColor: '#444444',
-
-  button: {
-    backgroundColor: 'var(--primaryColor)',
-    color: 'var(--textColor)',
-    borderRadius: 8,
+export class PanelSystem extends createSystem({
+  welcomePanel: {
+    required: [PanelUI, PanelDocument],
+    where: [eq(PanelUI, 'config', '/ui/main-menu.json')],
   },
+}) {
+  init() {
+    this.queries.welcomePanel.subscribe('qualify', (entity) => {
+      const document = PanelDocument.data.document[
+        entity.index
+      ] as UIKitDocument;
+      if (!document) return;
 
-  panel: {
-    backgroundColor: 'var(--backgroundColor)',
-    borderColor: 'var(--borderColor)',
-  },
-};
-
-// Apply theme to UI document
-uiDoc.applyTheme(darkTheme);
-```
-
-### CSS-like Styling
-
-```xml
-<style>
-  .primaryButton {
-    background-color: #007aff;
-    color: white;
-    border-radius: 8px;
-    font-size: 18px;
-  }
-
-  .primaryButton:hover {
-    background-color: #0056cc;
-  }
-
-  .dangerButton {
-    background-color: #ff3b30;
-    color: white;
-  }
-</style>
-
-<panel>
-  <button class="primaryButton">Primary Action</button>
-  <button class="dangerButton">Delete</button>
-</panel>
-```
-
-## Advanced UI Patterns
-
-### Contextual Menus
-
-Create UI that appears near objects when interacted with:
-
-```typescript
-import { ContextualUI } from '@iwsdk/core/ui';
-
-// Add contextual menu to grabbable objects
-const interactiveObject = world.spawn(Transform, {
-  position: [1, 1, -2],
-});
-
-interactiveObject.add(Grabbable);
-interactiveObject.add(ContextualUI, {
-  template: objectMenuUI,
-  triggerEvents: ['grab', 'point'],
-  positioning: 'above', // above, below, left, right
-  distance: 0.3, // Distance from object
-});
-```
-
-### Progressive Disclosure
-
-Show detailed information on demand:
-
-```xml
-<panel id="inventoryItem" width="100" height="100">
-  <!-- Compact view -->
-  <image src="/items/sword.png" width="60" height="60"/>
-  <text fontSize="12">Iron Sword</text>
-
-  <!-- Detailed view (initially hidden) -->
-  <panel id="detailView" display="none" width="300" height="200">
-    <text fontSize="16">Iron Sword</text>
-    <text fontSize="12" color="#888">
-      A sturdy blade forged from iron. +10 Attack Power.
-    </text>
-    <button id="equipBtn">Equip</button>
-    <button id="dropBtn">Drop</button>
-  </panel>
-</panel>
-```
-
-### Spatial Keyboards
-
-For text input in VR:
-
-```xml
-<spatialKeyboard
-  id="textInput"
-  width="600"
-  height="300"
-  layout="qwerty"
-  target="#usernameField"
-  onClose="handleKeyboardClose"
-/>
-```
-
-## Performance Considerations
-
-### Optimize UI Updates
-
-```typescript
-// Batch UI updates for better performance
-uiDoc.batchUpdate(() => {
-  scoreText.textContent = `Score: ${score}`;
-  livesText.textContent = `Lives: ${lives}`;
-  timeText.textContent = `Time: ${timeLeft}`;
-});
-```
-
-### Lazy Loading
-
-```typescript
-// Load UI content only when needed
-const loadSettingsUI = async () => {
-  if (!settingsUILoaded) {
-    const settingsContent = await import('./ui/settings.uikitml');
-    settingsUI = world.spawn(UIDocument, {
-      content: settingsContent.default,
-      position: [0, 1.5, -2],
+      const xrButton = document.getElementById('xr-button') as UIKit.Text;
+      xrButton.addEventListener('click', () => {
+        // TODO: add your interactivity here
+      });
     });
-    settingsUILoaded = true;
   }
-
-  settingsUI.show();
-};
+}
 ```
-
-### Efficient Positioning
-
-```typescript
-// Use object pooling for frequently created UI
-const uiPool = new UIPool(tooltipTemplate, 10);
-
-// Reuse UI elements instead of creating new ones
-const tooltip = uiPool.get();
-tooltip.position.copy(targetPosition);
-tooltip.querySelector('text').textContent = tooltipText;
-tooltip.show();
-```
-
 
 ## Troubleshooting
 
@@ -700,30 +316,22 @@ tooltip.show();
 
 **UI document loads but nothing shows?**
 
-- Check the position is in front of the player
-- Verify scale is appropriate (try 0.001 for pixel-based layouts)
+- Check that the position is in front of the player
+- Verify the scale is appropriate (try 0.001 for pixel-based layouts)
 - Ensure UISystem is registered with the world
+- Ensure your elements have a color different then their background
 
 ### Interaction Issues
 
 **Clicks not working?**
 
-- Check that ray pointers are set up correctly
-- Verify event listeners are attached to the UIDocument
-- Ensure UI elements have proper hit testing enabled
-
-### Performance Problems
-
-**UI causing frame rate drops?**
-
-- Reduce the number of UI elements updated per frame
-- Use batch updates for multiple changes
-- Consider using lower resolution for text elements
+- Verify event listeners are attached to the UI element
+- Check if anything is blocking the UI
 
 ### Layout Issues
 
 **Elements not positioning correctly?**
 
-- Check flexDirection and alignment properties
-- Verify parent container has appropriate dimensions
-- Use browser dev tools to inspect the rendered UI structure
+- Check `flexDirection` and alignment properties
+- Verify the parent container has appropriate dimensions
+- Use the UIKitML VSCode extension to understand the size and position of individual elements by hovering over them
