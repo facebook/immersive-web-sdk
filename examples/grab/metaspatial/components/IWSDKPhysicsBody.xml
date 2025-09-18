@@ -6,5 +6,7 @@
   </Enum>
   <Component name="PhysicsBody" description="Component to define physics behavior of an entity.">
     <EnumAttribute name="state" defaultValue="PhysicsState.DYNAMIC"/>
+    <FloatAttribute name="linearDamping" defaultValue="0f"/>
+    <FloatAttribute name="gravityFactor" defaultValue="1f"/>
   </Component>
 </ComponentSchema>

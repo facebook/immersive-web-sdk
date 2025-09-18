@@ -50,6 +50,8 @@ export class SettingsSystem extends createSystem({
       const document = PanelDocument.data.document[entity.index];
       if (!document) return;
 
+      console.log(entity);
+
       const xrButton = document.getElementById('xr-button');
       xrButton.addEventListener('click', () => {
         if (this.world.visibilityState.value === VisibilityState.NonImmersive) {

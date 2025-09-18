@@ -270,7 +270,7 @@ Style specific elements using ID selectors:
   #header {
     background-color: #ff6b6b;
     padding: 20px;
-    text-align: center;
+    justify-content: center;
   }
 
   #header:hover {

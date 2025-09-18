@@ -1,0 +1,8 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="DomeTexture" description="Background dome using a single equirectangular texture">
+    <StringAttribute name="src" defaultValue=""/>
+    <FloatAttribute name="blurriness" defaultValue="0f"/>
+    <FloatAttribute name="intensity" defaultValue="1f"/>
+    <Vector3Attribute name="rotation" defaultValue="0f, 0f, 0f"/>
+  </Component>
+</ComponentSchema>

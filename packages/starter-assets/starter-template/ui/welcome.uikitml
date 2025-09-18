@@ -37,6 +37,7 @@
     font-size: 2.5;
     font-weight: medium;
     text-align: center;
+    justify-content: center;
     cursor: pointer;
   }
 </style>

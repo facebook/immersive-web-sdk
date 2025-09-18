@@ -53,6 +53,7 @@
 		border-radius: 1;
 		font-size: 2;
 		text-align: center;
+		justify-content: center;
 		color: #a1a1aa;
 	}
 

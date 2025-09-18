@@ -8,8 +8,11 @@
     <EnumValue value="TriMesh"/>
     <EnumValue value="Auto"/>
   </Enum>
-  <Component name="com.elics.PhysicsShape" description="EliCS component: PhysicsShape">
+  <Component name="PhysicsShape" description="Component to define physics shape of an entity.">
     <EnumAttribute name="shape" defaultValue="PhysicsShapeType.Auto"/>
     <Vector3Attribute name="dimensions" defaultValue="0f, 0f, 0f"/>
+    <FloatAttribute name="density" defaultValue="1f"/>
+    <FloatAttribute name="restitution" defaultValue="0f"/>
+    <FloatAttribute name="friction" defaultValue="0.5f"/>
   </Component>
 </ComponentSchema>

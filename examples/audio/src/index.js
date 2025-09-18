@@ -36,8 +36,8 @@ World.create(document.getElementById('scene-container'), {
   },
   level: '/glxf/Composition.glxf',
   features: {
-    enableGrabbing: true,
-    enableLocomotion: true,
+    grabbing: true,
+    locomotion: true,
   },
 }).then((world) => {
   const { camera } = world;

@@ -1,5 +1,6 @@
 <ComponentSchema packageName="com.iwsdk.components">
   <Enum name="MovementMode">
+    <EnumValue value="MoveFromTarget"/>
     <EnumValue value="MoveTowardsTarget"/>
     <EnumValue value="MoveAtSource"/>
     <EnumValue value="RotateAtSource"/>
@@ -16,5 +17,6 @@
     <Vector3Attribute name="scaleMin"/>
     <EnumAttribute name="movementMode" defaultValue="MovementMode.MoveTowardsTarget"/>
     <BooleanAttribute name="returnToOrigin" defaultValue="false"/>
+    <FloatAttribute name="moveSpeed" defaultValue="0.1f"/>
   </Component>
 </ComponentSchema>

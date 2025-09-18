@@ -46,8 +46,8 @@
   #xr-button {
     align-items: center;
     width: 100%;
-    justify-content: center;
     text-align: center;
+    justify-content: center;
     border-radius: 1.25;
     margin-top: 3;
     background-color: #fafafa;
@@ -74,6 +74,7 @@
     border-radius: 1;
     font-size: 2;
     text-align: center;
+    justify-content: center;
     color: #a1a1aa;
   }
 
@@ -144,5 +145,5 @@
       <span id="angle-90" class="button" data-value="90"> 90° </span>
     </div>
   </div>
-  <span id="xr-button" data-value="30"> Enter XR </span>
+  <button id="xr-button" data-value="30"> Enter XR </button>
 </div>
