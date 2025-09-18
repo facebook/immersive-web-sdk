@@ -1,8 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture2
-    com.meta.components.Texture:
-      image: ref:PlantSansevieria_Color
-metadata:
-  version: 1.33

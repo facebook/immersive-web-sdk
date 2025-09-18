@@ -1,8 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture5
-    com.meta.components.Texture:
-      image: ref:Screen_1_Color
-metadata:
-  version: 1.33

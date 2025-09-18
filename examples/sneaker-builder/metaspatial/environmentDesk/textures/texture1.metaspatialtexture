@@ -1,8 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture1
-    com.meta.components.Texture:
-      image: ref:deskScreenBake_beauty
-metadata:
-  version: 1.33

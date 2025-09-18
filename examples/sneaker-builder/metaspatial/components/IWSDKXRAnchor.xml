@@ -1,5 +1,0 @@
-<ComponentSchema packageName="com.iwsdk.components">
-  <Component name="XRAnchor" description="Component for anchoring objects in the scene">
-    <BooleanAttribute name="attached" defaultValue="false"/>
-  </Component>
-</ComponentSchema>

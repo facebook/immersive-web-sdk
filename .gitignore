@@ -5,6 +5,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Package lock files in examples (these should be generated locally)
+examples/**/package-lock.json
+
 # Build outputs
 dist/
 lib/
