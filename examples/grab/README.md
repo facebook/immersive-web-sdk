@@ -1,11 +1,11 @@
-# WebXR Framework Boilerplate
+# WebXR Framework Grab Example
 
-This is the official boilerplate project for the WebXR Framework, designed for optimal developer, designer, and tech artist workflow.
+This is the official grab example project for the WebXR Framework, designed for optimal developer, designer, and tech artist workflow.
 
 ## 📁 Project Structure
 
 ```
-boilerplate/
+grab/
 ├── src/                    # Source code
 │   ├── index.js           # Main application entry point
 │   ├── settings.js        # Settings configuration
@@ -17,12 +17,11 @@ boilerplate/
 │   ├── textures/         # Images and texture files
 │   ├── audio/            # Audio files
 │   └── models/           # Other 3D model formats
-├── generated/            # Auto-generated files (committed for designers)
-│   └── components/       # Generated component XML definitions
-│       ├── Transform.xml # Core transform component
-│       ├── LocomotionEnvironment.xml  # Locomotion component
-│       └── ...           # Other framework components
 ├── metaspatial/          # Meta Spatial project files
+│   └── components/       # Generated component XML (committed for designers)
+│       ├── IWSDKAudioSource.xml # Audio Source component
+│       ├── IWSDKLocomotionEnvironment.xml  # Locomotion component
+│       └── ...           # Other framework components
 ├── dist/                 # Build output (generated)
 ├── index.html           # Main HTML file
 ├── vite.config.js       # Vite configuration
@@ -33,13 +32,13 @@ boilerplate/
 
 ### Prerequisites
 
-- Node.js 18+ and pnpm
+- Node.js 20.19.0+ and pnpm
 - HTTPS support for WebXR development
 
 ### Installation
 
 ```bash
-cd boilerplate
+cd grab
 pnpm install
 ```
 
@@ -62,7 +61,7 @@ The development server will start at `https://localhost:8081` with automatic HTT
 
 ### WebXR-Optimized Asset Handling
 
-This boilerplate uses Vite's `public/` directory for WebXR assets since they are:
+This example uses Vite's `public/` directory for WebXR assets since they are:
 
 - Loaded at runtime via URLs (not imported as modules)
 - Large files that shouldn't be bundled or processed
@@ -114,7 +113,7 @@ The `generated/` folder organizes all auto-generated files:
 
 ### HTTPS Requirements
 
-WebXR requires HTTPS for all features to work properly. This boilerplate includes:
+WebXR requires HTTPS for all features to work properly. This example includes:
 
 - Automatic HTTPS certificate generation via `vite-plugin-mkcert`
 - Self-signed certificates for local development
@@ -157,7 +156,7 @@ The `vite.config.js` file includes:
 
 ## 🔗 Integration
 
-This boilerplate is designed to work seamlessly with:
+This example is designed to work seamlessly with:
 
 - **Meta Spatial SDK** for component definitions
 - **WebXR browsers** for VR/AR development

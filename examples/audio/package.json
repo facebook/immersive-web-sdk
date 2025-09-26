@@ -1,5 +1,5 @@
 {
-  "name": "webxr-framework-boilerplate",
+  "name": "@iwsdk/audio",
   "version": "1.0.0",
   "private": true,
   "type": "module",
