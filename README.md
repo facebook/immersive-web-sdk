@@ -50,3 +50,9 @@ IWSDK is licensed under the MIT License. For more details, see the [LICENSE](htt
 ## Contributing
 
 Your contributions are welcome! Please feel free to submit issues and pull requests. Before contributing, make sure to review our [Contributing Guidelines](https://github.com/facebook/immersive-web-sdk/blob/main/CONTRIBUTING.md) and [Code of Conduct](https://github.com/facebook/immersive-web-sdk/blob/main/CODE_OF_CONDUCT.md).
+
+## Developer Terms
+
+- Open source Terms of Use - https://opensource.fb.com/legal/terms
+
+- Open source Privacy Policy - https://opensource.fb.com/legal/privacy
