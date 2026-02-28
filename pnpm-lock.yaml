@@ -162,8 +162,8 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       fast-xml-parser:
-        specifier: ^4.5.1
-        version: 4.5.3
+        specifier: ^5.3.8
+        version: 5.3.8
       ora:
         specifier: ^8.2.0
         version: 8.2.0
@@ -367,43 +367,6 @@ importers:
       three:
         specifier: npm:super-three@0.181.0
         version: super-three@0.181.0
-
-  playground:
-    dependencies:
-      '@iwsdk/core':
-        specifier: workspace:*
-        version: link:../packages/core
-      '@pmndrs/uikit-horizon':
-        specifier: ^1.0.60
-        version: 1.0.62(super-three@0.181.0)
-      '@pmndrs/uikit-lucide':
-        specifier: ^1.0.60
-        version: 1.0.62(super-three@0.181.0)
-      three:
-        specifier: npm:super-three@0.181.0
-        version: super-three@0.181.0
-    devDependencies:
-      '@iwsdk/vite-plugin-gltf-optimizer':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-gltf-optimizer
-      '@iwsdk/vite-plugin-iwer':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-iwer
-      '@iwsdk/vite-plugin-uikitml':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-uikitml
-      '@types/three':
-        specifier: 0.181.0
-        version: 0.181.0
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vite:
-        specifier: ^7.1.4
-        version: 7.2.4(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
-      vite-plugin-mkcert:
-        specifier: ^1.17.0
-        version: 1.17.10(vite@7.2.4(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1))
 
 packages:
 
@@ -1265,12 +1228,6 @@ packages:
 
   '@pmndrs/pointer-events@6.6.28':
     resolution: {integrity: sha512-kmZlcMsPiTHcotECLFbo6J/qQouX2ZeKNSMRwBWAF/EFesAV1uPwjar6SQDWkDH0fVB1snNbEoWLDLQ84tWOkw==}
-
-  '@pmndrs/uikit-horizon@1.0.62':
-    resolution: {integrity: sha512-wnTarmm42rM35hHbEPXzgUNIwYELJ1zw6u2+2tPmH5XBHMv00hqncAWwLJ1F8Z1z534o3isErWmzeIv6cCHx3w==}
-
-  '@pmndrs/uikit-lucide@1.0.62':
-    resolution: {integrity: sha512-aGgFJixWnYf+Gb3anQr04G3MaDYf82AQSZZFYO/Xzo1Y8QxaAjeiQdIgZtq7rrEWWxzJbVepHN9YgHyfLmBPMg==}
 
   '@pmndrs/uikit-pub-sub@1.0.62':
     resolution: {integrity: sha512-E/8z5ZnqGfHgsgyUtMujJwRM11JSsZpxYnSxDDOZ+Q5FcK7aLSBCfT80Nm32EdytpN+xQ76mDI8ROvWYg3abxg==}
@@ -2546,8 +2503,8 @@ packages:
   fast-uri@3.1.0:
     resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
 
-  fast-xml-parser@4.5.3:
-    resolution: {integrity: sha512-RKihhV+SHsIUGXObeVy9AXiBbFwkVk7Syp8XgwN5U3JV416+Gwp/GO9i0JYKmikykgz/UHRrrV4ROuZEo/T0ig==}
+  fast-xml-parser@5.3.8:
+    resolution: {integrity: sha512-53jIF4N6u/pxvaL1eb/hEZts/cFLWZ92eCfLrNyCI0k38lettCG/Bs40W9pPwoPXyHQlKu2OUbQtiEIZK/J6Vw==}
     hasBin: true
 
   fastq@1.19.1:
@@ -3961,8 +3918,8 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  strnum@1.1.2:
-    resolution: {integrity: sha512-vrN+B7DBIoTTZjnPNewwhx6cBA/H+IS7rfW68n7XxC1y7uoiGQBxaKzqucGUgavX15dJgiGztLJ8vxuEzwqBdA==}
+  strnum@2.2.0:
+    resolution: {integrity: sha512-Y7Bj8XyJxnPAORMZj/xltsfo55uOiyHcU2tnAVzHUnSJR/KsEX+9RoDeXEnsXtl/CX4fAcrt64gZ13aGaWPeBg==}
 
   styled-components@6.1.19:
     resolution: {integrity: sha512-1v/e3Dl1BknC37cXMhwGomhO8AkYmN41CqyX9xhUDxry1ns3BFQy2lLDRQXJRdVVWB9OHemv/53xaStimvWyuA==}
@@ -4227,12 +4184,6 @@ packages:
     resolution: {integrity: sha512-AM9aQ/IPrW/6ENLQg3AGY4K1N2TGZdR5e4gu/MmmR2xR3Ll1+dib+nook92g4TV3PXVyeyxdWwtaCAiUL0hMxA==}
     engines: {node: ^18.0.0 || >=20.0.0}
     hasBin: true
-
-  vite-plugin-mkcert@1.17.10:
-    resolution: {integrity: sha512-703hecAoGZYgNrkY76OIbo0M9j0tfGIIM6n7c0sYvhaczQMPwD0nFi+bS44d8kwdbCtV7885FYBWnTzhsaC7QQ==}
-    engines: {node: '>=v16.7.0'}
-    peerDependencies:
-      vite: '>=3'
 
   vite@5.4.21:
     resolution: {integrity: sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==}
@@ -5370,19 +5321,6 @@ snapshots:
 
   '@pmndrs/pointer-events@6.6.28': {}
 
-  '@pmndrs/uikit-horizon@1.0.62(super-three@0.181.0)':
-    dependencies:
-      '@pmndrs/uikit': 1.0.62(super-three@0.181.0)
-      '@pmndrs/uikit-lucide': 1.0.62(super-three@0.181.0)
-    transitivePeerDependencies:
-      - three
-
-  '@pmndrs/uikit-lucide@1.0.62(super-three@0.181.0)':
-    dependencies:
-      '@pmndrs/uikit': 1.0.62(super-three@0.181.0)
-    transitivePeerDependencies:
-      - three
-
   '@pmndrs/uikit-pub-sub@1.0.62':
     dependencies:
       '@preact/signals-core': 1.12.1
@@ -5978,7 +5916,7 @@ snapshots:
       '@vueuse/shared': 12.8.2(typescript@5.9.3)
       vue: 3.5.24(typescript@5.9.3)
     optionalDependencies:
-      axios: 1.13.6(debug@4.4.3)
+      axios: 1.13.6
       focus-trap: 7.6.6
     transitivePeerDependencies:
       - typescript
@@ -6139,13 +6077,14 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@1.13.6(debug@4.4.3):
+  axios@1.13.6:
     dependencies:
-      follow-redirects: 1.15.11(debug@4.4.3)
+      follow-redirects: 1.15.11
       form-data: 4.0.5
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug
+    optional: true
 
   balanced-match@1.0.2: {}
 
@@ -6830,9 +6769,9 @@ snapshots:
 
   fast-uri@3.1.0: {}
 
-  fast-xml-parser@4.5.3:
+  fast-xml-parser@5.3.8:
     dependencies:
-      strnum: 1.1.2
+      strnum: 2.2.0
 
   fastq@1.19.1:
     dependencies:
@@ -6894,9 +6833,8 @@ snapshots:
     dependencies:
       tabbable: 6.3.0
 
-  follow-redirects@1.15.11(debug@4.4.3):
-    optionalDependencies:
-      debug: 4.4.3
+  follow-redirects@1.15.11:
+    optional: true
 
   for-each@0.3.5:
     dependencies:
@@ -7889,7 +7827,8 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-from-env@1.1.0: {}
+  proxy-from-env@1.1.0:
+    optional: true
 
   punycode.js@2.3.1: {}
 
@@ -8375,7 +8314,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  strnum@1.1.2: {}
+  strnum@2.2.0: {}
 
   styled-components@6.1.19(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
@@ -8669,15 +8608,6 @@ snapshots:
       - sugarss
       - supports-color
       - terser
-
-  vite-plugin-mkcert@1.17.10(vite@7.2.4(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)):
-    dependencies:
-      axios: 1.13.6(debug@4.4.3)
-      debug: 4.4.3
-      picocolors: 1.1.1
-      vite: 7.2.4(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
-    transitivePeerDependencies:
-      - supports-color
 
   vite@5.4.21(@types/node@20.19.25)(terser@5.44.1):
     dependencies:
