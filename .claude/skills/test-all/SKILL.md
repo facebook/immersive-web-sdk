@@ -1,6 +1,6 @@
 ---
 name: test-all
-description: 'Parallel test orchestrator. Runs all 9 test suites concurrently via Task sub-agents and mcp-call.mjs. Handles build, example setup, dev servers, agent launch, polling, retries, and result aggregation.'
+description: "Parallel test orchestrator that runs all 9 IWSDK test suites concurrently via Task sub-agents and mcp-call.mjs. Handles build, example setup, dev servers, agent launch, polling, retries, and result aggregation. Use when running all tests, executing the full test suite, validating changes across all IWSDK packages, or performing CI-style parallel testing."
 argument-hint: '[--skip <test-name>] [--only <test-name>]'
 ---
 

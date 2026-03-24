@@ -1,6 +1,6 @@
 ---
 name: click-target
-description: Find and click a target object in XR. Use when testing UI interactions, clicking buttons, or verifying interactable elements work correctly.
+description: "Find and click a target object in XR using emulated controllers. Use when testing UI interactions, clicking buttons, tapping elements, selecting objects, or verifying interactable elements work correctly in VR/AR/WebXR scenes."
 disable-model-invocation: true
 ---
 

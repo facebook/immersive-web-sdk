@@ -1,6 +1,6 @@
 ---
 name: iwsdk-planner
-description: IWSDK project planning and best practices guide. Use when planning new IWSDK features, designing systems/components, reviewing IWSDK code architecture, or when the user asks about IWSDK patterns, ECS design, signals, or reactive programming in this codebase.
+description: "IWSDK project planning and best practices guide providing architectural patterns, code review checklists, and implementation guidelines. Use when planning new IWSDK features, designing systems/components, reviewing IWSDK code architecture, or when the user asks about IWSDK patterns, ECS design, signals, or reactive programming in this codebase."
 ---
 
 # IWSDK Project Planner

@@ -1,6 +1,6 @@
 ---
 name: iwsdk-ui-panel
-description: Develop and iterate on IWSDK UI panels efficiently. Use when working on PanelUI components, debugging UI layout, or improving UI design in IWSDK applications.
+description: "Develop and iterate on IWSDK UI panels efficiently using ScreenSpace preview and backdrop techniques. Use when working on PanelUI components, creating panel layouts, configuring component styling, debugging UI layout, or improving UI design in IWSDK applications."
 allowed-tools: Read, Edit, Write, Bash(npm *)
 ---
 

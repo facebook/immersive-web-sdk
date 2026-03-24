@@ -1,6 +1,6 @@
 ---
 name: xr-mode-test
-description: Test XR session lifecycle and mode transitions. Use when verifying XR enter/exit behavior, testing mode-dependent features, or debugging session state issues.
+description: "Test XR session lifecycle and mode transitions including enter/exit and focus/blur events. Use when verifying VR/AR/WebXR session behavior, testing mode-dependent features, debugging session state issues, or validating immersive session initialization."
 disable-model-invocation: true
 ---
 

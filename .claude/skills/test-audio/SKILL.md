@@ -1,6 +1,6 @@
 ---
 name: test-audio
-description: 'Test audio system (AudioSource loading, playback state, stop, spatial audio) against the audio example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK audio system covering AudioSource loading, playback state, stop, and spatial audio against the audio example via mcp-call.mjs WebSocket CLI. Use when testing audio playback, verifying sound system behavior, debugging AudioSource issues, or validating spatial audio in IWSDK applications."
 argument-hint: '[--suite loading|playback|stop|all]'
 ---
 

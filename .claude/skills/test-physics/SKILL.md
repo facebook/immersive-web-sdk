@@ -1,6 +1,6 @@
 ---
 name: test-physics
-description: 'Test Havok physics system (gravity, rigid bodies, static vs dynamic) against the physics example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK Havok physics system covering gravity, rigid bodies, and static vs dynamic behavior against the physics example via mcp-call.mjs WebSocket CLI. Use when testing physics simulations, debugging Havok integration, validating rigid body behavior, or verifying collision detection in IWSDK."
 argument-hint: '[--suite gravity|static|force|all]'
 ---
 
