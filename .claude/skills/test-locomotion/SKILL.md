@@ -1,6 +1,6 @@
 ---
 name: test-locomotion
-description: 'Test locomotion system (slide, snap turn, teleport, jump) against the locomotion example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK locomotion system covering slide, snap turn, teleport, and jump against the locomotion example via mcp-call.mjs WebSocket CLI. Use when testing VR movement systems, debugging player locomotion, validating teleport or snap turn behavior, or verifying locomotion controls in IWSDK."
 argument-hint: '[--suite slide|turn|teleport|jump|all]'
 ---
 

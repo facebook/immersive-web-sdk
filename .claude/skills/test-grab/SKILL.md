@@ -1,6 +1,6 @@
 ---
 name: test-grab
-description: 'Test grab system (distance grab, one-hand grab, two-hand grab) against the grab example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK grab system covering distance grab, one-hand grab, and two-hand grab against the grab example via mcp-call.mjs WebSocket CLI. Use when testing VR/XR grab interactions, validating hand tracking mechanics, debugging grab behavior, or verifying object pickup in IWSDK applications."
 argument-hint: '[--suite distance|onehand|twohand|all]'
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: iwsdk-debug
-description: Debug continuous behavior in WebXR scenes — physics, animations, collisions, game loops, or any real-time interaction that happens too fast for an agent to observe. Uses ECS pause/step/snapshot/diff to freeze time and inspect state frame by frame.
+description: "Debug continuous behavior in WebXR scenes — physics, animations, collisions, game loops, or any real-time interaction that happens too fast for an agent to observe. Uses ECS pause/step/snapshot/diff to freeze time and inspect state frame by frame. Use when debugging WebXR physics glitches, animation stutters, collision detection issues, or stepping through game loop frames."
 argument-hint: [description of behavior to debug]
 ---
 

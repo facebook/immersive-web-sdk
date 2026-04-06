@@ -1,6 +1,6 @@
 ---
 name: test-ecs-core
-description: 'Test ECS core functionality (system registration, components, Transform sync, pause/step/resume, system toggle, entity discovery, snapshots) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: "Test ECS core functionality covering system registration, components, Transform sync, pause/step/resume, system toggle, entity discovery, and snapshots against the poke example via mcp-call.mjs WebSocket CLI. Use when testing entity-component system behavior, debugging ECS registration, or validating core IWSDK framework functionality."
 argument-hint: '[--suite systems|components|transform|lifecycle|toggle|discovery|snapshot|stability|all]'
 ---
 

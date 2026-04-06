@@ -1,6 +1,6 @@
 ---
 name: iwsdk-ui
-description: Develop and iterate on IWSDK PanelUI components. Use when the user wants to create, modify, debug, or improve UI panels in their IWSDK application. Covers UIKITML editing, full-screen preview with ScreenSpace, and visual verification.
+description: "Develop and iterate on IWSDK PanelUI components with UIKITML editing, full-screen ScreenSpace preview, and visual verification. Use when creating, modifying, debugging, or improving UI panels, dashboard interfaces, or widget layouts in IWSDK applications."
 argument-hint: [panel-name or description of changes]
 ---
 

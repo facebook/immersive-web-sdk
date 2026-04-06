@@ -1,6 +1,6 @@
 ---
 name: test-environment
-description: 'Test environment system (DomeGradient, IBLGradient, default lighting, component schemas) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK environment system covering DomeGradient, IBLGradient, default lighting, and component schemas against the poke example via mcp-call.mjs WebSocket CLI. Use when testing lighting environments, validating gradient components, debugging scene lighting setup, or verifying environment configuration in IWSDK."
 argument-hint: '[--suite gradient|ibl|defaults|all]'
 ---
 

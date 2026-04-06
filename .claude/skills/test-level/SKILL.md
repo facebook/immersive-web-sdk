@@ -1,6 +1,6 @@
 ---
 name: test-level
-description: 'Test level system (LevelRoot, LevelTag, default lighting, scene hierarchy) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK level system covering LevelRoot, LevelTag, default lighting, and scene hierarchy against the poke example via mcp-call.mjs WebSocket CLI. Use when testing game levels, validating scene hierarchies, debugging level configurations, or verifying lighting setup in IWSDK applications."
 argument-hint: '[--suite root|tags|lighting|hierarchy|all]'
 ---
 

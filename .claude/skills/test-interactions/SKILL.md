@@ -1,6 +1,6 @@
 ---
 name: test-interactions
-description: 'Test XR interactions (ray, poke/touch, dual-mode, audio, UI panel) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: "Test XR interactions covering ray, poke/touch, dual-mode, audio, and UI panel behaviors against the poke example via mcp-call.mjs WebSocket CLI. Use when testing VR/AR interaction handlers, validating poke or ray input, debugging spatial interactions, or verifying XR input modes in IWSDK."
 argument-hint: '[--suite ray|poke|dual|audio|ui|all]'
 ---
 

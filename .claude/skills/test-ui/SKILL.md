@@ -1,6 +1,6 @@
 ---
 name: test-ui
-description: 'Test UI system (PanelUI, ScreenSpace) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: "Test IWSDK UI system covering PanelUI and ScreenSpace components against the poke example via mcp-call.mjs WebSocket CLI. Use when testing UI panels, debugging ScreenSpace layouts, validating panel rendering, or verifying UI component behavior in IWSDK applications."
 argument-hint: '[--suite panel|screenspace|follower|all]'
 ---
 
