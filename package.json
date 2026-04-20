@@ -72,7 +72,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.4",
     "prettier": "^3.0.3",
-    "rollup": "^4.46.2",
+    "rollup": "^4.59.0",
     "rollup-plugin-copy": "^3.5.0",
     "rollup-plugin-worker64": "^0.2.1",
     "semver": "^7.7.2",
