@@ -1,11 +1,11 @@
 ---
 name: iwsdk-physics
-description: Guide for implementing physics in IWSDK projects. Use when adding physics simulation, configuring rigid bodies, collision shapes, applying forces, creating grabbable physics objects, or troubleshooting physics behavior.
+description: "Sets up Havok-powered rigid bodies, configures collision shapes and material properties, applies forces and impulses, and creates interactive grabbable physics objects in IWSDK projects. Use when adding physics simulation, tuning collision response, building throwable or kinematic objects, or debugging physics behavior."
 ---
 
 # IWSDK Physics System Guide
 
-This skill provides the complete reference and workflow for implementing Havok-powered physics simulation in IWSDK applications. Physics is built on three ECS components (`PhysicsBody`, `PhysicsShape`, `PhysicsManipulation`) orchestrated by the `PhysicsSystem`.
+Physics is built on three ECS components (`PhysicsBody`, `PhysicsShape`, `PhysicsManipulation`) orchestrated by the `PhysicsSystem`.
 
 ## Enabling Physics
 
@@ -18,8 +18,8 @@ const world = await World.create(container, {
   xr: { sessionMode: SessionMode.ImmersiveVR },
   features: {
     physics: true,
-    grabbing: true, // Required if physics objects should be grabbable
-    locomotion: true, // Requires collision geometry in the scene
+    grabbing: true,
+    locomotion: true,
   },
   level: './glxf/Composition.glxf',
 });
@@ -41,7 +41,7 @@ entity.addComponent(PhysicsBody, {
   linearDamping: 0.0,
   angularDamping: 0.0,
   gravityFactor: 1.0,
-  centerOfMass: [Infinity, Infinity, Infinity], // Infinity = auto-compute from shape
+  centerOfMass: [Infinity, Infinity, Infinity],
 });
 ```
 
@@ -152,11 +152,10 @@ A **one-shot** component for applying forces and velocities. Automatically remov
 ```typescript
 import { PhysicsManipulation } from '@iwsdk/core';
 
-// Apply an impulse (removed automatically after 1 frame)
 entity.addComponent(PhysicsManipulation, {
-  force: [0, 10, 0], // Impulse force vector
-  linearVelocity: [0, 0, 0], // Override linear velocity (0 = no change)
-  angularVelocity: [0, 0, 0], // Override angular velocity (0 = no change)
+  force: [0, 10, 0],
+  linearVelocity: [0, 0, 0],
+  angularVelocity: [0, 0, 0],
 });
 ```
 
@@ -198,7 +197,6 @@ import {
   PhysicsManipulation,
 } from '@iwsdk/core';
 
-// 1. Create Three.js mesh
 const ball = new Mesh(
   new SphereGeometry(0.2),
   new MeshStandardMaterial({ color: new Color(0xff4444), side: FrontSide }),
@@ -206,27 +204,25 @@ const ball = new Mesh(
 ball.position.set(0, 2, -1);
 scene.add(ball);
 
-// 2. Wrap as ECS entity
 const entity = world.createTransformEntity(ball);
 
-// 3. Add physics components
 entity.addComponent(PhysicsShape, {
   shape: PhysicsShapeType.Sphere,
   dimensions: [0.2],
-  restitution: 0.6, // Bouncy
+  restitution: 0.6,
 });
 entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
 
-// 4. Optional: apply initial impulse
 entity.addComponent(PhysicsManipulation, { force: [5, 2, 0] });
 ```
+
+**Verify:** After a few frames, `entity.getVectorView(PhysicsBody, '_linearVelocity')` should show non-zero values, confirming the object is simulating.
 
 ### Creating a Static Environment Collider
 
 For walls, floors, and fixed scenery that block dynamic objects but never move:
 
 ```typescript
-// Ground plane
 const ground = new Mesh(
   new BoxGeometry(10, 0.1, 10),
   new MeshStandardMaterial({ color: 0x888888 }),
@@ -250,12 +246,13 @@ envEntity.addComponent(PhysicsShape, { shape: PhysicsShapeType.TriMesh });
 envEntity.addComponent(PhysicsBody, { state: PhysicsState.Static });
 ```
 
+**Verify:** Drop a dynamic object onto the static surface. If it passes through, check that dimensions match the visual geometry and that the shape type is appropriate (use `TriMesh` for complex GLTF meshes).
+
 ### Creating a Kinematic Moving Platform
 
 Kinematic bodies are moved by code and push dynamic objects:
 
 ```typescript
-// Setup
 const platform = new Mesh(
   new BoxGeometry(3, 0.2, 3),
   new MeshStandardMaterial({ color: 0x4488ff }),
@@ -269,7 +266,6 @@ platformEntity.addComponent(PhysicsShape, {
 });
 platformEntity.addComponent(PhysicsBody, { state: PhysicsState.Kinematic });
 
-// In a system's update loop, move it:
 update(delta, time) {
   for (const entity of this.queries.platforms.entities) {
     entity.object3D.position.y = 1 + Math.sin(time) * 2;
@@ -284,22 +280,20 @@ Combine grab components with physics for throwable objects:
 ```typescript
 import { Interactable, OneHandGrabbable, DistanceGrabbable } from '@iwsdk/core';
 
-// Physics components
 entity.addComponent(PhysicsShape, { shape: PhysicsShapeType.Auto });
 entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-
-// Grab components
 entity.addComponent(Interactable);
 entity.addComponent(OneHandGrabbable);
 
-// Optional: allow grabbing from a distance
 entity.addComponent(DistanceGrabbable, {
   rotate: true,
   translate: true,
 });
 ```
 
-When grabbed, the `PhysicsSystem` automatically detects the `Pressed` component and overrides physics with `HP_Body_SetTargetQTransform`, making the object follow the hand. On release, the object resumes dynamic simulation with natural velocity for realistic throwing.
+When grabbed, `PhysicsSystem` detects the `Pressed` component and overrides physics with `HP_Body_SetTargetQTransform`, making the object follow the hand. On release, the object resumes dynamic simulation with natural velocity for realistic throwing.
+
+**Verify:** Grab and release the object — it should inherit the hand's velocity on release. If it drops straight down, confirm both `PhysicsBody` and the grab components are present on the same entity.
 
 ### Reading Velocity for Game Logic
 
@@ -308,7 +302,7 @@ const velocity = entity.getVectorView(PhysicsBody, '_linearVelocity');
 const speed = Math.sqrt(velocity[0] ** 2 + velocity[1] ** 2 + velocity[2] ** 2);
 
 if (speed > 5.0) {
-  // High-speed impact logic
+  // high-speed impact logic
 }
 ```
 
@@ -349,13 +343,11 @@ import {
   PhysicsManipulation,
 } from '@iwsdk/core';
 
-// 1. Define custom component
 export const Buoyancy = createComponent('Buoyancy', {
   waterLevel: { type: Types.Float32, default: 0.0 },
   buoyancyForce: { type: Types.Float32, default: 15.0 },
 });
 
-// 2. Create system that applies physics forces
 export class BuoyancySystem extends createSystem({
   floaters: { required: [Buoyancy, PhysicsBody] },
 }) {
@@ -377,7 +369,6 @@ export class BuoyancySystem extends createSystem({
   }
 }
 
-// 3. Register with world
 world.registerComponent(Buoyancy);
 world.registerSystem(BuoyancySystem, { priority: 5 });
 ```
@@ -422,48 +413,14 @@ The system accepts a `gravity` config (defaults to Earth gravity):
 import { PhysicsSystem } from '@iwsdk/core';
 
 const physicsSystem = world.getSystem(PhysicsSystem);
-physicsSystem.config.gravity.value = [0, -9.81, 0]; // Earth gravity (default)
-physicsSystem.config.gravity.value = [0, -1.62, 0]; // Moon gravity
-physicsSystem.config.gravity.value = [0, 0, 0]; // Zero gravity
+physicsSystem.config.gravity.value = [0, -9.81, 0]; // Earth (default)
+physicsSystem.config.gravity.value = [0, -1.62, 0]; // Moon
+physicsSystem.config.gravity.value = [0, 0, 0];      // Zero-g
 ```
 
 ## GLXF / Editor Configuration
 
-Physics components can be configured declaratively in GLXF scene files (exported by Meta Spatial Editor):
-
-```json
-{
-  "com.iwsdk.components.PhysicsShape": {
-    "shape": { "alias": "Auto", "value": 6 },
-    "dimensions": { "value": [0, 0, 0] },
-    "density": { "value": 1.0 },
-    "friction": { "value": 0.5 },
-    "restitution": { "value": 0.0 }
-  },
-  "com.iwsdk.components.PhysicsBody": {
-    "state": { "alias": "DYNAMIC", "value": 1 },
-    "gravityFactor": { "value": 1.0 },
-    "linearDamping": { "value": 0.0 },
-    "angularDamping": { "value": 0.0 }
-  }
-}
-```
-
-**State enum values in GLXF:**
-
-- `0` = STATIC
-- `1` = DYNAMIC
-- `2` = KINEMATIC
-
-**Shape enum values in GLXF:**
-
-- `0` = Sphere
-- `1` = Box
-- `2` = Cylinder
-- `3` = Capsules
-- `4` = ConvexHull
-- `5` = TriMesh
-- `6` = Auto
+See [references/GLXF_CONFIG.md](references/GLXF_CONFIG.md) for declarative physics component configuration in GLXF scene files (Meta Spatial Editor).
 
 ## Troubleshooting
 
@@ -517,85 +474,6 @@ Physics components can be configured declaratively in GLXF scene files (exported
 5. **Use damping** to settle objects faster and reduce ongoing simulation work
 6. **TriMesh is for static only** -- it is computationally expensive and should never be used on dynamic bodies
 
-## Complete Example: Physics Playground
+## Complete Example
 
-```typescript
-import {
-  World,
-  SessionMode,
-  PhysicsShape,
-  PhysicsShapeType,
-  PhysicsBody,
-  PhysicsState,
-  PhysicsManipulation,
-  Interactable,
-  OneHandGrabbable,
-} from '@iwsdk/core';
-import {
-  Mesh,
-  BoxGeometry,
-  SphereGeometry,
-  MeshStandardMaterial,
-  Color,
-  FrontSide,
-} from 'three';
-
-World.create(document.getElementById('scene-container'), {
-  xr: { sessionMode: SessionMode.ImmersiveVR },
-  features: { physics: true, grabbing: true },
-}).then((world) => {
-  const { scene } = world;
-
-  // Static floor
-  const floor = new Mesh(
-    new BoxGeometry(10, 0.1, 10),
-    new MeshStandardMaterial({ color: 0x555555 }),
-  );
-  floor.position.set(0, -0.05, 0);
-  scene.add(floor);
-  const floorEntity = world.createTransformEntity(floor);
-  floorEntity.addComponent(PhysicsShape, {
-    shape: PhysicsShapeType.Box,
-    dimensions: [10, 0.1, 10],
-    friction: 0.8,
-  });
-  floorEntity.addComponent(PhysicsBody, { state: PhysicsState.Static });
-
-  // Dynamic bouncy ball (grabbable)
-  const ball = new Mesh(
-    new SphereGeometry(0.15),
-    new MeshStandardMaterial({ color: new Color(0xff4444), side: FrontSide }),
-  );
-  ball.position.set(0, 1.5, -1);
-  scene.add(ball);
-  const ballEntity = world.createTransformEntity(ball);
-  ballEntity.addComponent(PhysicsShape, {
-    shape: PhysicsShapeType.Sphere,
-    dimensions: [0.15],
-    restitution: 0.8,
-    friction: 0.5,
-  });
-  ballEntity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  ballEntity.addComponent(Interactable);
-  ballEntity.addComponent(OneHandGrabbable);
-
-  // Dynamic box with initial impulse
-  const box = new Mesh(
-    new BoxGeometry(0.3, 0.3, 0.3),
-    new MeshStandardMaterial({ color: new Color(0x4488ff), side: FrontSide }),
-  );
-  box.position.set(0.5, 2, -1);
-  scene.add(box);
-  const boxEntity = world.createTransformEntity(box);
-  boxEntity.addComponent(PhysicsShape, {
-    shape: PhysicsShapeType.Box,
-    dimensions: [0.3, 0.3, 0.3],
-    restitution: 0.3,
-  });
-  boxEntity.addComponent(PhysicsBody, {
-    state: PhysicsState.Dynamic,
-    linearDamping: 0.1,
-  });
-  boxEntity.addComponent(PhysicsManipulation, { force: [-3, 5, 0] });
-});
-```
+See [references/EXAMPLES.md](references/EXAMPLES.md) for a full physics playground (static floor, dynamic bouncy ball with grab, box with initial impulse).
