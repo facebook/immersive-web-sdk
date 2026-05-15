@@ -1,6 +1,6 @@
 ---
 name: test-environment
-description: 'Test environment system (DomeGradient, IBLGradient, default lighting, component schemas) against the poke example using the iwsdk CLI.'
+description: "Validates environment system defaults, DomeGradient/IBLGradient color values, EnvironmentSystem registration, and component schemas against the poke example using the iwsdk CLI. Use when running environment tests, verifying default lighting setup, checking gradient configuration, validating scene environment components, or debugging environment rendering issues with iwsdk."
 argument-hint: '[--suite gradient|ibl|defaults|all]'
 ---
 
@@ -8,81 +8,25 @@ argument-hint: '[--suite gradient|ibl|defaults|all]'
 
 Run 6 test suites covering default lighting verification, system registration, component registration, scene hierarchy, ECS data modification, and stability.
 
-All tool calls go through `npx iwsdk` from the example workspace. The helper below keeps the existing MCP-style tool names, but it resolves them through `iwsdk mcp inspect` and then executes the matching CLI command directly.
+All tool calls go through `npx iwsdk` from the example workspace using the MCPCALL helper defined in [mcpcall-helper.sh](mcpcall-helper.sh). Source it before running tests:
+
+```bash
+source .claude/skills/test-environment/mcpcall-helper.sh
+```
 
 **Configuration:**
 
-- EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/poke
-- ROOT: /Users/felixz/Projects/immersive-web-sdk
+- EXAMPLE_DIR: examples/poke (relative to repo root)
+- ROOT: repository root
 
-**SHORTHAND**: Throughout this document, `MCPCALL` means this shell function:
+**MCPCALL usage**: `MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null`
 
-```bash
-MCPCALL() {
-  local tool=""
-  local args=""
-  local timeout=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --tool) tool="$2"; shift 2 ;;
-      --args) args="$2"; shift 2 ;;
-      --timeout) timeout="$2"; shift 2 ;;
-      *) echo "Unknown argument: $1" >&2; return 1 ;;
-    esac
-  done
+- Uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`).
+- Output is JSON on stdout. Parse to check assertions.
+- Use `--timeout 20000` for slow operations (reload, accept_session, screenshot).
+- Must run from the example workspace directory.
 
-  node --input-type=module - "$tool" "${args:-}" "${timeout:-}" <<'EOF'
-import { spawnSync } from 'node:child_process';
-
-const [toolName, rawArgs, timeout] = process.argv.slice(2);
-const inspect = spawnSync('npx', ['iwsdk', 'mcp', 'inspect'], {
-  cwd: process.cwd(),
-  encoding: 'utf8',
-});
-if (inspect.status !== 0) {
-  if (inspect.stderr) process.stderr.write(inspect.stderr);
-  process.exit(inspect.status ?? 1);
-}
-
-const parsed = JSON.parse(inspect.stdout);
-const tool = parsed.data.tools.find((entry) => entry.mcpName === toolName);
-if (!tool) {
-  console.error(`Unknown tool: ${toolName}`);
-  process.exit(1);
-}
-
-const cliArgs = ['iwsdk', ...tool.cliPath.split(' ')];
-if (rawArgs) cliArgs.push('--input-json', rawArgs);
-if (timeout) cliArgs.push('--timeout', timeout);
-
-const result = spawnSync('npx', cliArgs, {
-  cwd: process.cwd(),
-  encoding: 'utf8',
-});
-if (result.stdout) process.stdout.write(result.stdout);
-if (result.stderr) process.stderr.write(result.stderr);
-process.exit(result.status ?? 1);
-EOF
-}
-```
-
-**Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
-
-```
-MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
-```
-
-- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`). The shell helper resolves them to direct CLI commands.
-- `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
-- Output is JSON on stdout. Parse it to check assertions.
-- Use `--timeout 20000` for operations that may take longer (reload, accept_session, screenshot).
-- Running from the example workspace (or a child directory within it) is required so `npx iwsdk` can resolve the nearest IWSDK app root.
-
-**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple `MCPCALL` commands together.
-
-**IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
-
-**IMPORTANT**: Boolean values in `ecs_set_component` must be actual JSON booleans (`value: true`), NOT strings (`value: "true"`). Strings silently fail to coerce.
+**IMPORTANT**: Run each command one at a time — do NOT chain `MCPCALL` calls. Use `sleep N` as a separate command when waiting. Boolean values in `ecs_set_component` must be JSON booleans (`true`), not strings (`"true"`).
 
 ---
 
@@ -309,22 +253,4 @@ Only give up after one retry attempt per suite. If the same suite fails twice, m
 
 ## Known Issues & Workarounds
 
-### Live gradient color changes don't update visuals
-
-Setting DomeGradient/IBLGradient color fields via `ecs_set_component` updates the ECS data but does NOT update the Three.js shader uniforms. Testing is limited to **data verification**.
-
-### \_needsUpdate consumed immediately
-
-The `_needsUpdate` flag is consumed by the EnvironmentSystem and reset to `false`. The response may already show `newValue: false`.
-
-### Default lighting auto-attach
-
-`LevelSystem` attaches `DomeGradient` + `IBLGradient` to the LevelRoot ONLY if `defaultLighting: true` (default) AND the level root doesn't already have dome/IBL components.
-
-### Entity indices change on reload
-
-Never cache entity indices across page reloads. Always re-discover via `ecs_find_entities`.
-
-### Boolean values must be JSON booleans
-
-When setting boolean fields (like `_needsUpdate`) via `ecs_set_component`, the `value` must be a JSON boolean (`true`), not a string (`"true"`). Strings silently fail.
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for details on gradient rendering limitations, `_needsUpdate` flag behavior, default lighting auto-attach rules, entity index volatility, and boolean type requirements.
