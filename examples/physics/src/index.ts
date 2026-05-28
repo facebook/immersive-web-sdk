@@ -8,6 +8,8 @@
 import {
   AssetManifest,
   Color,
+  CylinderGeometry,
+  DistanceGrabbable,
   FrontSide,
   Mesh,
   MeshStandardMaterial,
@@ -65,7 +67,26 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     dimensions: [0.2, 0.2, 0.2],
   });
   entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  entity.addComponent(PhysicsManipulation, { force: [10, 1, 1] });
+  entity.addComponent(PhysicsManipulation, { force: [0.1, 0.1, -.1] });
+
+  const cylinderRadius = 0.15;
+  const cylinderHeight = 0.4;
+  const cylinder = new Mesh(
+    new CylinderGeometry(cylinderRadius, cylinderRadius, cylinderHeight),
+    new MeshStandardMaterial({
+      side: FrontSide,
+      color: new Color(Math.random(), Math.random(), Math.random()),
+    }),
+  );
+  cylinder.position.set(-0.5, 1.5, 0.5);
+  scene.add(cylinder);
+  const cylinderEntity = world.createTransformEntity(cylinder);
+  cylinderEntity.addComponent(PhysicsShape, {
+    shape: PhysicsShapeType.Cylinder,
+    dimensions: [cylinderRadius, cylinderHeight, 0],
+  });
+  cylinderEntity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
+  cylinderEntity.addComponent(DistanceGrabbable);
 
   const panelEntity = world
     .createTransformEntity()

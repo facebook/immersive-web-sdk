@@ -517,8 +517,8 @@ export class PhysicsSystem extends createSystem(
     }
 
     const cylinderShape = this.havok.HP_Shape_CreateCylinder(
-      [0, 0, 0],
-      [0, height, 0],
+      [0, -height / 2, 0],
+      [0, height / 2, 0],
       radius,
     )[1];
     this.havok.HP_Shape_SetDensity(cylinderShape, density);
