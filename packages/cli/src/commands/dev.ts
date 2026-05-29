@@ -478,6 +478,8 @@ export async function handleDevUp(
     detached: !foreground,
     stdio: foreground ? 'inherit' : ['ignore', stdoutFd, stdoutFd],
     env: process.env,
+    // npm/pnpm/yarn are .cmd shims on Windows; Node cannot spawn them without a shell.
+    shell: process.platform === 'win32',
   });
   const childExitPromise = waitForChildExit(child);
   let childExit: ProcessExitResult | null = null;

@@ -14,6 +14,8 @@ function hzdbTelemetry(args: string[], clientVersion?: string): void {
   }
   const child = spawn('npx', [...globalArgs, ...args], {
     stdio: 'ignore',
+    // npx is a .cmd shim on Windows; Node cannot spawn it without a shell.
+    shell: process.platform === 'win32',
   });
   child.on('error', () => {});
   child.unref();
