@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/vite-plugin-metaspatial",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "description": "Vite plugins for Meta Spatial SDK integration: component discovery & GLXF generation",
   "main": "dist/index.js",

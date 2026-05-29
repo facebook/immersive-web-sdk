@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/starter-assets",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "CDN-ready assets and recipes for IWSDK starters (VR/AR manual & metaspatial).",
   "type": "module",
   "files": [

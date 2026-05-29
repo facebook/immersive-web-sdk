@@ -1,5 +1,18 @@
 # @iwsdk/reference
 
+## 0.4.2
+
+### Patch Changes
+
+- Changelog-formatted bullets (one per user-facing change). Copy into your changeset
+  summary / changeset `.md`. `@iwsdk/*` is a fixed group, so all packages bump to 0.4.2.
+  - Fix cylinder physics collider configuration when calling the Havok API so cylinder colliders collide correctly.
+  - Keep the Havok physics engine and its ~2 MB WASM out of bundles when `features.physics` is disabled; physics is now code-split so `physics: false` apps no longer download it on first load.
+  - Break a value-level import cycle (`ecs/world` ↔ `init/world-initializer`) that could leave a component reference `undefined` at class-body evaluation and crash `QueryManager.registerQuery` with `Cannot read properties of undefined (reading 'bitmask')` in bundled apps.
+  - Guard `PhysicsSystem` against an unregistered `Grabbed` component, avoiding unnecessary coupling with the grab system (and a crash) when physics is used without grab.
+  - Skip XR input visual initialization when the controller/hand GLTF asset fails to load (e.g. offline or firewalled CDN); input is still tracked without a visual instead of throwing `TypeError: Cannot set properties of undefined (setting 'frustumCulled')`.
+  - Spawn the dev runtime with `shell: true` on Windows so the `npm`/`pnpm`/`yarn` `.cmd` shims resolve — fixes `iwsdk dev up` failing with "Failed to start the dev process". Also fixes silent hzdb telemetry on Windows.
+
 ## 0.4.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/vite-plugin-gltf-optimizer",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "description": "Vite plugin for GLTF/GLB optimization during build using gltf-transform",
   "main": "dist/index.js",

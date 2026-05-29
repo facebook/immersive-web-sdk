@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/glxf",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "GLXF (GLTF eXtended Format) loader for Three.js - composite scene format for WebXR applications",
   "type": "module",
   "main": "dist/index.js",
