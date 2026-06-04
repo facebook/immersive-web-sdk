@@ -84,6 +84,7 @@ export class ScreenSpaceUISystem extends createSystem({
     positionElement: document.createElement('div'),
   };
   private resized = true;
+  private autoDimensionWarned = { width: false, height: false };
 
   /** Prepare hidden DOM helpers and resize listener. */
   init() {
@@ -220,13 +221,27 @@ export class ScreenSpaceUISystem extends createSystem({
   /**
    * Evaluate CSS expressions for width/height using a temporary DOM node.
    * Returns pixel values from `window.getComputedStyle`.
+   *
+   * @remarks
+   * `ScreenSpace` declares `'auto'` as the default for both axes, but on a
+   * floating helper `<div>` the browser resolves an unconstrained `auto`
+   * dimension to `0px`. A `0px` target collapses {@link
+   * UIKitDocument.setTargetDimensions} and the panel ends up rendering at
+   * its 3D `maxWidth`/`maxHeight` (meters) inside camera space, blowing the
+   * UI up to most of the viewport. Until aspect-ratio derivation from the
+   * other axis lands, treat `'auto'` as an unsupported size for screen-space
+   * layout: warn once per axis, and clamp the contributing CSS expression to
+   * a viewport-relative fallback that produces a sensibly-sized HUD.
    */
   private getComputedDimensionValues(widthExp: string, heightExp: string) {
+    const widthForLayout = this.resolveAutoDimension(widthExp, 'width');
+    const heightForLayout = this.resolveAutoDimension(heightExp, 'height');
+
     const { dimensionElement: element, dimensionContainer: container } =
       this.layoutHelpers;
     document.body.appendChild(container);
-    element.style.width = widthExp;
-    element.style.height = heightExp;
+    element.style.width = widthForLayout;
+    element.style.height = heightForLayout;
     container.appendChild(element);
     const pixelValues = window.getComputedStyle(element);
     const result = {
@@ -235,6 +250,28 @@ export class ScreenSpaceUISystem extends createSystem({
     };
     document.body.removeChild(container);
     return result;
+  }
+
+  /**
+   * Substitute a `'25vw'` / `'25vh'` fallback for `'auto'` on the given axis,
+   * logging a single warning per axis the first time it triggers.
+   */
+  private resolveAutoDimension(
+    expression: string,
+    axis: 'width' | 'height',
+  ): string {
+    if (expression !== 'auto') {
+      return expression;
+    }
+    if (!this.autoDimensionWarned[axis]) {
+      this.autoDimensionWarned[axis] = true;
+      console.warn(
+        `[ScreenSpace] ${axis}: 'auto' is not supported in screen-space layout; ` +
+          `clamping to '25v${axis === 'width' ? 'w' : 'h'}'. Set an explicit CSS ` +
+          `size (e.g. '320px', '40vw') to silence this warning.`,
+      );
+    }
+    return axis === 'width' ? '25vw' : '25vh';
   }
 
   /** Evaluate CSS absolute positioning and return `top`/`left` in pixels. */
