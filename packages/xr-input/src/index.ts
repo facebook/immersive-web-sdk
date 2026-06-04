@@ -15,6 +15,7 @@ export * from './visual/adapter/base-visual-adapter.js';
 export * from './visual/adapter/controller-visual-adapter.js';
 export * from './visual/impl/animated-controller.js';
 export * from './visual/impl/animated-controller-hand.js';
+export { BaseControllerVisual } from './visual/impl/base-impl.js';
 
 // Hand exports
 export * from './visual/adapter/hand-visual-adapter.js';

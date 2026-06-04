@@ -108,6 +108,30 @@ export abstract class XRInputVisualAdapter {
     }
   }
 
+  /**
+   * Swap the controller/hand visual to a different `VisualImplementation`
+   * subclass at runtime. Tears down the current visual (model removed from
+   * the scene graph, `xrInput` cleared) and triggers asset load + `init()`
+   * for the new class on the next tick.
+   *
+   * @param visualClass A `VisualConstructor` — typically a subclass of
+   *   `BaseControllerVisual` (for controllers) or `BaseHandVisual` (for
+   *   hands), or one of the built-in implementations such as `AnimatedController`,
+   *   `AnimatedControllerHand`, or `AnimatedHand`.
+   *
+   * @example
+   * ```ts
+   * import { BaseControllerVisual, type VisualConstructor } from '@iwsdk/xr-input';
+   *
+   * class MyCustomController extends BaseControllerVisual {
+   *   init() { ... }
+   * }
+   *
+   * controllerAdapter.updateVisualImplementation(
+   *   MyCustomController as VisualConstructor<MyCustomController>,
+   * );
+   * ```
+   */
   updateVisualImplementation<T extends VisualImplementation>(
     visualClass: VisualConstructor<T>,
   ) {
