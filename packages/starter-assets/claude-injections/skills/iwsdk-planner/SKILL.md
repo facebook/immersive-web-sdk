@@ -470,6 +470,12 @@ entity.addComponent(DistanceGrabbable, {
   returnToOrigin: false, // Snap back when released
   moveSpeed: 0.1, // Speed for MoveTowardsTarget mode
 });
+
+// Force-release / hand lookup (game reset, weapon swap, recoil, etc.)
+import { GrabSystem } from '@iwsdk/core';
+const grab = world.getSystem(GrabSystem);
+grab.forceRelease(entity); // drop a held entity safely (no-op if not held)
+const hand = grab.getHolderHand(entity); // 'left' | 'right' | null ('left' for two-hand grabs)
 ```
 
 ### 13. Environment/Lighting

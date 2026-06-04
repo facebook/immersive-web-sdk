@@ -18,6 +18,7 @@ import {
   Quaternion,
 } from '../runtime/index.js';
 import { DistanceGrabbable } from './distance-grabbable.js';
+import { cancelGrabHandle, findHolderHand } from './grab-helpers.js';
 import { Grabbed } from './grabbed.js';
 import { DistanceGrabHandle, MovementMode, Handle } from './handles.js';
 import { OneHandGrabbable } from './one-hand-grabbable.js';
@@ -174,6 +175,68 @@ export class GrabSystem extends createSystem(
         }
       }
     });
+  }
+
+  /**
+   * Force-release `entity` if it is currently being held.
+   *
+   * @remarks
+   * Cancels every active pointer on the entity's grab handle, which causes
+   * `update()` on the next frame to remove the {@link Grabbed} tag. Safe to
+   * call when the entity is not held or has never been grabbable — a no-op
+   * in those cases.
+   *
+   * Useful for game-state changes that need to drop held items: level resets,
+   * weapon swaps, death/respawn, cinematics, etc.
+   *
+   * @example
+   * ```ts
+   * const grab = world.getSystem(GrabSystem);
+   * grab.forceRelease(weaponEntity);
+   * ```
+   */
+  forceRelease(entity: Entity): void {
+    cancelGrabHandle(
+      Handle.data.instance[entity.index] as HandleStore<unknown> | undefined,
+    );
+  }
+
+  /**
+   * Identify which controller is currently holding `entity`.
+   *
+   * @returns `'left'` or `'right'` when a single hand holds the entity,
+   * `null` when the entity is not held (or has no grab handle).
+   *
+   * @remarks
+   * For two-handed grabs (both controllers active on the same entity), the
+   * left hand is reported. Callers needing per-hand state for two-handed
+   * interactions should track grab/release events themselves rather than
+   * polling this method.
+   *
+   * Useful for hand-aware behaviors: recoil/animation that should react to
+   * the holding controller, hand-specific UI prompts, etc.
+   *
+   * @example
+   * ```ts
+   * const grab = world.getSystem(GrabSystem);
+   * const hand = grab.getHolderHand(gunEntity);
+   * if (hand) {
+   *   playRecoilOn(hand);
+   * }
+   * ```
+   */
+  getHolderHand(entity: Entity): 'left' | 'right' | null {
+    const left = this.input.xr.multiPointers.left;
+    const right = this.input.xr.multiPointers.right;
+    return findHolderHand(
+      Handle.data.instance[entity.index] as HandleStore<unknown> | undefined,
+      // Near grabs capture via the `grab` sub-pointer; distance grabs capture
+      // via `ray` (see `initializeDistanceHandle` setting
+      // `pointerEventsType = { deny: 'grab' }`). Check both per hand so
+      // distance-held entities don't silently report `null`.
+      [left.getPointer('grab').id, left.getPointer('ray').id],
+      [right.getPointer('grab').id, right.getPointer('ray').id],
+    );
   }
 
   private initializeOneHandHandle(entity: Entity) {

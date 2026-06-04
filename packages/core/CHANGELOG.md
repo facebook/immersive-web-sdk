@@ -2,6 +2,17 @@
 
 ## 0.4.2
 
+### Minor Changes
+
+- `GrabSystem` now exposes two public methods so apps no longer need to
+  deep-import the private `Handle` class to interrogate or unwind a grab
+  (T270858800):
+  - `forceRelease(entity: Entity): void` — drop a held entity (game reset,
+    weapon swap, death/respawn, etc.). No-op if the entity is not held.
+  - `getHolderHand(entity: Entity): 'left' | 'right' | null` — identify
+    which controller is holding `entity`. Returns `null` when not held;
+    for two-handed grabs, reports `'left'` deterministically.
+
 ### Patch Changes
 
 - Changelog-formatted bullets (one per user-facing change). Copy into your changeset

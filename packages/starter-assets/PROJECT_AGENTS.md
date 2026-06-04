@@ -234,6 +234,19 @@ entity.addComponent(Interactable);
 // and auto-manages Hovered/Pressed state
 ```
 
+#### DON'T deep-import `Handle` to force-release or query a grab
+
+```typescript
+// ❌ BAD - private API; future SDK refactors will break this silently
+import { Handle } from '@iwsdk/core/dist/grab/handles.js';
+(Handle as any).data.instance[entity.index].cancel();
+
+// ✅ GOOD - public methods on GrabSystem
+const grab = world.getSystem(GrabSystem);
+grab.forceRelease(entity); // drop a held entity (game reset, weapon swap)
+const hand = grab.getHolderHand(entity); // 'left' | 'right' | null
+```
+
 #### DON'T add environment components to arbitrary entities
 
 ```typescript
