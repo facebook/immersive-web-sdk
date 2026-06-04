@@ -34,6 +34,15 @@ export * from './mcp/index.js';
 export * from '@iwsdk/xr-input';
 export * from '@iwsdk/locomotor';
 export * as UIKit from '@pmndrs/uikit';
+export {
+  signal,
+  effect,
+  computed,
+  batch,
+  untracked,
+  Signal,
+} from '@preact/signals-core';
+export type { ReadonlySignal } from '@preact/signals-core';
 
 export { VERSION };
 
