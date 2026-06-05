@@ -151,9 +151,11 @@ export class SceneUnderstandingSystem extends createSystem(
       // XRSession and become invalid when the session ends. Using them with a new session's
       // XRFrame will cause "XRSpace and XRFrame sessions do not match" errors.
       this.queries.planeEntities.entities.forEach((entity) => {
+        this.disposeEntityGeometry(entity);
         entity.destroy();
       });
       this.queries.meshEntities.entities.forEach((entity) => {
+        this.disposeEntityGeometry(entity);
         entity.destroy();
       });
 
@@ -231,6 +233,18 @@ export class SceneUnderstandingSystem extends createSystem(
     }
   }
 
+  /**
+   * Dispose only the per-object geometry for a plane/mesh entity being removed.
+   * The plane/mesh materials are shared singletons (`planeMaterial` /
+   * `meshMaterial`), so they must NOT be disposed here.
+   */
+  private disposeEntityGeometry(entity: Entity): void {
+    const object3D = entity.object3D;
+    if (object3D instanceof Mesh) {
+      object3D.geometry.dispose();
+    }
+  }
+
   private updatePlanes(
     planes: XRPlaneSet | undefined,
     referenceSpace: XRReferenceSpace | null,
@@ -243,6 +257,7 @@ export class SceneUnderstandingSystem extends createSystem(
           planeEntity,
         );
       } else {
+        this.disposeEntityGeometry(planeEntity);
         planeEntity.destroy();
       }
     });
@@ -258,26 +273,29 @@ export class SceneUnderstandingSystem extends createSystem(
           }
           this.matrixBuffer.fromArray(pose.transform.matrix);
 
-          const polygon = plane.polygon;
-
-          let minX = Number.MAX_SAFE_INTEGER;
-          let maxX = Number.MIN_SAFE_INTEGER;
-          let minZ = Number.MAX_SAFE_INTEGER;
-          let maxZ = Number.MIN_SAFE_INTEGER;
-
-          for (const point of polygon) {
-            minX = Math.min(minX, point.x);
-            maxX = Math.max(maxX, point.x);
-            minZ = Math.min(minZ, point.z);
-            maxZ = Math.max(maxZ, point.z);
-          }
-
-          const width = maxX - minX;
-          const height = maxZ - minZ;
-
-          const geometry = new BoxGeometry(width, 0.001, height);
-
           if (this.currentPlanes.has(plane) === false) {
+            // Only build geometry for newly-seen planes. Doing it every frame
+            // for every plane allocated a BoxGeometry that was then discarded
+            // (without dispose) for already-tracked planes — a per-frame GPU
+            // leak. Existing planes only need their transform refreshed below.
+            const polygon = plane.polygon;
+
+            let minX = Number.MAX_SAFE_INTEGER;
+            let maxX = Number.MIN_SAFE_INTEGER;
+            let minZ = Number.MAX_SAFE_INTEGER;
+            let maxZ = Number.MIN_SAFE_INTEGER;
+
+            for (const point of polygon) {
+              minX = Math.min(minX, point.x);
+              maxX = Math.max(maxX, point.x);
+              minZ = Math.min(minZ, point.z);
+              maxZ = Math.max(maxZ, point.z);
+            }
+
+            const width = maxX - minX;
+            const height = maxZ - minZ;
+
+            const geometry = new BoxGeometry(width, 0.001, height);
             const mesh = new Mesh(geometry, this.planeMaterial);
             mesh.visible = this.config.showWireFrame.value;
             mesh.position.setFromMatrixPosition(this.matrixBuffer);
@@ -309,6 +327,7 @@ export class SceneUnderstandingSystem extends createSystem(
           meshEntity,
         );
       } else {
+        this.disposeEntityGeometry(meshEntity);
         meshEntity.destroy();
       }
     });
@@ -324,14 +343,18 @@ export class SceneUnderstandingSystem extends createSystem(
           }
           this.matrixBuffer.fromArray(pose.transform.matrix);
 
-          const geometry = new BufferGeometry();
-          geometry.setAttribute(
-            'position',
-            new BufferAttribute(mesh.vertices, 3),
-          );
-          geometry.setIndex(new BufferAttribute(mesh.indices, 1));
-
           if (this.currentMeshes.has(mesh) === false) {
+            // Only build geometry for newly-seen meshes. Building a
+            // BufferGeometry every frame for every mesh and discarding it
+            // (without dispose) for already-tracked meshes was a per-frame GPU
+            // leak. Existing meshes only need their transform refreshed below.
+            const geometry = new BufferGeometry();
+            geometry.setAttribute(
+              'position',
+              new BufferAttribute(mesh.vertices, 3),
+            );
+            geometry.setIndex(new BufferAttribute(mesh.indices, 1));
+
             const threeMesh = new Mesh(geometry, this.meshMaterial);
             threeMesh.visible = this.config.showWireFrame.value;
             this.scene.add(threeMesh);
