@@ -93,6 +93,22 @@ export class PhysicsSystem extends createSystem(
 
   private scaleBuffer = new Vector3();
   private matrixBuffer = new Matrix4();
+  /**
+   * Cached Float32Array view over the entire Havok heap, reused across frames
+   * and bodies. Recreated only when the underlying ArrayBuffer changes (the
+   * WASM heap can grow and detach the old buffer), so per-body transform reads
+   * don't allocate a fresh typed-array view every frame.
+   */
+  private heapFloatView?: Float32Array;
+
+  /** Float32 view over the current Havok heap buffer (see {@link heapFloatView}). */
+  private getHeapFloatView(): Float32Array {
+    const buffer = this.havok!.HEAPU8.buffer;
+    if (!this.heapFloatView || this.heapFloatView.buffer !== buffer) {
+      this.heapFloatView = new Float32Array(buffer);
+    }
+    return this.heapFloatView;
+  }
 
   async init(): Promise<void> {
     const { default: HavokPhysics } = await import('@babylonjs/havok');
@@ -197,15 +213,15 @@ export class PhysicsSystem extends createSystem(
           }
 
           const bodyOffset = entity.getValue(PhysicsBody, '_engineOffset') ?? 0;
-          const transformBuffer = new Float32Array(
-            this.havok.HEAPU8.buffer,
-            this.bodyBuffer + bodyOffset,
-            16,
-          );
+          // Read the 16-float transform straight out of the cached heap view.
+          // `bodyBuffer + bodyOffset` is 4-byte aligned (it was a valid
+          // Float32Array byteOffset previously), so `>> 2` is exact.
+          const heap = this.getHeapFloatView();
+          const base = (this.bodyBuffer + bodyOffset) >> 2;
 
           for (let mi = 0; mi < 15; mi++) {
             if ((mi & 3) != 3) {
-              this.matrixBuffer.elements[mi] = transformBuffer[mi];
+              this.matrixBuffer.elements[mi] = heap[base + mi];
             }
           }
           this.matrixBuffer.elements[15] = 1.0;
