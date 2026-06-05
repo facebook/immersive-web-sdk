@@ -11,7 +11,9 @@
   "scripts": {
     "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts",
     "build": "rollup -c",
-    "format": "prettier --write ./src/**/*"
+    "format": "prettier --write ./src/**/*",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "repository": {
     "type": "git",
@@ -31,6 +33,9 @@
   "peerDependencies": {
     "three": ">=0.160.0",
     "three-mesh-bvh": ">=0.9.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.0"
   },
   "engines": {
     "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"

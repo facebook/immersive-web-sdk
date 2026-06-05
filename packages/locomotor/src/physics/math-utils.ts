@@ -19,7 +19,11 @@ export function calculateTrajectoryBounds(
   const b = direction.y;
   const c = origin.y - minY;
 
-  const discriminant = b * b - 4 * a * c;
+  // When the trajectory never reaches minY (e.g. the ray is aimed so its
+  // reachable extent stays above the floor) the discriminant goes negative and
+  // Math.sqrt() returns NaN, which would propagate into the output box. Clamp
+  // to 0 so we fall back to the vertex time instead of producing NaN bounds.
+  const discriminant = Math.max(0, b * b - 4 * a * c);
   const tEnd = (-b + Math.sqrt(discriminant)) / (2 * a);
 
   // Calculate peak height (maximum Y)
@@ -56,7 +60,10 @@ export function sampleParabolicCurve(
   const b = direction.y;
   const c = start.y - minY;
 
-  const discriminant = b * b - 4 * a * c;
+  // Guard against an unreachable floor: a negative discriminant would make
+  // Math.sqrt() return NaN, which would then propagate into every sampled point
+  // (and from there into raycast origins). Clamp to 0 to keep points finite.
+  const discriminant = Math.max(0, b * b - 4 * a * c);
 
   const tEnd = (-b + Math.sqrt(discriminant)) / (2 * a);
 
