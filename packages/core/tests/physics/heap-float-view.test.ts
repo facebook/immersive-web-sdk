@@ -6,6 +6,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { PhysicsSystem } from '../../src/physics/physics-system.js';
+import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 // physics-system.ts -> runtime barrel -> xr-input cursor-visual.ts touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,9 +29,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { PhysicsSystem } from '../../src/physics/physics-system.js';
-import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 function createPhysicsSystem() {
   const world = {

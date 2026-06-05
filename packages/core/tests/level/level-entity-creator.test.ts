@@ -6,6 +6,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { EntityCreator } from '../../src/level/level-entity-creator.js';
+import { Object3D } from '../../src/runtime/three.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,9 +29,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { EntityCreator } from '../../src/level/level-entity-creator.js';
-import { Object3D } from '../../src/runtime/three.js';
 
 function makeWorld() {
   const createTransformEntity = vi.fn(() => ({ addComponent: vi.fn() }));

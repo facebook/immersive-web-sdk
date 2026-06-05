@@ -6,6 +6,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { computeGradientHexes } from '../../src/environment/environment-system.js';
+import { Color } from '../../src/runtime/three.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,9 +29,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { computeGradientHexes } from '../../src/environment/environment-system.js';
-import { Color } from '../../src/runtime/three.js';
 
 describe('computeGradientHexes', () => {
   it('computes the three channel hexes correctly', () => {

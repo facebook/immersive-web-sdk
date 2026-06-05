@@ -6,6 +6,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AudioSystem } from '../../src/audio/audio-system.js';
+import { AudioSource } from '../../src/audio/audio.js';
+import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 // audio-system.ts -> runtime barrel -> xr-input cursor-visual.ts touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,10 +30,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { AudioSystem } from '../../src/audio/audio-system.js';
-import { AudioSource } from '../../src/audio/audio.js';
-import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 function createAudioSystem() {
   const world = {

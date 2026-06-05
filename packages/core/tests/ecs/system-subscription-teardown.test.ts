@@ -6,6 +6,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { CameraSystem } from '../../src/camera/camera-system.js';
+import { XRLayerSystem } from '../../src/layers/xr-layer-system.js';
+import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,10 +30,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { CameraSystem } from '../../src/camera/camera-system.js';
-import { XRLayerSystem } from '../../src/layers/xr-layer-system.js';
-import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
 
 function baseWorld(extra: Record<string, unknown> = {}) {
   return {

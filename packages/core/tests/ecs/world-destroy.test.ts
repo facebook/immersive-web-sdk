@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { World } from '../../src/ecs/world.js';
 
 // world.ts -> @iwsdk/xr-input -> cursor-visual.ts touches `document` at module
 // load; provide a minimal canvas stub before importing.
@@ -27,8 +28,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { World } from '../../src/ecs/world.js';
 
 describe('World.destroy', () => {
   it('runs registered cleanup callbacks', () => {

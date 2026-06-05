@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { launchXR } from '../../src/init/xr.js';
 
 // xr.ts -> runtime barrel -> xr-input cursor-visual.ts touches `document` at
 // module load; provide a minimal canvas stub before importing.
@@ -27,8 +28,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { launchXR } from '../../src/init/xr.js';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 

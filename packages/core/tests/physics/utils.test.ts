@@ -6,6 +6,18 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { PhysicsShapeType } from '../../src/physics/physicsShape.js';
+import {
+  detectShapeFromGeometry,
+  generateMergedGeometry,
+  sequentialIndices,
+} from '../../src/physics/utils.js';
+import {
+  BoxGeometry,
+  BufferGeometry,
+  Mesh,
+  Object3D,
+} from '../../src/runtime/three.js';
 
 // physics/utils.ts -> runtime barrel -> xr-input cursor-visual.ts touches
 // `document` at module load, so provide a minimal canvas stub before importing.
@@ -27,19 +39,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { PhysicsShapeType } from '../../src/physics/physicsShape.js';
-import {
-  detectShapeFromGeometry,
-  generateMergedGeometry,
-  sequentialIndices,
-} from '../../src/physics/utils.js';
-import {
-  BoxGeometry,
-  BufferGeometry,
-  Mesh,
-  Object3D,
-} from '../../src/runtime/three.js';
 
 describe('sequentialIndices', () => {
   it('produces 0..n-1 as a Uint32Array', () => {

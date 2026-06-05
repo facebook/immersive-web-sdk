@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { describe, it, expect } from 'vitest';
 import { Box3, Vector3 } from 'three';
+import { describe, it, expect } from 'vitest';
 import {
   calculateTrajectoryBounds,
   sampleParabolicCurve,

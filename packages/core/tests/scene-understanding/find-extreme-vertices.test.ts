@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { findExtremeVertices } from '../../src/scene-understanding/scene-understanding-system.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,8 +28,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { findExtremeVertices } from '../../src/scene-understanding/scene-understanding-system.js';
 
 describe('findExtremeVertices', () => {
   it('returns the vertices with the smallest and largest coordinate sum', () => {

@@ -6,6 +6,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { DistanceGrabHandle, MovementMode } from '../../src/grab/handles.js';
+import { Object3D, Quaternion, Vector3 } from '../../src/runtime/three.js';
 
 // handles.ts -> runtime barrel -> xr-input cursor-visual.ts touches `document`
 // at module load; provide a minimal canvas stub before importing.
@@ -27,9 +29,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { DistanceGrabHandle, MovementMode } from '../../src/grab/handles.js';
-import { Object3D, Quaternion, Vector3 } from '../../src/runtime/three.js';
 
 function createHandle(target: Object3D) {
   return new DistanceGrabHandle(

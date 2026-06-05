@@ -6,6 +6,17 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import {
+  BoxGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PerspectiveCamera,
+  Scene,
+} from '../../src/runtime/three.js';
+import { XRMesh } from '../../src/scene-understanding/mesh.js';
+import { XRPlane } from '../../src/scene-understanding/plane.js';
+import { SceneUnderstandingSystem } from '../../src/scene-understanding/scene-understanding-system.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -27,18 +38,6 @@ vi.hoisted(() => {
     }),
   };
 });
-
-import { SceneUnderstandingSystem } from '../../src/scene-understanding/scene-understanding-system.js';
-import { XRMesh } from '../../src/scene-understanding/mesh.js';
-import { XRPlane } from '../../src/scene-understanding/plane.js';
-import {
-  BoxGeometry,
-  Mesh,
-  MeshBasicMaterial,
-  Object3D,
-  PerspectiveCamera,
-  Scene,
-} from '../../src/runtime/three.js';
 
 const IDENTITY = new Float32Array([
   1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
