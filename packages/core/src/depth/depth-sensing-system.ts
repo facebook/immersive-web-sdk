@@ -94,38 +94,63 @@ export class DepthSensingSystem extends createSystem(
   }
 
   init(): void {
-    this.xrManager.addEventListener('sessionstart', () => {
+    const onSessionStart = () => {
       this.updateEnabledFeatures(this.xrManager.getSession());
-    });
-
-    this.xrManager.addEventListener('sessionend', () => {
+    };
+    const onSessionEnd = () => {
       this.cleanup();
+    };
+    this.xrManager.addEventListener('sessionstart', onSessionStart);
+    this.xrManager.addEventListener('sessionend', onSessionEnd);
+    this.cleanupFuncs.push(() => {
+      this.xrManager.removeEventListener('sessionstart', onSessionStart);
+      this.xrManager.removeEventListener('sessionend', onSessionEnd);
     });
 
-    // React to config changes
-    this.config.enableDepthTexture.subscribe((enabled) => {
-      if (enabled && !this.depthTextures) {
-        this.initializeDepthTextures();
-      }
-    });
+    // React to config changes. subscribe() returns an unsubscribe function;
+    // register it for teardown so the callback (and its closure over `this`)
+    // does not outlive the system.
+    this.cleanupFuncs.push(
+      this.config.enableDepthTexture.subscribe((enabled) => {
+        if (enabled && !this.depthTextures) {
+          this.initializeDepthTextures();
+        }
+      }),
+    );
 
-    this.queries.occludables.subscribe('qualify', (entity: Entity) => {
-      this.attachOcclusionToEntity(entity);
-      if (
-        DepthOccludable.data.mode[entity.index] ===
-        OcclusionShadersMode.MinMaxSoftOcclusion
-      ) {
-        this.minMaxEntityCount++;
-      }
-    });
-    this.queries.occludables.subscribe('disqualify', (entity: Entity) => {
-      if (
-        DepthOccludable.data.mode[entity.index] ===
-        OcclusionShadersMode.MinMaxSoftOcclusion
-      ) {
-        this.minMaxEntityCount--;
-      }
-      this.detachOcclusionFromEntity(entity);
+    this.cleanupFuncs.push(
+      this.queries.occludables.subscribe('qualify', (entity: Entity) => {
+        this.attachOcclusionToEntity(entity);
+        if (
+          DepthOccludable.data.mode[entity.index] ===
+          OcclusionShadersMode.MinMaxSoftOcclusion
+        ) {
+          this.minMaxEntityCount++;
+        }
+      }),
+      this.queries.occludables.subscribe('disqualify', (entity: Entity) => {
+        if (
+          DepthOccludable.data.mode[entity.index] ===
+          OcclusionShadersMode.MinMaxSoftOcclusion
+        ) {
+          this.minMaxEntityCount--;
+        }
+        this.detachOcclusionFromEntity(entity);
+      }),
+    );
+
+    // Release GPU-backed resources on system teardown. `depthTextures` is
+    // created once (the enableDepthTexture subscription fires immediately) and
+    // reused across XR sessions, so it must be disposed on destroy() rather
+    // than in cleanup() (sessionend) — disposing it per session would leave a
+    // subsequent session with no depth textures. preprocessingPass is normally
+    // released in cleanup() on sessionend; dispose it here too in case the
+    // system is torn down mid-session.
+    this.cleanupFuncs.push(() => {
+      this.depthTextures?.dispose();
+      this.depthTextures = undefined;
+      this.preprocessingPass?.dispose();
+      this.preprocessingPass = undefined;
     });
   }
 
