@@ -98,6 +98,11 @@ export class World extends ElicsWorld {
   /** MCP runtime for framework-specific tools. Set automatically during World.create(). */
   public mcpRuntime?: MCPRuntime;
 
+  /** Teardown callbacks run by {@link World.destroy} (render loop, global listeners). */
+  private worldCleanupFuncs: Array<() => void> = [];
+  /** Guards {@link World.destroy} so a second call is a no-op. */
+  private destroyed = false;
+
   /** Entity wrapping the XROrigin Group (persistent, survives level changes). */
   public playerEntity!: Entity;
   /** Entity wrapping the player head Group (persistent). */
@@ -235,6 +240,54 @@ export class World extends ElicsWorld {
 
   exitXR() {
     this.session?.end();
+  }
+
+  /**
+   * Register a teardown callback to run on {@link World.destroy}. Used by the
+   * initializer to undo global side effects such as the render loop and the
+   * window `resize` listener.
+   *
+   * @internal
+   */
+  addCleanup(fn: () => void): void {
+    this.worldCleanupFuncs.push(fn);
+  }
+
+  /**
+   * Tear down the world: destroy all registered systems (running their
+   * `cleanupFuncs`), then run world-level teardown callbacks (stop the render
+   * loop, remove the window `resize` listener). After calling this the world
+   * instance should be discarded.
+   *
+   * @remarks
+   * Not invoked during normal single-world app usage (where the world lives for
+   * the page lifetime); provided so tests, hot-reload, and multi-world hosts can
+   * release the render loop, listeners, and per-system subscriptions instead of
+   * leaking them. Individual failures are caught so one bad teardown does not
+   * block the rest.
+   */
+  destroy(): void {
+    // Idempotent: getSystems() keeps returning the same systems, so without
+    // this guard a second destroy() would re-run every system's destroy().
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
+    for (const system of this.getSystems()) {
+      try {
+        (system as { destroy?: () => void }).destroy?.();
+      } catch (error) {
+        console.error('[World] system destroy failed:', error);
+      }
+    }
+    const fns = this.worldCleanupFuncs.splice(0);
+    for (const fn of fns) {
+      try {
+        fn();
+      } catch (error) {
+        console.error('[World] cleanup failed:', error);
+      }
+    }
   }
 
   update(delta: number, time: number): void {

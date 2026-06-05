@@ -241,7 +241,7 @@ export async function initializeWorld(
   setupRenderLoop(world, renderer);
 
   // Setup resize handling
-  setupResizeHandling(camera, renderer);
+  setupResizeHandling(world, camera, renderer);
 
   // Manage XR offer flow if configured
   if (config.xr.offer && config.xr.offer !== 'none') {
@@ -781,6 +781,9 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
   };
 
   renderer.setAnimationLoop(render);
+  // Allow World.destroy() to stop the loop (otherwise it keeps the world,
+  // renderer, scene and camera alive forever via the render closure).
+  world.addCleanup(() => renderer.setAnimationLoop(null));
 
   // No explicit sessionend handling required on r177; WebXRManager handles
   // render target and canvas sizing restoration internally.
@@ -790,6 +793,7 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
  * Setup window resize handling
  */
 function setupResizeHandling(
+  world: World,
   camera: PerspectiveCamera,
   renderer: WebGLRenderer,
 ) {
@@ -800,6 +804,11 @@ function setupResizeHandling(
   };
 
   window.addEventListener('resize', onWindowResize, false);
+  // Allow World.destroy() to remove this listener (otherwise it fires forever
+  // and pins the camera/renderer captured in the closure).
+  world.addCleanup(() =>
+    window.removeEventListener('resize', onWindowResize, false),
+  );
 }
 
 /**
