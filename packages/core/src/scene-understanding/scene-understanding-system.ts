@@ -368,9 +368,7 @@ export class SceneUnderstandingSystem extends createSystem(
                 isBounded3D: false,
               });
             } else {
-              const { minEntry, maxEntry } = this.findMinMaxEntries(
-                this.flatToVec3Array(mesh.vertices),
-              );
+              const { minEntry, maxEntry } = findExtremeVertices(mesh.vertices);
               meshEntity.addComponent(XRMesh, {
                 _mesh: mesh,
                 isBounded3D: true,
@@ -525,39 +523,42 @@ export class SceneUnderstandingSystem extends createSystem(
       }
     });
   }
+}
 
-  private flatToVec3Array(arr: Float32Array) {
-    if (!arr || arr.length % 3 !== 0) {
-      throw new Error('Array length must be a multiple of 3.');
-    }
-    const result = [];
-    for (let i = 0; i < arr.length; i += 3) {
-      const obj = {
-        x: arr[i],
-        y: arr[i + 1],
-        z: arr[i + 2],
-      };
-      result.push(obj);
-    }
-    return result;
-  }
+type Vec3 = { x: number; y: number; z: number };
 
-  private findMinMaxEntries(arr: { x: number; y: number; z: number }[]) {
-    let minEntry = arr[0];
-    let maxEntry = arr[0];
-    let minSum = arr[0].x + arr[0].y + arr[0].z;
-    let maxSum = arr[0].x + arr[0].y + arr[0].z;
-    for (let i = 1; i < arr.length; i++) {
-      const currentSum = arr[i].x + arr[i].y + arr[i].z;
-      if (currentSum < minSum) {
-        minSum = currentSum;
-        minEntry = arr[i];
-      }
-      if (currentSum > maxSum) {
-        maxSum = currentSum;
-        maxEntry = arr[i];
-      }
-    }
-    return { minEntry, maxEntry };
+/**
+ * From a flat `[x,y,z, x,y,z, ...]` vertex buffer, return the vertices with the
+ * smallest and largest coordinate sum (`x + y + z`).
+ *
+ * Equivalent to the previous `flatToVec3Array(...)` -> `findMinMaxEntries(...)`
+ * pipeline, but it scans the typed array directly and allocates only the two
+ * result objects instead of one object per vertex (thousands per mesh).
+ */
+export function findExtremeVertices(arr: Float32Array): {
+  minEntry: Vec3;
+  maxEntry: Vec3;
+} {
+  if (!arr || arr.length === 0 || arr.length % 3 !== 0) {
+    throw new Error('Array length must be a positive multiple of 3.');
   }
+  let minIndex = 0;
+  let maxIndex = 0;
+  let minSum = arr[0] + arr[1] + arr[2];
+  let maxSum = minSum;
+  for (let i = 3; i < arr.length; i += 3) {
+    const sum = arr[i] + arr[i + 1] + arr[i + 2];
+    if (sum < minSum) {
+      minSum = sum;
+      minIndex = i;
+    }
+    if (sum > maxSum) {
+      maxSum = sum;
+      maxIndex = i;
+    }
+  }
+  return {
+    minEntry: { x: arr[minIndex], y: arr[minIndex + 1], z: arr[minIndex + 2] },
+    maxEntry: { x: arr[maxIndex], y: arr[maxIndex + 1], z: arr[maxIndex + 2] },
+  };
 }

@@ -37,6 +37,24 @@ import {
 import { IBLGradient } from './ibl-gradient.js';
 import { IBLTexture } from './ibl-texture.js';
 
+/**
+ * Compute sky/equator/ground hex colors from RGB views, reusing a single shared
+ * `Color` scratch object (`out`) instead of allocating one `Color` per channel
+ * per frame. Each `getHex()` is read before the next `setRGB()` overwrites
+ * `out`, so the shared instance is safe.
+ */
+export function computeGradientHexes(
+  out: Color,
+  sky: ArrayLike<number>,
+  equator: ArrayLike<number>,
+  ground: ArrayLike<number>,
+): { skyHex: number; equatorHex: number; groundHex: number } {
+  const skyHex = out.setRGB(sky[0], sky[1], sky[2]).getHex();
+  const equatorHex = out.setRGB(equator[0], equator[1], equator[2]).getHex();
+  const groundHex = out.setRGB(ground[0], ground[1], ground[2]).getHex();
+  return { skyHex, equatorHex, groundHex };
+}
+
 interface EnvState {
   backgroundTexture?: Texture;
   environmentTarget?: WebGLRenderTarget;
@@ -339,13 +357,14 @@ export class EnvironmentSystem extends createSystem({
     const equatorV = entity.getVectorView(IBLGradient, 'equator');
     const groundV = entity.getVectorView(IBLGradient, 'ground');
     const intensity = entity.getValue(IBLGradient, 'intensity') || 1.0;
-    const skyHex = new Color().setRGB(skyV[0], skyV[1], skyV[2]).getHex();
-    const equatorHex = new Color(
-      equatorV[0],
-      equatorV[1],
-      equatorV[2],
-    ).getHex();
-    const groundHex = new Color(groundV[0], groundV[1], groundV[2]).getHex();
+    // Reuse the shared scratch Color instead of allocating three new Color
+    // objects every frame (updateDomeGradient already uses this.tmpColor).
+    const { skyHex, equatorHex, groundHex } = computeGradientHexes(
+      this.tmpColor,
+      skyV,
+      equatorV,
+      groundV,
+    );
 
     let gradientScene = this.state.gradientEnvironmentScene;
     if (!gradientScene) {
