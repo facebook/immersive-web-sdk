@@ -159,6 +159,14 @@ export class MCPWebSocketClient {
   disconnect(): void {
     this.intentionalDisconnect = true;
 
+    // Reset the reconnect budget so a later connect() starts fresh. Without
+    // this, a client that had already exhausted maxReconnectAttempts stays
+    // capped after an explicit disconnect/reconnect cycle: scheduleReconnect()
+    // early-returns forever and the client can never recover. (Auto-reconnects
+    // go through scheduleReconnect()->connect(), not disconnect(), so the
+    // backoff/cap behavior for unintentional drops is unchanged.)
+    this.reconnectAttempts = 0;
+
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

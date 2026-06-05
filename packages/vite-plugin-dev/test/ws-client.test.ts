@@ -618,6 +618,23 @@ describe('MCPWebSocketClient', () => {
       // Verify the reconnect attempt happened by checking we have a new instance URL
       expect(secondInstance!.url).toContain('/__iwer_mcp');
     });
+
+    test('disconnect() resets the reconnect budget so a later connect can recover', () => {
+      const c = new MCPWebSocketClient(mockDevice as any);
+      client = c;
+
+      // Simulate a client that used up all of its reconnect attempts during a
+      // run of failed reconnections (onopen never fired to reset the counter).
+      (c as any).reconnectAttempts = (c as any).maxReconnectAttempts;
+      expect((c as any).reconnectAttempts).toBeGreaterThan(0);
+
+      c.disconnect();
+
+      // Regression: pre-fix this stayed pinned at the cap, so a later
+      // connect()/close() could never schedule another reconnect
+      // (scheduleReconnect early-returns once reconnectAttempts >= max).
+      expect((c as any).reconnectAttempts).toBe(0);
+    });
   });
 
   describe('tab identity', () => {
