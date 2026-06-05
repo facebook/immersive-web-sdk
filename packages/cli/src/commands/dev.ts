@@ -47,9 +47,30 @@ interface PackageJsonManifest {
   scripts?: Record<string, string>;
 }
 
-interface ProcessExitResult {
+export interface ProcessExitResult {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
+}
+
+/**
+ * A child process exited cleanly only when it reported exit code 0 and was not
+ * terminated by a signal. A signal kill reports `exitCode === null` (with
+ * `signal` set), so a plain `exit.exitCode !== 0` check silently treats
+ * signal-terminated processes as success — hiding crashes from the CLI caller.
+ */
+export function isAbnormalChildExit(exit: ProcessExitResult): boolean {
+  return !(exit.exitCode === 0 && exit.signal === null);
+}
+
+/** Human-readable reason for an abnormal child exit (code vs. signal). */
+export function describeChildExit(exit: ProcessExitResult): string {
+  if (exit.signal !== null) {
+    return `Dev server terminated by signal ${exit.signal}`;
+  }
+  if (exit.exitCode !== null) {
+    return `Dev server exited with code ${exit.exitCode}`;
+  }
+  return 'Dev server exited abnormally';
 }
 
 interface WaitForRuntimeSessionResult {
@@ -579,18 +600,14 @@ export async function handleDevUp(
       `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
     );
     const exit = await childExitPromise;
-    if (exit.exitCode && exit.exitCode !== 0) {
-      return createFailure(
-        `Dev server exited with code ${exit.exitCode}`,
-        'dev_up_exit',
-        {
-          workspaceRoot,
-          session: waitResult.session,
-          exitCode: exit.exitCode,
-          signal: exit.signal,
-          scriptName,
-        },
-      );
+    if (isAbnormalChildExit(exit)) {
+      return createFailure(describeChildExit(exit), 'dev_up_exit', {
+        workspaceRoot,
+        session: waitResult.session,
+        exitCode: exit.exitCode,
+        signal: exit.signal,
+        scriptName,
+      });
     }
     return null;
   }
