@@ -26,6 +26,13 @@ export interface AudioInstance<T extends AmbientAudio | PositionalAudio> {
   isFadingOut?: boolean;
   isFadingIn?: boolean;
   pausedBySessionEnd?: boolean;
+  /**
+   * Pending timer used to attach the `onended` handler when `audio.source` is
+   * not ready immediately. Tracked so it can be cancelled when the instance is
+   * released — otherwise a late callback could clobber the `onended` of a
+   * pooled audio node that has since been reacquired for a different sound.
+   */
+  onendedTimeout?: ReturnType<typeof setTimeout>;
 }
 
 /**

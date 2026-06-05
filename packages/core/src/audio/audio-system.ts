@@ -361,14 +361,27 @@ export class AudioSystem extends createSystem(
         this.onInstanceEnded(entity, instance);
       };
     } else {
-      // If source not available immediately, try after a short delay
-      setTimeout(() => {
+      // If source not available immediately, try after a short delay. Track the
+      // timer on the instance so releaseInstance() can cancel it; otherwise this
+      // callback could run after `audio` has been returned to the pool and
+      // reacquired for a different sound, clobbering that sound's onended.
+      instance.onendedTimeout = setTimeout(() => {
+        instance.onendedTimeout = undefined;
         if (audio.source) {
           audio.source.onended = () => {
             this.onInstanceEnded(entity, instance);
           };
         }
       }, 10);
+    }
+  }
+
+  private clearInstanceTimeout(
+    instance: AudioInstance<AmbientAudio> | AudioInstance<PositionalAudio>,
+  ): void {
+    if (instance.onendedTimeout !== undefined) {
+      clearTimeout(instance.onendedTimeout);
+      instance.onendedTimeout = undefined;
     }
   }
 
@@ -474,6 +487,9 @@ export class AudioSystem extends createSystem(
       | AudioPool<PositionalAudio>;
     const instances = this.activeInstances.get(entity)!;
 
+    // Cancel any pending onended-attach timer before the audio returns to the pool.
+    this.clearInstanceTimeout(instance);
+
     // Release back to pool
     (pool as any).release(instance.audio);
 
@@ -498,6 +514,7 @@ export class AudioSystem extends createSystem(
       | AudioPool<PositionalAudio>;
 
     instances.forEach((instance) => {
+      this.clearInstanceTimeout(instance);
       (pool as any).release(instance.audio);
     });
 
@@ -589,6 +606,7 @@ export class AudioSystem extends createSystem(
 
     if (pool) {
       instances.forEach((instance) => {
+        this.clearInstanceTimeout(instance);
         (pool as any).release(instance.audio);
       });
       pool.dispose();
