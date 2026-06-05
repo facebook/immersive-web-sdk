@@ -55,14 +55,19 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
     super(target_, getOptions);
 
     this.targetQuatOffset.normalize();
-
-    (target_ as Object3D).addEventListener('pointerup', () => {
-      this.isSnapped = false;
-    });
   }
 
   update(time: number) {
     const target = this.getTarget();
+
+    if (this.inputState.size === 0) {
+      // No active pointers: the grab was released, cancelled, or
+      // force-released. Clear transient snap state so the next grab starts
+      // unsnapped. This replaces the constructor's 'pointerup' DOM listener,
+      // which was never removed (a listener leak) and also missed
+      // forceRelease()/cancel() (which don't fire a DOM pointerup).
+      this.isSnapped = false;
+    }
 
     if (
       target == null ||
