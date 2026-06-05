@@ -98,12 +98,12 @@ export class ScreenSpaceUISystem extends createSystem({
     this.layoutHelpers.positionContainer.style.position = 'relative';
     this.layoutHelpers.positionContainer.style.visibility = 'hidden';
 
-    window.addEventListener(
-      'resize',
-      () => {
-        this.resized = true;
-      },
-      false,
+    const onResize = () => {
+      this.resized = true;
+    };
+    window.addEventListener('resize', onResize, false);
+    this.cleanupFuncs.push(() =>
+      window.removeEventListener('resize', onResize, false),
     );
   }
 

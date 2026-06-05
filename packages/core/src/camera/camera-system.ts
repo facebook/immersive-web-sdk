@@ -29,14 +29,18 @@ export class CameraSystem extends createSystem({
   cameras: { required: [CameraSource] },
 }) {
   init() {
-    // Stop all cameras only when the page/session is hidden.
-    this.world.visibilityState.subscribe((state) => {
-      if (state === VisibilityState.Hidden) {
-        for (const entity of this.queries.cameras.entities) {
-          this.stopCamera(entity);
+    // Stop all cameras only when the page/session is hidden. Register the
+    // unsubscribe so the callback (and its closure over `this`) is released on
+    // system teardown rather than leaking.
+    this.cleanupFuncs.push(
+      this.world.visibilityState.subscribe((state) => {
+        if (state === VisibilityState.Hidden) {
+          for (const entity of this.queries.cameras.entities) {
+            this.stopCamera(entity);
+          }
         }
-      }
-    });
+      }),
+    );
   }
 
   update() {

@@ -107,17 +107,21 @@ export class XRLayerSystem extends createSystem({
       () => this.xrManager.removeEventListener('sessionend', onSessionEnd),
     );
 
-    this.queries.quadLayers.subscribe('qualify', (entity: Entity) =>
-      this.setupLayer(entity, 'quad'),
-    );
-    this.queries.quadLayers.subscribe('disqualify', (entity: Entity) =>
-      this.teardownLayer(entity),
-    );
-    this.queries.cylinderLayers.subscribe('qualify', (entity: Entity) =>
-      this.setupLayer(entity, 'cylinder'),
-    );
-    this.queries.cylinderLayers.subscribe('disqualify', (entity: Entity) =>
-      this.teardownLayer(entity),
+    // Register the query subscriptions on cleanupFuncs so they're released on
+    // system teardown (matching the xr listeners above).
+    this.cleanupFuncs.push(
+      this.queries.quadLayers.subscribe('qualify', (entity: Entity) =>
+        this.setupLayer(entity, 'quad'),
+      ),
+      this.queries.quadLayers.subscribe('disqualify', (entity: Entity) =>
+        this.teardownLayer(entity),
+      ),
+      this.queries.cylinderLayers.subscribe('qualify', (entity: Entity) =>
+        this.setupLayer(entity, 'cylinder'),
+      ),
+      this.queries.cylinderLayers.subscribe('disqualify', (entity: Entity) =>
+        this.teardownLayer(entity),
+      ),
     );
   }
 

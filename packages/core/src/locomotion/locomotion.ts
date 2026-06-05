@@ -165,12 +165,17 @@ export class LocomotionSystem extends createSystem(
       );
     });
 
-    this.queries.envs.subscribe('qualify', (entity) => {
-      this.addEnvironmentToEngine(entity);
-    });
-    this.queries.envs.subscribe('disqualify', (entity) => {
-      this.removeEnvironmentFromEngine(entity);
-    });
+    // Register the env query subscriptions on cleanupFuncs (the config
+    // subscriptions above are already registered) so they're released when the
+    // LocomotionSystem is torn down.
+    this.cleanupFuncs.push(
+      this.queries.envs.subscribe('qualify', (entity) => {
+        this.addEnvironmentToEngine(entity);
+      }),
+      this.queries.envs.subscribe('disqualify', (entity) => {
+        this.removeEnvironmentFromEngine(entity);
+      }),
+    );
   }
 
   private async initLocomotor(): Promise<void> {

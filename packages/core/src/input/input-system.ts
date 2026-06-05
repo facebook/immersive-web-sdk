@@ -97,27 +97,31 @@ export class InputSystem extends createSystem(
 
     // Wire pointer event listeners on qualify; tear them down on disqualify.
     // Descendant arrays are rebuilt every frame, so no dirty bookkeeping here.
-    this.queries.rayInteractables.subscribe('qualify', (entity) => {
-      this.setupEventListeners(entity);
-    });
-    this.queries.rayInteractables.subscribe('disqualify', (entity) => {
-      this.cleanupEventListeners(entity);
-    });
+    // Register the query subscriptions on cleanupFuncs so they're released on
+    // system teardown (matching the visibilityState subscription above).
+    this.cleanupFuncs.push(
+      this.queries.rayInteractables.subscribe('qualify', (entity) => {
+        this.setupEventListeners(entity);
+      }),
+      this.queries.rayInteractables.subscribe('disqualify', (entity) => {
+        this.cleanupEventListeners(entity);
+      }),
 
-    this.queries.pokeInteractables.subscribe('qualify', (entity) => {
-      this.setupEventListeners(entity);
-      // Enable touch pointers when first poke interactable appears
-      this.input.xr.multiPointers.left.toggleSubPointer('touch', true);
-      this.input.xr.multiPointers.right.toggleSubPointer('touch', true);
-    });
-    this.queries.pokeInteractables.subscribe('disqualify', (entity) => {
-      this.cleanupEventListeners(entity);
-      // Disable touch pointers when no poke interactables remain
-      if (this.queries.pokeInteractables.entities.size === 0) {
-        this.input.xr.multiPointers.left.toggleSubPointer('touch', false);
-        this.input.xr.multiPointers.right.toggleSubPointer('touch', false);
-      }
-    });
+      this.queries.pokeInteractables.subscribe('qualify', (entity) => {
+        this.setupEventListeners(entity);
+        // Enable touch pointers when first poke interactable appears
+        this.input.xr.multiPointers.left.toggleSubPointer('touch', true);
+        this.input.xr.multiPointers.right.toggleSubPointer('touch', true);
+      }),
+      this.queries.pokeInteractables.subscribe('disqualify', (entity) => {
+        this.cleanupEventListeners(entity);
+        // Disable touch pointers when no poke interactables remain
+        if (this.queries.pokeInteractables.entities.size === 0) {
+          this.input.xr.multiPointers.left.toggleSubPointer('touch', false);
+          this.input.xr.multiPointers.right.toggleSubPointer('touch', false);
+        }
+      }),
+    );
 
     // Enable touch pointer if there are already poke interactables
     if (this.queries.pokeInteractables.entities.size > 0) {

@@ -175,21 +175,23 @@ export class SceneUnderstandingSystem extends createSystem(
       persistent: true,
     });
 
-    this.config.showWireFrame.subscribe((value) => {
-      this.queries.planeEntities.entities.forEach((planeEntity) => {
-        const planeObject = planeEntity.object3D;
-        if (planeObject instanceof Mesh) {
-          planeObject.visible = value;
-        }
-      });
+    this.cleanupFuncs.push(
+      this.config.showWireFrame.subscribe((value) => {
+        this.queries.planeEntities.entities.forEach((planeEntity) => {
+          const planeObject = planeEntity.object3D;
+          if (planeObject instanceof Mesh) {
+            planeObject.visible = value;
+          }
+        });
 
-      this.queries.meshEntities.entities.forEach((meshEntity) => {
-        const meshObject = meshEntity.object3D;
-        if (meshObject instanceof Mesh) {
-          meshObject.visible = value;
-        }
-      });
-    });
+        this.queries.meshEntities.entities.forEach((meshEntity) => {
+          const meshObject = meshEntity.object3D;
+          if (meshObject instanceof Mesh) {
+            meshObject.visible = value;
+          }
+        });
+      }),
+    );
   }
 
   update(_delta: number, _time: number): void {

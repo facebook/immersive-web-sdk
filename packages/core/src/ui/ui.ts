@@ -115,29 +115,32 @@ export class PanelUISystem extends createSystem(
     this.renderer.setTransparentSort(reversePainterSortStable);
     this.renderer.localClippingEnabled = true;
 
-    // Apply color scheme preference
-    this.config.preferredColorScheme.subscribe((scheme) => {
-      setPreferredColorScheme(scheme as ColorScheme);
-    });
+    // Apply color scheme preference. Register the unsubscribe / query handles
+    // on cleanupFuncs so they are released on system teardown.
+    this.cleanupFuncs.push(
+      this.config.preferredColorScheme.subscribe((scheme) => {
+        setPreferredColorScheme(scheme as ColorScheme);
+      }),
 
-    // Set up reactive UI loading when panels need configuration
-    this.queries.unconfiguredPanels.subscribe('qualify', (entity) => {
-      this.loadPanel(entity)
-        .then(() => {
-          // Loading completed successfully - PanelDocument component added
-        })
-        .catch((error) => {
-          console.error(
-            `[PanelUISystem] Failed to load panel for entity ${entity.index}:`,
-            error,
-          );
-        });
-    });
+      // Set up reactive UI loading when panels need configuration
+      this.queries.unconfiguredPanels.subscribe('qualify', (entity) => {
+        this.loadPanel(entity)
+          .then(() => {
+            // Loading completed successfully - PanelDocument component added
+          })
+          .catch((error) => {
+            console.error(
+              `[PanelUISystem] Failed to load panel for entity ${entity.index}:`,
+              error,
+            );
+          });
+      }),
 
-    // Set up cleanup when panels are unconfigured
-    this.queries.configuredPanels.subscribe('disqualify', (entity) => {
-      this.cleanupPanel(entity);
-    });
+      // Set up cleanup when panels are unconfigured
+      this.queries.configuredPanels.subscribe('disqualify', (entity) => {
+        this.cleanupPanel(entity);
+      }),
+    );
   }
 
   /** Tick loaded UIKit documents each frame. */
