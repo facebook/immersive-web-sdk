@@ -15,6 +15,16 @@ import {
   Vector3,
 } from '../runtime/index.js';
 
+/**
+ * Angle in degrees from the dot product of two unit vectors, robust to
+ * floating-point error. A normalized dot product can land slightly outside
+ * [-1, 1] (e.g. 1.0000001), which makes `Math.acos` return `NaN`; that `NaN`
+ * would then poison the follow re-target comparison. Clamp before `acos`.
+ */
+export function clampedAcosDeg(dot: number): number {
+  return MathUtils.radToDeg(Math.acos(MathUtils.clamp(dot, -1, 1)));
+}
+
 /** Behavior modes for {@link Follower}. @category UI */
 export const FollowBehavior = {
   FaceTarget: 'face-target',
@@ -128,10 +138,8 @@ export class FollowSystem extends createSystem({
         const distance = object.parent
           .worldToLocal(this.strictFollowTarget)
           .distanceTo(this.followTarget);
-        const deltaAngle = MathUtils.radToDeg(
-          Math.acos(
-            this.targetForward.normalize().dot(this.deltaVec3.normalize()),
-          ),
+        const deltaAngle = clampedAcosDeg(
+          this.targetForward.normalize().dot(this.deltaVec3.normalize()),
         );
         if (
           distance > entity.getValue(Follower, 'tolerance')! ||
