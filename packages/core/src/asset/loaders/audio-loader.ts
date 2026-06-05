@@ -30,27 +30,28 @@ export class AudioAssetLoader {
       return CacheManager.getPromise<AudioBuffer>(url)!;
     }
 
+    // Return a cached buffer directly. Registering a promise on the cached
+    // path leaks: deletePromise() inside the executor runs before setPromise()
+    // stores the promise, so the resolved promise would never be evicted.
+    if (CacheManager.hasAsset(url)) {
+      return CacheManager.getAsset<AudioBuffer>(url)!;
+    }
+
     const loadingPromise = new Promise<AudioBuffer>((resolve, reject) => {
-      // Check cache first
-      if (CacheManager.hasAsset(url)) {
-        resolve(CacheManager.getAsset<AudioBuffer>(url)!);
-        CacheManager.deletePromise(url);
-      } else {
-        // Load using Three.js AudioLoader
-        this.audioLoader.load(
-          url,
-          (buffer) => {
-            CacheManager.setAsset(url, buffer);
-            resolve(buffer);
-            CacheManager.deletePromise(url);
-          },
-          undefined, // progress callback
-          (error) => {
-            reject(error);
-            CacheManager.deletePromise(url);
-          },
-        );
-      }
+      // Load using Three.js AudioLoader
+      this.audioLoader.load(
+        url,
+        (buffer) => {
+          CacheManager.setAsset(url, buffer);
+          resolve(buffer);
+          CacheManager.deletePromise(url);
+        },
+        undefined, // progress callback
+        (error) => {
+          reject(error);
+          CacheManager.deletePromise(url);
+        },
+      );
     });
 
     CacheManager.setPromise(url, loadingPromise);

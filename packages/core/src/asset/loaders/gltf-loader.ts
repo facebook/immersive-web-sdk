@@ -90,25 +90,29 @@ export class GLTFAssetLoader {
         CacheManager.setKeyToUrl(key, url);
       }
 
+      // If the asset is already cached, return it directly. Registering a
+      // promise on the cached path leaks: the synchronous deletePromise()
+      // inside the executor runs before setPromise() stores the promise, so the
+      // resolved promise would linger in promiseCache for the life of the
+      // process (and be returned by the hasPromise() branch on every reload).
+      if (CacheManager.hasAsset(url)) {
+        return Promise.resolve(CacheManager.getAsset<GLTF>(url)!);
+      }
+
       const loadingPromise = new Promise<GLTF>((resolve, reject) => {
-        if (CacheManager.hasAsset(url)) {
-          resolve(CacheManager.getAsset<GLTF>(url)!);
-          CacheManager.deletePromise(url);
-        } else {
-          this.gltfLoader.load(
-            url,
-            (gltf) => {
-              CacheManager.setAsset(url, gltf);
-              resolve(gltf);
-              CacheManager.deletePromise(url);
-            },
-            () => {}, // progress callback
-            (error) => {
-              reject(error);
-              CacheManager.deletePromise(url);
-            },
-          );
-        }
+        this.gltfLoader.load(
+          url,
+          (gltf) => {
+            CacheManager.setAsset(url, gltf);
+            resolve(gltf);
+            CacheManager.deletePromise(url);
+          },
+          () => {}, // progress callback
+          (error) => {
+            reject(error);
+            CacheManager.deletePromise(url);
+          },
+        );
       });
 
       CacheManager.setPromise(url, loadingPromise);

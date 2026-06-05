@@ -45,13 +45,14 @@ export class HDRTextureAssetLoader {
       return CacheManager.getPromise<Texture>(url)!;
     }
 
-    const loadingPromise = new Promise<Texture>((resolve, reject) => {
-      if (CacheManager.hasAsset(url)) {
-        resolve(CacheManager.getAsset<Texture>(url)!);
-        CacheManager.deletePromise(url);
-        return;
-      }
+    // Return a cached texture directly. Registering a promise on the cached
+    // path leaks: deletePromise() inside the executor runs before setPromise()
+    // stores the promise, so the resolved promise would never be evicted.
+    if (CacheManager.hasAsset(url)) {
+      return CacheManager.getAsset<Texture>(url)!;
+    }
 
+    const loadingPromise = new Promise<Texture>((resolve, reject) => {
       const onLoad = (texture: Texture) => {
         // Ensure world-locked mapping for equirectangular HDR/EXR
         texture.mapping = EquirectangularReflectionMapping;

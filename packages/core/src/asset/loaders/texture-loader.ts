@@ -30,27 +30,28 @@ export class TextureAssetLoader {
       return CacheManager.getPromise<Texture>(url)!;
     }
 
+    // Return a cached texture directly. Registering a promise on the cached
+    // path leaks: deletePromise() inside the executor runs before setPromise()
+    // stores the promise, so the resolved promise would never be evicted.
+    if (CacheManager.hasAsset(url)) {
+      return CacheManager.getAsset<Texture>(url)!;
+    }
+
     const loadingPromise = new Promise<Texture>((resolve, reject) => {
-      // Check cache first
-      if (CacheManager.hasAsset(url)) {
-        resolve(CacheManager.getAsset<Texture>(url)!);
-        CacheManager.deletePromise(url);
-      } else {
-        // Load using Three.js TextureLoader
-        this.textureLoader.load(
-          url,
-          (texture) => {
-            CacheManager.setAsset(url, texture);
-            resolve(texture);
-            CacheManager.deletePromise(url);
-          },
-          undefined, // progress callback
-          (error) => {
-            reject(error);
-            CacheManager.deletePromise(url);
-          },
-        );
-      }
+      // Load using Three.js TextureLoader
+      this.textureLoader.load(
+        url,
+        (texture) => {
+          CacheManager.setAsset(url, texture);
+          resolve(texture);
+          CacheManager.deletePromise(url);
+        },
+        undefined, // progress callback
+        (error) => {
+          reject(error);
+          CacheManager.deletePromise(url);
+        },
+      );
     });
 
     CacheManager.setPromise(url, loadingPromise);
