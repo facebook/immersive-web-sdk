@@ -37,7 +37,11 @@ import {
 } from './physicsBody';
 import { PhysicsManipulation } from './physicsManipulation';
 import { PhysicsShape, PhysicsShapeType } from './physicsShape';
-import { detectShapeFromGeometry, generateMergedGeometry } from './utils';
+import {
+  detectShapeFromGeometry,
+  generateMergedGeometry,
+  sequentialIndices,
+} from './utils';
 
 /**
  * Manages physics simulation using the Havok physics engine.
@@ -545,26 +549,37 @@ export class PhysicsSystem extends createSystem(
       return;
     }
 
+    // When object3D is not a Mesh we build a merged geometry here and must
+    // dispose it once the shape is created; a Mesh's own geometry stays in use.
+    const ownsGeometry = !(object3D instanceof Mesh);
     const geometry =
       object3D instanceof Mesh
         ? object3D.geometry
         : generateMergedGeometry(object3D);
-    const vertices = this.getVertices(geometry.attributes.position.array);
-    if (!vertices) {
+    const positionAttribute = geometry.attributes.position;
+    if (!positionAttribute) {
       console.warn(
         'PhysicsSystem: Failed to get vertices for convex hull shape with object3D name ' +
           object3D.name +
           ' &id ' +
           object3D.id,
       );
+      if (ownsGeometry) {
+        geometry.dispose();
+      }
       return;
     }
+    const vertices = this.getVertices(positionAttribute.array);
 
     const convexHullShape = this.havok.HP_Shape_CreateConvexHull(
       vertices.offset,
       vertices.numObjects / 3,
     )[1];
     this.havok._free(vertices.offset);
+
+    if (ownsGeometry) {
+      geometry.dispose();
+    }
 
     this.havok.HP_Shape_SetDensity(convexHullShape, density);
     this.havok.HP_Shape_SetMaterial(convexHullShape, [
@@ -591,33 +606,34 @@ export class PhysicsSystem extends createSystem(
       return;
     }
 
+    // When object3D is not a Mesh we build a merged geometry here and must
+    // dispose it once the shape is created; a Mesh's own geometry stays in use.
+    const ownsGeometry = !(object3D instanceof Mesh);
     const geometry =
       object3D instanceof Mesh
         ? object3D.geometry
         : generateMergedGeometry(object3D);
 
-    const vertices = this.getVertices(geometry.attributes.position.array);
-    const indices = this.getIndices(geometry.index.array);
-
-    if (!vertices || !indices) {
-      if (!vertices) {
-        console.warn(
-          'PhysicsSystem: Failed to get vertices for tri-mesh shape with object3D name ' +
-            object3D.name +
-            ' &id ' +
-            object3D.id,
-        );
-      }
-      if (!indices) {
-        console.warn(
-          'PhysicsSystem: Failed to get indices for tri-mesh shape with object3D name ' +
-            object3D.name +
-            ' &id ' +
-            object3D.id,
-        );
+    const positionAttribute = geometry.attributes.position;
+    if (!positionAttribute) {
+      console.warn(
+        'PhysicsSystem: Failed to get vertices for tri-mesh shape with object3D name ' +
+          object3D.name +
+          ' &id ' +
+          object3D.id,
+      );
+      if (ownsGeometry) {
+        geometry.dispose();
       }
       return;
     }
+
+    const vertices = this.getVertices(positionAttribute.array);
+    // geometry.index is null for non-indexed geometry; synthesize the implicit
+    // sequential index list so non-indexed meshes don't dereference null here.
+    const indices = this.getIndices(
+      geometry.index?.array ?? sequentialIndices(positionAttribute.count),
+    );
 
     const triMeshShape = this.havok.HP_Shape_CreateMesh(
       vertices.offset,
@@ -627,6 +643,10 @@ export class PhysicsSystem extends createSystem(
     )[1];
     this.havok._free(vertices.offset);
     this.havok._free(indices.offset);
+
+    if (ownsGeometry) {
+      geometry.dispose();
+    }
 
     this.havok.HP_Shape_SetDensity(triMeshShape, density);
     this.havok.HP_Shape_SetMaterial(triMeshShape, [
