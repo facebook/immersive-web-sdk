@@ -307,9 +307,15 @@ export function launchXR(world: World, options?: Partial<XROptions>) {
 
   if (!world.session) {
     world.renderer.xr.enabled = true;
-    navigator.xr
-      ?.requestSession?.(sessionMode, sessionOptions)
-      .then(onSessionStart);
+    Promise.resolve(navigator.xr?.requestSession?.(sessionMode, sessionOptions))
+      .then((session) => (session ? onSessionStart(session) : undefined))
+      .catch((error) => {
+        // requestSession rejects when the user denies permission, the device is
+        // unavailable, or the requested features are unsupported. Without this
+        // handler the rejection was unhandled (and silently swallowed); surface
+        // it instead of leaving the caller with a half-enabled XR manager.
+        console.error('[XR] Failed to start XR session:', error);
+      });
   } else {
     console.error('XRSession already exists');
   }
