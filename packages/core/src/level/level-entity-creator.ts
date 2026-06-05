@@ -50,6 +50,12 @@ export class EntityCreator {
         object.userData.meta_spatial.components,
         world,
       );
+      // Continue processing the carrier's children under the same parentEntity
+      // (the level root) — they are real scene content, not metadata. Without
+      // this they were silently orphaned and never converted to ECS entities.
+      object.children.forEach((child: Object3D) => {
+        this.createEntitiesFromObject3D(child, nodes, parentEntity, world);
+      });
       // Remove the carrier node from the scene graph; it's metadata-only
       object.removeFromParent();
       return;
