@@ -10,6 +10,9 @@
   ],
   "scripts": {
     "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts && node scripts/generate-input-profiles.js",
+    "generate:profiles": "node scripts/generate-input-profiles.js",
+    "generate:profiles:force": "node scripts/generate-input-profiles.js --force",
+    "generate:profiles:offline": "node scripts/generate-input-profiles.js --offline",
     "build": "rollup -c",
     "format": "prettier --write ./src/**/*",
     "test": "vitest run"

@@ -6,10 +6,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import https from 'https';
 import path from 'path';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,20 +25,102 @@ const OUTPUT_FILE = path.join(
   '../src/gamepad/generated-profiles.ts',
 );
 
-// Check if we should skip fetching (file exists and --force not passed)
-const forceRefresh = process.argv.includes('--force');
+function readFlagValue(flag) {
+  const prefix = `${flag}=`;
+  const inline = process.argv.find((arg) => arg.startsWith(prefix));
+  if (inline) {
+    return inline.slice(prefix.length);
+  }
+
+  const index = process.argv.indexOf(flag);
+  if (index !== -1) {
+    return process.argv[index + 1];
+  }
+
+  return undefined;
+}
+
+const forceRefresh =
+  process.argv.includes('--force') || process.argv.includes('--refresh');
+const offline = process.argv.includes('--offline');
+const proxyUrl =
+  readFlagValue('--proxy') ??
+  process.env.HTTPS_PROXY ??
+  process.env.https_proxy ??
+  process.env.HTTP_PROXY ??
+  process.env.http_proxy;
+
+function redactUrlForLogs(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password) {
+      parsed.username = '***';
+      parsed.password = '***';
+    }
+    return parsed.toString();
+  } catch {
+    return '<configured>';
+  }
+}
+
+function explainNetworkMode() {
+  if (offline) {
+    console.log(
+      '🌐 Network mode: offline; using existing generated profiles only.',
+    );
+  } else if (proxyUrl) {
+    console.log(
+      `🌐 Network mode: fetching input profiles through proxy ${redactUrlForLogs(proxyUrl)}`,
+    );
+  } else {
+    console.log('🌐 Network mode: direct HTTPS fetch.');
+  }
+}
+
+// Check if we should skip fetching (file exists and --force/--refresh not passed)
 if (!forceRefresh && fs.existsSync(OUTPUT_FILE)) {
   console.log(
     `✅ Input profiles already exist at ${OUTPUT_FILE}, skipping CDN fetch.`,
   );
-  console.log('   Use --force to refresh from CDN.');
+  console.log('   Use --force or --refresh to refresh from CDN.');
   process.exit(0);
 }
 
-function fetchJson(url) {
+if (offline) {
+  console.error(
+    `❌ Offline profile generation requested, but ${OUTPUT_FILE} does not exist.`,
+  );
+  console.error('   Run this command once with network access to create it.');
+  process.exit(1);
+}
+
+function fetchJsonDirect(url, redirectsRemaining = 5) {
   return new Promise((resolve, reject) => {
     https
       .get(url, (res) => {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location &&
+          redirectsRemaining > 0
+        ) {
+          res.resume();
+          const redirectedUrl = new URL(res.headers.location, url).toString();
+          fetchJsonDirect(redirectedUrl, redirectsRemaining - 1)
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(
+            new Error(`Request failed for ${url}: HTTP ${res.statusCode}`),
+          );
+          return;
+        }
+
         let data = '';
 
         res.on('data', (chunk) => {
@@ -59,22 +145,39 @@ function fetchJson(url) {
   });
 }
 
-function toCamelCase(str) {
-  return str
-    .replace(/[-\/]/g, ' ')
-    .replace(/\.json$/, '')
-    .split(' ')
-    .map((word, index) => {
-      if (index === 0) {
-        return word.toLowerCase();
-      }
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    })
-    .join('');
+async function fetchJsonWithCurl(url) {
+  const { stdout } = await execFileAsync(
+    'curl',
+    [
+      '--fail',
+      '--silent',
+      '--show-error',
+      '--location',
+      '--proxy',
+      proxyUrl,
+      url,
+    ],
+    {
+      maxBuffer: 20 * 1024 * 1024,
+    },
+  );
+  return JSON.parse(stdout);
+}
+
+async function fetchJson(url) {
+  try {
+    return proxyUrl ? await fetchJsonWithCurl(url) : await fetchJsonDirect(url);
+  } catch (error) {
+    const hint = proxyUrl
+      ? 'Check that the proxy is reachable and that curl is available.'
+      : 'If you are on a Linux dev server that requires a proxy, set HTTPS_PROXY/HTTP_PROXY or pass --proxy <url>.';
+    throw new Error(`Failed to fetch ${url}. ${hint}`, { cause: error });
+  }
 }
 
 async function generateInputProfiles() {
   try {
+    explainNetworkMode();
     console.log('Fetching profiles list...');
     const profilesList = await fetchJson(`${CDN_BASE_URL}/profilesList.json`);
 
@@ -150,6 +253,9 @@ export function getProfilesList(): ProfilesList {
     console.log(`✅ Generated ${OUTPUT_FILE} with ${profiles.length} profiles`);
   } catch (error) {
     console.error('❌ Error generating input profiles:', error);
+    if (error?.cause) {
+      console.error('Caused by:', error.cause);
+    }
     process.exit(1);
   }
 }

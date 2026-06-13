@@ -4,10 +4,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Build script to create standalone tgz files for all packages
-# Places all tgz files in examples folder for easy consumption
+# Build script to create standalone tgz files for all packages.
+# By default this fails fast when any package build, pack, or artifact
+# validation step fails. Use --skip-reference-assets for a faster development
+# build that relies on separately hosted reference corpus payloads.
 
-set -e
+set -euo pipefail
 
 SKIP_REFERENCE_ASSETS=0
 while [ $# -gt 0 ]; do
@@ -27,9 +29,14 @@ echo "🚀 Building standalone tgz packages..."
 
 # Detect CI environment and set pnpm install flags
 PNPM_INSTALL_FLAGS=""
-if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
+if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
     echo "🔍 CI environment detected, using --no-frozen-lockfile"
     PNPM_INSTALL_FLAGS="--no-frozen-lockfile"
+fi
+
+if [ ! -t 0 ]; then
+    echo "🔍 Non-interactive shell detected, disabling pnpm module purge confirmation"
+    PNPM_INSTALL_FLAGS="${PNPM_INSTALL_FLAGS:+$PNPM_INSTALL_FLAGS }--config.confirmModulesPurge=false"
 fi
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,6 +49,8 @@ if [[ "$UNAME" == CYGWIN* || "$UNAME" == MINGW* ]]; then
 fi
 PACKAGES_DIR="$BASE_DIR/packages"
 EXAMPLES_DIR="$BASE_DIR/examples"
+LOCKFILE_BACKUP="$BASE_DIR/pnpm-lock.yaml.build-tgz.backup"
+WORKSPACE_BACKUP="$BASE_DIR/pnpm-workspace.yaml.build-tgz.backup"
 
 # Package build order (dependencies first)
 LEAF_PACKAGES=("glxf" "xr-input" "locomotor" "vite-plugin-gltf-optimizer" "cli" "vite-plugin-dev" "vite-plugin-metaspatial" "vite-plugin-uikitml" "create" "reference-assets" "reference")
@@ -61,6 +70,24 @@ restore_package_json() {
     fi
 }
 
+backup_workspace_state() {
+    if [ -f "$BASE_DIR/pnpm-lock.yaml" ] && [ ! -f "$LOCKFILE_BACKUP" ]; then
+        cp "$BASE_DIR/pnpm-lock.yaml" "$LOCKFILE_BACKUP"
+    fi
+    if [ -f "$BASE_DIR/pnpm-workspace.yaml" ] && [ ! -f "$WORKSPACE_BACKUP" ]; then
+        cp "$BASE_DIR/pnpm-workspace.yaml" "$WORKSPACE_BACKUP"
+    fi
+}
+
+restore_workspace_state() {
+    if [ -f "$LOCKFILE_BACKUP" ]; then
+        mv "$LOCKFILE_BACKUP" "$BASE_DIR/pnpm-lock.yaml"
+    fi
+    if [ -f "$WORKSPACE_BACKUP" ]; then
+        mv "$WORKSPACE_BACKUP" "$BASE_DIR/pnpm-workspace.yaml"
+    fi
+}
+
 # Create a versionless alias for a packed tarball (keeps the original too)
 alias_tarball() {
     local tarball="$1"
@@ -77,10 +104,139 @@ alias_tarball() {
     fi
 }
 
+validate_declared_entrypoints() {
+    local package_dir="$1"
+    node - "$package_dir/package.json" <<'NODE'
+const fs = require('fs');
+const pkgPath = process.argv[2];
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+const path = require('path');
+const root = path.dirname(pkgPath);
+const missing = [];
+for (const field of ['main', 'module', 'types', 'typings']) {
+  const value = pkg[field];
+  if (typeof value === 'string' && !fs.existsSync(path.join(root, value))) {
+    missing.push(`${field}: ${value}`);
+  }
+}
+if (typeof pkg.bin === 'string' && !fs.existsSync(path.join(root, pkg.bin))) {
+  missing.push(`bin: ${pkg.bin}`);
+}
+if (pkg.bin && typeof pkg.bin === 'object') {
+  for (const [name, value] of Object.entries(pkg.bin)) {
+    if (typeof value === 'string' && !fs.existsSync(path.join(root, value))) {
+      missing.push(`bin.${name}: ${value}`);
+    }
+  }
+}
+if (missing.length > 0) {
+  console.error(`Missing declared package entrypoints for ${pkg.name}:`);
+  for (const entry of missing) {
+    console.error(`  - ${entry}`);
+  }
+  process.exit(1);
+}
+NODE
+}
+
+validate_tarball() {
+    local package_dir="$1"
+    local tarball="$2"
+    local package_name="$3"
+
+    if [ ! -s "$tarball" ]; then
+        echo "❌ Empty or missing tarball for $package_name: $tarball" >&2
+        exit 1
+    fi
+
+
+    node - "$package_dir/package.json" "$tarball" <<'NODE'
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+const path = require('path');
+const pkgPath = process.argv[2];
+const tarball = process.argv[3];
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+const entries = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' })
+  .split('\n')
+  .filter(Boolean)
+  .map((entry) => entry.replace(/^\.\//, '').replace(/^package\//, ''));
+const missing = [];
+function expectEntry(label, value) {
+  if (typeof value !== 'string') return;
+  const normalized = value.replaceAll('\\', '/');
+  if (!entries.includes(normalized)) {
+    missing.push(`${label}: ${value}`);
+  }
+}
+for (const field of ['main', 'module', 'types', 'typings']) {
+  expectEntry(field, pkg[field]);
+}
+if (typeof pkg.bin === 'string') {
+  expectEntry('bin', pkg.bin);
+}
+if (pkg.bin && typeof pkg.bin === 'object') {
+  for (const [name, value] of Object.entries(pkg.bin)) {
+    expectEntry(`bin.${name}`, value);
+  }
+}
+if (missing.length > 0) {
+  console.error(`Tarball for ${pkg.name} is missing declared entrypoints:`);
+  for (const entry of missing) {
+    console.error(`  - ${entry}`);
+  }
+  process.exit(1);
+}
+NODE
+}
+
+build_and_pack_package() {
+    local package_dir="$1"
+    local build_script="$2"
+    local package_name="$3"
+
+    cd "$package_dir"
+
+    # Clean previous builds
+    rm -rf lib dist build *.tgz
+
+    if ! pnpm run "$build_script"; then
+        echo "❌ Build failed for $package_name (script: $build_script)" >&2
+        exit 1
+    fi
+    echo "     ✅ Build completed"
+
+    validate_declared_entrypoints "$package_dir"
+
+    local pack_output
+    if ! pack_output=$(pnpm pack); then
+        echo "❌ Pack failed for $package_name" >&2
+        exit 1
+    fi
+    printf '%s\n' "$pack_output"
+
+    local tarball
+    tarball=$(printf '%s\n' "$pack_output" | tail -n1)
+    if [ -z "$tarball" ]; then
+        echo "❌ Could not determine packed tarball for $package_name" >&2
+        exit 1
+    fi
+
+    validate_tarball "$package_dir" "$tarball" "$package_name"
+
+    echo "     📦 Packed:  $tarball"
+    local alias_path
+    alias_path=$(alias_tarball "$tarball")
+    validate_tarball "$package_dir" "$alias_path" "$package_name"
+    if [ -n "$alias_path" ]; then
+        echo "     🔁 Renamed: $alias_path"
+    fi
+}
+
 # Function to build and pack leaf packages (no workspace dependencies)
 build_leaf_packages() {
     echo "📦 Building leaf packages (no workspace dependencies)..."
-    
+
     for package in "${LEAF_PACKAGES[@]}"; do
         local package_dir="$PACKAGES_DIR/$package"
 
@@ -88,34 +244,20 @@ build_leaf_packages() {
             echo "   ⏭️  Skipping $package (bundle/runtime warmup expects separately hosted corpus payload)"
             continue
         fi
-        
+
         if [ ! -d "$package_dir" ]; then
-            echo "❌ Package directory not found: $package_dir"
-            continue
+            echo "❌ Package directory not found: $package_dir" >&2
+            exit 1
         fi
-        
+
         echo "   Building $package..."
-        cd "$package_dir"
-        
-        # Clean previous builds
-        rm -rf lib dist build *.tgz
-        
+
         local build_script="build"
         if [ "$package" = "reference-assets" ]; then
             build_script="build:payload"
         fi
-        
-        if pnpm run "$build_script" 2>/dev/null; then
-            echo "     ✅ Build completed"
-        fi
 
-        # Pack - this works because no workspace dependencies
-        local tarball=$(pnpm pack 2>/dev/null | tail -n1)
-        echo "     📦 Packed:  $tarball"
-        local alias_path=$(alias_tarball "$tarball")
-        if [ -n "$alias_path" ]; then
-            echo "     🔁 Renamed: $alias_path"
-        fi
+        build_and_pack_package "$package_dir" "$build_script" "$package"
     done
 }
 
@@ -123,22 +265,21 @@ build_leaf_packages() {
 replace_workspace_deps() {
     local package_dir="$1"
     local package_json="$package_dir/package.json"
-    
+
     echo "   🔄 Replacing workspace: dependencies with file: dependencies..."
-    
+
     # Use Node.js to replace workspace dependencies
     node -e "
     const fs = require('fs');
     const path = require('path');
     const pkgPath = '$package_json';
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    const here = path.dirname(pkgPath);
     function repl(deps){
       if (!deps) return;
       for (const [name, ver] of Object.entries(deps)){
         if (!name.startsWith('@iwsdk/')) continue;
         const short = name.replace('@iwsdk/', '');
-        const versionedRe = new RegExp('^file:\\.{2}\/' + short + '\/iwsdk-' + short + '-.*\\.tgz$');
+        const versionedRe = new RegExp('^file:\\\\.{2}\\/' + short + '\\/iwsdk-' + short + '-.*\\\\.tgz$');
         const isWorkspace = String(ver).startsWith('workspace:');
         const isVersionedFile = versionedRe.test(String(ver));
         if (!(isWorkspace || isVersionedFile)) continue;
@@ -155,46 +296,36 @@ replace_workspace_deps() {
 # Function to build root packages (with workspace dependencies)
 build_root_packages() {
     echo "📦 Building root packages (with workspace dependencies)..."
-    
+
     for package in "${ROOT_PACKAGES[@]}"; do
         local package_dir="$PACKAGES_DIR/$package"
-        
+
         if [ ! -d "$package_dir" ]; then
-            echo "❌ Package directory not found: $package_dir"
-            continue
+            echo "❌ Package directory not found: $package_dir" >&2
+            exit 1
         fi
-        
+
         echo "   Building $package..."
         cd "$package_dir"
-        
-        # Backup original package.json
+
+        # Backup original package.json and workspace install state because the
+        # temporary file: dependencies should never leak into the lockfile.
         backup_package_json "$package_dir"
-        
+        backup_workspace_state
+
         # Replace workspace dependencies with file dependencies
         replace_workspace_deps "$package_dir"
-        
+
         # Install the file dependencies
         echo "   📥 Installing file dependencies..."
         pnpm install $PNPM_INSTALL_FLAGS
-        
-        # Clean and build
-        rm -rf lib dist build *.tgz
-        
-        if pnpm run build 2>/dev/null; then
-            echo "     ✅ Build completed"
-        fi
-        
-        # Pack - now works because dependencies are file: references
-        local tarball=$(pnpm pack 2>/dev/null | tail -n1)
-        echo "     📦 Packed:  $tarball"
-        local alias_path=$(alias_tarball "$tarball")
-        if [ -n "$alias_path" ]; then
-            echo "     🔁 Renamed: $alias_path"
-        fi
-        
+
+        build_and_pack_package "$package_dir" "build" "$package"
+
         # Restore original package.json and reinstall workspace dependencies
         echo "   🔄 Restoring workspace dependencies..."
         restore_package_json "$package_dir"
+        restore_workspace_state
         pnpm install --silent $PNPM_INSTALL_FLAGS
     done
 }
@@ -202,16 +333,16 @@ build_root_packages() {
 # Cleanup function
 cleanup() {
     echo "🧹 Cleaning up backup files and temporary changes..."
-    find "$PACKAGES_DIR" -name "package.json.backup" -delete
-    # Ensure all workspace dependencies are restored
     for package in "${ROOT_PACKAGES[@]}"; do
         local package_dir="$PACKAGES_DIR/$package"
         if [ -f "$package_dir/package.json.backup" ]; then
             restore_package_json "$package_dir"
+            restore_workspace_state
             cd "$package_dir"
             pnpm install --silent $PNPM_INSTALL_FLAGS
         fi
     done
+    find "$PACKAGES_DIR" -name "package.json.backup" -delete
 }
 
 # Trap cleanup on exit (success or failure)
@@ -221,27 +352,23 @@ trap cleanup EXIT
 main() {
     echo "Building standalone tgz packages for examples..."
     echo ""
-    
+
     # Step 1: Build packages without workspace dependencies
     build_leaf_packages
     echo ""
-    
+
     # Step 2: Build packages with workspace dependencies (with temporary changes)
     build_root_packages
     echo ""
-    
-    echo "🎉 All packages built and moved to examples folder!"
+
+    echo "🎉 All packages built!"
     echo ""
-    echo "📋 Available tgz files in examples/:"
-    ls -la "$EXAMPLES_DIR"/*.tgz 2>/dev/null || echo "   (No tgz files found)"
+    echo "📋 Available tgz files:"
+    find "$PACKAGES_DIR" -maxdepth 2 -name 'iwsdk-*.tgz' -print | sort
     echo ""
-    echo "💡 Examples can now install these packages with:"
-    echo "   npm install ./iwsdk-core.tgz"
-    echo "   npm install ./iwsdk-cli.tgz --save-dev"
-    echo "   npm install ./iwsdk-vite-plugin-gltf-optimizer.tgz --save-dev"
-    echo "   npm install ./iwsdk-vite-plugin-dev.tgz --save-dev"
-    echo "   npm install ./iwsdk-vite-plugin-metaspatial.tgz --save-dev"
-    echo "   npm install ./iwsdk-vite-plugin-uikitml.tgz --save-dev"
+    echo "💡 Examples can install the package tarballs from their package directories, for example:"
+    echo "   npm install ../../packages/core/iwsdk-core.tgz"
+    echo "   npm install ../../packages/cli/iwsdk-cli.tgz --save-dev"
 }
 
 main
