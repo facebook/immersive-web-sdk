@@ -53,14 +53,53 @@ export const PhysicsBody = createComponent(
       enum: PhysicsState,
       default: PhysicsState.Dynamic,
     },
+    /**
+     * Linear velocity damping. Reactive: mutating it via
+     * `setValue(PhysicsBody, 'linearDamping', ...)` after the body is created is
+     * applied to the running simulation on the next frame.
+     */
     linearDamping: { type: Types.Float32, default: 0.0 },
+    /**
+     * Angular velocity damping. Reactive: mutating it via
+     * `setValue(PhysicsBody, 'angularDamping', ...)` after the body is created is
+     * applied to the running simulation on the next frame.
+     */
     angularDamping: { type: Types.Float32, default: 0.0 },
+    /**
+     * Per-body gravity multiplier (`0` floats, `1` is normal gravity). Reactive:
+     * mutating it via `setValue(PhysicsBody, 'gravityFactor', ...)` after the body
+     * is created is applied to the running simulation on the next frame.
+     */
     gravityFactor: { type: Types.Float32, default: 1.0 },
     centerOfMass: { type: Types.Vec3, default: [Infinity, Infinity, Infinity] },
     _linearVelocity: { type: Types.Vec3, default: [0.0, 0.0, 0.0] },
     _angularVelocity: { type: Types.Vec3, default: [0.0, 0.0, 0.0] },
     _engineBody: { type: Types.Float64, default: 0 },
     _engineOffset: { type: Types.Float64, default: 0 },
+    /**
+     * Last `gravityFactor` value pushed to the engine. Internal shadow used by
+     * the reactive sync to detect changes without reading back from Havok.
+     */
+    _engineGravityFactor: {
+      type: Types.Float32,
+      default: 1.0,
+    },
+    /**
+     * Last `linearDamping` value pushed to the engine. Internal shadow used by
+     * the reactive sync to detect changes without reading back from Havok.
+     */
+    _engineLinearDamping: {
+      type: Types.Float32,
+      default: 0.0,
+    },
+    /**
+     * Last `angularDamping` value pushed to the engine. Internal shadow used by
+     * the reactive sync to detect changes without reading back from Havok.
+     */
+    _engineAngularDamping: {
+      type: Types.Float32,
+      default: 0.0,
+    },
   },
   'Component to define physics behavior of an entity.',
 );

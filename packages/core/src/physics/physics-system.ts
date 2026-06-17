@@ -82,6 +82,23 @@ export class PhysicsSystem extends createSystem(
       required: [PhysicsBody, PhysicsManipulation],
       where: [ne(PhysicsBody, '_engineBody', 0)],
     },
+    // Bodies whose gravityFactor / linearDamping / angularDamping differ from
+    // the defaults. The value predicate keeps each set limited to overridden
+    // bodies, so the common case (default values) is never visited by the
+    // per-frame reactive sync below, and the queries re-fire whenever the field
+    // is `setValue`-d.
+    gravityOverrides: {
+      required: [PhysicsBody, PhysicsShape],
+      where: [ne(PhysicsBody, 'gravityFactor', DEFAULT_GRAVITY_FACTOR)],
+    },
+    linearDampingOverrides: {
+      required: [PhysicsBody, PhysicsShape],
+      where: [ne(PhysicsBody, 'linearDamping', DEFAULT_LINEAR_DAMPING)],
+    },
+    angularDampingOverrides: {
+      required: [PhysicsBody, PhysicsShape],
+      where: [ne(PhysicsBody, 'angularDamping', DEFAULT_ANGULAR_DAMPING)],
+    },
   },
   {
     gravity: { type: Types.Vec3, default: [0, -9.81, 0] },
@@ -132,6 +149,44 @@ export class PhysicsSystem extends createSystem(
         this.havok.HP_World_RemoveBody(this.havokWorld, [BigInt(engineBody)]);
       }
     });
+
+    this.subscribeReactiveOverrides();
+  }
+
+  /**
+   * Reset a body's gravityFactor / linearDamping / angularDamping to the engine
+   * default when its field returns to the default value. The entity then drops
+   * out of the override set, so {@link syncReactiveOverrides} no longer visits
+   * it — this is the one place that restores the default. The `hasComponent`
+   * guard distinguishes the value-returned-to-default case from the other
+   * disqualify cause (PhysicsBody/PhysicsShape removal), where the body is being
+   * released and must not be written to.
+   */
+  private subscribeReactiveOverrides(): void {
+    this.queries.gravityOverrides.subscribe('disqualify', (entity) => {
+      if (
+        entity.hasComponent(PhysicsBody) &&
+        entity.hasComponent(PhysicsShape)
+      ) {
+        this.syncGravityFactor(entity);
+      }
+    });
+    this.queries.linearDampingOverrides.subscribe('disqualify', (entity) => {
+      if (
+        entity.hasComponent(PhysicsBody) &&
+        entity.hasComponent(PhysicsShape)
+      ) {
+        this.syncLinearDamping(entity);
+      }
+    });
+    this.queries.angularDampingOverrides.subscribe('disqualify', (entity) => {
+      if (
+        entity.hasComponent(PhysicsBody) &&
+        entity.hasComponent(PhysicsShape)
+      ) {
+        this.syncAngularDamping(entity);
+      }
+    });
   }
 
   update(delta: number): void {
@@ -158,17 +213,23 @@ export class PhysicsSystem extends createSystem(
         return;
       } else {
         if (!engineBody && engineShape) {
+          const linearDamping =
+            entity.getValue(PhysicsBody, 'linearDamping') ??
+            DEFAULT_LINEAR_DAMPING;
+          const angularDamping =
+            entity.getValue(PhysicsBody, 'angularDamping') ??
+            DEFAULT_ANGULAR_DAMPING;
+          const gravityFactor =
+            entity.getValue(PhysicsBody, 'gravityFactor') ??
+            DEFAULT_GRAVITY_FACTOR;
           const bodyRepsonse = this.createBody(
             [BigInt(engineShape)],
             entity.object3D.position,
             entity.object3D.quaternion,
             entity.getValue(PhysicsBody, 'state'),
-            entity.getValue(PhysicsBody, 'linearDamping') ??
-              DEFAULT_LINEAR_DAMPING,
-            entity.getValue(PhysicsBody, 'angularDamping') ??
-              DEFAULT_ANGULAR_DAMPING,
-            entity.getValue(PhysicsBody, 'gravityFactor') ??
-              DEFAULT_GRAVITY_FACTOR,
+            linearDamping,
+            angularDamping,
+            gravityFactor,
             entity.getVectorView(PhysicsBody, 'centerOfMass') as Float32Array,
           );
           if (bodyRepsonse) {
@@ -178,6 +239,12 @@ export class PhysicsSystem extends createSystem(
               Number(bodyRepsonse.createdBody),
             );
             entity.setValue(PhysicsBody, '_engineOffset', bodyRepsonse.offset);
+            // Seed the reactive shadows with what createBody just pushed, so the
+            // first per-frame sync sees no drift and skips a redundant write.
+            PhysicsBody.data._engineGravityFactor[entity.index] = gravityFactor;
+            PhysicsBody.data._engineLinearDamping[entity.index] = linearDamping;
+            PhysicsBody.data._engineAngularDamping[entity.index] =
+              angularDamping;
           }
         } else if (engineBody && this.bodyBuffer) {
           const linearVelocity = this.havok.HP_Body_GetLinearVelocity([
@@ -229,6 +296,8 @@ export class PhysicsSystem extends createSystem(
         }
       }
     });
+
+    this.syncReactiveOverrides();
 
     this.queries.manipluatedEntities.entities.forEach((entity) => {
       const engineBody = entity.getValue(PhysicsBody, '_engineBody');
@@ -351,6 +420,100 @@ export class PhysicsSystem extends createSystem(
       offset: this.havok.HP_Body_GetWorldTransformOffset(body)[1],
       createdBody: body,
     };
+  }
+
+  /**
+   * Push post-creation gravityFactor / linearDamping / angularDamping edits to
+   * Havok. Only overridden bodies are visited (see the value-predicate queries
+   * in the system definition); each sync diffs the component value against the
+   * last-pushed shadow, so a body whose field is unchanged this frame costs only
+   * a typed-array compare.
+   */
+  private syncReactiveOverrides(): void {
+    this.queries.gravityOverrides.entities.forEach((entity) => {
+      this.syncGravityFactor(entity);
+    });
+    this.queries.linearDampingOverrides.entities.forEach((entity) => {
+      this.syncLinearDamping(entity);
+    });
+    this.queries.angularDampingOverrides.entities.forEach((entity) => {
+      this.syncAngularDamping(entity);
+    });
+  }
+
+  /**
+   * Sync the entity's current {@link PhysicsBody.gravityFactor} onto its Havok
+   * body. Diffs the component value against `_engineGravityFactor` (the last
+   * value pushed) rather than reading back from Havok, so an unchanged body
+   * costs only a typed-array compare — no WASM call and no allocation. The Havok
+   * write and shadow update happen only on an actual change. No-op until the body
+   * exists. See {@link gravityOverrides}.
+   */
+  private syncGravityFactor(entity: Entity): void {
+    if (!this.havok) {
+      return;
+    }
+    const index = entity.index;
+    const engineBody = PhysicsBody.data._engineBody[index];
+    if (!engineBody) {
+      return;
+    }
+    const target = PhysicsBody.data.gravityFactor[index];
+    if (PhysicsBody.data._engineGravityFactor[index] === target) {
+      return;
+    }
+    this.havok.HP_Body_SetGravityFactor([BigInt(engineBody)], target);
+    PhysicsBody.data._engineGravityFactor[index] = target;
+  }
+
+  /**
+   * Sync the entity's current {@link PhysicsBody.linearDamping} onto its Havok
+   * body. Diffs against `_engineLinearDamping` (the last value pushed) rather
+   * than reading back from Havok, so an unchanged body costs only a typed-array
+   * compare — no WASM call and no allocation. The Havok write and shadow update
+   * happen only on an actual change. No-op until the body exists.
+   * See {@link linearDampingOverrides}.
+   */
+  private syncLinearDamping(entity: Entity): void {
+    if (!this.havok) {
+      return;
+    }
+    const index = entity.index;
+    const engineBody = PhysicsBody.data._engineBody[index];
+    if (!engineBody) {
+      return;
+    }
+    const target = PhysicsBody.data.linearDamping[index];
+    if (PhysicsBody.data._engineLinearDamping[index] === target) {
+      return;
+    }
+    this.havok.HP_Body_SetLinearDamping([BigInt(engineBody)], target);
+    PhysicsBody.data._engineLinearDamping[index] = target;
+  }
+
+  /**
+   * Sync the entity's current {@link PhysicsBody.angularDamping} onto its Havok
+   * body. Diffs against `_engineAngularDamping` (the last value pushed) rather
+   * than reading back from Havok, so an unchanged body costs only a typed-array
+   * compare — no WASM call and no allocation. The Havok write and shadow update
+   * happen only on an actual change. No-op until the body exists.
+   * See {@link angularDampingOverrides}.
+   */
+  private syncAngularDamping(entity: Entity): void {
+    if (!this.havok) {
+      return;
+    }
+    const index = entity.index;
+    const engineBody = PhysicsBody.data._engineBody[index];
+    if (!engineBody) {
+      return;
+    }
+    const target = PhysicsBody.data.angularDamping[index];
+    if (PhysicsBody.data._engineAngularDamping[index] === target) {
+      return;
+    }
+    this.havok.HP_Body_SetAngularDamping([BigInt(engineBody)], target);
+    PhysicsBody.data._engineAngularDamping[index] = target;
   }
 
   private createHavokShapes(entity: Entity, dimensionsView: Float32Array) {
