@@ -63,6 +63,8 @@
     "@pmndrs/uikit": "^1.0.62",
     "@pmndrs/uikitml": "^0.1.12",
     "@preact/signals-core": "^1.11.0",
+    "@types/three": "^0.181.0",
+    "@types/webxr": "^0.5.0",
     "elics": "^3.4.1",
     "three": "*",
     "three-mesh-bvh": "^0.9.1"
