@@ -45,7 +45,7 @@ entities:
     - components:
         com.iwsdk.components.AudioSource:
           maxInstances: 3
-          src: /audio/chime.mp3
+          src: ./audio/chime.mp3
           playbackMode: 3
         com.iwsdk.components.Interactable:
           {}
