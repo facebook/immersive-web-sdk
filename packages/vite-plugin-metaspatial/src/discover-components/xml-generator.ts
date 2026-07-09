@@ -218,7 +218,8 @@ function generateXMLForComponent(
     }
 
     // Handle FilePath-specific attributes (fileTypes and subfolder)
-    if (fieldDef.type === 'FilePath') {
+    // Only PathByFilePickerAttribute supports these extras; StringAttribute does not.
+    if (attributeType === 'PathByFilePickerAttribute') {
       if (fieldDef.fileTypes && typeof fieldDef.fileTypes === 'string') {
         attributeElement.att('fileTypes', fieldDef.fileTypes);
       }
@@ -283,7 +284,7 @@ function mapTypeToXMLAttribute(elicsType?: string): string {
     Int64: 'LongAttribute',
     Boolean: 'BooleanAttribute',
     String: 'StringAttribute',
-    FilePath: 'PathByFilePickerAttribute',
+    FilePath: 'StringAttribute',
     Vec2: 'Vector2Attribute',
     Vec3: 'Vector3Attribute',
     Vec4: 'Vector4Attribute',
