@@ -250,6 +250,9 @@ export class InputSystem extends createSystem(
     const leave = (event: PointerEvent) => {
       event.stopPropagation();
       entity.removeComponent(Hovered);
+      // pointerleave can fire without a preceding pointerup for flat geometry
+      // (poke sphere exits intersection in one frame); clear Pressed defensively.
+      entity.removeComponent(Pressed);
     };
     const down = (event: PointerEvent) => {
       event.stopPropagation();
