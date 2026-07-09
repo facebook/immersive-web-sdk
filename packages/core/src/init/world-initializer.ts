@@ -777,6 +777,13 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
       VisibilityState.NonImmersive) as VisibilityState;
     // Run ECS systems in priority order (InputSystem => LocomotionSystem => GrabSystem)
     world.update(delta, elapsedTime);
+    // Fan out the live XRFrame to userland callbacks (world.onXRFrame) after
+    // systems update and before rendering. Guarded so non-XR ticks and worlds
+    // with no subscribers pay nothing.
+    const xrFrame = renderer.xr.getFrame?.();
+    if (xrFrame) {
+      world.runXRFrameCallbacks(xrFrame, delta, elapsedTime);
+    }
     renderer.render(world.scene, world.camera);
   };
 

@@ -56,6 +56,22 @@ export type GradientColors = {
 };
 
 /**
+ * Callback invoked once per render-loop tick while an XR session is active,
+ * registered via {@link World.onXRFrame}.
+ *
+ * @param frame The live {@link XRFrame} for this tick. Only valid synchronously
+ *   inside the callback — do not retain it across ticks.
+ * @param delta Seconds since the previous frame.
+ * @param time  Accumulated render-loop time in seconds (monotonic within a session).
+ * @category XR Runtime
+ */
+export type OnXRFrameCallback = (
+  frame: XRFrame,
+  delta: number,
+  time: number,
+) => void;
+
+/**
  * World is the root ECS container, Three.js scene/renderer owner, and XR session gateway.
  *
  * @remarks
@@ -102,6 +118,8 @@ export class World extends ElicsWorld {
   private worldCleanupFuncs: Array<() => void> = [];
   /** Guards {@link World.destroy} so a second call is a no-op. */
   private destroyed = false;
+  /** Per-frame XR callbacks registered via {@link World.onXRFrame}. */
+  private xrFrameCallbacks = new Set<OnXRFrameCallback>();
 
   /** Entity wrapping the XROrigin Group (persistent, survives level changes). */
   public playerEntity!: Entity;
@@ -240,6 +258,162 @@ export class World extends ElicsWorld {
 
   exitXR() {
     this.session?.end();
+  }
+
+  /**
+   * The active {@link XRSession}, or `undefined` outside XR. Alias of
+   * {@link World.session}, exposed for discoverability alongside
+   * {@link World.xrFrame} and {@link World.xrReferenceSpace}.
+   *
+   * @remarks
+   * Enable WebXR features your app needs (e.g. hit-test, depth sensing) via
+   * `World.create(container, { xr: { features: { hitTest: true, depthSensing: true } } })`.
+   * Once granted, they appear in `world.xrSession.enabledFeatures`.
+   * @category XR Runtime
+   */
+  get xrSession(): XRSession | undefined {
+    return this.session;
+  }
+
+  /**
+   * The current {@link XRFrame} for this animation-loop tick, or `null` outside
+   * XR. Use it for raw WebXR access such as `frame.getViewerPose(...)`,
+   * `frame.getHitTestResults(...)`, or `frame.getDepthInformation(...)`.
+   *
+   * @remarks
+   * Read this synchronously inside an {@link World.onXRFrame} callback or a
+   * System `update()` — the frame object is only valid for the current tick and
+   * must not be retained across frames.
+   * @category XR Runtime
+   */
+  get xrFrame(): XRFrame | null {
+    return this.renderer?.xr.getFrame() ?? null;
+  }
+
+  /**
+   * The active {@link XRReferenceSpace} that IWSDK resolved for the session, or
+   * `null` outside XR. Pass it to `XRHitTestResult.getPose(space)` or
+   * `XRFrame.getViewerPose(space)` to obtain poses in the world's tracking space.
+   * @category XR Runtime
+   */
+  get xrReferenceSpace(): XRReferenceSpace | null {
+    return this.renderer?.xr.getReferenceSpace() ?? null;
+  }
+
+  /**
+   * Register a callback that runs once per render-loop tick with the live
+   * {@link XRFrame}, without having to author a System. Useful for per-pixel
+   * world alignment, hit-test queries, depth sampling, and object-anchored
+   * overlays.
+   *
+   * @param callback Invoked with `(frame, delta, time)` while an XR session is active.
+   * @returns An unsubscribe function; call it to stop receiving frames.
+   * @category XR Runtime
+   * @example
+   * ```ts
+   * const source = await world.requestHitTestSource({ space: world.xrReferenceSpace! });
+   * const stop = world.onXRFrame((frame) => {
+   *   if (!source) return;
+   *   const [hit] = world.getHitTestResults(source);
+   *   const pose = hit?.getPose(world.xrReferenceSpace!);
+   *   // place a world-locked label at pose.transform.position ...
+   * });
+   * ```
+   */
+  onXRFrame(callback: OnXRFrameCallback): () => void {
+    this.xrFrameCallbacks.add(callback);
+    return () => {
+      this.xrFrameCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Invoke all callbacks registered via {@link World.onXRFrame}. Called by the
+   * render loop after systems update and before rendering.
+   * @internal
+   */
+  runXRFrameCallbacks(frame: XRFrame, delta: number, time: number): void {
+    if (this.xrFrameCallbacks.size === 0) {
+      return;
+    }
+    for (const callback of this.xrFrameCallbacks) {
+      try {
+        callback(frame, delta, time);
+      } catch (error) {
+        console.error('[World] onXRFrame callback failed:', error);
+      }
+    }
+  }
+
+  /**
+   * Request an {@link XRHitTestSource} on the active session. Requires the
+   * `hit-test` feature (enable via
+   * `World.create(container, { xr: { features: { hitTest: true } } })`).
+   *
+   * @returns The hit-test source, or `undefined` if there is no active session
+   *   or the request is unavailable/unsupported. The underlying
+   *   `XRSession.requestHitTestSource` rejects when the `hit-test` feature was
+   *   not granted; that rejection is caught and surfaced as `undefined` (logged
+   *   as a warning) so callers can `await` without their own `try/catch`.
+   * @category XR Runtime
+   */
+  async requestHitTestSource(
+    options: XRHitTestOptionsInit,
+  ): Promise<XRHitTestSource | undefined> {
+    const session = this.session;
+    if (!session?.requestHitTestSource) {
+      return undefined;
+    }
+    try {
+      return await session.requestHitTestSource(options);
+    } catch (error) {
+      console.warn(
+        "[World] requestHitTestSource failed (is the 'hit-test' feature enabled?):",
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Request an {@link XRTransientInputHitTestSource} (e.g. for screen taps or
+   * transient controllers). Requires the `hit-test` feature.
+   *
+   * @returns The transient hit-test source, or `undefined` if unavailable. As
+   *   with {@link World.requestHitTestSource}, a rejection from the underlying
+   *   WebXR call (e.g. feature not granted) is caught and surfaced as
+   *   `undefined`.
+   * @category XR Runtime
+   */
+  async requestHitTestSourceForTransientInput(
+    options: XRTransientInputHitTestOptionsInit,
+  ): Promise<XRTransientInputHitTestSource | undefined> {
+    const session = this.session;
+    if (!session?.requestHitTestSourceForTransientInput) {
+      return undefined;
+    }
+    try {
+      return await session.requestHitTestSourceForTransientInput(options);
+    } catch (error) {
+      console.warn(
+        "[World] requestHitTestSourceForTransientInput failed (is the 'hit-test' feature enabled?):",
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Read the hit-test results for a source from the current {@link XRFrame}.
+   * Returns an empty array when there is no active frame.
+   * @category XR Runtime
+   */
+  getHitTestResults(source: XRHitTestSource): XRHitTestResult[] {
+    const frame = this.xrFrame;
+    if (!frame) {
+      return [];
+    }
+    return frame.getHitTestResults(source);
   }
 
   /**
