@@ -73,6 +73,7 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     verbose: options.verbose || false,
     userAgentException:
       emulator.userAgentException || new RegExp('OculusBrowser'),
+    iwer: emulator.iwer ?? true,
   };
 
   // Process SEM options from emulator.environment
@@ -82,8 +83,20 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     };
   }
 
+  // AI agent tooling drives the page through the injected IWER runtime/MCP
+  // bridge, so it cannot work when IWER injection is disabled (`iwer: false`).
+  // Warn and skip the AI path rather than launching a managed browser + MCP
+  // server that wait for a bridge that will never connect.
+  if (options.ai && processed.iwer === false) {
+    console.warn(
+      '[IWSDK Dev] `ai` was requested but `emulator.iwer` is false. AI agent ' +
+        'tooling requires the injected IWER runtime bridge, so it has been ' +
+        'disabled. Set `emulator.iwer: true` (the default) to use AI features.',
+    );
+  }
+
   // AI is opt-in: omit `ai` to disable entirely
-  if (options.ai) {
+  if (options.ai && processed.iwer !== false) {
     const mode = options.ai.mode ?? 'agent';
     const settings = MODE_SETTINGS[mode];
     if (!settings) {
@@ -1016,16 +1029,22 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     async buildStart() {
-      // Determine if we should generate injection script
+      // Determine if we should generate injection script. `iwer: false` opts
+      // out of the emulator entirely (browser-only / native-WebXR-only apps).
       const shouldInject =
-        config.command === 'serve' ||
-        (config.command === 'build' && pluginOptions.injectOnBuild);
+        pluginOptions.iwer !== false &&
+        (config.command === 'serve' ||
+          (config.command === 'build' && pluginOptions.injectOnBuild));
 
       if (!shouldInject) {
-        if (pluginOptions.verbose && config.command === 'build') {
-          console.log(
-            '⏭️  IWSDK Dev: Skipping build injection (injectOnBuild: false)',
-          );
+        if (pluginOptions.verbose) {
+          if (pluginOptions.iwer === false) {
+            console.log('⏭️  IWSDK Dev: IWER injection disabled (iwer: false)');
+          } else if (config.command === 'build') {
+            console.log(
+              '⏭️  IWSDK Dev: Skipping build injection (injectOnBuild: false)',
+            );
+          }
         }
         return;
       }
@@ -1052,10 +1071,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     transformIndexHtml: {
       order: 'pre', // Run before other HTML transformations
       handler(html) {
-        // Check if we should inject
+        // Check if we should inject. Mirrors buildStart's gate (incl.
+        // `iwer !== false`) so the policy is explicit at every hook, even
+        // though `injectionBundle` is already null when iwer is false.
         const shouldInject =
-          config.command === 'serve' ||
-          (config.command === 'build' && pluginOptions.injectOnBuild);
+          pluginOptions.iwer !== false &&
+          (config.command === 'serve' ||
+            (config.command === 'build' && pluginOptions.injectOnBuild));
 
         if (!shouldInject || !injectionBundle) {
           return html;
@@ -1082,10 +1104,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     closeBundle: {
       order: 'post',
       async handler() {
-        // Only show summary when injection actually happened
+        // Only show summary when injection actually happened (same gate as
+        // buildStart / transformIndexHtml, including `iwer !== false`).
         const shouldInject =
-          config.command === 'serve' ||
-          (config.command === 'build' && pluginOptions.injectOnBuild);
+          pluginOptions.iwer !== false &&
+          (config.command === 'serve' ||
+            (config.command === 'build' && pluginOptions.injectOnBuild));
 
         if (shouldInject && injectionBundle) {
           const mode = config.command === 'serve' ? 'Development' : 'Build';

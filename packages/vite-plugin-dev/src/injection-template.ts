@@ -32,7 +32,14 @@ const DEVICE_CONFIGS = {
 function shouldActivate(
   activationMode: ProcessedDevOptions['activation'],
   userAgentException?: ProcessedDevOptions['userAgentException'],
+  iwer?: ProcessedDevOptions['iwer'],
 ): boolean {
+  // IWER is opt-out. `false` should never reach here (the plugin skips bundle
+  // generation entirely when iwer is false), but guard defensively.
+  if (iwer === false) {
+    return false;
+  }
+
   // UA exception: if provided and matches current UA, block activation
   if (userAgentException) {
     const ua = navigator.userAgent || '';
@@ -95,11 +102,16 @@ function initDevRuntime(config: ProcessedDevOptions): void {
   const shouldActivateResult = shouldActivate(
     config.activation,
     config.userAgentException,
+    config.iwer,
   );
 
   if (!shouldActivateResult) {
     if (config.verbose) {
-      console.log('[IWSDK Dev] Skipping activation - not on localhost');
+      const reason =
+        config.iwer === false
+          ? 'IWER disabled (iwer: false)'
+          : 'activation conditions not met (localhost / user-agent)';
+      console.log(`[IWSDK Dev] Skipping activation - ${reason}`);
     }
     return;
   }

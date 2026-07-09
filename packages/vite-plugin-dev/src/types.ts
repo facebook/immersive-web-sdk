@@ -93,6 +93,23 @@ export interface EmulatorOptions {
    * @default /OculusBrowser/
    */
   userAgentException?: RegExp;
+
+  /**
+   * Whether to inject the IWER (Immersive Web Emulation Runtime).
+   * - `true` (default): inject the emulator during development, subject to
+   *   `activation` and `userAgentException` (which already skips real XR
+   *   browsers such as OculusBrowser so headsets keep their native WebXR).
+   * - `false`: never inject the emulator. Use this for browser-only apps, or to
+   *   develop exclusively against native WebXR.
+   *
+   * @remarks
+   * Note that `navigator.xr` exists in ordinary desktop Chrome (the API surface
+   * is present even with no XR device), so its mere presence is not a reliable
+   * signal for whether to emulate — hence a simple opt-out rather than
+   * auto-detection.
+   * @default true
+   */
+  iwer?: boolean;
 }
 
 /**
@@ -141,6 +158,7 @@ export interface ProcessedDevOptions {
   activation: 'localhost' | 'always' | RegExp;
   verbose: boolean;
   userAgentException?: RegExp | string;
+  iwer: boolean;
 }
 
 /** @deprecated Use `ProcessedDevOptions` instead */

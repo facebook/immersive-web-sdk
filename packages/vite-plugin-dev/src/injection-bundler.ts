@@ -43,6 +43,7 @@ export async function buildInjectionBundle(
         options.userAgentException instanceof RegExp
           ? `/${options.userAgentException.source}/`
           : options.userAgentException,
+      iwer: options.iwer,
     };
 
     // Replace the CONFIG token with actual configuration
