@@ -217,16 +217,6 @@ function generateXMLForComponent(
       attributeElement.att('defaultValue', defaultValue);
     }
 
-    // Handle FilePath-specific attributes (fileTypes and subfolder)
-    // Only PathByFilePickerAttribute supports these extras; StringAttribute does not.
-    if (attributeType === 'PathByFilePickerAttribute') {
-      if (fieldDef.fileTypes && typeof fieldDef.fileTypes === 'string') {
-        attributeElement.att('fileTypes', fieldDef.fileTypes);
-      }
-      if (fieldDef.subfolder && typeof fieldDef.subfolder === 'string') {
-        attributeElement.att('subfolder', fieldDef.subfolder);
-      }
-    }
   });
 
   return doc.end({
