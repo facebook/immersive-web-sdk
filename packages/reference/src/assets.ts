@@ -470,7 +470,9 @@ async function validateInstalledModelFiles(
     return true;
   }
 
-  for (const [relativePath, expectedSha] of Object.entries(expectedFileHashes)) {
+  for (const [relativePath, expectedSha] of Object.entries(
+    expectedFileHashes,
+  )) {
     try {
       const actualSha = await sha256File(path.join(modelDir, relativePath));
       if (actualSha !== expectedSha) {
@@ -1088,9 +1090,7 @@ async function installPinnedModelFiles(
     for (const [relativePath, expectedSha] of Object.entries(
       metadata.fileHashes,
     )) {
-      const actualSha = await sha256File(
-        path.join(extractedDir, relativePath),
-      );
+      const actualSha = await sha256File(path.join(extractedDir, relativePath));
       if (actualSha !== expectedSha) {
         throw new Error(
           `Pinned reference model file ${relativePath} has unexpected content after download. Run "iwsdk reference warmup" again.`,
@@ -1108,9 +1108,7 @@ async function installPinnedModelFiles(
     await rename(tempFinalRoot, finalRoot);
   } catch (error) {
     await rm(tempFinalRoot, { recursive: true, force: true });
-    if (
-      !(await validateInstalledModelFiles(finalDir, metadata.fileHashes))
-    ) {
+    if (!(await validateInstalledModelFiles(finalDir, metadata.fileHashes))) {
       throw error;
     }
   }

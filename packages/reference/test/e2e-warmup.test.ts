@@ -14,12 +14,21 @@
  */
 
 import { createHash } from 'crypto';
-import http from 'http';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import http from 'http';
 import os from 'os';
 import path from 'path';
 import * as tar from 'tar';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {
   REFERENCE_MODEL_ONNX_URL,
   getReferenceCacheStatus,
@@ -42,7 +51,9 @@ function sha256(data: string | Buffer): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
-function computeFileHashes(files: Record<string, string>): Record<string, string> {
+function computeFileHashes(
+  files: Record<string, string>,
+): Record<string, string> {
   const hashes: Record<string, string> = {};
   for (const [relativePath, contents] of Object.entries(files)) {
     hashes[relativePath] = sha256(contents);
@@ -177,7 +188,9 @@ describe('e2e warmup integration', () => {
 
       const modelBody = modelFilesByPath.get(url);
       if (modelBody !== undefined) {
-        res.writeHead(200, { 'content-length': String(Buffer.byteLength(modelBody)) });
+        res.writeHead(200, {
+          'content-length': String(Buffer.byteLength(modelBody)),
+        });
         res.end(modelBody);
         return;
       }
@@ -242,196 +255,208 @@ describe('e2e warmup integration', () => {
     await rm(sharedRoot, { recursive: true, force: true });
   });
 
-  it('full warmup → status → corruption → repair cycle', { timeout: 30_000 }, async () => {
-    // 1. Initial status should be not_started
-    const initialStatus = await getReferenceCacheStatus();
-    expect(initialStatus.initState).toBe('not_started');
-    expect(initialStatus.warmupRequired).toBe(true);
+  it(
+    'full warmup → status → corruption → repair cycle',
+    { timeout: 30_000 },
+    async () => {
+      // 1. Initial status should be not_started
+      const initialStatus = await getReferenceCacheStatus();
+      expect(initialStatus.initState).toBe('not_started');
+      expect(initialStatus.warmupRequired).toBe(true);
 
-    // 2. Run warmup — this downloads from the real HTTP server
-    const warmupStatus = await warmupReferenceAssets();
-    expect(warmupStatus.initState).toBe('ready');
-    expect(warmupStatus.warmupRequired).toBe(false);
-    expect(warmupStatus.dataDir).toBeTruthy();
-    expect(warmupStatus.modelDir).toBeTruthy();
-    expect(warmupStatus.dataSha256).toBe(dataArchive.sha256);
-    expect(warmupStatus.modelSha256).toBe(testModel.archiveSha256);
+      // 2. Run warmup — this downloads from the real HTTP server
+      const warmupStatus = await warmupReferenceAssets();
+      expect(warmupStatus.initState).toBe('ready');
+      expect(warmupStatus.warmupRequired).toBe(false);
+      expect(warmupStatus.dataDir).toBeTruthy();
+      expect(warmupStatus.modelDir).toBeTruthy();
+      expect(warmupStatus.dataSha256).toBe(dataArchive.sha256);
+      expect(warmupStatus.modelSha256).toBe(testModel.archiveSha256);
 
-    // 3. Status should show ready
-    const readyStatus = await getReferenceCacheStatus();
-    expect(readyStatus.initState).toBe('ready');
-    expect(readyStatus.warmupRequired).toBe(false);
+      // 3. Status should show ready
+      const readyStatus = await getReferenceCacheStatus();
+      expect(readyStatus.initState).toBe('ready');
+      expect(readyStatus.warmupRequired).toBe(false);
 
-    // 4. resolveReferenceAssets should succeed
-    const resolved = await resolveReferenceAssets();
-    expect(resolved.dataDir).toBe(warmupStatus.dataDir);
-    expect(resolved.modelDir).toBe(warmupStatus.modelDir);
-    expect(resolved.model.fileHashes).toEqual(testModel.fileHashes);
+      // 4. resolveReferenceAssets should succeed
+      const resolved = await resolveReferenceAssets();
+      expect(resolved.dataDir).toBe(warmupStatus.dataDir);
+      expect(resolved.modelDir).toBe(warmupStatus.modelDir);
+      expect(resolved.model.fileHashes).toEqual(testModel.fileHashes);
 
-    // 5. Verify actual model files exist and have correct content
-    const configContent = await readFile(
-      path.join(resolved.modelDir, 'config.json'),
-      'utf8',
-    );
-    expect(configContent).toBe(MODEL_FILES['config.json']);
-    const tokenizerContent = await readFile(
-      path.join(resolved.modelDir, 'tokenizer.json'),
-      'utf8',
-    );
-    expect(tokenizerContent).toBe(MODEL_FILES['tokenizer.json']);
+      // 5. Verify actual model files exist and have correct content
+      const configContent = await readFile(
+        path.join(resolved.modelDir, 'config.json'),
+        'utf8',
+      );
+      expect(configContent).toBe(MODEL_FILES['config.json']);
+      const tokenizerContent = await readFile(
+        path.join(resolved.modelDir, 'tokenizer.json'),
+        'utf8',
+      );
+      expect(tokenizerContent).toBe(MODEL_FILES['tokenizer.json']);
 
-    // 6. Corrupt a model file
-    await writeFile(
-      path.join(resolved.modelDir, 'config.json'),
-      '{"corrupted": true}\n',
-      'utf8',
-    );
+      // 6. Corrupt a model file
+      await writeFile(
+        path.join(resolved.modelDir, 'config.json'),
+        '{"corrupted": true}\n',
+        'utf8',
+      );
 
-    // 7. Status should now detect corruption via per-file hash mismatch
-    const corruptedStatus = await getReferenceCacheStatus();
-    expect(corruptedStatus.initState).toBe('failed');
-    expect(corruptedStatus.warmupRequired).toBe(true);
-    expect(corruptedStatus.error?.message).toContain('corrupted');
+      // 7. Status should now detect corruption via per-file hash mismatch
+      const corruptedStatus = await getReferenceCacheStatus();
+      expect(corruptedStatus.initState).toBe('failed');
+      expect(corruptedStatus.warmupRequired).toBe(true);
+      expect(corruptedStatus.error?.message).toContain('corrupted');
 
-    // 8. resolveReferenceAssets should fail
-    await expect(resolveReferenceAssets()).rejects.toThrow();
+      // 8. resolveReferenceAssets should fail
+      await expect(resolveReferenceAssets()).rejects.toThrow();
 
-    // 9. Re-run warmup to repair
-    const repairedStatus = await warmupReferenceAssets();
-    expect(repairedStatus.initState).toBe('ready');
-    expect(repairedStatus.warmupRequired).toBe(false);
+      // 9. Re-run warmup to repair
+      const repairedStatus = await warmupReferenceAssets();
+      expect(repairedStatus.initState).toBe('ready');
+      expect(repairedStatus.warmupRequired).toBe(false);
 
-    // 10. Verify the file was actually repaired
-    const repairedConfig = await readFile(
-      path.join(repairedStatus.modelDir!, 'config.json'),
-      'utf8',
-    );
-    expect(repairedConfig).toBe(MODEL_FILES['config.json']);
+      // 10. Verify the file was actually repaired
+      const repairedConfig = await readFile(
+        path.join(repairedStatus.modelDir!, 'config.json'),
+        'utf8',
+      );
+      expect(repairedConfig).toBe(MODEL_FILES['config.json']);
 
-    // 11. Status should be ready again
-    const finalStatus = await getReferenceCacheStatus();
-    expect(finalStatus.initState).toBe('ready');
-    expect(finalStatus.warmupRequired).toBe(false);
-  });
+      // 11. Status should be ready again
+      const finalStatus = await getReferenceCacheStatus();
+      expect(finalStatus.initState).toBe('ready');
+      expect(finalStatus.warmupRequired).toBe(false);
+    },
+  );
 
-  it('second warmup short-circuits when cache is already valid', { timeout: 30_000 }, async () => {
-    const firstWarmup = await warmupReferenceAssets();
-    expect(firstWarmup.initState).toBe('ready');
+  it(
+    'second warmup short-circuits when cache is already valid',
+    { timeout: 30_000 },
+    async () => {
+      const firstWarmup = await warmupReferenceAssets();
+      expect(firstWarmup.initState).toBe('ready');
 
-    const secondWarmup = await warmupReferenceAssets();
-    expect(secondWarmup.initState).toBe('ready');
-    expect(secondWarmup.modelDir).toBe(firstWarmup.modelDir);
-    expect(secondWarmup.dataDir).toBe(firstWarmup.dataDir);
-  });
+      const secondWarmup = await warmupReferenceAssets();
+      expect(secondWarmup.initState).toBe('ready');
+      expect(secondWarmup.modelDir).toBe(firstWarmup.modelDir);
+      expect(secondWarmup.dataDir).toBe(firstWarmup.dataDir);
+    },
+  );
 
-  it('handles old corpus format without fileHashes gracefully', { timeout: 15_000 }, async () => {
-    const packageVersion = getReferencePackageVersion();
-    const oldModel: ReferenceEmbeddingModelMetadata = {
-      source: 'archive',
-      format: 'transformers-js',
-      archiveSha256: testModel.archiveSha256,
-      archiveSize: testModel.archiveSize,
-      dtype: 'q8',
-      pooling: 'mean',
-      normalize: true,
-    };
+  it(
+    'handles old corpus format without fileHashes gracefully',
+    { timeout: 15_000 },
+    async () => {
+      const packageVersion = getReferencePackageVersion();
+      const oldModel: ReferenceEmbeddingModelMetadata = {
+        source: 'archive',
+        format: 'transformers-js',
+        archiveSha256: testModel.archiveSha256,
+        archiveSize: testModel.archiveSize,
+        dtype: 'q8',
+        pooling: 'mean',
+        normalize: true,
+      };
 
-    const oldDataArchive = await createTgz(tempDir, 'data-old', {
-      'embeddings.json': `${JSON.stringify(
-        {
-          version: packageVersion,
-          model: oldModel,
-          dimensions: 768,
-          iwsdk: [],
-          deps: [],
-        },
-        null,
-        2,
-      )}\n`,
-      'sources/.keep': '',
-    });
-
-    const modelDir = path.join(
-      sharedRoot,
-      'models',
-      oldModel.archiveSha256,
-      'model',
-    );
-    await mkdir(path.join(modelDir, 'onnx'), { recursive: true });
-    for (const [relativePath, contents] of Object.entries(MODEL_FILES)) {
-      const absolutePath = path.join(modelDir, relativePath);
-      await mkdir(path.dirname(absolutePath), { recursive: true });
-      await writeFile(absolutePath, contents, 'utf8');
-    }
-
-    const dataDir = path.join(
-      sharedRoot,
-      'corpora',
-      oldDataArchive.sha256,
-      'data',
-    );
-    await mkdir(path.join(dataDir, 'sources'), { recursive: true });
-    await writeFile(
-      path.join(dataDir, 'embeddings.json'),
-      `${JSON.stringify(
-        {
-          version: packageVersion,
-          model: oldModel,
-          dimensions: 768,
-          iwsdk: [],
-          deps: [],
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
-
-    const statePath = path.join(
-      workspaceRoot,
-      '.iwsdk',
-      'reference',
-      'state.json',
-    );
-    await mkdir(path.dirname(statePath), { recursive: true });
-    await writeFile(
-      statePath,
-      `${JSON.stringify(
-        {
-          schemaVersion: 4,
-          packageVersion,
-          assetsPackage: {
-            name: ASSETS_PACKAGE_NAME,
+      const oldDataArchive = await createTgz(tempDir, 'data-old', {
+        'embeddings.json': `${JSON.stringify(
+          {
             version: packageVersion,
+            model: oldModel,
+            dimensions: 768,
+            iwsdk: [],
+            deps: [],
           },
-          status: 'ready',
-          pid: null,
-          manifestUrl: `${baseUrl}/manifest.json`,
-          dataDir,
-          dataSha256: oldDataArchive.sha256,
-          modelDir,
-          modelSha256: oldModel.archiveSha256,
-          modelUrl: REFERENCE_MODEL_ONNX_URL,
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          error: null,
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
+          null,
+          2,
+        )}\n`,
+        'sources/.keep': '',
+      });
 
-    // Old format without fileHashes should still validate (falls back to
-    // file-existence checks only, no archive re-compression)
-    const status = await getReferenceCacheStatus();
-    expect(status.initState).toBe('ready');
-    expect(status.warmupRequired).toBe(false);
+      const modelDir = path.join(
+        sharedRoot,
+        'models',
+        oldModel.archiveSha256,
+        'model',
+      );
+      await mkdir(path.join(modelDir, 'onnx'), { recursive: true });
+      for (const [relativePath, contents] of Object.entries(MODEL_FILES)) {
+        const absolutePath = path.join(modelDir, relativePath);
+        await mkdir(path.dirname(absolutePath), { recursive: true });
+        await writeFile(absolutePath, contents, 'utf8');
+      }
 
-    const resolved = await resolveReferenceAssets();
-    expect(resolved.dataDir).toBe(dataDir);
-    expect(resolved.modelDir).toBe(modelDir);
-    expect(resolved.model.fileHashes).toBeUndefined();
-  });
+      const dataDir = path.join(
+        sharedRoot,
+        'corpora',
+        oldDataArchive.sha256,
+        'data',
+      );
+      await mkdir(path.join(dataDir, 'sources'), { recursive: true });
+      await writeFile(
+        path.join(dataDir, 'embeddings.json'),
+        `${JSON.stringify(
+          {
+            version: packageVersion,
+            model: oldModel,
+            dimensions: 768,
+            iwsdk: [],
+            deps: [],
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+
+      const statePath = path.join(
+        workspaceRoot,
+        '.iwsdk',
+        'reference',
+        'state.json',
+      );
+      await mkdir(path.dirname(statePath), { recursive: true });
+      await writeFile(
+        statePath,
+        `${JSON.stringify(
+          {
+            schemaVersion: 4,
+            packageVersion,
+            assetsPackage: {
+              name: ASSETS_PACKAGE_NAME,
+              version: packageVersion,
+            },
+            status: 'ready',
+            pid: null,
+            manifestUrl: `${baseUrl}/manifest.json`,
+            dataDir,
+            dataSha256: oldDataArchive.sha256,
+            modelDir,
+            modelSha256: oldModel.archiveSha256,
+            modelUrl: REFERENCE_MODEL_ONNX_URL,
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            error: null,
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+
+      // Old format without fileHashes should still validate (falls back to
+      // file-existence checks only, no archive re-compression)
+      const status = await getReferenceCacheStatus();
+      expect(status.initState).toBe('ready');
+      expect(status.warmupRequired).toBe(false);
+
+      const resolved = await resolveReferenceAssets();
+      expect(resolved.dataDir).toBe(dataDir);
+      expect(resolved.modelDir).toBe(modelDir);
+      expect(resolved.model.fileHashes).toBeUndefined();
+    },
+  );
 });

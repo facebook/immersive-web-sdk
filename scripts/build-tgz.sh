@@ -27,6 +27,16 @@ done
 
 echo "🚀 Building standalone tgz packages..."
 
+if command -v pnpm >/dev/null 2>&1; then
+    PNPM_CMD=(pnpm --config.confirmModulesPurge=false)
+elif command -v corepack >/dev/null 2>&1; then
+    COREPACK_PNPM_VERSION="${COREPACK_PNPM_VERSION:-pnpm@10.18.3}"
+    PNPM_CMD=(corepack "$COREPACK_PNPM_VERSION" --config.confirmModulesPurge=false)
+else
+    echo "❌ pnpm is required. Install pnpm or enable corepack." >&2
+    exit 1
+fi
+
 # Detect CI environment and set pnpm install flags
 PNPM_INSTALL_FLAGS=""
 if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
@@ -53,7 +63,7 @@ LOCKFILE_BACKUP="$BASE_DIR/pnpm-lock.yaml.build-tgz.backup"
 WORKSPACE_BACKUP="$BASE_DIR/pnpm-workspace.yaml.build-tgz.backup"
 
 # Package build order (dependencies first)
-LEAF_PACKAGES=("glxf" "xr-input" "locomotor" "vite-plugin-gltf-optimizer" "cli" "vite-plugin-dev" "vite-plugin-metaspatial" "vite-plugin-uikitml" "create" "reference-assets" "reference")
+LEAF_PACKAGES=("scene-composition" "glxf" "xr-input" "locomotor" "example-assets" "vite-plugin-gltf-optimizer" "cli" "vite-plugin-dev" "vite-plugin-uikitml" "create" "reference-assets" "reference")
 ROOT_PACKAGES=("core")
 
 # Function to backup package.json
@@ -200,7 +210,7 @@ build_and_pack_package() {
     # Clean previous builds
     rm -rf lib dist build *.tgz
 
-    if ! pnpm run "$build_script"; then
+    if ! "${PNPM_CMD[@]}" run "$build_script"; then
         echo "❌ Build failed for $package_name (script: $build_script)" >&2
         exit 1
     fi
@@ -209,7 +219,7 @@ build_and_pack_package() {
     validate_declared_entrypoints "$package_dir"
 
     local pack_output
-    if ! pack_output=$(pnpm pack); then
+    if ! pack_output=$("${PNPM_CMD[@]}" pack); then
         echo "❌ Pack failed for $package_name" >&2
         exit 1
     fi
@@ -318,7 +328,7 @@ build_root_packages() {
 
         # Install the file dependencies
         echo "   📥 Installing file dependencies..."
-        pnpm install $PNPM_INSTALL_FLAGS
+        "${PNPM_CMD[@]}" install $PNPM_INSTALL_FLAGS
 
         build_and_pack_package "$package_dir" "build" "$package"
 
@@ -326,7 +336,7 @@ build_root_packages() {
         echo "   🔄 Restoring workspace dependencies..."
         restore_package_json "$package_dir"
         restore_workspace_state
-        pnpm install --silent $PNPM_INSTALL_FLAGS
+        "${PNPM_CMD[@]}" install --silent $PNPM_INSTALL_FLAGS
     done
 }
 
@@ -339,7 +349,7 @@ cleanup() {
             restore_package_json "$package_dir"
             restore_workspace_state
             cd "$package_dir"
-            pnpm install --silent $PNPM_INSTALL_FLAGS
+            "${PNPM_CMD[@]}" install --silent $PNPM_INSTALL_FLAGS
         fi
     done
     find "$PACKAGES_DIR" -name "package.json.backup" -delete

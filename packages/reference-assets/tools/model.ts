@@ -363,9 +363,7 @@ async function installReferenceModelFiles(
     await rename(tempFinalRoot, finalRoot);
   } catch (error) {
     await rm(tempFinalRoot, { recursive: true, force: true });
-    if (
-      !(await validateInstalledModelFiles(finalDir, metadata.fileHashes))
-    ) {
+    if (!(await validateInstalledModelFiles(finalDir, metadata.fileHashes))) {
       throw error;
     }
   }

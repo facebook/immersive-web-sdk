@@ -6,7 +6,6 @@
     "packages/locomotor/src/index.ts",
     "packages/glxf/src/index.ts",
     "packages/vite-plugin-iwer/src/index.ts",
-    "packages/vite-plugin-metaspatial/src/index.ts",
     "packages/vite-plugin-uikitml/src/index.ts",
     "packages/vite-plugin-gltf-optimizer/src/index.ts"
   ],
