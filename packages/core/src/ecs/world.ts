@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import type { SceneDocument } from '@iwsdk/scene-composition';
 import { XROrigin } from '@iwsdk/xr-input';
 import type { PointerEventsMap } from '@pmndrs/pointer-events';
 import { Signal, signal } from '@preact/signals-core';
@@ -90,7 +91,7 @@ export type OnXRFrameCallback = (
  * const world = await World.create(container, {
  *   xr: { sessionMode: SessionMode.ImmersiveVR },
  *   features: { enableLocomotion: true, enableGrabbing: true },
- *   level: '/glxf/Composition.glxf'
+ *   level: '/scenes/main.iwsdk.scene.json'
  * });
  * ```
  */
@@ -108,6 +109,7 @@ export class World extends ElicsWorld {
   public session: XRSession | undefined;
   public visibilityState = signal(VisibilityState.NonImmersive);
   public requestedLevelUrl: string | undefined;
+  public requestedLevelDocument: SceneDocument | undefined;
   public _resolveLevelLoad: (() => void) | undefined;
   /** Default XR options used when calling {@link World.launchXR} without overrides. */
   public xrDefaults: import('../init/xr.js').XROptions | undefined;
@@ -250,7 +252,19 @@ export class World extends ElicsWorld {
 
   /** Request a level change; LevelSystem performs the work and resolves. */
   async loadLevel(url?: string): Promise<void> {
+    this.resolvePendingLevelLoad();
+    this.requestedLevelDocument = undefined;
     this.requestedLevelUrl = url ?? '';
+    return new Promise<void>((resolve) => {
+      this._resolveLevelLoad = resolve;
+    });
+  }
+
+  /** Request an in-memory native scene document level load; LevelSystem performs the work and resolves. */
+  async loadSceneDocument(document: SceneDocument): Promise<void> {
+    this.resolvePendingLevelLoad();
+    this.requestedLevelUrl = undefined;
+    this.requestedLevelDocument = document;
     return new Promise<void>((resolve) => {
       this._resolveLevelLoad = resolve;
     });
@@ -258,6 +272,15 @@ export class World extends ElicsWorld {
 
   exitXR() {
     this.session?.end();
+  }
+
+  private resolvePendingLevelLoad(): void {
+    if (this._resolveLevelLoad == null) {
+      return;
+    }
+    const resolve = this._resolveLevelLoad;
+    this._resolveLevelLoad = undefined;
+    resolve();
   }
 
   /**

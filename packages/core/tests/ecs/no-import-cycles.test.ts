@@ -8,23 +8,23 @@
 import { describe, expect, it } from 'vitest';
 import { AudioSystem } from '../../src/audio/audio-system.js';
 import { AudioSource } from '../../src/audio/audio.js';
+import { EnvironmentSystem } from '../../src/environment/environment-system.js';
 import {
   DomeGradient,
   DomeTexture,
   IBLGradient,
   IBLTexture,
 } from '../../src/environment/index.js';
-import { EnvironmentSystem } from '../../src/environment/environment-system.js';
-import { LevelRoot } from '../../src/level/level-root.js';
-import { LevelTag } from '../../src/level/level-tag.js';
-import { LevelSystem } from '../../src/level/level-system.js';
-import { Transform } from '../../src/transform/transform.js';
-import { TransformSystem } from '../../src/transform/transform.js';
 import { InputSystem } from '../../src/input/input-system.js';
 import {
   PokeInteractable,
   RayInteractable,
 } from '../../src/input/state-tags.js';
+import { LevelRoot } from '../../src/level/level-root.js';
+import { LevelSystem } from '../../src/level/level-system.js';
+import { LevelTag } from '../../src/level/level-tag.js';
+import { Transform } from '../../src/transform/transform.js';
+import { TransformSystem } from '../../src/transform/transform.js';
 
 // Regression guard for module-cycle TDZ bugs.
 //
@@ -49,20 +49,55 @@ describe('module load order — System.queries must capture defined components',
   // defined at class-body evaluation time. Any one of these going undefined
   // would crash QueryManager.registerQuery the same way AudioSource did.
   const cases: Array<[string, any, string, any[]]> = [
-    ['EnvironmentSystem', EnvironmentSystem, 'domeTextures', [DomeTexture, LevelRoot]],
-    ['EnvironmentSystem', EnvironmentSystem, 'domeGradients', [DomeGradient, LevelRoot]],
-    ['EnvironmentSystem', EnvironmentSystem, 'iblTextures', [IBLTexture, LevelRoot]],
-    ['EnvironmentSystem', EnvironmentSystem, 'iblGradients', [IBLGradient, LevelRoot]],
+    [
+      'EnvironmentSystem',
+      EnvironmentSystem,
+      'domeTextures',
+      [DomeTexture, LevelRoot],
+    ],
+    [
+      'EnvironmentSystem',
+      EnvironmentSystem,
+      'domeGradients',
+      [DomeGradient, LevelRoot],
+    ],
+    [
+      'EnvironmentSystem',
+      EnvironmentSystem,
+      'iblTextures',
+      [IBLTexture, LevelRoot],
+    ],
+    [
+      'EnvironmentSystem',
+      EnvironmentSystem,
+      'iblGradients',
+      [IBLGradient, LevelRoot],
+    ],
     ['LevelSystem', LevelSystem, 'levelEntities', [LevelTag]],
     ['TransformSystem', TransformSystem, 'transform', [Transform]],
-    ['InputSystem', InputSystem, 'rayInteractables', [RayInteractable, Transform]],
-    ['InputSystem', InputSystem, 'pokeInteractables', [PokeInteractable, Transform]],
+    [
+      'InputSystem',
+      InputSystem,
+      'rayInteractables',
+      [RayInteractable, Transform],
+    ],
+    [
+      'InputSystem',
+      InputSystem,
+      'pokeInteractables',
+      [PokeInteractable, Transform],
+    ],
   ];
 
   for (const [sysName, Sys, queryKey, expectedRefs] of cases) {
     it(`${sysName}.queries.${queryKey}.required holds defined component refs`, () => {
-      const required = (Sys as any).queries?.[queryKey]?.required as any[] | undefined;
-      expect(required, `${sysName}.queries.${queryKey}.required must exist`).toBeDefined();
+      const required = (Sys as any).queries?.[queryKey]?.required as
+        | any[]
+        | undefined;
+      expect(
+        required,
+        `${sysName}.queries.${queryKey}.required must exist`,
+      ).toBeDefined();
       expect(required!.length).toBe(expectedRefs.length);
       for (let i = 0; i < expectedRefs.length; i++) {
         expect(

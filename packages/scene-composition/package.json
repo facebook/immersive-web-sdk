@@ -1,0 +1,41 @@
+{
+  "name": "@iwsdk/scene-composition",
+  "version": "0.4.2",
+  "description": "IWSDK native scene document schema, validation, patching, and authoring helpers",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "format": "prettier --write ./src/**/* ./tests/**/*",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [
+    "webxr",
+    "iwsdk",
+    "scene",
+    "editor",
+    "composition"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "devDependencies": {
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
+  }
+}

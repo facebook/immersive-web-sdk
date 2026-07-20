@@ -7,15 +7,15 @@
 
 import { signal } from '@preact/signals-core';
 import { Types } from '../ecs/component.js';
-import { createSystem } from '../ecs/system.js';
 import type { Entity } from '../ecs/entity.js';
+import { createSystem } from '../ecs/system.js';
 import {
   DomeGradient,
   DomeTexture,
   IBLGradient,
   IBLTexture,
 } from '../environment/index.js';
-import { GLXFImporter } from './level-glxf-importer.js';
+import { LevelImporter } from './level-importer.js';
 import { LevelRoot } from './level-root.js';
 import { LevelTag } from './level-tag.js';
 
@@ -24,7 +24,7 @@ import { LevelTag } from './level-tag.js';
  *
  * @remarks
  * - Destroys all {@link LevelTag}-tagged entities on level change.
- * - Loads GLXF via {@link GLXFImporter} when a URL is requested through {@link World.loadLevel}.
+ * - Loads native scene JSON documents, scene JSON URLs, or legacy GLXF URLs via {@link LevelImporter}.
  * @category Scene
  */
 export class LevelSystem extends createSystem(
@@ -81,17 +81,22 @@ export class LevelSystem extends createSystem(
     if (this.loading) {
       return;
     }
-    const pending = this.world.requestedLevelUrl;
-    if (pending === undefined) {
+    const pendingUrl = this.world.requestedLevelUrl;
+    const pendingDocument = this.world.requestedLevelDocument;
+    if (pendingUrl === undefined && pendingDocument === undefined) {
       return;
     }
-    this.startLevelChange(pending);
+    this.startLevelChange(pendingUrl ?? '', pendingDocument);
   }
 
-  private startLevelChange(url: string): void {
+  private startLevelChange(
+    url: string,
+    document = this.world.requestedLevelDocument,
+  ): void {
     this.loading = true;
     // Unset request now to avoid re-entry during async flow
     this.world.requestedLevelUrl = undefined;
+    this.world.requestedLevelDocument = undefined;
 
     // Destroy all level-tagged entities (current level content)
     for (const ent of this.queries.levelEntities.entities) {
@@ -108,9 +113,12 @@ export class LevelSystem extends createSystem(
     newRoot.addComponent(LevelRoot);
     this.world.activeLevel!.value = newRoot;
 
-    const doLoad = url
-      ? GLXFImporter.load(this.world, url, newRoot)
-      : Promise.resolve();
+    const doLoad =
+      document != null
+        ? LevelImporter.loadDocument(this.world, document, newRoot)
+        : url
+          ? LevelImporter.load(this.world, url, newRoot)
+          : Promise.resolve();
     void doLoad
       .catch((err) => console.error('[LevelSystem] Failed to load level', err))
       .finally(() => {

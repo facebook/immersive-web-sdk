@@ -76,7 +76,6 @@ npm install -D @iwsdk/vite-plugin-dev @iwsdk/vite-plugin-gltf-optimizer @iwsdk/v
 | `@iwsdk/vite-plugin-dev`            | XR emulation, AI agent tooling, and dev browser |
 | `@iwsdk/vite-plugin-gltf-optimizer` | GLTF/GLB optimization during build              |
 | `@iwsdk/vite-plugin-uikitml`        | Compile HTML-like UI templates to spatial UI    |
-| `@iwsdk/vite-plugin-metaspatial`    | Meta Spatial Editor integration                 |
 
 ## Documentation
 

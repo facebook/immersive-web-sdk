@@ -169,4 +169,50 @@ describe('ecsFindEntities', () => {
     expect(result.entities.map((entity) => entity.entityIndex)).toEqual([2, 1]);
     expect(result.total).toBe(2);
   });
+
+  it('falls back to component ids when debug queries see an unregistered component bitmask', async () => {
+    const { ComponentRegistry } = (await import('elics')) as any;
+    const { ecsFindEntities } = await import(
+      '../../src/mcp/ecs-debug-tools.js'
+    );
+
+    const Robot = { bitmask: null, id: 'Robot', schema: {} };
+    ComponentRegistry._register(Robot);
+
+    const world = {
+      entityManager: {
+        indexLookup: [
+          null,
+          {
+            active: true,
+            getComponents: () => [Robot],
+            hasComponent: vi.fn(() => {
+              throw new Error('hasComponent should not be called');
+            }),
+            index: 1,
+            object3D: { name: 'Robot' },
+          },
+        ],
+      },
+    } as any;
+
+    expect(ecsFindEntities(world, { withComponents: ['Robot'] })).toMatchObject(
+      {
+        entities: [
+          {
+            componentIds: ['Robot'],
+            entityIndex: 1,
+            name: 'Robot',
+          },
+        ],
+        total: 1,
+      },
+    );
+    expect(
+      ecsFindEntities(world, { withoutComponents: ['Robot'] }),
+    ).toMatchObject({
+      entities: [],
+      total: 0,
+    });
+  });
 });

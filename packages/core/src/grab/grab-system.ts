@@ -7,9 +7,9 @@
 
 import { HandleStore } from '@pmndrs/handle';
 import { PointerEventsMap } from '@pmndrs/pointer-events';
-import { createSystem } from '../ecs/system.js';
-import { Entity } from '../ecs/entity.js';
 import { Types } from '../ecs/component.js';
+import { Entity } from '../ecs/entity.js';
+import { createSystem } from '../ecs/system.js';
 import { LevelTag } from '../level/index.js';
 import {
   Object3D,

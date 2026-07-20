@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { createSystem } from '../ecs/system.js';
 import { Entity } from '../ecs/entity.js';
+import { createSystem } from '../ecs/system.js';
 import { Matrix4, Object3D, Quaternion, Vector3 } from '../runtime/index.js';
 import { setWorldPosition, setWorldQuaternion } from '../transform/index.js';
 import { EnvironmentRaycastTarget, RaycastSpace } from './raycast-target.js';

@@ -5,15 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { AnySchema, Component, ComponentRegistry } from 'elics';
-import { Types } from '../ecs/component.js';
 import { Entity } from '../ecs/entity.js';
 import type { World } from '../ecs/world.js';
 import { Object3D } from '../runtime/index.js';
-import { PanelUI } from '../ui/index.js';
-
-/** Component id prefix expected in GLXF extras. */
-const PACKAGE_PREFIX = 'com.iwsdk.components.';
+import { LevelComponentApplier } from './level-component-applier.js';
 
 /**
  * Creates ECS entities from Three.js Object3D graphs and applies IWSDK components
@@ -78,78 +73,9 @@ export class EntityCreator {
 
   private static applyComponents(
     entity: Entity,
-    glxfComponents: Record<string, any>,
+    glxfComponents: Record<string, unknown>,
     world: World,
   ): void {
-    const allComponents = ComponentRegistry.getAllComponents();
-    this.handleMetaSpatialPanelComponents(entity, glxfComponents, world);
-
-    Object.entries(glxfComponents).forEach(([componentName, componentData]) => {
-      if (componentName === 'com.iwsdk.components.PanelUI') {
-        return;
-      }
-      if (!componentName.startsWith(PACKAGE_PREFIX)) {
-        return;
-      }
-
-      const targetId = componentName.slice(PACKAGE_PREFIX.length);
-      const component = allComponents.find((comp) => comp.id === targetId);
-      if (component) {
-        const componentProps = this.mapGLXFDataToProps(
-          component,
-          componentData,
-        );
-        if (!component.bitmask) {
-          world.registerComponent(component);
-        }
-        entity.addComponent(component, componentProps);
-      } else {
-        console.warn(
-          `Component "${componentName}" not found in registry. Available components:`,
-          allComponents.map((comp) => comp.id),
-        );
-      }
-    });
-  }
-
-  private static mapGLXFDataToProps(
-    component: Component<AnySchema>,
-    glxfData: Record<string, any>,
-  ): Record<string, any> {
-    const props: Record<string, any> = {};
-    Object.entries(glxfData).forEach(([key, fieldData]) => {
-      if (fieldData && typeof fieldData === 'object' && component.schema[key]) {
-        if (component.schema[key].type === Types.Enum && 'alias' in fieldData) {
-          props[key] = fieldData.alias;
-        } else if ('value' in fieldData) {
-          props[key] = fieldData.value;
-        }
-      }
-    });
-    return props;
-  }
-
-  private static handleMetaSpatialPanelComponents(
-    entity: Entity,
-    glxfComponents: Record<string, any>,
-    world: World,
-  ): void {
-    const panelComponent = glxfComponents['com.iwsdk.components.PanelUI'];
-
-    if (!panelComponent || !panelComponent.config?.value) {
-      return;
-    }
-
-    const config = (panelComponent.config.value as string).replace(
-      '.uikitml',
-      '.json',
-    );
-    const maxWidth = (panelComponent.maxWidth?.value ?? 1) as number;
-    const maxHeight = (panelComponent.maxHeight?.value ?? 1) as number;
-
-    if (!PanelUI.bitmask) {
-      world.registerComponent(PanelUI);
-    }
-    entity.addComponent(PanelUI, { config, maxWidth, maxHeight });
+    LevelComponentApplier.applyComponents(entity, glxfComponents, world);
   }
 }

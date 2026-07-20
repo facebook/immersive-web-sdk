@@ -14,6 +14,7 @@ import { Object3D, Quaternion, Vector3 } from '../runtime/index.js';
 export interface HierarchyNode {
   name: string;
   uuid: string;
+  sceneNodeId?: string;
   entityIndex?: number;
   children?: HierarchyNode[];
   /** Present when children were truncated due to breadth limit. */
@@ -40,7 +41,8 @@ interface GetSceneHierarchyParams {
 }
 
 interface GetObjectTransformParams {
-  uuid: string;
+  nodeId?: string;
+  uuid?: string;
 }
 
 /** Default maximum number of children per node before truncation. */
@@ -86,6 +88,9 @@ function buildHierarchy(
     name: obj.name || '(unnamed)',
     uuid: obj.uuid,
   };
+  if (typeof obj.userData?.iwsdkSceneNodeId === 'string') {
+    node.sceneNodeId = obj.userData.iwsdkSceneNodeId;
+  }
 
   // Check if Object3D has associated entity (entityIdx is set by Transform component)
   if ('entityIdx' in obj && typeof (obj as any).entityIdx === 'number') {
@@ -115,18 +120,23 @@ export function getObjectTransform(
   world: World,
   params: Record<string, unknown>,
 ): ObjectTransform {
-  const { uuid } = params as unknown as GetObjectTransformParams;
+  const { nodeId, uuid } = params as unknown as GetObjectTransformParams;
 
-  if (!uuid) {
+  if (!uuid && !nodeId) {
     throw new Error(
-      'uuid parameter is required. Use get_scene_hierarchy to discover object UUIDs.',
+      'uuid or nodeId parameter is required. Use get_scene_hierarchy for Object3D UUIDs or scene_get_hierarchy for native scene node ids.',
     );
   }
 
-  const obj = world.scene.getObjectByProperty('uuid', uuid);
+  const obj =
+    uuid != null
+      ? world.scene.getObjectByProperty('uuid', uuid)
+      : findObjectBySceneNodeId(world.scene, nodeId!);
   if (!obj) {
     throw new Error(
-      `Object not found with UUID '${uuid}'. Use get_scene_hierarchy to discover available objects.`,
+      uuid != null
+        ? `Object not found with UUID '${uuid}'. Use get_scene_hierarchy to discover available objects.`
+        : `Object not found with scene node id '${nodeId}'. Use scene_get_hierarchy to discover native scene node ids.`,
     );
   }
 
@@ -178,4 +188,22 @@ export function getObjectTransform(
     globalScale: globalScale.toArray() as [number, number, number],
     positionRelativeToXROrigin,
   };
+}
+
+function findObjectBySceneNodeId(
+  object: Object3D,
+  nodeId: string,
+): Object3D | undefined {
+  if (object.userData?.iwsdkSceneNodeId === nodeId) {
+    return object;
+  }
+
+  for (const child of object.children) {
+    const found = findObjectBySceneNodeId(child, nodeId);
+    if (found != null) {
+      return found;
+    }
+  }
+
+  return undefined;
 }

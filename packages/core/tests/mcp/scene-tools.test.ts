@@ -6,7 +6,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getSceneHierarchy } from '../../src/mcp/scene-tools.js';
+import {
+  getObjectTransform,
+  getSceneHierarchy,
+} from '../../src/mcp/scene-tools.js';
 
 // ---------------------------------------------------------------------------
 // Minimal Object3D mock (only the properties scene-tools uses)
@@ -151,6 +154,16 @@ describe('getSceneHierarchy', () => {
 
       expect(result.children![0].entityIndex).toBeUndefined();
     });
+
+    it('should include native scene node ids when present', () => {
+      const obj = createMockObject3D('scene-node-obj');
+      obj.userData = { iwsdkSceneNodeId: 'lamp-node' };
+      const world = createMockWorld([obj]);
+
+      const result = getSceneHierarchy(world, {});
+
+      expect(result.children![0].sceneNodeId).toBe('lamp-node');
+    });
   });
 
   describe('parentId', () => {
@@ -172,6 +185,36 @@ describe('getSceneHierarchy', () => {
       expect(result.name).toBe('target');
       expect(result.children).toHaveLength(1);
       expect(result.children![0].name).toBe('target-child');
+    });
+  });
+});
+
+describe('getObjectTransform', () => {
+  it('finds Object3D transforms by native scene node id', () => {
+    const obj = createMockObject3D('scene-node-obj');
+    obj.userData = { iwsdkSceneNodeId: 'lamp-node' };
+    obj.position = { toArray: () => [1, 2, 3] };
+    obj.quaternion = { toArray: () => [0, 0, 0, 1] };
+    obj.scale = { toArray: () => [1, 1, 1] };
+    obj.updateWorldMatrix = () => {};
+    obj.matrixWorld = {
+      decompose: (position: any, quaternion: any, scale: any) => {
+        position.set(4, 5, 6);
+        quaternion.set(0, 0, 0, 1);
+        scale.set(2, 2, 2);
+      },
+    };
+    const world = createMockWorld([obj]);
+
+    const transform = getObjectTransform(world, { nodeId: 'lamp-node' });
+
+    expect(transform).toMatchObject({
+      globalPosition: [4, 5, 6],
+      globalQuaternion: [0, 0, 0, 1],
+      globalScale: [2, 2, 2],
+      localPosition: [1, 2, 3],
+      localQuaternion: [0, 0, 0, 1],
+      localScale: [1, 1, 1],
     });
   });
 });

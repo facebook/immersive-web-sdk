@@ -24,6 +24,7 @@ export default {
       'three-mesh-bvh',
       '@iwsdk/glxf',
       '@iwsdk/locomotor',
+      '@iwsdk/scene-composition',
       '@iwsdk/xr-input',
       '@pmndrs/handle',
       '@pmndrs/pointer-events',

@@ -473,7 +473,7 @@ export function ecsFindEntities(
     // Check required components
     let match = true;
     for (const comp of requiredComponents) {
-      if (!entity.hasComponent(comp)) {
+      if (!entityHasDebugComponent(entity, comp)) {
         match = false;
         break;
       }
@@ -484,7 +484,7 @@ export function ecsFindEntities(
 
     // Check excluded components
     for (const comp of excludedComponents) {
-      if (entity.hasComponent(comp)) {
+      if (entityHasDebugComponent(entity, comp)) {
         match = false;
         break;
       }
@@ -519,6 +519,18 @@ export function ecsFindEntities(
     total: totalMatches,
     limited: totalMatches > maxResults,
   };
+}
+
+function entityHasDebugComponent(
+  entity: import('elics').Entity,
+  component: AnyComponent,
+): boolean {
+  if (component.bitmask != null) {
+    return entity.hasComponent(component);
+  }
+  return entity.getComponents().some((entry: AnyComponent) => {
+    return entry === component || entry.id === component.id;
+  });
 }
 
 function getEntityDebugSortRank(entity: EntitySummary): number {
@@ -623,7 +635,7 @@ export function ecsToggleSystem(
   world: World,
   params: Record<string, unknown>,
 ): EcsToggleSystemResult {
-  const { name, paused } = params as EcsToggleSystemParams;
+  const { name, paused } = params as unknown as EcsToggleSystemParams;
   const systems = world.getSystems();
   const system = systems.find((s) => s.constructor.name === name);
   if (!system) {
@@ -665,7 +677,7 @@ export function ecsSetComponent(
   params: Record<string, unknown>,
 ): EcsSetComponentResult {
   const { entityIndex, componentId, field, value } =
-    params as EcsSetComponentParams;
+    params as unknown as EcsSetComponentParams;
 
   const entity = world.entityManager.getEntityByIndex(entityIndex);
   if (!entity) {
@@ -876,7 +888,7 @@ export function ecsDiff(
   _world: World,
   params: Record<string, unknown>,
 ): EcsDiffResult {
-  const { from, to } = params as EcsDiffParams;
+  const { from, to } = params as unknown as EcsDiffParams;
 
   const snapFrom = snapshots.get(from);
   const snapTo = snapshots.get(to);

@@ -6,8 +6,8 @@
  */
 
 import { createComponent, Types } from '../ecs/component.js';
-import { createSystem } from '../ecs/system.js';
 import { Entity } from '../ecs/entity.js';
+import { createSystem } from '../ecs/system.js';
 import {
   AddEquation,
   BackSide,

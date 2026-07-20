@@ -57,6 +57,7 @@
     "@babylonjs/havok": "^1.3.10",
     "@iwsdk/glxf": "workspace:*",
     "@iwsdk/locomotor": "workspace:*",
+    "@iwsdk/scene-composition": "workspace:*",
     "@iwsdk/xr-input": "workspace:*",
     "@pmndrs/handle": "^6.6.16",
     "@pmndrs/pointer-events": "^6.6.22",

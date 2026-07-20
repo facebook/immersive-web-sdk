@@ -5,9 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { createSystem } from '../ecs/system.js';
-import { Entity } from '../ecs/entity.js';
 import { Types } from '../ecs/component.js';
+import { Entity } from '../ecs/entity.js';
+import { createSystem } from '../ecs/system.js';
 import { type IUniform, Mesh, Texture, Vector2 } from '../runtime/three.js';
 import { DepthOccludable, OcclusionShadersMode } from './depth-occludable.js';
 import { DepthTextures } from './depth-textures.js';
