@@ -19,7 +19,7 @@ When you call `World.create(container, options)` IWSDK:
 7. Initializes `AssetManager`.
 8. Starts the render loop (`renderer.setAnimationLoop`): each tick sets `visibilityState`, runs `world.update(delta, time)`, then renders.
 9. If `options.xr.offer` is 'once' or 'always', IWSDK offers an XR session after init (and re‑offers on end if 'always'). Otherwise, call `world.launchXR()` manually when the user presses your XR button.
-10. Preloads assets (if provided) and requests an initial level load via `world.loadLevel(url?)`.
+10. Preloads assets (if provided) and requests an initial level load via `world.loadLevel(url?)`. Later scene swaps can use either `world.loadLevel(url)` or `world.loadSceneDocument(document)`.
 
 Implications
 

@@ -1,0 +1,16 @@
+{
+  "explicit": {
+    "firstHash": "c6dabf990014840eec4e0d784454e2d697a0cc1aa19c65de11335b35fcd216f5",
+    "firstLength": 26656,
+    "matches": true,
+    "secondHash": "c6dabf990014840eec4e0d784454e2d697a0cc1aa19c65de11335b35fcd216f5",
+    "secondLength": 26656
+  },
+  "sameNamed": {
+    "firstHash": "88d12ae0eb211d06740cf91bd3a28279ddfc607a095e2bc4d000001f2fc821a3",
+    "firstLength": 7844,
+    "matches": true,
+    "secondHash": "88d12ae0eb211d06740cf91bd3a28279ddfc607a095e2bc4d000001f2fc821a3",
+    "secondLength": 7844
+  }
+}

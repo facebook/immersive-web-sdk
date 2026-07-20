@@ -1,0 +1,65 @@
+{
+  "artifactRoot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current",
+  "generatedAt": "2026-07-08T22:37:57.028Z",
+  "performanceThresholds": {
+    "appCanvasReadyMs": 30000,
+    "appRuntimeReadyMs": 60000,
+    "appScreenshotCaptureMs": 10000,
+    "editorScreenshotCaptureMs": 10000,
+    "editorWorldReadyMs": 60000,
+    "targetTotalMs": 120000
+  },
+  "summaries": [
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 61,
+        "nodeObjectCount": 6,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 299,
+        "editorWorldReadyMs": 228,
+        "totalMs": 3714
+      },
+      "target": "audio"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 42,
+        "nodeObjectCount": 5,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 68,
+        "editorWorldReadyMs": 232,
+        "totalMs": 3496
+      },
+      "target": "grab"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 42,
+        "nodeObjectCount": 5,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 81,
+        "editorWorldReadyMs": 286,
+        "totalMs": 3592
+      },
+      "target": "physics"
+    }
+  ]
+}

@@ -45,7 +45,7 @@ GLXF is a scene composition format that wraps multiple GLTF files and adds:
 - **Asset References** - Reference external GLTF files with automatic loading
 - **Optimized Loading** - Parallel asset loading for WebXR experiences
 
-GLXF files are typically exported from Meta Spatial Editor, but the format is open and can be generated programmatically.
+GLXF is retained as a legacy interchange format. New IWSDK projects should prefer native scene JSON for authored scene composition.
 
 ## Peer Dependencies
 

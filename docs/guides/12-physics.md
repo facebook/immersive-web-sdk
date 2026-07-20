@@ -467,28 +467,37 @@ function animatePlatform(time) {
 3. **Test with simple primitive shapes** before using complex geometry
 4. **Check console for warnings** from the physics system
 
-## MetaSpatial Integration
+## Native Scene JSON Usage
 
-The physics components are also available in MetaSpatial projects through XML component definitions:
+Physics components can be authored directly in native scene JSON and loaded
+through `World.create({ level })`:
 
-```xml
-<!-- PhysicsBody component -->
-<IWSDKPhysicsBody state="DYNAMIC" />
-
-<!-- PhysicsShape component -->
-<IWSDKPhysicsShape
-  shape="Box"
-  dimensions="2f, 1f, 1f"
-  density="1f"
-  friction="0.5f"
-  restitution="0f" />
-
-<!-- PhysicsManipulation component -->
-<IWSDKPhysicsManipulation
-  force="0f, 10f, 0f"
-  linearVelocity="0f, 0f, 0f"
-  angularVelocity="0f, 0f, 0f" />
+```json
+{
+  "id": "dynamic-box",
+  "asset": "box",
+  "transform": { "position": [0, 1, -1] },
+  "components": {
+    "PhysicsBody": { "state": "DYNAMIC" },
+    "PhysicsShape": {
+      "shape": "Box",
+      "dimensions": [1, 1, 1],
+      "density": 1,
+      "friction": 0.5,
+      "restitution": 0
+    },
+    "PhysicsManipulation": {
+      "force": [0, 10, 0],
+      "linearVelocity": [0, 0, 0],
+      "angularVelocity": [0, 0, 0]
+    }
+  }
+}
 ```
+
+Use the native scene editor for placement and validation, especially when a
+physics object needs a precise surface relationship with the floor or another
+collider.
 
 ## Example Projects
 

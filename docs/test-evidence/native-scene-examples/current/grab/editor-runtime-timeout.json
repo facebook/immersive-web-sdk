@@ -1,0 +1,21 @@
+{
+  "badResponses": [],
+  "consoleErrors": ["Event"],
+  "failedRequests": [],
+  "pageState": {
+    "bodyText": "",
+    "canvasCount": 1,
+    "hasFrameworkRuntime": true,
+    "href": "http://127.0.0.1:53572/__iwsdk/workspace?scene=public%2Fscenes%2Fgrab.iwsdk.scene.json",
+    "readyState": "complete",
+    "title": "IWSDK Grab Example",
+    "windowKeys": [
+      "___FONT_AWESOME___",
+      "__THREE__IWER__",
+      "__THREE__",
+      "__zod_globalConfig",
+      "__zod_globalRegistry",
+      "FRAMEWORK_MCP_RUNTIME"
+    ]
+  }
+}

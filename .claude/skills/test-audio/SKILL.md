@@ -255,9 +255,9 @@ If `_stopRequested` and `_playRequested` are set simultaneously, stop wins.
 
 IWER runs in a browser context where the AudioContext may be suspended until a user gesture. The MCP tools can verify ECS state transitions but cannot confirm actual audio output.
 
-### Audio example uses GLXF level
+### Audio example uses native scene JSON
 
-The audio example loads entities from `./glxf/Composition.glxf`. Entities are not created in index.js — they come from the GLXF composition. Use `npx iwsdk ecs find` to discover them dynamically.
+The audio example loads entities from `./scenes/audio.iwsdk.scene.json`. Most entities are not created in index.js; they come from the scene document. Use `npx iwsdk ecs find` to discover them dynamically.
 
 ### Boolean values must be JSON booleans
 

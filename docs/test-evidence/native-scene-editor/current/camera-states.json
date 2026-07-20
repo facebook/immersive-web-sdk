@@ -1,0 +1,112 @@
+{
+  "screenshots": [
+    {
+      "hash": "5fe9f02ba451d7b902f7abe8a72e993f44a63bc093656a50c2404cc1b181af67",
+      "imageDataLength": 20436,
+      "mimeType": "image/png",
+      "view": "right",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [8, 2, 0],
+        "view": "right"
+      }
+    },
+    {
+      "hash": "bab36e4b5ddc9b5e096bd28dae0d16dd321b5dc221f699dd85acd47f8bbd2ae9",
+      "imageDataLength": 9772,
+      "mimeType": "image/png",
+      "view": "top",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [0, 8, 0],
+        "view": "top"
+      }
+    },
+    {
+      "hash": "b540e4c2f7805fab92a674a4d3a49a3d520e4eaca3e7ac1605d324cdb1ac9b94",
+      "imageDataLength": 20256,
+      "mimeType": "image/png",
+      "view": "front",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [0, 2, 8],
+        "view": "front"
+      }
+    },
+    {
+      "hash": "e5dcc16b34f57287c0810644410ce5165cd0e1a37de928adece96a21ce47a89c",
+      "imageDataLength": 20636,
+      "mimeType": "image/png",
+      "view": "back",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [0, 2, -8],
+        "view": "back"
+      }
+    },
+    {
+      "hash": "2237b12cc49dea4c25e170433aff8bf7800d2aea72ac3a27e7258271f15b5a1b",
+      "imageDataLength": 20392,
+      "mimeType": "image/png",
+      "view": "left",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [-8, 2, 0],
+        "view": "left"
+      }
+    },
+    {
+      "hash": "5fe9f02ba451d7b902f7abe8a72e993f44a63bc093656a50c2404cc1b181af67",
+      "imageDataLength": 20436,
+      "mimeType": "image/png",
+      "view": "right",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [8, 2, 0],
+        "view": "right"
+      }
+    },
+    {
+      "hash": "89b2dabcb3bb15a53c346ca9fffb3c662122c871b6db6f3251d62af7be2686b6",
+      "imageDataLength": 34652,
+      "mimeType": "image/png",
+      "view": "quarter",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [4, 3, 4],
+        "view": "quarter"
+      }
+    },
+    {
+      "hash": "33eff37d152fa9315d3d9c5690b2bccfa937f1870df786dbdc8ecf46b9a6dedc",
+      "imageDataLength": 35072,
+      "mimeType": "image/png",
+      "view": "orbit",
+      "camera": {
+        "fov": 50,
+        "lookAt": [0, 0, 0],
+        "position": [-4.0022, 3, 4.0022],
+        "view": "orbit"
+      }
+    },
+    {
+      "hash": "cc9ab1c4b592e593a39b5b55791e56b1cdb0a0de48cd60efb90ceda17c62c14e",
+      "imageDataLength": 38124,
+      "mimeType": "image/png",
+      "view": "custom",
+      "camera": {
+        "fov": 35,
+        "lookAt": [0, 0.5, 0],
+        "position": [3, 4, 5],
+        "view": "custom"
+      }
+    }
+  ]
+}

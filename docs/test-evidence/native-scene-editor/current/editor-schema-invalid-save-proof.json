@@ -1,0 +1,16 @@
+{
+  "status": "Error | Cannot save invalid scene: component field \"rotate\" must be a boolean on node \"robot-distance-grab\"",
+  "dirty": "Unsaved changes",
+  "validation": {
+    "valid": false,
+    "issues": [
+      {
+        "message": "component field \"rotate\" must be a boolean",
+        "nodeId": "robot-distance-grab",
+        "path": "$.nodes[1].components[\"com.iwsdk.components.DistanceGrabbable\"].props[\"rotate\"]",
+        "suggestedFix": "Set \"rotate\" to a Boolean value before saving."
+      }
+    ]
+  },
+  "screenshotPath": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-editor/current/editor-schema-invalid-save-proof.png"
+}

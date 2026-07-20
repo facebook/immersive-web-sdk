@@ -1,0 +1,46 @@
+{
+  "activeLevelName": "LevelRoot",
+  "canvasHeight": 720,
+  "canvasWidth": 1280,
+  "importedEntities": [
+    {
+      "components": ["LevelTag", "PanelUI", "Transform", "Visibility"],
+      "id": "table-1",
+      "index": 11,
+      "panelUI": {
+        "config": "updated-panel.json",
+        "maxHeight": 1,
+        "maxWidth": 2
+      },
+      "position": [0.35, 0, -0.2],
+      "transformParentIndex": 1
+    },
+    {
+      "components": ["LevelTag", "Transform"],
+      "id": "vase-1",
+      "index": 12,
+      "panelUI": null,
+      "position": [0.4, 0.6, 0.2],
+      "transformParentIndex": 1
+    }
+  ],
+  "nodeCount": 2,
+  "nodes": [
+    {
+      "assetId": "table",
+      "id": "table-1",
+      "name": "table-1",
+      "position": [0.35, 0, -0.2],
+      "scale": [1.2, 1.2, 1.2]
+    },
+    {
+      "assetId": "vase",
+      "id": "vase-1",
+      "name": "vase-1",
+      "position": [0.4, 0.6, 0.2],
+      "scale": [1, 1, 1]
+    }
+  ],
+  "renderer": "iwsdk-webgl",
+  "webgl": true
+}

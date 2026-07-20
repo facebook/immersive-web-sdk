@@ -143,5 +143,5 @@ ai: {
 ## What's Next
 
 - [Modes](./modes) — Learn about oversight and collaborate modes
-- [MCP Tools Reference](./mcp-tools) — See all 32 tools available to the agent
+- [MCP Tools Reference](./mcp-tools) — See all 52 tools available to the agent
 - [Workflows](./workflows) — Common agent workflow patterns

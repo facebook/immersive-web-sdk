@@ -4,7 +4,11 @@ outline: [2, 4]
 
 # MCP Tools Reference
 
-The IWSDK MCP server exposes 32 tools organized into 9 categories. These tools give AI agents full control over the emulated XR runtime, the browser, the Three.js scene, and the ECS simulation.
+The IWSDK MCP server exposes 58 tools across runtime, browser, managed
+workspace, native scene composition, Three.js scene inspection, and ECS
+categories. These tools give AI agents full control over the emulated XR
+runtime, the managed workspace, the native scene composition editor, the
+Three.js scene, and the ECS simulation.
 
 If you change the runtime tool contract or CLI mappings, run `pnpm test:cli-mcp-parity`. If you change `@iwsdk/reference` CLI/MCP mappings, run `pnpm test:reference-cli-mcp-parity`. Run `pnpm test:mcp-parity` when a change touches both surfaces or when you want the full contract check before review.
 
@@ -160,9 +164,12 @@ Set device state. When called with no `state` parameter, resets everything to de
 
 ### `browser_screenshot`
 
-Capture a screenshot of the browser. Returns the image as inline base64 PNG.
+Capture a screenshot of a managed browser target. Returns the image as inline
+base64 PNG.
 
-**Parameters:** None
+| Parameter | Type     | Required | Description                         |
+| --------- | -------- | -------- | ----------------------------------- |
+| `target`  | `string` | No       | `runtime`, `editor`, or `workspace` |
 
 ### `browser_get_console_logs`
 
@@ -180,6 +187,268 @@ Get console logs from the browser with optional filtering. Excludes debug level 
 Reload the browser page to reset application state.
 
 **Parameters:** None
+
+## Managed Workspace
+
+These tools target the Playwright-managed IWSDK workspace. The workspace owns
+runtime, editor, and split views. Normal browser tabs stay on the runtime app and
+do not mount the editor.
+
+### `workspace_get_state`
+
+Get the managed workspace state, including current view, runtime readiness,
+editor readiness, selected scene path, scene session id, and dirty state.
+
+**Parameters:** None
+
+### `workspace_set_view`
+
+Set the visible managed workspace view. Tool routing remains semantic; this only
+changes what the managed workspace shows.
+
+| Parameter | Type     | Required | Description                     |
+| --------- | -------- | -------- | ------------------------------- |
+| `view`    | `string` | Yes      | `runtime`, `editor`, or `split` |
+
+### `workspace_open_scene`
+
+Open a scene file from `public/scenes/` in the managed workspace editor.
+
+| Parameter | Type     | Required | Description                                               |
+| --------- | -------- | -------- | --------------------------------------------------------- |
+| `path`    | `string` | Yes      | Path under `public/scenes/` ending in `.iwsdk.scene.json` |
+
+## Native Scene Composition
+
+These tools target the native IWSDK scene editor inside the managed workspace.
+Use them for declarative scene composition instead of editing
+`.iwsdk.scene.json` files directly. They share the same scene session, history,
+validation, WebGL viewport, and save path as the human editor.
+
+For visual verification, use `scene_screenshot` or `scene_set_camera` with
+multiple views before saving. Top views catch alignment and symmetry issues;
+front/side views catch floating or penetrated objects; quarter/orbit views catch
+overall composition. `scene_screenshot` supports `current`, `top`, `front`,
+`back`, `left`, `right`, `quarter`, deterministic `orbit` steps, and explicit
+`position`/`lookAt`/`fov` camera poses.
+
+### `scene_list_files`
+
+List IWSDK scene JSON files available under `public/scenes/`.
+
+| Parameter | Type     | Required | Description                         |
+| --------- | -------- | -------- | ----------------------------------- |
+| `query`   | `string` | No       | Optional case-insensitive path text |
+
+### `scene_open`
+
+Open an existing IWSDK scene JSON file from `public/scenes/` in the managed
+workspace editor.
+
+| Parameter | Type     | Required | Description                                               |
+| --------- | -------- | -------- | --------------------------------------------------------- |
+| `path`    | `string` | Yes      | Path under `public/scenes/` ending in `.iwsdk.scene.json` |
+
+### `scene_create`
+
+Create a new IWSDK scene JSON file under `public/scenes/`. By default, the
+managed workspace opens the new scene after creation.
+
+| Parameter   | Type      | Required | Description                                               |
+| ----------- | --------- | -------- | --------------------------------------------------------- |
+| `path`      | `string`  | Yes      | Path under `public/scenes/` ending in `.iwsdk.scene.json` |
+| `overwrite` | `boolean` | No       | Replace an existing scene file when true                  |
+| `open`      | `boolean` | No       | Open the created scene; defaults to true                  |
+
+### `scene_list_assets`
+
+List assets available to the native scene editor, including ids, names, URIs,
+and bounds metadata.
+
+| Parameter | Type     | Required | Description                                  |
+| --------- | -------- | -------- | -------------------------------------------- |
+| `query`   | `string` | No       | Optional case-insensitive asset id/name text |
+
+### `scene_list_component_schemas`
+
+List typed component schemas available to the native scene editor. Call this
+before adding or editing component payloads so generated scene JSON uses typed
+component props.
+
+| Parameter | Type     | Required | Description                                      |
+| --------- | -------- | -------- | ------------------------------------------------ |
+| `query`   | `string` | No       | Optional case-insensitive component id/name text |
+
+### `scene_get_document`
+
+Get the current native IWSDK scene JSON document from the managed workspace
+editor session.
+
+**Parameters:** None
+
+### `scene_get_hierarchy`
+
+Get the current native IWSDK scene document hierarchy from the managed workspace
+editor session.
+
+| Parameter  | Type     | Required | Description                                   |
+| ---------- | -------- | -------- | --------------------------------------------- |
+| `parentId` | `string` | No       | Scene node id to start from; defaults to root |
+| `maxDepth` | `number` | No       | Maximum traversal depth, default `5`          |
+
+### `scene_get_selection`
+
+Get the current native scene editor selection.
+
+**Parameters:** None
+
+### `scene_select`
+
+Select one or more scene node ids in the native editor.
+
+| Parameter | Type       | Required | Description                                  |
+| --------- | ---------- | -------- | -------------------------------------------- |
+| `nodeIds` | `string[]` | Yes      | Scene node ids to select; pass `[]` to clear |
+
+### `scene_add_node`
+
+Add a node to the native scene JSON document.
+
+| Parameter  | Type     | Required | Description                                    |
+| ---------- | -------- | -------- | ---------------------------------------------- |
+| `node`     | `object` | Yes      | Scene node to add; must include `id`           |
+| `parentId` | `string` | No       | Parent scene node id                           |
+| `index`    | `number` | No       | Insertion index within root or parent children |
+
+### `scene_remove_node`
+
+Remove a node and its children from the native scene JSON document.
+
+| Parameter | Type     | Required | Description             |
+| --------- | -------- | -------- | ----------------------- |
+| `nodeId`  | `string` | Yes      | Scene node id to remove |
+
+### `scene_duplicate_node`
+
+Duplicate a node and its children in the native scene editor.
+
+| Parameter   | Type     | Required | Description                                     |
+| ----------- | -------- | -------- | ----------------------------------------------- |
+| `nodeId`    | `string` | Yes      | Scene node id to duplicate                      |
+| `newNodeId` | `string` | No       | Optional id for the duplicated root node        |
+| `parentId`  | `string` | No       | Optional parent id; defaults to original parent |
+
+### `scene_set_transform`
+
+Replace the transform for a native scene node. Prefer `scene_place_on` and
+`scene_look_at` for deterministic placement/orientation helpers.
+
+| Parameter   | Type     | Required | Description                               |
+| ----------- | -------- | -------- | ----------------------------------------- |
+| `nodeId`    | `string` | Yes      | Scene node id                             |
+| `transform` | `object` | Yes      | `position`, `rotationDeg`, and/or `scale` |
+
+### `scene_apply_patch`
+
+Apply one native scene JSON patch operation with undo support. Prefer specific
+tools for common edits.
+
+| Parameter | Type     | Required | Description                                                                 |
+| --------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `patch`   | `object` | Yes      | Patch such as `moveNode`, `reorderChildren`, `updateComponent`, or metadata |
+
+### `scene_place_on`
+
+Place a node on another node using scene asset bounds.
+
+| Parameter   | Type     | Required | Description                  |
+| ----------- | -------- | -------- | ---------------------------- |
+| `nodeId`    | `string` | Yes      | Node being placed            |
+| `targetId`  | `string` | Yes      | Support node id              |
+| `clearance` | `number` | No       | Vertical clearance in meters |
+| `align`     | `string` | No       | `center` or `preserve-xz`    |
+
+### `scene_look_at`
+
+Yaw a scene node so it faces a target point while preserving pitch and roll.
+
+| Parameter | Type     | Required | Description        |
+| --------- | -------- | -------- | ------------------ |
+| `nodeId`  | `string` | Yes      | Node to orient     |
+| `target`  | `Vec3`   | Yes      | Target world point |
+
+### `scene_validate`
+
+Validate the current native scene JSON document and return structured issues
+with paths and suggested fixes where available.
+
+**Parameters:** None
+
+### `scene_save`
+
+Save the current native scene JSON document from the managed workspace editor
+session to disk.
+
+**Parameters:** None
+
+### `scene_undo`
+
+Undo the most recent native scene editor command.
+
+**Parameters:** None
+
+### `scene_redo`
+
+Redo the most recently undone native scene editor command.
+
+**Parameters:** None
+
+### `scene_get_logs`
+
+Get native scene editor logs.
+
+| Parameter | Type     | Required | Description                   |
+| --------- | -------- | -------- | ----------------------------- |
+| `count`   | `number` | No       | Maximum number of recent logs |
+| `level`   | `string` | No       | `info`, `warn`, or `error`    |
+
+### `scene_set_camera`
+
+Set the native scene editor camera to a named view or explicit pose.
+
+| Parameter   | Type       | Required | Description                                                               |
+| ----------- | ---------- | -------- | ------------------------------------------------------------------------- |
+| `view`      | `string`   | No       | `current`, `top`, `front`, `back`, `left`, `right`, `quarter`, or `orbit` |
+| `position`  | `number[]` | No       | Explicit camera position `[x, y, z]`                                      |
+| `lookAt`    | `number[]` | No       | Explicit target `[x, y, z]`                                               |
+| `fov`       | `number`   | No       | Perspective field of view                                                 |
+| `orbitStep` | `number`   | No       | Deterministic orbit index for `view: "orbit"`                             |
+
+### `scene_screenshot`
+
+Capture a screenshot from the real native scene editor WebGL viewport.
+
+| Parameter | Type     | Required | Description                          |
+| --------- | -------- | -------- | ------------------------------------ |
+| `view`    | `string` | No       | Named view; defaults to current      |
+| `width`   | `number` | No       | Optional screenshot width in pixels  |
+| `height`  | `number` | No       | Optional screenshot height in pixels |
+
+`scene_screenshot` also accepts the explicit camera fields from
+`scene_set_camera`.
+
+### `scene_compare_screenshots`
+
+Capture two native scene editor screenshots and report whether the image
+payloads match. Use this to prove named camera views or before/after edits
+produce distinct visual evidence.
+
+| Parameter | Type     | Required | Description                                     |
+| --------- | -------- | -------- | ----------------------------------------------- |
+| `first`   | `object` | Yes      | First camera request, same shape as screenshot  |
+| `second`  | `object` | Yes      | Second camera request, same shape as screenshot |
+| `width`   | `number` | No       | Optional screenshot width in pixels             |
+| `height`  | `number` | No       | Optional screenshot height in pixels            |
 
 ## Scene Inspection
 

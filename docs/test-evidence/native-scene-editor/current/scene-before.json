@@ -1,0 +1,29 @@
+{
+  "assets": [
+    {
+      "bounds": { "max": [1, 0.5, 1], "min": [-1, 0, -1] },
+      "id": "table",
+      "uri": "/assets/table.gltf"
+    },
+    {
+      "bounds": { "max": [0.1, 0.4, 0.1], "min": [-0.1, 0, -0.1] },
+      "id": "vase",
+      "uri": "/assets/vase.gltf"
+    }
+  ],
+  "nodes": [
+    {
+      "asset": "table",
+      "components": {
+        "com.iwsdk.components.PanelUI": {
+          "props": { "config": "panel.json", "maxWidth": 1 },
+          "type": "PanelUI"
+        }
+      },
+      "id": "table-1",
+      "transform": { "position": [0, 0, 0] }
+    }
+  ],
+  "units": "meters",
+  "version": "iwsdk.scene.v1"
+}

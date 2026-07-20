@@ -1,0 +1,336 @@
+{
+  "assetLoads": [
+    {
+      "assetId": "table",
+      "loadedAt": 1783129507922,
+      "status": "loaded",
+      "url": "/assets/table.gltf"
+    }
+  ],
+  "canvasHeight": 720,
+  "canvasWidth": 1280,
+  "cameraLookAt": [0, 0.25, 0],
+  "cameraPosition": [1.2422, 2.4238, 3.7265],
+  "contributions": {
+    "count": 0,
+    "items": [],
+    "slots": {
+      "bottomPanel.tab": 0,
+      "inspector.global": 0,
+      "inspector.pinned": 0,
+      "inspector.section": 0,
+      "sidebar.bottom": 0,
+      "sidebar.top": 0,
+      "toolbar.center": 0,
+      "toolbar.left": 0,
+      "toolbar.right": 0,
+      "viewport.overlay": 0
+    }
+  },
+  "layout": {
+    "canvas": {
+      "bottom": 720,
+      "height": 720,
+      "left": 0,
+      "pointerEvents": "auto",
+      "position": "static",
+      "resize": "none",
+      "right": 1280,
+      "top": 0,
+      "width": 1280,
+      "zIndex": "auto"
+    },
+    "bottomPanel": {
+      "bottom": 720,
+      "height": 148,
+      "left": 0,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 980,
+      "top": 572,
+      "width": 980,
+      "zIndex": "4"
+    },
+    "contributionSlots": {
+      "bottomPanel.tab": null,
+      "inspector.global": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "inspector.pinned": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "inspector.section": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "sidebar.bottom": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "sidebar.top": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "toolbar.center": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "toolbar.left": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "toolbar.right": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "auto",
+        "position": "static",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "auto"
+      },
+      "viewport.overlay": {
+        "bottom": 0,
+        "height": 0,
+        "left": 0,
+        "pointerEvents": "none",
+        "position": "absolute",
+        "resize": "none",
+        "right": 0,
+        "top": 0,
+        "width": 0,
+        "zIndex": "3"
+      }
+    },
+    "leftPanel": {
+      "bottom": 572,
+      "height": 572,
+      "left": 0,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 250,
+      "top": 0,
+      "width": 250,
+      "zIndex": "5"
+    },
+    "orientationGizmo": {
+      "bottom": 150,
+      "height": 112,
+      "left": 858,
+      "pointerEvents": "none",
+      "position": "absolute",
+      "resize": "none",
+      "right": 970,
+      "top": 38,
+      "width": 112,
+      "zIndex": "6"
+    },
+    "rightPanel": {
+      "bottom": 720,
+      "height": 720,
+      "left": 980,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 1280,
+      "top": 0,
+      "width": 300,
+      "zIndex": "5"
+    },
+    "statusStrip": {
+      "bottom": 572,
+      "height": 27,
+      "left": 250,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 980,
+      "top": 545,
+      "width": 730,
+      "zIndex": "4"
+    },
+    "toolbar": {
+      "bottom": 30,
+      "height": 30,
+      "left": 250,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 980,
+      "top": 0,
+      "width": 730,
+      "zIndex": "4"
+    },
+    "viewport": {
+      "bottom": 720,
+      "height": 720,
+      "left": 0,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 1280,
+      "top": 0,
+      "width": 1280,
+      "zIndex": "auto"
+    },
+    "window": { "height": 720, "width": 1280 }
+  },
+  "materialCount": 1,
+  "meshCount": 1,
+  "nodeObjectCount": 1,
+  "objectHierarchy": [
+    {
+      "assetId": "table",
+      "fallback": null,
+      "helperType": null,
+      "localPosition": [0, 0, 0],
+      "nodeId": "table-1",
+      "parentNodeId": null,
+      "worldPosition": [0, 0, 0]
+    }
+  ],
+  "orbitControls": true,
+  "orientationGizmo": {
+    "animating": false,
+    "axisCount": 6,
+    "clickTargets": [
+      { "view": "right", "x": 94.36886605783752, "y": 62.1929081362391 },
+      { "view": "top", "x": 56.00000007082255, "y": 20.61284848655393 },
+      { "view": "front", "x": 43.2100350271983, "y": 74.57822605540672 },
+      { "view": "left", "x": 17.631133942162492, "y": 49.8070918637609 },
+      { "view": "bottom", "x": 55.999999929177456, "y": 91.38715151344607 },
+      { "view": "back", "x": 68.7899649728017, "y": 37.42177394459328 }
+    ],
+    "draggable": true,
+    "renderer": "shared-webgl",
+    "widget": {
+      "bottom": 150,
+      "height": 112,
+      "left": 858,
+      "pointerEvents": "auto",
+      "position": "absolute",
+      "resize": "none",
+      "right": 970,
+      "top": 38,
+      "width": 112,
+      "zIndex": "1000"
+    },
+    "webgl": true
+  },
+  "renderer": "iwsdk-webgl",
+  "hoverBounds": null,
+  "selectionBounds": {
+    "centerDistance": 0,
+    "helperCenter": [0, 0.25, 0],
+    "nodeId": "table-1",
+    "objectCenter": [0, 0.25, 0]
+  },
+  "selectedRuntime": {
+    "assetStatus": "loaded",
+    "assetUrl": "/assets/table.gltf",
+    "bounds": {
+      "center": [0, 0.25, 0],
+      "max": [1, 0.5, 1],
+      "min": [-1, 0, -1],
+      "size": [2, 0.5, 2]
+    },
+    "componentCount": 1,
+    "components": ["PanelUI"],
+    "fallback": null,
+    "helperType": null,
+    "materialCount": 1,
+    "meshCount": 1,
+    "nodeId": "table-1",
+    "objectCount": 3,
+    "ready": true
+  },
+  "surfacePlacement": {
+    "enabled": false,
+    "lastTargetNodeId": null,
+    "targetNodeId": null
+  },
+  "transformControls": {
+    "attachedNodeId": "table-1",
+    "mode": "translate",
+    "snapping": {
+      "applied": {
+        "rotationSnapDeg": null,
+        "scaleSnap": null,
+        "translationSnap": null
+      },
+      "enabled": false,
+      "rotationDeg": 15,
+      "scale": 0.1,
+      "translation": 0.25
+    },
+    "dragging": false,
+    "space": "local",
+    "visible": true
+  },
+  "uses2DRenderer": false,
+  "webgl": true,
+  "webglContextType": "WebGL2RenderingContext",
+  "worldReady": true
+}

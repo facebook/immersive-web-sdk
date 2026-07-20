@@ -16,7 +16,7 @@ Built on **Three.js**, the most popular JavaScript 3D library, paired with a hig
 
 ### **Developer-First Workflow**
 
-One-command setup gets you running in under a minute. Visual scene composition with **Meta Spatial Editor**, HTML-syntax spatial UI authoring, automated asset optimization, and **built-in emulation**—no VR hardware required to get started.
+One-command setup gets you running in under a minute. Native scene JSON editing, HTML-syntax spatial UI authoring, automated asset optimization, and **built-in emulation**—no VR hardware required to get started.
 
 ### **Production-Ready Systems**
 

@@ -1,0 +1,50 @@
+{
+  "assets": [
+    {
+      "bounds": { "max": [1, 0.5, 1], "min": [-1, 0, -1] },
+      "id": "table",
+      "uri": "/assets/table.gltf"
+    },
+    {
+      "bounds": { "max": [0.1, 0.4, 0.1], "min": [-0.1, 0, -0.1] },
+      "id": "vase",
+      "uri": "/assets/vase.gltf"
+    }
+  ],
+  "nodes": [
+    {
+      "asset": "table",
+      "components": {
+        "com.iwsdk.components.PanelUI": {
+          "props": {
+            "config": "updated-panel.json",
+            "maxHeight": 1,
+            "maxWidth": 2
+          },
+          "type": "PanelUI"
+        },
+        "com.iwsdk.components.Visibility": {
+          "props": { "isVisible": true },
+          "type": "Visibility"
+        }
+      },
+      "id": "table-1",
+      "transform": {
+        "position": [0.35, 0, -0.2],
+        "rotationDeg": [0, 45, 0],
+        "scale": 1.2
+      }
+    },
+    {
+      "asset": "vase",
+      "id": "vase-1",
+      "transform": {
+        "position": [0.4, 0.6, 0.2],
+        "rotationDeg": [0, 330, 0],
+        "scale": 1
+      }
+    }
+  ],
+  "units": "meters",
+  "version": "iwsdk.scene.v1"
+}

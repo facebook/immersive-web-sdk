@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-07-08T22:37:44.885Z",
+  "command": "pnpm test:native-scene-starter-evidence",
+  "files": [
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app.png",
+      "sha256": "a43d65181bea6fe5c341fc9274e4c49b15495c76a36644bf42a0fb25b905a0ad"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-vr/editor.png",
+      "sha256": "ac3fecbf35fa01d0e236ecd19ec1e8b804b72a239cd9fd2a1f2bcd49b8c43100"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app-after-reload.png",
+      "sha256": "db42d5491e55e08f519e1edaa03d8d37542763fa367780835879774b9a2062b8"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-vr/proof.json",
+      "sha256": "5c60242cb8cc6c1cdcc2c09394d38908718dc335ed16741872154cd04db01da3"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app.png",
+      "sha256": "9f0dbf1dee9f1f3c4a189e10c5d7f61a06f8a74ca64368505d4a9f9b86416d0a"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-ar/editor.png",
+      "sha256": "f2d44d83745126f3df6efe2a0d6702404c6ac05e8f0e3e9209486be55a96257f"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app-after-reload.png",
+      "sha256": "b9f4ec5ca8923f5eb6e08050fea39c387f5b387d5f35ddcc0101a0158d7b4eb9"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-ar/proof.json",
+      "sha256": "7efd5a0213f6777e558782888fc0a0fc187cef5f029341bdb69c5fbeeed718dd"
+    }
+  ],
+  "targets": ["generated-vr", "generated-ar"]
+}

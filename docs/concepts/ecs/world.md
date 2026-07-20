@@ -13,7 +13,7 @@ The World is the bridge between:
 - ECS data (entities/components)
 - 3D rendering (Three.js scene/camera/renderer)
 - XR interaction (WebXR session via WebGLRenderer.xr)
-- Content pipeline (asset manager, GLXF levels)
+- Content pipeline (asset manager, native scene JSON)
 
 ```text
 Components ←→ Systems ←→ World ←→ Three.js/XR
@@ -29,7 +29,7 @@ const container = document.getElementById('scene') as HTMLDivElement;
 const world = await World.create(container, {
   xr: { sessionMode: SessionMode.ImmersiveVR },
   features: { enableLocomotion: true, enableGrabbing: true },
-  level: '/glxf/Composition.glxf',
+  level: '/scenes/main.iwsdk.scene.json',
 });
 ```
 
@@ -94,7 +94,9 @@ Within `world.update`, systems run by ascending priority. Use negative prioritie
 ## Levels
 
 ```ts
-await world.loadLevel('/glxf/Cave.glxf');
+await world.loadLevel('/scenes/cave.iwsdk.scene.json');
+await world.loadSceneDocument(sceneDocument);
 ```
 
-The LevelSystem listens for requests and handles the load; when complete the world’s `activeLevel` signal updates.
+The LevelSystem listens for URL or in-memory scene document requests and handles
+the load; when complete the world’s `activeLevel` signal updates.

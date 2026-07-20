@@ -1,0 +1,143 @@
+{
+  "app": {
+    "assets": {
+      "environment-desk": [200, 200, 200, 200],
+      "robot": [200, 200, 200, 200, 200, 200]
+    },
+    "components": {
+      "AudioSource": 3,
+      "LocomotionEnvironment": 1,
+      "PanelUI": 1,
+      "RayInteractable": 4
+    },
+    "hierarchyNameCount": 35,
+    "performance": {
+      "gotoMs": 268,
+      "runtimeReadyMs": 299,
+      "canvasReadyMs": 2,
+      "screenshotCaptureMs": 120
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+      "sampledPixels": 129,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "http://127.0.0.1:49439/",
+  "editor": {
+    "performance": {
+      "gotoMs": 139,
+      "worldReadyMs": 228,
+      "screenshotCaptureMs": 157
+    },
+    "sceneDocument": { "assetCount": 2, "nodeCount": 6 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
+      "sampledPixels": 250,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [
+        {
+          "assetId": "environment-desk",
+          "loadedAt": 1783550268889,
+          "status": "loaded",
+          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
+        },
+        {
+          "assetId": "robot",
+          "loadedAt": 1783550269039,
+          "status": "loaded",
+          "url": "/iwsdk-assets/robot/robot.gltf"
+        }
+      ],
+      "meshCount": 61,
+      "nodeObjectCount": 6,
+      "objectHierarchy": [
+        {
+          "assetId": null,
+          "fallback": "environment-light-helper",
+          "helperType": "environment-light",
+          "localPosition": [0, 0, 0],
+          "nodeId": "level",
+          "parentNodeId": null,
+          "worldPosition": [0, 0, 0]
+        },
+        {
+          "assetId": "environment-desk",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, -0.1069, 0],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "worldPosition": [0, -0.1069, 0]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0.95, -1.8],
+          "nodeId": "robot-center",
+          "parentNodeId": null,
+          "worldPosition": [0, 0.95, -1.8]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-0.5, 0.95, -1.8],
+          "nodeId": "robot-left",
+          "parentNodeId": null,
+          "worldPosition": [-0.5, 0.95, -1.8]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.5, 0.95, -1.8],
+          "nodeId": "robot-right",
+          "parentNodeId": null,
+          "worldPosition": [0.5, 0.95, -1.8]
+        },
+        {
+          "assetId": null,
+          "fallback": "no-gltf-asset",
+          "helperType": null,
+          "localPosition": [0, 1.6, -2.2],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "worldPosition": [0, 1.6, -2.2]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 268,
+      "runtimeReadyMs": 299,
+      "canvasReadyMs": 2,
+      "screenshotCaptureMs": 120
+    },
+    "editor": {
+      "gotoMs": 139,
+      "worldReadyMs": 228,
+      "screenshotCaptureMs": 157
+    },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 3714
+  },
+  "scene": "public/scenes/audio.iwsdk.scene.json",
+  "target": "audio"
+}

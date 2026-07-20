@@ -273,7 +273,7 @@ const container = document.getElementById('scene') as HTMLDivElement;
 const world = await World.create(container, {
   xr: { sessionMode: SessionMode.ImmersiveVR },
   features: { enableLocomotion: true, enableGrabbing: true },
-  level: '/glxf/Composition.glxf',
+  level: '/scenes/main.iwsdk.scene.json',
 });
 ```
 
@@ -281,7 +281,8 @@ Useful world helpers:
 
 - `createTransformEntity(object?, parentOrOptions?)` — create an entity plus `object3D` with a parent.
 - `getActiveRoot()` / `getPersistentRoot()` — use for attaching Three.js nodes.
-- `loadLevel(url)` — request a GLXF level; LevelSystem performs the work.
+- `loadLevel(url)` — request a scene JSON or legacy level file; LevelSystem performs the work.
+- `loadSceneDocument(document)` — request an in-memory scene JSON document through the same LevelSystem path.
 
 ## Real-World Example: Interactive VR Objects
 

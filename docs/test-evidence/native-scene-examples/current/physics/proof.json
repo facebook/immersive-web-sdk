@@ -1,0 +1,143 @@
+{
+  "app": {
+    "assets": {
+      "environment-desk": [200, 200, 200, 200],
+      "plant-sansevieria": [200, 200, 200, 200],
+      "robot": [200, 200, 200, 200, 200, 200]
+    },
+    "components": {
+      "DistanceGrabbable": 3,
+      "LocomotionEnvironment": 1,
+      "OneHandGrabbable": 1,
+      "PhysicsBody": 5,
+      "PhysicsShape": 5,
+      "RayInteractable": 4
+    },
+    "hierarchyNameCount": 35,
+    "performance": {
+      "gotoMs": 332,
+      "runtimeReadyMs": 81,
+      "canvasReadyMs": 3,
+      "screenshotCaptureMs": 125
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+      "sampledPixels": 97,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "http://127.0.0.1:49639/",
+  "editor": {
+    "performance": {
+      "gotoMs": 146,
+      "worldReadyMs": 286,
+      "screenshotCaptureMs": 125
+    },
+    "sceneDocument": { "assetCount": 3, "nodeCount": 2 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
+      "sampledPixels": 250,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [
+        {
+          "assetId": "environment-desk",
+          "loadedAt": 1783550276361,
+          "status": "loaded",
+          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
+        },
+        {
+          "assetId": "robot",
+          "loadedAt": 1783550276246,
+          "status": "loaded",
+          "url": "/iwsdk-assets/robot/robot.gltf"
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "loadedAt": 1783550276217,
+          "status": "loaded",
+          "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
+        }
+      ],
+      "meshCount": 42,
+      "nodeObjectCount": 5,
+      "objectHierarchy": [
+        {
+          "assetId": "environment-desk",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, -0.1069, 0],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "worldPosition": [0, -0.1069, 0]
+        },
+        {
+          "assetId": null,
+          "fallback": "no-gltf-asset",
+          "helperType": null,
+          "localPosition": [0, 0, 0],
+          "nodeId": "spawnable-objects",
+          "parentNodeId": null,
+          "worldPosition": [0, 0, 0]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0.9455, 2],
+          "nodeId": "robot",
+          "parentNodeId": "spawnable-objects",
+          "worldPosition": [0, 0.9455, 2]
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-1, 1.4114, 1.5066],
+          "nodeId": "plant",
+          "parentNodeId": "spawnable-objects",
+          "worldPosition": [-1, 1.4114, 1.5066]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [1, 0.8207, 0.9333],
+          "nodeId": "robot-one-hand",
+          "parentNodeId": "spawnable-objects",
+          "worldPosition": [1, 0.8207, 0.9333]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 332,
+      "runtimeReadyMs": 81,
+      "canvasReadyMs": 3,
+      "screenshotCaptureMs": 125
+    },
+    "editor": {
+      "gotoMs": 146,
+      "worldReadyMs": 286,
+      "screenshotCaptureMs": 125
+    },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 3592
+  },
+  "scene": "public/scenes/physics.iwsdk.scene.json",
+  "target": "physics"
+}

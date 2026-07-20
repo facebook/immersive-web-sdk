@@ -1,0 +1,135 @@
+name: Native Scene Editor
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-scene-editor.yml'
+      - 'docs/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'packages/cli/**'
+      - 'packages/core/**'
+      - 'packages/create/**'
+      - 'packages/example-assets/**'
+      - 'packages/scene-composition/**'
+      - 'packages/starter-assets/**'
+      - 'packages/vite-plugin-dev/**'
+      - 'pnpm-lock.yaml'
+      - 'scripts/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/native-scene-editor.yml'
+      - 'docs/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'packages/cli/**'
+      - 'packages/core/**'
+      - 'packages/create/**'
+      - 'packages/example-assets/**'
+      - 'packages/scene-composition/**'
+      - 'packages/starter-assets/**'
+      - 'packages/vite-plugin-dev/**'
+      - 'pnpm-lock.yaml'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  editor-e2e:
+    name: Editor E2E and release gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: 'pnpm'
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @iwsdk/vite-plugin-dev exec playwright install --with-deps chromium
+
+      - name: Run native editor browser tests
+        env:
+          IWSDK_EDITOR_E2E_EVIDENCE_DIR: docs/test-evidence/native-scene-editor/current
+        run: pnpm --filter @iwsdk/vite-plugin-dev test
+
+      - name: Verify MCP and docs contract
+        run: pnpm test:canonical-mcp-surface
+
+      - name: Check migrated native scene examples
+        run: pnpm test:native-scene-examples
+
+      - name: Collect native scene render proof
+        run: pnpm test:native-scene-render-proof
+
+      - name: Verify native scene editor evidence
+        run: pnpm test:native-scene-editor-evidence
+
+      - name: Verify manual smoke evidence validator
+        run: pnpm test:native-scene-manual-smoke-validator
+
+      - name: Audit legacy editor removal
+        run: pnpm test:metaspatial-removal
+
+      - name: Upload native scene editor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: ignore
+          name: native-scene-editor-evidence
+          path: |
+            docs/test-evidence/native-scene-editor/current
+            docs/test-evidence/native-scene-examples/current
+
+  generated-starters:
+    name: Generated starter app/editor evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: 'pnpm'
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @iwsdk/vite-plugin-dev exec playwright install --with-deps chromium
+
+      - name: Run generated starter install/build/dev-server E2E
+        run: pnpm test:create-flow-e2e
+
+      - name: Verify generated starter evidence
+        run: pnpm test:native-scene-starter-evidence
+
+      - name: Upload generated starter evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: ignore
+          name: native-scene-starter-evidence
+          path: docs/test-evidence/native-scene-starters/current

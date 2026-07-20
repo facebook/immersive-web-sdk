@@ -10,7 +10,8 @@ IWSDK's AI integration supports three modes, each tailored to a different develo
 
 **Config:** `ai: { mode: 'agent' }` (default)
 
-The AI works autonomously in a headless Playwright browser while you develop in your normal browser. This is the default and most common mode.
+The AI works autonomously in a headless Playwright-managed workspace while you
+develop in your normal browser. This is the default and most common mode.
 
 | Setting        | Value                                       |
 | -------------- | ------------------------------------------- |
@@ -37,15 +38,23 @@ export default defineConfig({
 
 ### How it works
 
-The Playwright browser runs headlessly with a fixed viewport matching your `screenshotSize`. Screenshots are captured at exactly that resolution — no resizing needed. This keeps token usage predictable.
+The Playwright browser opens the managed IWSDK workspace at
+`/__iwsdk/workspace` and runs headlessly with a fixed viewport matching your
+`screenshotSize`. Screenshots are captured at exactly that resolution — no
+resizing needed. This keeps token usage predictable.
 
-Your normal browser opens separately with its own XR session. It always has DevUI enabled so you can manually interact with the emulated XR runtime. The two sessions are independent.
+Your normal browser opens separately on the runtime app. It always has DevUI
+enabled so you can manually interact with the emulated XR runtime. Normal
+browsers do not mount the native editor; the editor is owned by the managed
+workspace.
 
 ## Oversight Mode
 
 **Config:** `ai: { mode: 'oversight' }`
 
-The Playwright browser is visible so you can watch the AI agent operate in real time. Useful when you want to see what the agent is doing without interfering.
+The Playwright-managed workspace is visible so you can watch the AI agent
+operate in real time. Useful when you want to see runtime, editor, or split view
+without interfering.
 
 | Setting        | Value                                             |
 | -------------- | ------------------------------------------------- |
@@ -78,7 +87,10 @@ Since the viewport is freely resizable, screenshots may be larger than needed. I
 
 **Config:** `ai: { mode: 'collaborate' }`
 
-You and the AI share the same Playwright browser session. DevUI is enabled so you can use it to position controllers, adjust transforms, and interact with the emulated XR runtime — then ask the agent to observe, learn, or continue from where you left off.
+You and the AI share the same Playwright-managed workspace. DevUI is enabled so
+you can use runtime controls, switch to the native editor, adjust scene
+composition, and then ask the agent to observe, learn, or continue from where
+you left off.
 
 | Setting        | Value                                             |
 | -------------- | ------------------------------------------------- |
@@ -109,9 +121,38 @@ Same as oversight mode — screenshots are downscaled to fit within `screenshotS
 
 ## Per-Session DevUI
 
-Any non-Playwright browser tab you open manually will always show DevUI, regardless of mode. The mode's DevUI setting only controls whether DevUI appears in the Playwright-managed browser.
+Any non-Playwright browser tab you open manually will always show DevUI,
+regardless of mode. The mode's DevUI setting only controls whether DevUI appears
+in the Playwright-managed workspace.
 
-In agent mode, a normal browser opens automatically via `server.open`, so you get DevUI there by default. In oversight and collaborate modes, Playwright is the visible browser and `server.open` is suppressed — but if you navigate to the dev server URL in a separate browser window, that tab will still have DevUI enabled.
+In agent mode, a normal browser opens automatically via `server.open`, so you
+get DevUI there by default. In oversight and collaborate modes, Playwright is the
+visible browser and `server.open` is suppressed — but if you navigate to the dev
+server URL in a separate browser window, that tab still opens the runtime app
+with DevUI enabled.
+
+## Workspace-Only Mode
+
+You can launch the managed workspace without declaring an AI mode:
+
+```typescript
+import { defineConfig } from 'vite';
+import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
+
+export default defineConfig({
+  plugins: [
+    iwsdkDev({
+      workspace: { enabled: true },
+    }),
+  ],
+});
+```
+
+This is useful for manual native scene editing. The managed Playwright browser
+opens the workspace, normal browsers remain runtime app browsers, and no AI mode
+is reported for the session. Set `workspace.open: false` when you want the
+workspace/MCP server available but do not want to launch the browser at dev
+server startup.
 
 ## Settings Matrix
 
@@ -131,10 +172,19 @@ interface AiOptions {
   tools?: AiTool[]; // default: ['claude']
   screenshotSize?: { width?: number; height?: number }; // default: 800x800
 }
+
+interface WorkspaceOptions {
+  enabled?: boolean; // default: false unless ai is configured
+  open?: boolean; // default: true
+  headless?: boolean; // default: false for workspace-only
+  screenshotSize?: { width?: number; height?: number }; // default: 800x800
+}
 ```
 
 - **`mode`** — Selects the usage mode. All internal settings (headless, devUI, viewport, server.open) are derived from the mode.
 - **`tools`** — Which AI tools to generate MCP config files for. Options: `'claude'`, `'cursor'`, `'copilot'`, `'codex'`.
 - **`screenshotSize`** — In agent mode, this sets the Playwright viewport directly. In oversight/collaborate, screenshots are downscaled to fit within this bounding box. If only one dimension is provided, the other mirrors it (producing a square).
+- **`workspace`** — Enables the managed runtime/editor/split workspace without
+  requiring an AI mode. AI configuration implies `workspace.enabled`.
 
-Omit `ai` entirely to disable all AI features (no Playwright, no MCP configs).
+Omit both `ai` and `workspace` to disable managed Playwright/MCP features.

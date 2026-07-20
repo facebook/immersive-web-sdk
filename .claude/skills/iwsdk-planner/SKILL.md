@@ -1187,11 +1187,10 @@ my-iwsdk-project/
 ├── public/
 │   ├── gltf/                 # 3D models
 │   ├── audio/                # Audio files
-│   ├── glxf/                 # Generated scene files
+│   ├── scenes/               # Native IWSDK scene JSON files
 │   └── ui/                   # Compiled UI configs
 ├── ui/
 │   └── *.uikitml             # UI markup source
-├── metaspatial/              # Meta Spatial Editor project
 ├── vite.config.ts
 └── package.json
 ```

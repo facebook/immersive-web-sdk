@@ -17,13 +17,13 @@ Use this file as a compact start-here index. The full skill is authoritative whe
 
 ```bash
 # VR game
-npx @iwsdk/create@0.4.1 my-iwsdk-app --yes --mode vr --physics --grabbing --no-metaspatial
+npx @iwsdk/create@0.4.2 my-iwsdk-app --yes --mode vr --physics --grabbing
 
 # AR app
-npx @iwsdk/create@0.4.1 my-ar-app --yes --mode ar --physics --scene-understanding --no-metaspatial
+npx @iwsdk/create@0.4.2 my-ar-app --yes --mode ar --physics --scene-understanding
 
 # Browser-first 3D app
-npx @iwsdk/create@0.4.1 my-browser-app --yes --no-xr --physics --no-metaspatial
+npx @iwsdk/create@0.4.2 my-browser-app --yes --no-xr --physics
 ```
 
 Choose flags based on the requested experience. For browser-first apps, add browser locomotion and camera controls in application code when needed.
@@ -55,6 +55,14 @@ npx iwsdk ecs step --count 1
 npx iwsdk ecs snapshot --label after
 npx iwsdk ecs diff --from before --to after
 ```
+
+For declarative scene composition, prefer the native editor tools when the MCP
+runtime exposes them: `scene_list_assets`, `scene_add_node`,
+`scene_set_transform`, `scene_place_on`, `scene_look_at`, `scene_set_camera`,
+`scene_screenshot`, `scene_compare_screenshots`, `scene_validate`, and
+`scene_save`. Use current/top/front/side or quarter screenshots before saving
+when alignment or on-surface placement matters; use `scene_screenshot` with
+`{"view":"orbit","orbitStep":N}` for deterministic orbit angles.
 
 For XR interactions:
 

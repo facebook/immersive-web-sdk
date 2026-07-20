@@ -1,0 +1,142 @@
+{
+  "app": {
+    "assets": {
+      "environment-desk": [200, 200, 200, 200],
+      "plant-sansevieria": [200, 200, 200, 200],
+      "robot": [200, 200, 200, 200, 200, 200]
+    },
+    "components": {
+      "DistanceGrabbable": 2,
+      "LocomotionEnvironment": 1,
+      "OneHandGrabbable": 1,
+      "RayInteractable": 5,
+      "TwoHandsGrabbable": 1
+    },
+    "hierarchyNameCount": 35,
+    "performance": {
+      "gotoMs": 262,
+      "runtimeReadyMs": 68,
+      "canvasReadyMs": 47,
+      "screenshotCaptureMs": 112
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+      "sampledPixels": 82,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "http://127.0.0.1:49515/",
+  "editor": {
+    "performance": {
+      "gotoMs": 152,
+      "worldReadyMs": 232,
+      "screenshotCaptureMs": 135
+    },
+    "sceneDocument": { "assetCount": 3, "nodeCount": 5 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
+      "sampledPixels": 250,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [
+        {
+          "assetId": "environment-desk",
+          "loadedAt": 1783550272647,
+          "status": "loaded",
+          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
+        },
+        {
+          "assetId": "robot",
+          "loadedAt": 1783550272709,
+          "status": "loaded",
+          "url": "/iwsdk-assets/robot/robot.gltf"
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "loadedAt": 1783550272522,
+          "status": "loaded",
+          "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
+        }
+      ],
+      "meshCount": 42,
+      "nodeObjectCount": 5,
+      "objectHierarchy": [
+        {
+          "assetId": "environment-desk",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, -0.1069, 0],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "worldPosition": [0, -0.1069, 0]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0.95, -2],
+          "nodeId": "robot-distance-grab",
+          "parentNodeId": null,
+          "worldPosition": [0, 0.95, -2]
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.65, 0.95, -1.65],
+          "nodeId": "plant-one-hand",
+          "parentNodeId": null,
+          "worldPosition": [0.65, 0.95, -1.65]
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [1.05, 0.95, -1.65],
+          "nodeId": "plant-two-hands",
+          "parentNodeId": null,
+          "worldPosition": [1.05, 0.95, -1.65]
+        },
+        {
+          "assetId": "robot",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-0.7, 0.95, -1.65],
+          "nodeId": "robot-rotate-only",
+          "parentNodeId": null,
+          "worldPosition": [-0.7, 0.95, -1.65]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 262,
+      "runtimeReadyMs": 68,
+      "canvasReadyMs": 47,
+      "screenshotCaptureMs": 112
+    },
+    "editor": {
+      "gotoMs": 152,
+      "worldReadyMs": 232,
+      "screenshotCaptureMs": 135
+    },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 3496
+  },
+  "scene": "public/scenes/grab.iwsdk.scene.json",
+  "target": "grab"
+}

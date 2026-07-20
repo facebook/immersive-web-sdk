@@ -34,6 +34,7 @@ function loadVersion() {
 export default defineConfig({
   // Build static site even if some cross-package API links are unresolved in early builds
   ignoreDeadLinks: true,
+  srcExclude: ['plans/**'],
   lang: 'en-US',
   title: 'Immersive Web SDK',
   description:
@@ -141,8 +142,12 @@ gtag('config', 'G-V03QDNGKY3');`,
           text: 'Advanced Guides',
           items: [
             {
-              text: '09 · Meta Spatial Editor',
-              link: '/guides/09-meta-spatial-editor',
+              text: '09 · Native Scene Editor',
+              link: '/guides/09-native-scene-editor',
+            },
+            {
+              text: '09a · Native Scene Migration',
+              link: '/guides/09-native-scene-migration',
             },
             {
               text: '10 · Spatial UI with UIKitML',

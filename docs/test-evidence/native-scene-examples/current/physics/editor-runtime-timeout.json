@@ -1,0 +1,24 @@
+{
+  "badResponses": [],
+  "consoleErrors": [
+    "[LevelSystem] Failed to load level SyntaxError: Unexpected token '<', \"<!-- \n  Co\"... is not valid JSON",
+    "[PanelUISystem] Error loading panel for entity 13: SyntaxError: Unexpected token '<', \"<!-- \n  Co\"... is not valid JSON"
+  ],
+  "failedRequests": [],
+  "pageState": {
+    "bodyText": "",
+    "canvasCount": 1,
+    "hasFrameworkRuntime": true,
+    "href": "http://127.0.0.1:53791/__iwsdk/workspace?scene=public%2Fscenes%2Fphysics.iwsdk.scene.json",
+    "readyState": "complete",
+    "title": "IWSDK Physics Example",
+    "windowKeys": [
+      "___FONT_AWESOME___",
+      "__THREE__IWER__",
+      "__THREE__",
+      "__zod_globalConfig",
+      "__zod_globalRegistry",
+      "FRAMEWORK_MCP_RUNTIME"
+    ]
+  }
+}

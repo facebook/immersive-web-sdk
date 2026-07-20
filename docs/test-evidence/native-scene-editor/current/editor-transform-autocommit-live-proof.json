@@ -1,0 +1,22 @@
+{
+  "before": {
+    "documentPosition": [0, 0.95, -2],
+    "runtime": {
+      "position": [0, 0.95, -2],
+      "rotationDeg": [0, 0, 0],
+      "scale": [0.5, 0.5, 0.5]
+    }
+  },
+  "after": {
+    "dirty": true,
+    "documentPosition": [0.17, 0.95, -2],
+    "runtime": {
+      "position": [0.17, 0.95, -2],
+      "rotationDeg": [0, 0, 0],
+      "scale": [0.5, 0.5, 0.5]
+    },
+    "transformMessage": ""
+  },
+  "expectedX": 0.17,
+  "screenshotPath": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-editor/current/editor-transform-autocommit-live-proof.png"
+}

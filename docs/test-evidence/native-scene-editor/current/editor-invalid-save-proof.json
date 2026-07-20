@@ -1,0 +1,16 @@
+{
+  "status": "Error | Cannot save invalid scene: node \"robot-distance-grab\" references unknown component \"MissingComponent\" on node \"robot-distance-grab\"",
+  "dirty": "Unsaved changes",
+  "validation": {
+    "valid": false,
+    "issues": [
+      {
+        "message": "node \"robot-distance-grab\" references unknown component \"MissingComponent\"",
+        "nodeId": "robot-distance-grab",
+        "path": "$.nodes[1].components[\"MissingComponent\"]",
+        "suggestedFix": "Register \"MissingComponent\" as an app-specific component for the editor session or remove/rename the component payload."
+      }
+    ]
+  },
+  "screenshotPath": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-editor/current/editor-invalid-save-proof.png"
+}

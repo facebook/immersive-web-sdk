@@ -11,3 +11,8 @@ pnpm-workspace.yaml
 **/metaspatial/
 **/metaspatial-vr/
 **/metaspatial-ar/
+packages/example-assets/assets/
+packages/reference-assets/data/
+packages/reference-assets/dist-tools/
+packages/xr-input/src/gamepad/generated-profiles.ts
+package-lock.json

@@ -43,7 +43,6 @@ For guides, concepts, and API reference, visit: **[https://iwsdk.dev](https://iw
 | [@iwsdk/vite-plugin-dev](./packages/vite-plugin-dev)                       | XR emulation, AI agent tooling, and dev browser   |
 | [@iwsdk/vite-plugin-gltf-optimizer](./packages/vite-plugin-gltf-optimizer) | GLTF/GLB optimization during build                |
 | [@iwsdk/vite-plugin-uikitml](./packages/vite-plugin-uikitml)               | UIKitML to JSON compiler for spatial UI           |
-| [@iwsdk/vite-plugin-metaspatial](./packages/vite-plugin-metaspatial)       | Meta Spatial Editor integration                   |
 
 ### Internal Packages
 

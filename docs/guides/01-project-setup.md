@@ -31,9 +31,9 @@ Before we begin, make sure you have:
 
 - **A WebXR-compatible headset** (Meta Quest, HTC Vive, etc.) for testing your experience immersively. While not strictly required thanks to IWER (our WebXR emulator), having a physical headset provides the best testing experience.
 
-### Meta Spatial Editor (Optional)
+### Native Scene Editor (Optional)
 
-**For this tutorial, we recommend skipping Meta Spatial Editor integration.** You can build amazing WebXR experiences purely with code, which is what we'll teach you in this guide. If you're interested in visual scene composition tools later, check out [Chapter 9: Meta Spatial Editor](./09-meta-spatial-editor.md) after completing the core tutorial.
+IWSDK includes a native scene JSON workflow for visual scene composition. This tutorial starts with code so you can learn the runtime fundamentals first. If you want to place assets visually later, continue with [Chapter 9: Native Scene Editor](./09-native-scene-editor.md) after completing the core tutorial.
 
 ## Creating Your First Project
 
@@ -167,17 +167,9 @@ Physics simulation adds realistic object behavior (gravity, collisions, etc.).
 
 Default is **No** because physics adds complexity. You can enable it later if needed.
 
-### Meta Spatial Editor Integration
+### Scene Composition
 
-```
-Enable Meta Spatial Editor integration?
-❯ No (Can change later)
-  Yes (Additional software required)
-```
-
-**Choose "No" for this tutorial.** This keeps your setup simple and lets you learn IWSDK's core concepts through code. You'll create and position 3D objects entirely through code, which gives you complete control and is perfect for learning the fundamentals.
-
-If you're interested in visual scene composition tools later, you can explore [Chapter 9: Meta Spatial Editor](./09-meta-spatial-editor.md) after completing the main tutorial.
+New projects include native scene JSON under `public/scenes/`. You can load that scene directly from `World.create`, edit it through the development editor, or keep building entities in code when procedural behavior is a better fit.
 
 ### Development Setup
 

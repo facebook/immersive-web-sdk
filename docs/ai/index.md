@@ -4,14 +4,14 @@ outline: [2, 4]
 
 # AI-Native Development
 
-IWSDK is built from the ground up for AI-assisted immersive web development. AI agents can see, interact with, and debug your WebXR experience through 32 [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) tools — screenshots, controller input, scene inspection, ECS (Entity-Component-System) debugging, and more.
+IWSDK is built from the ground up for AI-assisted immersive web development. AI agents can see, interact with, compose, and debug your WebXR experience through 52 [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) tools — screenshots, controller input, native scene composition, scene inspection, ECS (Entity-Component-System) debugging, and more.
 
 ## How It Works
 
 When you enable AI in your Vite config and start the app through the `iwsdk` CLI, the stack sets up three things automatically:
 
 1. **[Playwright](https://playwright.dev/) Browser** — A managed Chromium instance that loads your app and provides screenshots and console capture for the AI agent.
-2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 32 tools for controlling the emulated XR runtime, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
+2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 52 tools for controlling the emulated XR runtime, composing native scenes, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
 3. **MCP Config Files** — `iwsdk adapter sync` writes workspace-based config files (for example `.mcp.json` for Claude) so your AI tool discovers that server on startup.
 
 ```text
@@ -79,5 +79,5 @@ See [MCP Tools Reference](./mcp-tools) for the complete list.
 
 - [Getting Started](./getting-started) — Set up AI in 5 minutes
 - [Modes](./modes) — Understand agent, oversight, and collaborate
-- [MCP Tools Reference](./mcp-tools) — All 32 tools documented
+- [MCP Tools Reference](./mcp-tools) — All 52 tools documented
 - [Workflows](./workflows) — Practical agent workflow patterns

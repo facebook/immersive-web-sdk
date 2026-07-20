@@ -9,7 +9,7 @@ description: >
 
 # IWSDK Development Guide
 
-**Current version: 0.4.1** · [iwsdk.dev](https://iwsdk.dev) · [GitHub](https://github.com/facebook/immersive-web-sdk)
+**Current version: 0.4.2** · [iwsdk.dev](https://iwsdk.dev) · [GitHub](https://github.com/facebook/immersive-web-sdk)
 
 This guide is for AI agents and developers building WebXR or browser-first 3D
 applications with IWSDK in cloud/headless Linux environments (no physical GPU,
@@ -40,12 +40,6 @@ interactive prompts.
 
 **Do not hardcode scaffolding flags.** Infer the correct flags from the
 request. When ambiguous, ask.
-
-### Hard Constraints (Always Apply)
-
-- **`--no-metaspatial`** — use the manual workflow in cloud/headless Linux.
-  Meta Spatial Editor authoring requires the macOS/Windows GUI; the Linux CLI is
-  for CI/CD build workflows, not GUI authoring.
 
 ### Step 1: XR vs Browser-First
 
@@ -83,13 +77,13 @@ request. When ambiguous, ask.
 
 ```bash
 # VR game (stationary, physics for gameplay)
-npx @iwsdk/create@0.4.1 space-pong --yes --mode vr --physics --no-locomotion --grabbing --no-metaspatial
+npx @iwsdk/create@0.4.2 space-pong --yes --mode vr --physics --no-locomotion --grabbing
 
 # AR object placer
-npx @iwsdk/create@0.4.1 ar-placer --yes --mode ar --physics --scene-understanding --no-metaspatial
+npx @iwsdk/create@0.4.2 ar-placer --yes --mode ar --physics --scene-understanding
 
 # Browser-first 3D game (no headset). Add browser locomotion/camera controls in code.
-npx @iwsdk/create@0.4.1 browser-game --yes --no-xr --physics --no-metaspatial
+npx @iwsdk/create@0.4.2 browser-game --yes --no-xr --physics
 ```
 
 ---
@@ -415,6 +409,25 @@ npx iwsdk scene hierarchy
 npx iwsdk scene hierarchy --input-json '{"maxDepth":3}'
 npx iwsdk scene transform --input-json '{"uuid":"<uuid>"}'
 ```
+
+### Native Scene Composition Tools
+
+When MCP tools are available, use the native editor-targeted scene composition
+tools instead of direct scene-file edits for declarative placement:
+
+`scene_list_assets`, `scene_get_document`, `scene_get_hierarchy`,
+`scene_get_selection`, `scene_select`, `scene_add_node`, `scene_remove_node`,
+`scene_duplicate_node`, `scene_set_transform`, `scene_apply_patch`,
+`scene_place_on`, `scene_look_at`, `scene_validate`, `scene_save`,
+`scene_undo`, `scene_redo`, `scene_get_logs`, `scene_set_camera`, and
+`scene_screenshot`, and `scene_compare_screenshots`.
+
+For visual verification, call `scene_set_camera` or `scene_screenshot` with
+named views such as `current`, `top`, `front`, `back`, `left`, `right`,
+`quarter`, and `orbit`. Pass `orbitStep` or `step` with `orbit` for
+deterministic 45-degree increments around the scene. Use multiple angles before
+saving when checking symmetry, alignment, and whether objects are actually
+resting on a surface.
 
 ### ECS Inspection
 

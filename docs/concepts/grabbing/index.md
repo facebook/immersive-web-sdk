@@ -128,7 +128,7 @@ The grabbing system integrates with multiple IWSDK systems:
 
 - **Input System** — Automatic sub-pointer management and event routing
 - **Physics System** — Grabbable objects maintain physics properties during manipulation
-- **Spatial Editor** — Visual component assignment through Meta Spatial Editor interface
+- **Native Scene Editor** — Visual placement and component assignment through the IWSDK editor
 - **Interaction System** — Works with `Interactable`, `Hovered`, and `Pressed` components
 
 ## Next Steps
