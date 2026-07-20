@@ -30,7 +30,7 @@ const assets: AssetManifest = {
     priority: 'background',
   },
   environmentDesk: {
-    url: './gltf/environmentDesk/environmentDesk.gltf',
+    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
   },

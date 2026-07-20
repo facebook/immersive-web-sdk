@@ -12,7 +12,7 @@ import { RaycastPlantSystem } from './raycast-plant.js';
 
 const assets: AssetManifest = {
   plantSansevieria: {
-    url: './gltf/plantSansevieria/plantSansevieria.gltf',
+    url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
   },

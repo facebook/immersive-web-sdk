@@ -45,12 +45,12 @@ const assets: AssetManifest = {
     priority: 'critical',
   },
   environmentDesk: {
-    url: './gltf/environmentDesk/environmentDesk.gltf',
+    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
   },
   robot: {
-    url: './gltf/robot/robot.gltf',
+    url: '/iwsdk-assets/robot/robot.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
   },

@@ -22,12 +22,14 @@ environment-raycast/
 ├── ui/
 │   └── welcome.uikitml    # Welcome panel UI definition
 ├── public/
-│   └── gltf/
-│       └── plantSansevieria/  # Plant 3D model
+│   └── ui/                # Compiled UI output
 ├── index.html             # HTML entry point
 ├── vite.config.ts         # Vite build configuration
 └── package.json           # Dependencies
 ```
+
+The plant model is served from the shared `@iwsdk/example-assets` catalog at
+`/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf`.
 
 ## Quick Start
 

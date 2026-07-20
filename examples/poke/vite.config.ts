@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
@@ -23,6 +24,7 @@ export default defineConfig({
       ai: { mode: 'agent', screenshotSize: { width: 500, height: 500 } },
       verbose: true,
     }),
+    iwsdkExampleAssets({ assetIds: ['environment-desk', 'robot'] }),
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
     optimizeGLTF({
       level: 'medium',

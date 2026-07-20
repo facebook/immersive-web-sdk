@@ -43,6 +43,7 @@ function makeFakeSource(packageMap: Record<string, string>): ResolvedSource {
     fetchIndex: async () => [],
     fetchRecipe: async () => ({ name: 'fake' }),
     getPackageInstallSpec: (name: string) => packageMap[name],
+    getPackageInstallSpecs: () => packageMap,
     downloadPackages: async () => {},
     resolveRecipeUrls: (recipe) => recipe,
     cleanup: async () => {},
@@ -148,6 +149,33 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.dependencies['@iwsdk/core']).toBe(
       'file:.sdk-packages/core/iwsdk-core.tgz',
     );
+  });
+
+  it('adds bundle overrides for transitive @iwsdk/* packages without conflicting with direct deps', async () => {
+    const source = makeFakeSource({
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+      '@iwsdk/vite-plugin-dev':
+        'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
+    });
+
+    await installDependenciesFromBundle(tmpDir, source);
+
+    const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf-8'));
+    expect(pkg.dependencies['@iwsdk/core']).toBe(
+      'file:.sdk-packages/core/iwsdk-core.tgz',
+    );
+    expect(pkg.devDependencies['@iwsdk/cli']).toBe(
+      'file:.sdk-packages/cli/iwsdk-cli.tgz',
+    );
+    expect(pkg.overrides).toMatchObject({
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+    });
+    expect(pkg.overrides).not.toHaveProperty('@iwsdk/cli');
+    expect(pkg.overrides).not.toHaveProperty('@iwsdk/core');
   });
 
   it('does NOT restore package.json after install failure', async () => {

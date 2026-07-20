@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
@@ -22,6 +23,7 @@ export default defineConfig({
       ai: { mode: 'collaborate', screenshotSize: { width: 500, height: 500 } },
       verbose: true,
     }),
+    iwsdkExampleAssets({ assetIds: ['environment-desk'] }),
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
   ],
   server: { host: '0.0.0.0' },

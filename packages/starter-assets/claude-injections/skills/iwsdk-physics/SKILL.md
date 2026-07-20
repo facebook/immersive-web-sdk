@@ -21,7 +21,7 @@ const world = await World.create(container, {
     grabbing: true, // Required if physics objects should be grabbable
     locomotion: true, // Requires collision geometry in the scene
   },
-  level: './glxf/Composition.glxf',
+  level: './scenes/physics.iwsdk.scene.json',
 });
 ```
 
@@ -427,43 +427,48 @@ physicsSystem.config.gravity.value = [0, -1.62, 0]; // Moon gravity
 physicsSystem.config.gravity.value = [0, 0, 0]; // Zero gravity
 ```
 
-## GLXF / Editor Configuration
+## Native Scene JSON Configuration
 
-Physics components can be configured declaratively in GLXF scene files (exported by Meta Spatial Editor):
+Physics components can be configured declaratively in native scene JSON files:
 
 ```json
 {
-  "com.iwsdk.components.PhysicsShape": {
-    "shape": { "alias": "Auto", "value": 6 },
-    "dimensions": { "value": [0, 0, 0] },
-    "density": { "value": 1.0 },
-    "friction": { "value": 0.5 },
-    "restitution": { "value": 0.0 }
-  },
-  "com.iwsdk.components.PhysicsBody": {
-    "state": { "alias": "DYNAMIC", "value": 1 },
-    "gravityFactor": { "value": 1.0 },
-    "linearDamping": { "value": 0.0 },
-    "angularDamping": { "value": 0.0 }
+  "id": "dynamic-box",
+  "asset": "box",
+  "transform": { "position": [0, 1.5, -1] },
+  "components": {
+    "PhysicsShape": {
+      "shape": "Box",
+      "dimensions": [1, 1, 1],
+      "density": 1,
+      "friction": 0.5,
+      "restitution": 0
+    },
+    "PhysicsBody": {
+      "state": "DYNAMIC",
+      "gravityFactor": 1,
+      "linearDamping": 0,
+      "angularDamping": 0
+    }
   }
 }
 ```
 
-**State enum values in GLXF:**
+**State enum values in scene JSON:**
 
-- `0` = STATIC
-- `1` = DYNAMIC
-- `2` = KINEMATIC
+- `STATIC`
+- `DYNAMIC`
+- `KINEMATIC`
 
-**Shape enum values in GLXF:**
+**Shape enum values in scene JSON:**
 
-- `0` = Sphere
-- `1` = Box
-- `2` = Cylinder
-- `3` = Capsules
-- `4` = ConvexHull
-- `5` = TriMesh
-- `6` = Auto
+- `Sphere`
+- `Box`
+- `Cylinder`
+- `Capsules`
+- `ConvexHull`
+- `TriMesh`
+- `Auto`
 
 ## Troubleshooting
 

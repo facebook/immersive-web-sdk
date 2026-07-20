@@ -1,8 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture2
-    com.meta.components.Texture:
-      image: ref:Robot_mat_ORM
-metadata:
-  version: 1.33

@@ -5,20 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
-/* @template:if kind='metaspatial' */
-import {
-  discoverComponents,
-  generateGLXF,
-} from '@iwsdk/vite-plugin-metaspatial';
-/* @template:end */
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
 
+const useMkcert = process.env.IWSDK_DISABLE_MKCERT !== '1';
+
 export default defineConfig({
   plugins: [
-    mkcert(),
+    ...(useMkcert ? [mkcert()] : []),
     iwsdkDev({
       emulator: {
         device: 'metaQuest3',
@@ -33,20 +30,9 @@ export default defineConfig({
       ai: { mode: 'agent' },
       verbose: true,
     }),
-    /* @template:if kind='metaspatial' */
-    discoverComponents({
-      outputDir: 'metaspatial/components',
-      include: /\.(js|ts|jsx|tsx)$/,
-      exclude: /node_modules/,
-      verbose: false,
+    iwsdkExampleAssets({
+      assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
     }),
-    generateGLXF({
-      metaSpatialDir: 'metaspatial',
-      outputDir: 'public/glxf',
-      verbose: false,
-      enableWatcher: true,
-    }),
-    /* @template:end */
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
   ],
   server: { host: '0.0.0.0', port: 8081, open: true },

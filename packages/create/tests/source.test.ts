@@ -65,6 +65,10 @@ describe('NpmSource', () => {
     expect(source.getPackageInstallSpec('anything')).toBeUndefined();
   });
 
+  it('getPackageInstallSpecs returns an empty map', () => {
+    expect(source.getPackageInstallSpecs()).toEqual({});
+  });
+
   it('prepare() is a no-op', async () => {
     await expect(source.prepare()).resolves.toBeUndefined();
   });
@@ -270,6 +274,17 @@ describe('BundleSource', () => {
     await source.prepare();
     expect(source.getPackageInstallSpec('@iwsdk/unknown')).toBeUndefined();
     expect(source.getPackageInstallSpec('three')).toBeUndefined();
+  });
+
+  it('getPackageInstallSpecs() returns every package from the manifest', async () => {
+    setupManifestFetch();
+    const source = new BundleSource('https://example.com/bundle');
+    await source.prepare();
+    expect(source.getPackageInstallSpecs()).toEqual({
+      '@iwsdk/cli': `file:${SDK_PACKAGES_DIR}/cli/iwsdk-cli.tgz`,
+      '@iwsdk/core': `file:${SDK_PACKAGES_DIR}/core/iwsdk-core.tgz`,
+      '@iwsdk/starter-assets': `file:${SDK_PACKAGES_DIR}/starter-assets/iwsdk-starter-assets.tgz`,
+    });
   });
 
   it('cleanup() is a no-op', async () => {

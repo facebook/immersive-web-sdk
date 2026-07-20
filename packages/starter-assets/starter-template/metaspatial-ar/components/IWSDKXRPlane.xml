@@ -1,3 +1,0 @@
-<ComponentSchema packageName="com.iwsdk.components">
-  <Component name="XRPlane" description="Component for managing 3D planes in the scene"/>
-</ComponentSchema>

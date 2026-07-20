@@ -1,0 +1,126 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "assets": [
+    {
+      "id": "environment-desk",
+      "name": "Environment Desk",
+      "type": "gltf",
+      "uri": "/iwsdk-assets/environment-desk/environmentDesk.gltf",
+      "bounds": {
+        "min": [-862.1762084960938, -704.1123046875, -423.6421203613281],
+        "max": [862.17626953125, 871.5792236328125, 117.95475769042969]
+      }
+    },
+    {
+      "id": "robot",
+      "name": "Robot",
+      "type": "gltf",
+      "uri": "/iwsdk-assets/robot/robot.gltf",
+      "bounds": {
+        "min": [-29.710256576538086, -22.996440887451172, -73.18901824951172],
+        "max": [29.710256576538086, 68.02915954589844, 28.88426399230957]
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "level",
+      "name": "Level",
+      "components": {
+        "DomeGradient": {},
+        "IBLGradient": {}
+      }
+    },
+    {
+      "id": "environment",
+      "name": "Environment",
+      "asset": "environment-desk",
+      "transform": {
+        "position": [0, -0.106921583, 0],
+        "rotationDeg": [0, 180, 0]
+      },
+      "components": {
+        "LocomotionEnvironment": {}
+      }
+    },
+    {
+      "id": "robot-center",
+      "name": "Robot Center",
+      "asset": "robot",
+      "transform": {
+        "position": [0, 0.95, -1.8],
+        "scale": 0.5
+      },
+      "components": {
+        "AudioSource": {
+          "src": "./audio/beepboop.mp3",
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      }
+    },
+    {
+      "id": "robot-left",
+      "name": "Robot Left",
+      "asset": "robot",
+      "transform": {
+        "position": [-0.5, 0.95, -1.8],
+        "scale": 0.5
+      },
+      "components": {
+        "AudioSource": {
+          "src": "./audio/beepboop.mp3",
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5,
+          "playbackMode": "fade-restart"
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      }
+    },
+    {
+      "id": "robot-right",
+      "name": "Robot Right",
+      "asset": "robot",
+      "transform": {
+        "position": [0.5, 0.95, -1.8],
+        "scale": 0.5
+      },
+      "components": {
+        "AudioSource": {
+          "src": "./audio/beepboop.mp3",
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5,
+          "playbackMode": "overlap"
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "transform": {
+        "position": [0, 1.6, -2.2],
+        "scale": [1.8, 1, 1]
+      },
+      "components": {
+        "PanelUI": {
+          "config": "./ui/welcome.json"
+        },
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "top": "20px",
+          "left": "20px",
+          "height": "40%"
+        }
+      }
+    }
+  ]
+}

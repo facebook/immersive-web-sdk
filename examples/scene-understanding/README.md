@@ -35,7 +35,7 @@ scene-understanding/
 └── package.json          # Project dependencies
 ```
 
-**Note**: This example focuses on code-based AR scene understanding and doesn't require static assets or Meta Spatial project files.
+**Note**: This example focuses on code-based AR scene understanding and doesn't require static scene assets.
 
 ## 🚀 Quick Start
 

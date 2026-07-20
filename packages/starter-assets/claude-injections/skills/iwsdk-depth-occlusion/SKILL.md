@@ -22,7 +22,7 @@ World.create(container, {
     features: {
       depthSensing: {
         required: true,
-        usage: 'gpu-optimized',  // or 'cpu-optimized'
+        usage: 'gpu-optimized', // or 'cpu-optimized'
         format: 'float32',
       },
       hitTest: { required: true },
@@ -73,26 +73,26 @@ The material must have `transparent: true`. The system sets this automatically, 
 
 ## Occlusion Modes
 
-| Mode | Quality | Cost | Best For |
-|------|---------|------|----------|
-| `SoftOcclusion` | Good | Low | Most objects — smooth edges, hides depth aliasing |
-| `HardOcclusion` | Basic | Lowest | Small objects or when sharp edges are acceptable |
-| `MinMaxSoftOcclusion` | Best | Medium | Large objects with complex silhouettes against varied backgrounds |
+| Mode                  | Quality | Cost   | Best For                                                          |
+| --------------------- | ------- | ------ | ----------------------------------------------------------------- |
+| `SoftOcclusion`       | Good    | Low    | Most objects — smooth edges, hides depth aliasing                 |
+| `HardOcclusion`       | Basic   | Lowest | Small objects or when sharp edges are acceptable                  |
+| `MinMaxSoftOcclusion` | Best    | Medium | Large objects with complex silhouettes against varied backgrounds |
 
 ## DepthSensingSystem Config
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `enableOcclusion` | Boolean | `true` | Master switch for all occlusion |
-| `enableDepthTexture` | Boolean | `true` | Create GPU textures from depth data |
-| `useFloat32` | Boolean | `true` | Float32 depth textures (higher precision) |
-| `blurRadius` | Float32 | `20.0` | Blur radius for soft occlusion (pixels) |
+| Property             | Type    | Default | Description                               |
+| -------------------- | ------- | ------- | ----------------------------------------- |
+| `enableOcclusion`    | Boolean | `true`  | Master switch for all occlusion           |
+| `enableDepthTexture` | Boolean | `true`  | Create GPU textures from depth data       |
+| `useFloat32`         | Boolean | `true`  | Float32 depth textures (higher precision) |
+| `blurRadius`         | Float32 | `20.0`  | Blur radius for soft occlusion (pixels)   |
 
 ## Depth Sensing Modes
 
-| Mode | When to use |
-|------|------------|
-| `cpu-optimized` | Simpler, works everywhere. Depth as linear meters in a DataArrayTexture. |
+| Mode            | When to use                                                                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cpu-optimized` | Simpler, works everywhere. Depth as linear meters in a DataArrayTexture.                                                                                                                                        |
 | `gpu-optimized` | **Recommended.** Matches Quest hardware format. Depth as reverse-Z inverse depth in an ExternalTexture. Required for production parity with on-device behavior. Note that Quest devices only support this mode. |
 
 ## AR Session Requirements
@@ -106,15 +106,18 @@ scene.background = null;
 ## Troubleshooting
 
 **Objects never occlude (always visible on top)**
+
 - Verify the entity has `DepthOccludable` component
 - Verify `DepthSensingSystem` is registered with `enableOcclusion: true`
 - Check that `depthSensing` is in the XR features config
 
 **Objects always invisible in IWER**
+
 - In the IWER emulator, the SEM must have loaded environment geometry. If no room is loaded, no depth data is produced.
 - Check the console for "Warning: depth-sensing feature not enabled"
 
 **Flickering or noisy occlusion edges**
+
 - Increase `blurRadius` (try 30-40)
 - Switch from `HardOcclusion` to `SoftOcclusion`
 - Use `MinMaxSoftOcclusion` for best edge quality

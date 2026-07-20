@@ -73,6 +73,7 @@ export async function installDependenciesFromBundle(
   try {
     // Rewrite @iwsdk/* deps to file: paths in both dependencies and devDependencies
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const directDependencyNames = new Set<string>();
     for (const depsKey of ['dependencies', 'devDependencies'] as const) {
       const deps = pkg[depsKey];
       if (!deps) {
@@ -80,12 +81,32 @@ export async function installDependenciesFromBundle(
       }
       for (const name of Object.keys(deps)) {
         if (name.startsWith('@iwsdk/')) {
+          directDependencyNames.add(name);
           const spec = source.getPackageInstallSpec(name);
           if (spec) {
             deps[name] = spec;
           }
         }
       }
+    }
+    const allPackageSpecs = source.getPackageInstallSpecs();
+    const bundleOverrides: Record<string, string> = {};
+    for (const [name, spec] of Object.entries(allPackageSpecs)) {
+      if (!directDependencyNames.has(name)) {
+        bundleOverrides[name] = spec;
+      }
+    }
+    if (Object.keys(bundleOverrides).length > 0) {
+      const existingOverrides =
+        pkg.overrides != null &&
+        typeof pkg.overrides === 'object' &&
+        !Array.isArray(pkg.overrides)
+          ? pkg.overrides
+          : {};
+      pkg.overrides = {
+        ...existingOverrides,
+        ...bundleOverrides,
+      };
     }
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 

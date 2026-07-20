@@ -1,0 +1,108 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "assets": [
+    {
+      "id": "environment-desk",
+      "name": "Environment Desk",
+      "type": "gltf",
+      "uri": "/iwsdk-assets/environment-desk/environmentDesk.gltf",
+      "bounds": {
+        "min": [-862.1762084960938, -704.1123046875, -423.6421203613281],
+        "max": [862.17626953125, 871.5792236328125, 117.95475769042969]
+      }
+    },
+    {
+      "id": "plant-sansevieria",
+      "name": "Plant Sansevieria",
+      "type": "gltf",
+      "uri": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf",
+      "bounds": {
+        "min": [-0.14591170847415924, -0.0010799765586853027, -0.18947772681713104],
+        "max": [0.14463400840759277, 0.4789590835571289, 0.13743270933628082]
+      }
+    },
+    {
+      "id": "robot",
+      "name": "Robot",
+      "type": "gltf",
+      "uri": "/iwsdk-assets/robot/robot.gltf",
+      "bounds": {
+        "min": [-29.710256576538086, -22.996440887451172, -73.18901824951172],
+        "max": [29.710256576538086, 68.02915954589844, 28.88426399230957]
+      }
+    }
+  ],
+  "componentSchemas": [
+    {
+      "id": "Robot",
+      "source": "app",
+      "fields": {}
+    }
+  ],
+  "nodes": [
+    {
+      "id": "environment",
+      "name": "Environment",
+      "asset": "environment-desk",
+      "transform": {
+        "position": [0, -0.106921583, 0],
+        "rotationDeg": [0, 180, 0]
+      },
+      "components": {
+        "LocomotionEnvironment": {}
+      }
+    },
+    {
+      "id": "plant-sansevieria",
+      "name": "Plant Sansevieria",
+      "asset": "plant-sansevieria",
+      "transform": {
+        "position": [1.2, 0.85, -1.8]
+      },
+      "components": {
+        "RayInteractable": {},
+        "DistanceGrabbable": {
+          "movementMode": "MoveFromTarget"
+        }
+      }
+    },
+    {
+      "id": "robot",
+      "name": "Robot",
+      "asset": "robot",
+      "transform": {
+        "position": [-1.2, 0.95, -1.8],
+        "scale": 0.5
+      },
+      "components": {
+        "AudioSource": {
+          "src": "/audio/chime.mp3",
+          "maxInstances": 3,
+          "playbackMode": "fade-restart"
+        },
+        "RayInteractable": {},
+        "Robot": {}
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "transform": {
+        "position": [0, 1.6, -2],
+        "scale": [1.8, 1, 1]
+      },
+      "components": {
+        "PanelUI": {
+          "config": "./ui/welcome.json"
+        },
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "top": "20px",
+          "left": "20px",
+          "height": "40%"
+        }
+      }
+    }
+  ]
+}

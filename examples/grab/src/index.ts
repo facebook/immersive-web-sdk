@@ -40,7 +40,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       handTracking: { required: true },
     },
   },
-  level: './glxf/Composition.glxf',
+  level: './scenes/grab.iwsdk.scene.json',
   features: {
     grabbing: { useHandPinchForGrab: true },
     locomotion: true,

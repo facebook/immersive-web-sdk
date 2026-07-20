@@ -1,9 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture5
-    com.meta.components.Texture:
-      image: ref:Earth_01_Earth_BaseColor
-      sampler: ref:sampler0
-metadata:
-  version: 1.34

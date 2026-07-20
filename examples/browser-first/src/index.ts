@@ -47,7 +47,7 @@ const BALL_RADIUS = 0.18;
 
 const assets: AssetManifest = {
   environmentDesk: {
-    url: './gltf/environmentDesk/environmentDesk.gltf',
+    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
   },

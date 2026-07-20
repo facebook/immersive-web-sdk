@@ -36,8 +36,7 @@ The CLI will guide you through:
 3. **Platform** - VR (Virtual Reality) or AR (Augmented Reality)
 4. **XR Features** - Hand tracking, layers, anchors, hit-test, plane/mesh detection (tri-state: No/Optional/Required)
 5. **SDK Features** - Locomotion (VR), Scene Understanding (AR), Grabbing, Physics
-6. **Meta Spatial Editor** - Optional visual scene authoring integration
-7. **Git & Install** - Initialize git repo and install dependencies
+6. **Git & Install** - Initialize git repo and install dependencies
 
 ## What You Get
 
@@ -47,7 +46,7 @@ A fully configured project with:
 - 🎮 **WebXR Emulator** - Develop without VR hardware
 - 📦 **GLTF Optimization** - Automatic asset compression
 - 🔒 **HTTPS** - Required for WebXR, auto-configured
-- 🏗️ **Meta Spatial Editor** - Visual scene authoring (optional)
+- 🧩 **Native scene workflow** - IWSDK scene JSON and editor tooling
 
 ## Example
 
@@ -67,7 +66,6 @@ Node v20.19.0
 ? Deploy locomotion engine on a Worker? › Yes (recommended)
 ? Enable grabbing (one/two-hand, distance)? › Yes
 ? Enable physics simulation (Havok)? › No
-? Enable Meta Spatial Editor integration? › No (Can change later)
 ? Set up a Git repository? › Yes
 ? Install dependencies now? › Yes
 ```
@@ -81,30 +79,30 @@ npm create @iwsdk@latest my-app
 # Skip all prompts and use defaults
 npm create @iwsdk@latest my-app -- -y
 
-# Use custom CDN for recipes/assets
-npm create @iwsdk@latest -- --assets-base https://my-cdn.com/iwsdk
+# Use canary SDK bundle
+npm create @iwsdk@latest -- --canary
 ```
 
-| Flag                  | Description                                              |
-| --------------------- | -------------------------------------------------------- |
-| `[name]`              | Project name (first positional argument)                 |
-| `-y, --yes`           | Skip prompts and use defaults (VR + TypeScript + manual) |
-| `--assets-base <url>` | Custom CDN base URL for recipes and assets               |
+| Flag           | Description                              |
+| -------------- | ---------------------------------------- |
+| `[name]`       | Project name (first positional argument) |
+| `-y, --yes`    | Skip prompts and use defaults (VR + TS)  |
+| `--canary`     | Use the default canary SDK bundle        |
+| `--canary URL` | Use a custom HTTP(S) SDK bundle          |
 
 ## Generated Templates
 
 Based on your choices, one of these variants is generated:
 
-| Template ID         | Description                           |
-| ------------------- | ------------------------------------- |
-| `vr-manual-ts`      | VR + TypeScript + code-only scene     |
-| `vr-manual-js`      | VR + JavaScript + code-only scene     |
-| `vr-metaspatial-ts` | VR + TypeScript + Meta Spatial Editor |
-| `vr-metaspatial-js` | VR + JavaScript + Meta Spatial Editor |
-| `ar-manual-ts`      | AR + TypeScript + code-only scene     |
-| `ar-manual-js`      | AR + JavaScript + code-only scene     |
-| `ar-metaspatial-ts` | AR + TypeScript + Meta Spatial Editor |
-| `ar-metaspatial-js` | AR + JavaScript + Meta Spatial Editor |
+| Template ID    | Description                       |
+| -------------- | --------------------------------- |
+| `vr-manual-ts` | VR + TypeScript + native workflow |
+| `vr-manual-js` | VR + JavaScript + native workflow |
+| `ar-manual-ts` | AR + TypeScript + native workflow |
+| `ar-manual-js` | AR + JavaScript + native workflow |
+
+The scaffolded project includes native scene JSON under `public/scenes/` and is
+ready for declarative scene authoring through the IWSDK managed workspace.
 
 ## Requirements
 

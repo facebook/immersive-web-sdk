@@ -6,15 +6,7 @@
  */
 
 import prompts from 'prompts';
-import { MSE_MIN_VERSION } from './mse-config.js';
-import { installMSE } from './mse-installer.js';
-import {
-  MSEInstallResult,
-  PromptResult,
-  TriState,
-  VariantId,
-  AiTool,
-} from './types.js';
+import { PromptResult, TriState, VariantId, AiTool } from './types.js';
 
 export async function promptFlow(
   nameArg?: string,
@@ -306,43 +298,6 @@ export async function promptFlow(
 
   // UI library selection removed (no-op currently)
 
-  // Meta Spatial Editor is only available as a GUI app on macOS/Windows.
-  // On Linux, skip the prompt and default to manual workflow.
-  const isLinux = process.platform !== 'darwin' && process.platform !== 'win32';
-  let metaspatial = false;
-  if (!isLinux) {
-    const metaAnswer = await prompts(
-      {
-        type: 'select',
-        name: 'metaspatialChoice',
-        message: 'Enable Meta Spatial Editor integration?',
-        choices: [
-          {
-            title: 'Yes (Install Meta Spatial Editor if needed)',
-            value: true,
-          },
-          { title: 'Skip for now (can change later)', value: false },
-        ],
-        initial: 1,
-      },
-      { onCancel },
-    );
-    metaspatial = !!metaAnswer.metaspatialChoice;
-  }
-
-  let mseInstallResult: MSEInstallResult | undefined;
-
-  if (metaspatial) {
-    mseInstallResult = await installMSE();
-
-    if (mseInstallResult.manual || mseInstallResult.outdated) {
-      prerequisites.push({
-        level: 'important',
-        message: `Required: Install Meta Spatial Editor (v${MSE_MIN_VERSION} or later). The build pipeline depends on its CLI tool; without it, build or dev WILL FAIL. Download: https://developers.meta.com/horizon/documentation/spatial-sdk/spatial-editor-overview`,
-      });
-    }
-  }
-
   const { gitInit, installNow } = await prompts(
     [
       {
@@ -370,13 +325,11 @@ export async function promptFlow(
     throw new Error('Input cancelled');
   }
 
-  const kind = metaspatial ? 'metaspatial' : 'manual';
-  const id = `${mode}-${kind}-${language}` as VariantId;
+  const id = `${mode}-manual-${language}` as VariantId;
   return {
     name,
     id,
     installNow,
-    metaspatial,
     xrEnabled,
     mode,
     language,
@@ -394,6 +347,5 @@ export async function promptFlow(
     xrFeatureStates,
     actionItems,
     prerequisites,
-    mseInstallResult,
   };
 }

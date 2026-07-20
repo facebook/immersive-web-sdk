@@ -61,7 +61,4 @@ coverage/
 .vscode/mcp.json
 .codex/config.toml
 
-# Meta Spatial Editor exports
-public/gltf/generated/
-public/glxf/
 public/ui/

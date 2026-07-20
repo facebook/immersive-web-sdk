@@ -1,0 +1,55 @@
+{
+  "name": "@iwsdk/example-assets",
+  "version": "0.4.2",
+  "description": "Shared IWSDK example asset catalog and copy helpers",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    }
+  },
+  "files": [
+    "assets",
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "format": "prettier --write ./src/**/* ./tests/**/*",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "keywords": [
+    "webxr",
+    "iwsdk",
+    "examples",
+    "assets",
+    "gltf"
+  ],
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
+  }
+}

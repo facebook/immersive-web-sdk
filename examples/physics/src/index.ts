@@ -38,7 +38,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     sessionMode: SessionMode.ImmersiveVR,
     features: { handTracking: true },
   },
-  level: './glxf/Composition.glxf',
+  level: './scenes/physics.iwsdk.scene.json',
   features: {
     grabbing: true,
     locomotion: true,
@@ -67,7 +67,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     dimensions: [0.2, 0.2, 0.2],
   });
   entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  entity.addComponent(PhysicsManipulation, { force: [0.1, 0.1, -.1] });
+  entity.addComponent(PhysicsManipulation, { force: [0.1, 0.1, -0.1] });
 
   const cylinderRadius = 0.15;
   const cylinderHeight = 0.4;

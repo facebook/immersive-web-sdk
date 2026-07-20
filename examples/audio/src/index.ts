@@ -37,7 +37,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       handTracking: { required: true },
     },
   },
-  level: './glxf/Composition.glxf',
+  level: './scenes/audio.iwsdk.scene.json',
   features: {
     locomotion: true,
     spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },

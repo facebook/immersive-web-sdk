@@ -1,9 +1,0 @@
-entities:
-  components:
-    com.meta.components.Name:
-      name: texture3
-    com.meta.components.Texture:
-      image: ref:white_rubber_normal_v2
-      sampler: ref:sampler0
-metadata:
-  version: 1.33

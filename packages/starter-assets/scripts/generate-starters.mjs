@@ -7,7 +7,7 @@
  */
 
 /**
- * Generate 8 starter variants (TS + JS) from the starter template.
+ * Generate 4 native-scene starter variants (TS + JS) from the starter template.
  * Outputs to variants-src/ and formats files with Prettier.
  */
 import fs from 'fs';
@@ -27,30 +27,10 @@ const VARIANTS = [
   {
     key: 'vr-manual',
     outName: 'starter-vr-manual-ts',
-    metaspatialSourceDir: null,
-    removePublicGltf: false,
-    removeEnvDesk: false,
   },
   {
     key: 'ar-manual',
     outName: 'starter-ar-manual-ts',
-    metaspatialSourceDir: null,
-    removePublicGltf: false,
-    removeEnvDesk: true,
-  },
-  {
-    key: 'vr-metaspatial',
-    outName: 'starter-vr-metaspatial-ts',
-    metaspatialSourceDir: 'metaspatial-vr',
-    removePublicGltf: true,
-    removeEnvDesk: false,
-  },
-  {
-    key: 'ar-metaspatial',
-    outName: 'starter-ar-metaspatial-ts',
-    metaspatialSourceDir: 'metaspatial-ar',
-    removePublicGltf: true,
-    removeEnvDesk: false,
   },
 ];
 
@@ -120,23 +100,26 @@ function readTemplate() {
   );
 }
 
-function removeBlock(s, startTag, endTag) {
-  const re = new RegExp(
-    `${startTag.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}[\\s\\S]*?${endTag.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}`,
-    'g',
-  );
-  return s.replace(re, '');
+function applyTemplateBlocks(source, { mode }) {
+  let result = source;
+  let previous;
+  do {
+    previous = result;
+    result = result.replace(
+      /\/\*\s*@template:if\s+mode='(ar|vr)'\s*\*\/([\s\S]*?)\/\*\s*@template:else\s*\*\/([\s\S]*?)\/\*\s*@template:end\s*\*\//g,
+      (_match, expectedMode, whenTrue, whenFalse) =>
+        mode === expectedMode ? whenTrue : whenFalse,
+    );
+    result = result.replace(
+      /\/\*\s*@template:if\s+mode='(ar|vr)'\s*\*\/([\s\S]*?)\/\*\s*@template:end\s*\*\//g,
+      (_match, expectedMode, body) => (mode === expectedMode ? body : ''),
+    );
+  } while (result !== previous);
+  return result;
 }
 
-function removeLineMarkers(s, tagPrefix) {
-  const re = new RegExp(`^.*${tagPrefix}.*$\\n?`, 'gm');
-  return s.replace(re, '');
-}
-
-function composeIndexTs({ mode, metaspatial }) {
+function composeIndexTs({ mode }) {
   const isAR = mode === 'ar';
-  const isVR = mode === 'vr';
-  const isMeta = Boolean(metaspatial);
   let t = readTemplate();
 
   // Session mode & offer
@@ -145,104 +128,20 @@ function composeIndexTs({ mode, metaspatial }) {
     `SessionMode.Immersive${isAR ? 'AR' : 'VR'}`,
   );
 
-  // Level line
-  if (isMeta)
-    t = t.replace('// @level-line', `level: '/glxf/Composition.glxf',`);
-  else t = removeLineMarkers(t, '@level-line');
-
-  // Feature defaults (valid TS; Chef replaces at recipe time)
-  const appLocomotion = isAR ? 'false' : 'true';
-  t = t.replace(
-    /features:\s*\{\s*enableGrabbing:\s*true,\s*enableLocomotion:\s*(true|false)\s*\}\s*,\s*\/\/\s*@app-features-line/,
-    `features: { enableGrabbing: true, enableLocomotion: ${appLocomotion} }, // @app-features-line`,
-  );
-
-  // Imports
-  if (!isMeta) {
-    if (!isVR)
-      t = removeBlock(
-        t,
-        '// @import-manual-vr-start',
-        '// @import-manual-vr-end',
-      );
-  } else {
-    t = removeBlock(t, '// @import-manual-start', '// @import-manual-end');
-    t = removeBlock(
-      t,
-      '// @import-manual-vr-start',
-      '// @import-manual-vr-end',
-    );
-  }
-  t = removeLineMarkers(t, '@import-manual');
-
-  // Assets
-  if (isMeta) {
-    t = removeBlock(t, '// @assets-manual-start', '// @assets-manual-end');
-  } else {
-    t = removeBlock(
-      t,
-      '// @assets-metaspatial-start',
-      '// @assets-metaspatial-end',
-    );
-    if (!isVR)
-      t = removeBlock(t, '// @assets-envdesk-start', '// @assets-envdesk-end');
-  }
-  t = removeLineMarkers(t, '@assets-');
-
-  // Camera blocks
-  if (isAR) t = removeBlock(t, '// @camera-vr-start', '// @camera-vr-end');
-  else t = removeBlock(t, '// @camera-ar-start', '// @camera-ar-end');
-  t = removeLineMarkers(t, '@camera-');
-
-  // Scene blocks
-  if (isMeta) {
-    t = removeBlock(t, '// @manual-scene-start', '// @manual-scene-end');
-  } else {
-    if (isAR) {
-      t = removeBlock(
-        t,
-        '// @manual-scene-vr-start',
-        '// @manual-scene-vr-end',
-      );
-      t = removeBlock(t, '// @envdesk-scene-start', '// @envdesk-scene-end');
-    } else {
-      t = removeBlock(
-        t,
-        '// @manual-scene-ar-start',
-        '// @manual-scene-ar-end',
-      );
-    }
-  }
-  t = removeLineMarkers(t, '@manual-scene');
-  t = removeLineMarkers(t, '@envdesk-scene');
-
   // Clean up excess blank lines
+  t = applyTemplateBlocks(t, { mode });
   t = t.replace(/\n{3,}/g, '\n\n');
   return t;
 }
 
-async function adjustPackageJson(destRoot, name, isMetaspatial, isJS) {
+async function adjustPackageJson(destRoot, name, isJS) {
   const p = path.join(destRoot, 'package.json');
   const pkg = await readJSON(p);
   pkg.name = `@iwsdk/${name}`;
   if (pkg.scripts) {
-    delete pkg.scripts['dev:metaspatial'];
-    delete pkg.scripts['build:metaspatial'];
     if (isJS) delete pkg.scripts.typecheck;
   }
   if (isJS && pkg.devDependencies) delete pkg.devDependencies.typescript;
-  pkg.devDependencies = pkg.devDependencies || {};
-  if (isMetaspatial) {
-    if (!pkg.devDependencies['@iwsdk/vite-plugin-metaspatial']) {
-      try {
-        const basePkg = await readJSON(path.join(STARTER_DIR, 'package.json'));
-        const val = basePkg.devDependencies?.['@iwsdk/vite-plugin-metaspatial'];
-        if (val) pkg.devDependencies['@iwsdk/vite-plugin-metaspatial'] = val;
-      } catch {}
-    }
-  } else {
-    delete pkg.devDependencies['@iwsdk/vite-plugin-metaspatial'];
-  }
   await writeJSON(p, pkg);
 }
 
@@ -338,30 +237,15 @@ function readViteTemplate() {
   );
 }
 
-function pruneViteTemplate(t, { mode, metaspatial }) {
+function pruneViteTemplate(t, { mode }) {
   const isAR = mode === 'ar';
-  const isMeta = Boolean(metaspatial);
   const removeBlock = (s, a, b) =>
     s.replace(new RegExp(`${a}[\\s\\S]*?${b}`, 'g'), '');
   const removeLinesWith = (s, tag) =>
     s.replace(new RegExp(`^.*${tag}.*$\\n?`, 'gm'), '');
-  if (!isMeta) {
-    t = removeBlock(
-      t,
-      '// @import-metaspatial-start',
-      '// @import-metaspatial-end',
-    );
-    t = removeBlock(
-      t,
-      '// @metaspatial-plugins-start',
-      '// @metaspatial-plugins-end',
-    );
-  }
   if (!isAR) t = removeBlock(t, '// @iwer-sem-ar-start', '// @iwer-sem-ar-end');
-  t = removeLinesWith(t, '@import-metaspatial');
-  t = removeLinesWith(t, '@metaspatial-plugins');
   t = removeLinesWith(t, '@iwer-sem-ar');
-  return t;
+  return applyTemplateBlocks(t, { mode });
 }
 
 async function generateTsVariant(v) {
@@ -377,13 +261,11 @@ async function generateTsVariant(v) {
   });
   const viteComposed = pruneViteTemplate(readViteTemplate(), {
     mode: v.key.startsWith('ar') ? 'ar' : 'vr',
-    metaspatial: v.metaspatialSourceDir != null,
   });
   const cfgDst = path.join(dest, 'vite.config.ts');
   await fsp.writeFile(cfgDst, viteComposed);
   const composed = composeIndexTs({
     mode: v.key.startsWith('ar') ? 'ar' : 'vr',
-    metaspatial: v.metaspatialSourceDir != null,
   });
   const indexDst = path.join(dest, 'src', 'index.ts');
   await ensureDir(path.dirname(indexDst));
@@ -393,32 +275,10 @@ async function generateTsVariant(v) {
   const entries = await fsp.readdir(dir).catch(() => []);
   await Promise.all(
     entries
-      .filter((n) => /^index-(vr|ar)-(manual|metaspatial)\.ts$/.test(n))
+      .filter((n) => /^index-(vr|ar)-manual\.ts$/.test(n))
       .map((n) => removeIfExists(path.join(dir, n))),
   );
   await removeIfExists(path.join(dest, 'src', 'index.template.ts'));
-  // Move metaspatial dir into common location, prune the other one
-  if (v.metaspatialSourceDir) {
-    const srcDir = path.join(dest, v.metaspatialSourceDir);
-    const dstDir = path.join(dest, 'metaspatial');
-    try {
-      await removeIfExists(dstDir);
-      await fsp.rename(srcDir, dstDir);
-    } catch {}
-    const other =
-      v.metaspatialSourceDir === 'metaspatial-vr'
-        ? 'metaspatial-ar'
-        : 'metaspatial-vr';
-    await removeIfExists(path.join(dest, other));
-  } else {
-    await removeIfExists(path.join(dest, 'metaspatial-vr'));
-    await removeIfExists(path.join(dest, 'metaspatial-ar'));
-    await removeIfExists(path.join(dest, 'metaspatial'));
-  }
-  if (v.removePublicGltf)
-    await removeIfExists(path.join(dest, 'public', 'gltf'));
-  else if (v.removeEnvDesk)
-    await removeIfExists(path.join(dest, 'public', 'gltf', 'environmentDesk'));
   await cleanTsconfig(dest);
   try {
     const readmePath = path.join(dest, 'README.md');
@@ -427,8 +287,7 @@ async function generateTsVariant(v) {
     const rd2 = rd.replace(/- Entry point is[\s\S]*?\n/, entryNote + '\n');
     await fsp.writeFile(readmePath, rd2);
   } catch {}
-  const isMetaspatial = Boolean(v.metaspatialSourceDir);
-  await adjustPackageJson(dest, v.outName, isMetaspatial, false);
+  await adjustPackageJson(dest, v.outName, false);
   await removeLocksAndNodeModules(dest);
   await formatTree(dest);
   return dest;
@@ -439,14 +298,16 @@ async function generateJsVariant(tsDir, tsName) {
   const out = path.join(OUT_ROOT, jsName);
   await transpileDir(tsDir, out);
   await removeIfExists(path.join(out, 'src', 'index.template.js'));
-  await adjustPackageJson(out, jsName, /-metaspatial-/.test(jsName), true);
+  await adjustPackageJson(out, jsName, true);
   await removeLocksAndNodeModules(out);
   await formatTree(out);
   return out;
 }
 
 async function main() {
-  console.log('🧩 Generating starter variants (assets package)...');
+  console.log(
+    '🧩 Generating native scene starter variants (assets package)...',
+  );
   if (!fs.existsSync(STARTER_DIR)) {
     console.error(
       'starter-template/ not found inside @iwsdk/starter-assets package',
@@ -459,7 +320,7 @@ async function main() {
     await generateJsVariant(tsDir, v.outName);
     console.log(`  • ${v.outName} and ${v.outName.replace(/-ts$/, '-js')}`);
   }
-  console.log('✅ Done generating 8 variants.');
+  console.log('✅ Done generating 4 variants.');
 }
 
 main().catch((err) => {

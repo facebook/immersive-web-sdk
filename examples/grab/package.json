@@ -23,9 +23,9 @@
   },
   "devDependencies": {
     "@iwsdk/cli": "file:../../packages/cli/iwsdk-cli.tgz",
+    "@iwsdk/example-assets": "file:../../packages/example-assets/iwsdk-example-assets.tgz",
     "@iwsdk/vite-plugin-gltf-optimizer": "file:../../packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz",
     "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
-    "@iwsdk/vite-plugin-metaspatial": "file:../../packages/vite-plugin-metaspatial/iwsdk-vite-plugin-metaspatial.tgz",
     "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",
     "@types/three": "^0.178.1",
     "typescript": "^5.5.0",

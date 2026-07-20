@@ -21,22 +21,10 @@ import {
   printNextSteps,
   printPrerequisites,
 } from './installer.js';
-import { MSE_MIN_VERSION } from './mse-config.js';
-import {
-  detectMSEVersion,
-  detectPlatform,
-  isVersionSufficient,
-} from './mse-installer.js';
 import { promptFlow } from './prompts.js';
 import { scaffoldProject } from './scaffold.js';
 import { resolveSource, SDK_PACKAGES_DIR } from './source.js';
-import {
-  MSEInstallResult,
-  PromptResult,
-  TriState,
-  VariantId,
-  AiTool,
-} from './types.js';
+import { PromptResult, TriState, VariantId, AiTool } from './types.js';
 import { VERSION, NODE_ENGINE } from './version.js';
 
 type CliOptions = {
@@ -45,7 +33,6 @@ type CliOptions = {
   mode?: 'vr' | 'ar';
   language?: 'ts' | 'js';
   xr?: boolean;
-  metaspatial?: boolean;
   install?: boolean;
   git?: boolean;
   locomotion?: boolean;
@@ -109,8 +96,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--language <lang>', 'Language: ts or js', 'ts')
     .option('--xr', 'Enable XR support', true)
     .option('--no-xr', 'Disable XR support for a browser-only 3D project')
-    .option('--metaspatial', 'Use Meta Spatial Editor workflow', false)
-    .option('--no-metaspatial', 'Use manual workflow (default)')
     .option('--install', 'Install dependencies after scaffolding', true)
     .option('--no-install', 'Skip dependency installation')
     .option('--git', 'Initialize git repository', true)
@@ -186,8 +171,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     const explicitFlags = [
       '--mode',
       '--language',
-      '--metaspatial',
-      '--no-metaspatial',
       '--install',
       '--no-install',
       '--git',
@@ -222,20 +205,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       const mode = (cliOpts.mode || 'vr') as 'vr' | 'ar';
       const language = (cliOpts.language || 'ts') as 'ts' | 'js';
       const xrEnabled = cliOpts.xr ?? true;
-      const metaspatial = cliOpts.metaspatial ?? false;
-
-      // Meta Spatial Editor is only available as a GUI app on macOS/Windows.
-      // The Linux CLI can build metaspatial projects but cannot author content.
-      if (metaspatial && detectPlatform() === 'linux') {
-        throw new Error(
-          'Meta Spatial Editor is not available on Linux.\n' +
-            'The metaspatial workflow requires macOS or Windows to author content.\n' +
-            'The Linux CLI (MetaSpatialEditorCLI) is for CI/CD builds only.',
-        );
-      }
-
-      const workflow = metaspatial ? 'metaspatial' : 'manual';
-      const variantId = `${mode}-${workflow}-${language}` as VariantId;
+      const variantId = `${mode}-manual-${language}` as VariantId;
 
       const validAiTools = ['claude', 'cursor', 'copilot', 'codex'] as const;
       const rawAiTools = (cliOpts.aiTools || 'claude,cursor,copilot,codex')
@@ -250,38 +220,10 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       const locomotionEnabled =
         xrEnabled && mode === 'vr' ? (cliOpts.locomotion ?? true) : false;
 
-      // MSE detection for scripted mode (no auto-install — requires TOS consent)
-      let mseInstallResult: MSEInstallResult | undefined;
-      if (metaspatial) {
-        const platform = detectPlatform();
-        const existingVersion = await detectMSEVersion(platform);
-        if (existingVersion && isVersionSufficient(existingVersion)) {
-          mseInstallResult = {
-            installed: true,
-            version: existingVersion,
-            manual: false,
-          };
-        } else if (existingVersion) {
-          throw new Error(
-            `Meta Spatial Editor ${existingVersion} is installed but version ${MSE_MIN_VERSION}+ is required.\n` +
-              'Please upgrade manually, or run without --yes to upgrade interactively.\n' +
-              'Download: https://developers.meta.com/horizon/documentation/spatial-sdk/spatial-editor-overview',
-          );
-        } else {
-          throw new Error(
-            'Meta Spatial Editor is required for --metaspatial but is not installed.\n' +
-              'Installation requires accepting the Terms of Service and cannot be automated with --yes.\n' +
-              'Run without --yes to install interactively, or install manually:\n' +
-              'https://developers.meta.com/horizon/documentation/spatial-sdk/spatial-editor-overview',
-          );
-        }
-      }
-
       res = {
         name: nameArg || 'iwsdk-app',
         id: variantId,
         installNow: cliOpts.install ?? true,
-        metaspatial,
         xrEnabled,
         mode,
         language,
@@ -314,7 +256,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
                 layers: 'optional',
               }
             : { handTracking: 'optional', layers: 'optional' },
-        mseInstallResult,
       };
     } else {
       const xrFlagProvided =
@@ -560,30 +501,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         }
       }
 
-      // Build prerequisites list (e.g., Meta Spatial Editor), including path-aware notes
       const prereqs = [...(res.prerequisites || [])];
-      if (res.metaspatial) {
-        const metaProjectPath = join(outDir, 'metaspatial');
-        const metaMainPath = join(metaProjectPath, 'Main.metaspatial');
-
-        if (res.mseInstallResult?.installed && !res.mseInstallResult.manual) {
-          prereqs.push({
-            level: 'info',
-            message:
-              `Meta Spatial Editor is ready!\n` +
-              `Project Folder: ${metaProjectPath}\n` +
-              `Open in Meta Spatial Editor: ${metaMainPath}`,
-          });
-        } else {
-          prereqs.push({
-            level: 'important',
-            message:
-              `After installing Meta Spatial Editor, open the project:\n` +
-              `Project Folder: ${metaProjectPath}\n` +
-              `Open in Meta Spatial Editor: ${metaMainPath}`,
-          });
-        }
-      }
       // Print prerequisites first, then next steps
       printPrerequisites(prereqs);
       printNextSteps(res.name, res.installNow, res.actionItems || []);

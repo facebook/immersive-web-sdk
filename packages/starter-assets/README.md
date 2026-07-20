@@ -1,6 +1,6 @@
 # @iwsdk/starter-assets
 
-CDN-hosted starter templates and assets for the IWSDK project scaffolding CLI. This package provides the recipes and assets used by `@iwsdk/create`.
+CDN-hosted native scene starter templates and assets for the IWSDK project scaffolding CLI. This package provides the recipes and assets used by `@iwsdk/create`.
 
 > **Note**: This is an internal package used by `@iwsdk/create`. You typically don't need to install it directly.
 
@@ -12,16 +12,12 @@ CDN-hosted starter templates and assets for the IWSDK project scaffolding CLI. T
 
 ## Template Variants
 
-| ID                  | Description                           |
-| ------------------- | ------------------------------------- |
-| `vr-manual-ts`      | VR + TypeScript + code-only scene     |
-| `vr-manual-js`      | VR + JavaScript + code-only scene     |
-| `vr-metaspatial-ts` | VR + TypeScript + Meta Spatial Editor |
-| `vr-metaspatial-js` | VR + JavaScript + Meta Spatial Editor |
-| `ar-manual-ts`      | AR + TypeScript + code-only scene     |
-| `ar-manual-js`      | AR + JavaScript + code-only scene     |
-| `ar-metaspatial-ts` | AR + TypeScript + Meta Spatial Editor |
-| `ar-metaspatial-js` | AR + JavaScript + Meta Spatial Editor |
+| ID             | Description                         |
+| -------------- | ----------------------------------- |
+| `vr-manual-ts` | VR + TypeScript + native scene JSON |
+| `vr-manual-js` | VR + JavaScript + native scene JSON |
+| `ar-manual-ts` | AR + TypeScript + native scene JSON |
+| `ar-manual-js` | AR + JavaScript + native scene JSON |
 
 ## CDN URLs
 

@@ -14,10 +14,10 @@
   "scripts": {
     "prebuild": "node scripts/gen-version.cjs",
     "build": "rollup -c",
-    "dev": "pnpm -s build && node dist/cli.js",
+    "dev": "corepack pnpm@10.18.3 -s build && node dist/cli.js",
     "watch": "rollup -c --watch",
     "clean": "rm -rf dist",
-    "test": "vitest run",
+    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 --filter @iwsdk/starter-assets build && corepack pnpm@10.18.3 build && vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

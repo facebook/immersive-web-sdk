@@ -65,7 +65,10 @@ async function startDistServer() {
     );
     const filePath = path.resolve(DIST_DIR, relativePath);
 
-    if (filePath !== DIST_DIR && !filePath.startsWith(`${DIST_DIR}${path.sep}`)) {
+    if (
+      filePath !== DIST_DIR &&
+      !filePath.startsWith(`${DIST_DIR}${path.sep}`)
+    ) {
       res.writeHead(403).end('Forbidden');
       return;
     }

@@ -713,7 +713,7 @@ const world = await World.create(container, {
 
 // ✅ GOOD - Locomotion with proper environment
 const world = await World.create(container, {
-  level: '/glxf/SceneWithFloor.glxf', // Scene has collision meshes
+  level: '/scenes/main.iwsdk.scene.json', // Scene has collision meshes
   features: {
     locomotion: true,
     physics: true, // Physics provides collision detection
@@ -775,7 +775,7 @@ const world = await World.create(container, {
     myModel: { url: '/models/scene.glb', type: AssetType.GLTF },
   },
 
-  level: '/glxf/MyScene.glxf',
+  level: '/scenes/main.iwsdk.scene.json',
 
   xr: {
     sessionMode: SessionMode.ImmersiveVR,
@@ -1194,13 +1194,12 @@ my-iwsdk-project/
 │   └── components/
 │       └── custom.ts         # Custom component definitions
 ├── public/
-│   ├── gltf/                 # 3D models
+│   ├── scenes/               # Native IWSDK scene JSON
+│   ├── iwsdk-assets/         # Shared catalog assets served by Vite
 │   ├── audio/                # Audio files
-│   ├── glxf/                 # Generated scene files
 │   └── ui/                   # Compiled UI configs
 ├── ui/
 │   └── *.uikitml             # UI markup source
-├── metaspatial/              # Meta Spatial Editor project
 ├── vite.config.ts
 └── package.json
 ```

@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@iwsdk/cli": "file:../../packages/cli/iwsdk-cli.tgz",
+    "@iwsdk/example-assets": "file:../../packages/example-assets/iwsdk-example-assets.tgz",
     "@iwsdk/reference": "file:../../packages/reference/iwsdk-reference.tgz",
     "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
     "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",

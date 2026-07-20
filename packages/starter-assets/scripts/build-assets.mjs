@@ -20,18 +20,18 @@ const VARIANTS_SRC = path.join(PKG_ROOT, 'variants-src');
 const DIST_ROOT = path.join(PKG_ROOT, 'dist');
 const DIST_ASSETS = path.join(DIST_ROOT, 'assets');
 
-const VARIANT_RE = /^starter-(vr|ar)-(manual|metaspatial)-(ts|js)$/;
+const VARIANT_RE = /^starter-(vr|ar)-manual-(ts|js)$/;
 
 function toVariantId(dirName) {
   const m = dirName.match(VARIANT_RE);
   if (!m) throw new Error(`Invalid starter dir: ${dirName}`);
-  return `${m[1]}-${m[2]}-${m[3]}`;
+  return `${m[1]}-manual-${m[2]}`;
 }
 
 function titleFromId(id) {
   const [mode, kind, lang] = id.split('-');
   const modeTitle = mode.toUpperCase();
-  const kindTitle = kind === 'metaspatial' ? 'Metaspatial' : 'Manual';
+  const kindTitle = kind === 'manual' ? 'Native Scene' : kind;
   const langTitle = lang.toUpperCase();
   return `${modeTitle} ${kindTitle} (${langTitle})`;
 }
@@ -131,11 +131,8 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
   const title = titleFromId(id);
   // We now publish assets to a canonical content-addressed store, not per-variant.
 
-  const metaspatialDir = path.join(starterDir, 'metaspatial');
   const publicDir = path.join(starterDir, 'public');
 
-  const hasMetaspatial =
-    fs.existsSync(metaspatialDir) && fs.statSync(metaspatialDir).isDirectory();
   const hasPublic =
     fs.existsSync(publicDir) && fs.statSync(publicDir).isDirectory();
 
@@ -143,21 +140,6 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
 
   const remotes = [];
   const edits = {};
-  if (hasMetaspatial) {
-    const files = await readAllFiles(metaspatialDir);
-    for (const rel of files) {
-      const srcFile = path.join(metaspatialDir, rel);
-      const bytes = await fsp.readFile(srcFile);
-      const relPath = path.join('metaspatial', rel).replaceAll('\\', '/');
-      const casRel = await writeCasObject(casRoot, bytes, path.basename(rel));
-      remotes.push({
-        path: relPath,
-        url: `assets/${casRel}`,
-        bytes: bytes.length,
-      });
-      edits[relPath] = { url: `assets/${casRel}` };
-    }
-  }
   if (hasPublic) {
     const files = await readAllFiles(publicDir);
     for (const rel of files) {
@@ -178,7 +160,6 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
   const allFiles = await readAllFiles(starterDir);
   const inlineFiles = allFiles.filter(
     (rel) =>
-      !rel.startsWith('metaspatial/') &&
       !rel.startsWith('public/') &&
       rel !== 'vite.config.template.ts' &&
       rel !== 'vite.config.template.js' &&
@@ -333,11 +314,10 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
     // IMPORTANT: the source length may have changed after Pass 1 replacements; recompute n
     n = source.length;
     const ctxMatch = (expr) => {
-      // support key='value' with mode/kind
-      const m = expr.match(/\b(mode|kind)\s*=\s*'(ar|vr|manual|metaspatial)'/);
+      const m = expr.match(/\bmode\s*=\s*'(ar|vr)'/);
       if (!m) return false;
-      const [, key, val] = m;
-      return String(ctx[key]) === val;
+      const [, val] = m;
+      return String(ctx.mode) === val;
     };
     let out = '';
     i = 0;
@@ -442,7 +422,6 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
     const relPath = rel.replaceAll('\\', '/');
     const ctx = {
       mode: id.startsWith('ar-') ? 'ar' : 'vr',
-      kind: id.includes('-metaspatial-') ? 'metaspatial' : 'manual',
     };
     if (/\.(mjs|cjs|js|jsx|ts|tsx)$/.test(relPath)) {
       content = transformTemplate(content, ctx);

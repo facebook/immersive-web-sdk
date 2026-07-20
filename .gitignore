@@ -87,19 +87,14 @@ docs/api/
 # Generated JavaScript starter (built from /starter)
 /starter-js/
 
-# Generated assets from Meta Spatial / GLXF / UIKitML
+# Generated assets from Vite plugins and UIKitML
 # These are created by the Vite plugins at dev/build time
-examples/**/public/glxf/
 examples/**/public/gltf/generated/
 examples/**/public/ui/
-examples/**/metaspatial/components/
 
 # Auto generated version files
 **/version.ts
 **/version.js
-
-# Meta Spatial Editor CLI (downloaded by build-examples.sh in CI)
-.meta-spatial-cli/
 
 # Local playground (created via `node packages/create/dist/cli.js playground`)
 /playground/

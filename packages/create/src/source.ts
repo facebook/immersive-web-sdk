@@ -59,6 +59,13 @@ export interface ResolvedSource {
   getPackageInstallSpec(name: string): string | undefined;
 
   /**
+   * Return every @iwsdk/* package install spec known by this source.
+   * BundleSource uses this to keep transitive IWSDK dependencies local instead
+   * of falling back to the registry during npm install.
+   */
+  getPackageInstallSpecs(): Record<string, string>;
+
+  /**
    * Download SDK package tarballs into a local directory.
    * NpmSource is a no-op; BundleSource fetches tgz files from the
    * remote bundle and writes them preserving the subdirectory hierarchy.
@@ -143,6 +150,10 @@ export class NpmSource implements ResolvedSource {
     return undefined; // npm resolves from registry using version in recipe
   }
 
+  getPackageInstallSpecs(): Record<string, string> {
+    return {};
+  }
+
   async downloadPackages(_destDir: string): Promise<void> {
     // no-op — npm resolves packages from the registry
   }
@@ -211,6 +222,18 @@ export class BundleSource implements ResolvedSource {
       return undefined;
     }
     return `file:${SDK_PACKAGES_DIR}/${this.manifestSubPath(tgzRelPath)}`;
+  }
+
+  getPackageInstallSpecs(): Record<string, string> {
+    if (!this.manifest) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(this.manifest.packages).map(([name, tgzRelPath]) => [
+        name,
+        `file:${SDK_PACKAGES_DIR}/${this.manifestSubPath(tgzRelPath)}`,
+      ]),
+    );
   }
 
   async downloadPackages(destDir: string): Promise<void> {

@@ -11,17 +11,10 @@ locomotion/
 │   ├── settings.js        # Settings configuration
 │   ├── test-component.js  # Example component
 │   └── settings.uikitml   # UI markup
-├── public/                # Static assets (served at root)
-│   ├── gltf/             # 3D models in GLTF format
-│   ├── glxf/             # GLXF scene files
-│   ├── textures/         # Images and texture files
-│   ├── audio/            # Audio files
-│   └── models/           # Other 3D model formats
-├── metaspatial/          # Meta Spatial project files
-│   └── components/       # Generated component XML (committed for designers)
-│       ├── IWSDKAudioSource.xml # Audio Source component
-│       ├── IWSDKLocomotionEnvironment.xml  # Locomotion component
-│       └── ...           # Other framework components
+├── public/                # Static assets served at root
+│   ├── textures/          # Images and texture files
+│   └── audio/             # Audio files
+├── ui/                    # UI markup
 ├── dist/                 # Build output (generated)
 ├── index.html           # Main HTML file
 ├── vite.config.js       # Vite configuration
@@ -61,7 +54,9 @@ The development server will start on the HTTPS local URL reported by Vite or `np
 
 ### WebXR-Optimized Asset Handling
 
-This example uses Vite's `public/` directory for WebXR assets since they are:
+This example uses Vite's `public/` directory for local texture/audio assets and
+the shared `@iwsdk/example-assets` catalog for reusable GLTF assets since they
+are:
 
 - Loaded at runtime via URLs (not imported as modules)
 - Large files that shouldn't be bundled or processed
@@ -69,45 +64,22 @@ This example uses Vite's `public/` directory for WebXR assets since they are:
 
 ### Assets Directory Structure
 
-- **`public/gltf/`** - 3D models in GLTF/GLB format
-- **`public/glxf/`** - GLXF scene files containing component data
+- **`/iwsdk-assets/environment-desk/`** - shared environment GLTF served by the catalog plugin
 - **`public/textures/`** - Images, textures, and visual assets (.png, .jpg, etc.)
 - **`public/audio/`** - Sound effects and music files
-- **`public/models/`** - Other 3D model formats
 
 ### Asset Usage
 
 ```javascript
-// Reference assets using root-relative paths (Vite serves public/ at root)
+// Reference public assets and shared catalog assets using root-relative paths.
 const assets = {
-  scene: { url: '/glxf/my-scene.glxf', type: AssetType.GLXF },
-  model: { url: '/gltf/my-model.gltf', type: AssetType.GLTF },
+  model: {
+    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    type: AssetType.GLTF,
+  },
   texture: { url: '/textures/my-texture.png', type: AssetType.Texture },
 };
 ```
-
-## 🔧 Component System
-
-### Generated Components
-
-The `generated/components/` directory contains XML definitions for all framework components. These files are:
-
-- **Generated automatically** during development
-- **Committed to version control** for designer/artist accessibility
-- **Used by Meta Spatial** for component integration
-
-### Generated Files Organization
-
-The `generated/` folder organizes all auto-generated files:
-
-- **`generated/components/`** - Component XML definitions
-- **Future**: Schema files, type definitions, documentation, etc.
-
-### Important Notes
-
-- All generated files should be committed to ensure the project works out-of-the-box
-- Designers and tech artists can use these without running build commands
-- Files are regenerated when components change during development
 
 ## 🌐 WebXR Development
 
@@ -144,8 +116,8 @@ The `vite.config.js` file includes:
 
 ### Adding New Assets
 
-1. Place assets in the appropriate `public/` subdirectory
-2. Reference them in your code using root-relative paths (e.g., `/gltf/model.gltf`)
+1. Add reusable GLTF assets to `@iwsdk/example-assets` when they are shared across examples, or place one-off assets in the appropriate `public/` subdirectory.
+2. Reference them in your code using root-relative paths such as `/iwsdk-assets/<asset-id>/<file>` or `/textures/model.png`.
 3. Assets are automatically served by Vite during development and copied to build output
 
 ## 📋 Scripts
@@ -158,7 +130,7 @@ The `vite.config.js` file includes:
 
 This example is designed to work seamlessly with:
 
-- **Meta Spatial SDK** for component definitions
+- **Native scene JSON** for declarative environment setup
 - **WebXR browsers** for VR/AR development
 - **Framework tools** for component generation
 - **Asset pipelines** for 3D content creation

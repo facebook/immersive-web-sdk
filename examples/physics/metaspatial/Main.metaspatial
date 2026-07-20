@@ -1,7 +1,0 @@
-entities:
-  com.meta.models.TargetModel:
-    - components:
-        com.meta.components.TargetComponent:
-          platform: immersive_web
-metadata:
-  version: 1.33
