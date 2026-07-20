@@ -628,6 +628,16 @@ async function prepareExampleClone(targetRoot, packageName) {
     JSON.stringify(packageJson, null, 2) + '\n',
     'utf8',
   );
+
+  const viteConfigPath = path.join(targetRoot, 'vite.config.ts');
+  const viteConfig = await readFile(viteConfigPath, 'utf8');
+  await writeFile(
+    viteConfigPath,
+    viteConfig
+      .replace("import mkcert from 'vite-plugin-mkcert';\n", '')
+      .replace(/^\s*mkcert\(\),\n/m, ''),
+    'utf8',
+  );
 }
 
 async function installWorkspace(workspaceRoot, label) {

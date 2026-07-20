@@ -11,6 +11,9 @@ export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
+    // The editor E2Es launch real WebGL browser contexts; running many files at
+    // once can exhaust contexts on developer machines and CI runners.
+    fileParallelism: false,
     include: ['test/**/*.test.ts'],
     setupFiles: ['./test/setup.ts'],
   },

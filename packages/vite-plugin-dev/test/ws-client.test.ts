@@ -129,6 +129,7 @@ describe('MCPWebSocketClient', () => {
       location: {
         protocol: 'http:',
         hostname: 'localhost',
+        pathname: '/',
         port: '5173',
       },
     };
@@ -173,6 +174,7 @@ describe('MCPWebSocketClient', () => {
       (globalThis as any).window.location = {
         protocol: 'https:',
         hostname: 'localhost',
+        pathname: '/',
         port: '5173',
       };
 
@@ -199,6 +201,7 @@ describe('MCPWebSocketClient', () => {
       (globalThis as any).window.location = {
         protocol: 'http:',
         hostname: 'localhost',
+        pathname: '/',
         port: '',
       };
 
@@ -235,6 +238,33 @@ describe('MCPWebSocketClient', () => {
       const messages = getParsedSentMessages(mockWebSocketInstance!);
       expect(messages[0]).toMatchObject({
         type: 'iwsdk_browser_hello',
+        pageId: client.tabId,
+        pageRole: 'app',
+        role: 'app',
+        tabId: client.tabId,
+        tabGeneration: client.tabGeneration,
+      });
+    });
+
+    test('sends editor page role metadata for workspace route pages', async () => {
+      (globalThis as any).window.location.pathname = '/__iwsdk/workspace';
+      (globalThis as any).window.__IWSDK_SCENE_SESSION_ID = 'scene-test';
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      const messages = getParsedSentMessages(mockWebSocketInstance!);
+      expect(messages[0]).toMatchObject({
+        type: 'iwsdk_browser_hello',
+        pageId: client.tabId,
+        pageRole: 'editor',
+        role: 'editor',
+        sceneSessionId: 'scene-test',
         tabId: client.tabId,
         tabGeneration: client.tabGeneration,
       });

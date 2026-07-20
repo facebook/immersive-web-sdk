@@ -8,6 +8,7 @@
 import WebSocket from 'ws';
 import {
   isRuntimeBrowserCommandReady,
+  type RuntimePageTarget,
   type RuntimeBrowserState,
   type RuntimeIssueCause,
   type RuntimeSession,
@@ -30,6 +31,7 @@ export interface SendRuntimeCommandOptions {
   port: number;
   method: string;
   params?: unknown;
+  target?: RuntimePageTarget;
   timeoutMs?: number;
   runtimeSession?: RuntimeSession | null;
 }
@@ -168,6 +170,7 @@ async function trySendRuntimeCommand(
   port: number,
   method: string,
   params: unknown,
+  target: RuntimePageTarget | undefined,
   timeoutMs: number,
   browser: RuntimeBrowserState | undefined,
 ): Promise<RuntimeCommandResponse> {
@@ -237,6 +240,7 @@ async function trySendRuntimeCommand(
         id: requestId,
         method,
         params: params ?? {},
+        ...(target ? { target } : {}),
       });
       traceTransport('open', {
         method,
@@ -396,6 +400,7 @@ export async function sendRuntimeCommand({
   port,
   method,
   params,
+  target,
   timeoutMs = 30000,
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
@@ -415,6 +420,7 @@ export async function sendRuntimeCommand({
       port,
       method,
       params,
+      target,
       firstAttemptTimeout,
       browser,
     );
@@ -447,6 +453,7 @@ export async function sendRuntimeCommand({
       port,
       method,
       params,
+      target,
       remainingMs,
       browser,
     );

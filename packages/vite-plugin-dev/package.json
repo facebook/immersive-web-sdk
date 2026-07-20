@@ -5,17 +5,27 @@
   "description": "Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwright browser",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./editor/session": {
+      "types": "./dist/editor/scene-editor-session.d.ts",
+      "import": "./dist/editor/scene-editor-session.js"
+    }
+  },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "prebuild": "pnpm --filter @iwsdk/cli build",
-    "prebuild:plugin": "pnpm --filter @iwsdk/cli build",
+    "prebuild": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
+    "prebuild:plugin": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
     "build": "rollup -c rollup.injection.config.js && rollup -c rollup.config.js",
     "build:plugin": "rollup -c rollup.config.js",
     "build:injection": "rollup -c rollup.injection.config.js",
-    "test": "pnpm --filter @iwsdk/cli build && vitest run",
+    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 run build:injection && vitest run",
     "test:watch": "vitest",
     "dev": "rollup -c --watch",
     "clean": "rm -rf dist"
@@ -37,9 +47,14 @@
   "dependencies": {
     "@iwer/devui": "^2.2.0",
     "@iwer/sem": "^0.2.5",
+    "@iwsdk/core": "workspace:*",
+    "@iwsdk/scene-composition": "workspace:*",
     "iwer": "^2.2.1",
+    "lucide": "^0.468.0",
     "playwright": "^1.58.2",
     "sharp": "^0.33.0",
+    "three": "npm:super-three@0.181.0",
+    "three-viewport-gizmo": "^2.2.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

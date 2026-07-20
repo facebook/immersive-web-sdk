@@ -6,7 +6,15 @@
  */
 
 import { randomUUID } from 'crypto';
-import { readFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'fs';
+import type { IncomingMessage, ServerResponse } from 'http';
 import * as path from 'path';
 import {
   INTERNAL_BROWSER_PROBE_METHOD,
@@ -15,9 +23,22 @@ import {
   type RuntimeIssueCause,
   type RuntimeIssueInfo,
 } from '@iwsdk/cli/contract';
+import {
+  CURRENT_SCENE_VERSION,
+  parseSceneDocument,
+  serializeSceneDocument,
+  type SceneDocument,
+} from '@iwsdk/scene-composition';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
+import {
+  createEditorRuntimeModuleSource,
+  createEditorShellHtml,
+  getCoreModuleImport,
+  getEditorSessionModuleImport,
+} from './editor/editor-runtime-source.js';
+import { EDITOR_SHELL_CSS } from './editor/editor-shell-styles.js';
 import {
   launchManagedBrowser,
   type ManagedBrowser,
@@ -43,6 +64,7 @@ export type {
   AiOptions,
   AiMode,
   EmulatorOptions,
+  WorkspaceOptions,
   ProcessedDevOptions,
   IWERPluginOptions,
   SEMOptions,
@@ -60,6 +82,20 @@ const MODE_SETTINGS: Record<
   oversight: { headless: false, devUI: false, fixedViewport: false },
   collaborate: { headless: false, devUI: true, fixedViewport: false },
 };
+
+const VIRTUAL_ID = '/@iwer-injection-runtime';
+const RESOLVED_VIRTUAL_ID = '\0' + VIRTUAL_ID;
+const EDITOR_RUNTIME_ID = '/@iwsdk-editor-runtime';
+const RESOLVED_EDITOR_RUNTIME_ID = '\0' + EDITOR_RUNTIME_ID;
+const EDITOR_STYLESHEET_ID = '/@iwsdk-editor-styles.css';
+const RESOLVED_EDITOR_STYLESHEET_ID = '\0' + EDITOR_STYLESHEET_ID;
+const EDITOR_ROUTE = '/__iwsdk/editor';
+const WORKSPACE_ROUTE = '/__iwsdk/workspace';
+const WORKSPACE_SCENES_ROUTE = `${WORKSPACE_ROUTE}/scenes`;
+const MANAGED_WORKSPACE_HEADER = 'x-iwsdk-managed-workspace';
+const MANAGED_WORKSPACE_QUERY = '__iwsdkManagedWorkspace';
+const SCENE_ROOT_RELATIVE_PATH = path.join('public', 'scenes');
+const SCENE_FILE_SUFFIX = '.iwsdk.scene.json';
 
 /**
  * Process and normalize plugin options with defaults
@@ -83,6 +119,18 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     };
   }
 
+  const normalizeScreenshotSize = (input?: {
+    width?: number;
+    height?: number;
+  }) => {
+    const width = input?.width;
+    const height = input?.height;
+    return {
+      width: width ?? height ?? 800,
+      height: height ?? width ?? 800,
+    };
+  };
+
   // AI agent tooling drives the page through the injected IWER runtime/MCP
   // bridge, so it cannot work when IWER injection is disabled (`iwer: false`).
   // Warn and skip the AI path rather than launching a managed browser + MCP
@@ -95,7 +143,8 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     );
   }
 
-  // AI is opt-in: omit `ai` to disable entirely
+  // AI is opt-in: omit `ai` to disable AI mode. Workspace may still be enabled
+  // separately for manual editor workflows.
   if (options.ai && processed.iwer !== false) {
     const mode = options.ai.mode ?? 'agent';
     const settings = MODE_SETTINGS[mode];
@@ -105,19 +154,29 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
         `[IWSDK] Invalid ai.mode "${mode}". Valid modes: ${valid}`,
       );
     }
-    const ssInput = options.ai.screenshotSize;
-    const ssWidth = ssInput?.width;
-    const ssHeight = ssInput?.height;
-    const screenshotSize = {
-      width: ssWidth ?? ssHeight ?? 800,
-      height: ssHeight ?? ssWidth ?? 800,
-    };
+    const screenshotSize = normalizeScreenshotSize(options.ai.screenshotSize);
 
     processed.ai = {
       mode,
       headless: settings.headless,
       devUI: settings.devUI,
       viewport: settings.fixedViewport ? screenshotSize : null,
+      screenshotSize,
+    };
+  }
+
+  if (options.ai || options.workspace?.enabled) {
+    const screenshotSize =
+      processed.ai?.screenshotSize ??
+      normalizeScreenshotSize(options.workspace?.screenshotSize);
+    const headless =
+      processed.ai?.headless ?? options.workspace?.headless ?? false;
+    processed.workspace = {
+      enabled: true,
+      open: options.workspace?.open ?? true,
+      headless,
+      devUI: processed.ai?.devUI ?? true,
+      viewport: processed.ai ? processed.ai.viewport : null,
       screenshotSize,
     };
   }
@@ -135,8 +194,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let mcpWss: WebSocketServer | null = null;
   let mcpClients: Set<WebSocket> | null = null;
   let managedBrowser: ManagedBrowser | null = null;
-  const VIRTUAL_ID = '/@iwer-injection-runtime';
-  const RESOLVED_VIRTUAL_ID = '\0' + VIRTUAL_ID;
+  const managedWorkspaceToken =
+    process.env.NODE_ENV === 'test' &&
+    process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN
+      ? process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN
+      : randomUUID();
 
   return {
     name: 'iwsdk-dev',
@@ -144,7 +206,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     config(userConfig) {
       // In oversight/collaborate mode the Playwright window IS the visible
       // browser, so suppress Vite's auto-open to avoid a duplicate tab.
-      if (pluginOptions.ai && !pluginOptions.ai.headless) {
+      if (
+        pluginOptions.workspace &&
+        pluginOptions.workspace.open &&
+        !pluginOptions.workspace.headless
+      ) {
         if (userConfig.server) {
           userConfig.server.open = false;
         } else {
@@ -165,6 +231,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         console.log(
           `  - AI: ${pluginOptions.ai ? `enabled (${pluginOptions.ai.mode} mode)` : 'disabled'}`,
         );
+        console.log(
+          `  - Workspace: ${pluginOptions.workspace ? `enabled (${pluginOptions.workspace.headless ? 'headless' : 'headed'})` : 'disabled'}`,
+        );
         console.log(`  - Activation: ${pluginOptions.activation}`);
         if (pluginOptions.userAgentException) {
           console.log('  - UA exception: enabled');
@@ -174,7 +243,83 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
-      if (!pluginOptions.ai) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = getRequestPathname(request.url);
+        const isManagedWorkspaceRequest = hasManagedWorkspaceAccess(
+          request,
+          managedWorkspaceToken,
+        );
+
+        if (pathname === `${EDITOR_ROUTE}/document`) {
+          if (!isManagedWorkspaceRequest) {
+            sendJsonError(
+              response,
+              403,
+              'The IWSDK scene editor document endpoint is only available in the managed workspace browser.',
+            );
+            return;
+          }
+          handleEditorDocumentRequest(request, response, config.root);
+          return;
+        }
+
+        if (pathname === EDITOR_STYLESHEET_ID) {
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'text/css; charset=utf-8');
+          response.end(EDITOR_SHELL_CSS);
+          return;
+        }
+
+        if (pathname === WORKSPACE_SCENES_ROUTE) {
+          if (!isManagedWorkspaceRequest) {
+            sendJsonError(
+              response,
+              403,
+              'IWSDK scene file management is only available in the managed workspace browser.',
+            );
+            return;
+          }
+          handleWorkspaceScenesRequest(request, response, config.root);
+          return;
+        }
+
+        if (pathname === WORKSPACE_ROUTE) {
+          if (!isManagedWorkspaceRequest) {
+            redirectToRuntimeApp(response);
+            return;
+          }
+
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'text/html; charset=utf-8');
+          response.end(
+            createEditorShellHtml(
+              VIRTUAL_ID,
+              EDITOR_RUNTIME_ID,
+              EDITOR_STYLESHEET_ID,
+              `${EDITOR_ROUTE}/document${getRequestSearch(request.url)}`,
+              {
+                sceneFilesUrl: WORKSPACE_SCENES_ROUTE,
+                workspaceRoute: WORKSPACE_ROUTE,
+              },
+            ),
+          );
+          return;
+        }
+
+        if (pathname === EDITOR_ROUTE) {
+          if (!isManagedWorkspaceRequest) {
+            redirectToRuntimeApp(response);
+            return;
+          }
+
+          redirectToWorkspace(response, request.url);
+          return;
+        }
+
+        next();
+      });
+
+      if (!pluginOptions.workspace) {
         return;
       }
 
@@ -314,16 +459,20 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           publishBrowserState(createBrowserState('launching'));
           traceRuntime('browser_launch_start', {
             browserUrl,
-            headless: pluginOptions.ai!.headless,
+            headless: pluginOptions.workspace!.headless,
           });
           try {
             const browser = await launchManagedBrowser(
               browserUrl,
-              pluginOptions.ai!.headless,
+              pluginOptions.workspace!.headless,
               pluginOptions.verbose,
-              pluginOptions.ai!.viewport,
-              pluginOptions.ai!.screenshotSize,
+              pluginOptions.workspace!.viewport,
+              pluginOptions.workspace!.screenshotSize,
               traceEnabled,
+              {
+                headerName: MANAGED_WORKSPACE_HEADER,
+                token: managedWorkspaceToken,
+              },
             );
             managedBrowser = browser;
             consecutiveFailures = 0;
@@ -672,13 +821,27 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               method?: string;
               params?: Record<string, unknown>;
               type?: string;
+              pageId?: string;
+              pageRole?: string;
+              role?: string;
+              sceneSessionId?: string;
               tabId?: string;
               tabGeneration?: number;
+              target?: { role?: string };
             };
 
             if (parsed?.type === 'iwsdk_browser_hello') {
               intercepted = true;
               markConnectionKind(ws, 'bridge');
+              const pageRole = normalizePageRole(
+                parsed.pageRole ?? parsed.role,
+              );
+              relay.registerBrowserClient(ws, {
+                pageId: parsed.pageId ?? parsed.tabId ?? connectionId,
+                role: pageRole,
+                sceneSessionId: parsed.sceneSessionId,
+                tabGeneration: parsed.tabGeneration ?? 1,
+              });
               if (!browserRuntimeClients!.has(ws)) {
                 browserRuntimeClients!.add(ws);
                 publishBrowserState(
@@ -692,6 +855,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               }
               traceRuntime('bridge_hello', {
                 connectionId,
+                pageId: parsed.pageId ?? parsed.tabId ?? connectionId,
+                pageRole,
+                sceneSessionId: parsed.sceneSessionId ?? null,
                 tabId: parsed.tabId ?? null,
                 tabGeneration: parsed.tabGeneration ?? null,
                 connectedClientCount: browserRuntimeClients!.size,
@@ -817,6 +983,14 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   );
                   return;
                 }
+                const workspaceScreenshotView = getWorkspaceScreenshotView(
+                  parsed.params,
+                );
+                if (workspaceScreenshotView != null) {
+                  await readiness.browser.setWorkspaceView(
+                    workspaceScreenshotView,
+                  );
+                }
                 const buffer = await readiness.browser.screenshot();
                 const base64 = buffer.toString('base64');
                 sendWsJson(
@@ -853,6 +1027,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               ? reasonBuffer
               : reasonBuffer.toString('utf8');
           mcpClients!.delete(ws);
+          relay.unregisterClient(ws);
           const removedBridge = browserRuntimeClients!.delete(ws);
           if (removedBridge) {
             browserCommandReadyPromise = null;
@@ -956,7 +1131,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             : server.config.server.port || 5173;
 
         const protocol = server.config.server.https ? 'https' : 'http';
-        browserUrl = `${protocol}://localhost:${actualPort}`;
+        browserUrl = `${protocol}://localhost:${actualPort}${WORKSPACE_ROUTE}`;
         try {
           await registerRuntimeSession({
             sessionId,
@@ -982,8 +1157,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           port: actualPort,
         });
 
-        // Launch Playwright-managed browser
-        launchBrowser();
+        // Launch Playwright-managed browser when requested. If open=false, the
+        // MCP/browser tooling can still launch it lazily on first command.
+        if (pluginOptions.workspace?.open !== false) {
+          launchBrowser();
+        }
       });
 
       // Clean up WebSocket server and browser when Vite server closes.
@@ -1017,6 +1195,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       if (id === VIRTUAL_ID) {
         return RESOLVED_VIRTUAL_ID;
       }
+      if (id === EDITOR_RUNTIME_ID) {
+        return RESOLVED_EDITOR_RUNTIME_ID;
+      }
+      if (id === EDITOR_STYLESHEET_ID) {
+        return RESOLVED_EDITOR_STYLESHEET_ID;
+      }
     },
 
     load(id) {
@@ -1025,6 +1209,15 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           return 'console.warn("[IWSDK Dev] Runtime not available - injection bundle not loaded");';
         }
         return injectionBundle.code;
+      }
+      if (id === RESOLVED_EDITOR_RUNTIME_ID) {
+        return createEditorRuntimeModuleSource(
+          getEditorSessionModuleImport(),
+          getCoreModuleImport(),
+        );
+      }
+      if (id === RESOLVED_EDITOR_STYLESHEET_ID) {
+        return EDITOR_SHELL_CSS;
       }
     },
 
@@ -1131,6 +1324,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               `  - AI: ${pluginOptions.ai.mode} mode (WebSocket at /__iwer_mcp)`,
             );
           }
+          if (pluginOptions.workspace && !pluginOptions.ai) {
+            console.log('  - Workspace: enabled (WebSocket at /__iwer_mcp)');
+          }
 
           if (pluginOptions.activation === 'localhost') {
             console.log(
@@ -1143,6 +1339,411 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       },
     },
   };
+}
+
+function getRequestPathname(url: string | undefined): string {
+  if (url == null) {
+    return '';
+  }
+
+  try {
+    return new URL(url, 'http://iwsdk.local').pathname;
+  } catch {
+    return url.split(/[?#]/, 1)[0] ?? url;
+  }
+}
+
+function getRequestSearch(url: string | undefined): string {
+  if (url == null) {
+    return '';
+  }
+
+  try {
+    return new URL(url, 'http://iwsdk.local').search;
+  } catch {
+    const searchIndex = url.indexOf('?');
+    return searchIndex === -1 ? '' : url.slice(searchIndex);
+  }
+}
+
+function hasManagedWorkspaceAccess(
+  request: IncomingMessage,
+  token: string,
+): boolean {
+  if (getHeaderValue(request.headers?.[MANAGED_WORKSPACE_HEADER]) === token) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(request.url ?? '', 'http://iwsdk.local');
+    return parsed.searchParams.get(MANAGED_WORKSPACE_QUERY) === token;
+  } catch {
+    return false;
+  }
+}
+
+function getHeaderValue(
+  value: string | string[] | number | undefined,
+): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return value;
+}
+
+function getRequestHeaderValue(
+  request: IncomingMessage,
+  name: string,
+): string | undefined {
+  const lowerName = name.toLowerCase();
+  const direct = getHeaderValue(request.headers[lowerName]);
+  if (direct != null) {
+    return direct;
+  }
+  const entry = Object.entries(request.headers).find(
+    ([key]) => key.toLowerCase() === lowerName,
+  );
+  return getHeaderValue(entry?.[1]);
+}
+
+function normalizeSceneRevisionHeader(
+  value: string | undefined,
+): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function redirectToRuntimeApp(response: ServerResponse): void {
+  response.statusCode = 302;
+  response.setHeader('Location', '/');
+  response.end();
+}
+
+function redirectToWorkspace(
+  response: ServerResponse,
+  requestUrl: string | undefined,
+): void {
+  response.statusCode = 302;
+  response.setHeader(
+    'Location',
+    `${WORKSPACE_ROUTE}${getRequestSearch(requestUrl)}`,
+  );
+  response.end();
+}
+
+function sendJsonError(
+  response: ServerResponse,
+  statusCode: number,
+  message: string,
+  extra: Record<string, unknown> = {},
+): void {
+  response.statusCode = statusCode;
+  response.setHeader('Content-Type', 'application/json; charset=utf-8');
+  response.end(JSON.stringify({ error: message, ...extra }));
+}
+
+function normalizePageRole(
+  role: string | undefined,
+): 'app' | 'editor' | 'preview' {
+  return role === 'editor' || role === 'preview' ? role : 'app';
+}
+
+function getWorkspaceScreenshotView(
+  params: Record<string, unknown> | undefined,
+): 'runtime' | 'editor' | null {
+  const target = params?.__iwsdkScreenshotTarget;
+  if (target === 'runtime' || target === 'editor') {
+    return target;
+  }
+  return null;
+}
+
+async function handleEditorDocumentRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  workspaceRoot: string,
+): Promise<void> {
+  try {
+    const scenePath = resolveEditorScenePath(request.url, workspaceRoot);
+    const relativeScenePath = path.relative(workspaceRoot, scenePath);
+
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const revision = getSceneFileRevision(scenePath);
+      const documentText = existsSync(scenePath)
+        ? readFileSync(scenePath, 'utf8')
+        : serializeSceneDocument({
+            nodes: [],
+            units: 'meters',
+            version: CURRENT_SCENE_VERSION,
+          });
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.setHeader('X-IWSDK-Scene-Path', relativeScenePath);
+      response.setHeader('X-IWSDK-Scene-Revision', revision.revision);
+      response.end(request.method === 'HEAD' ? undefined : documentText);
+      return;
+    }
+
+    if (request.method === 'PUT') {
+      const body = await readRequestBody(request);
+      const document = parseSceneDocument(body);
+      const serialized = serializeSceneDocument(document);
+      const currentRevision = getSceneFileRevision(scenePath);
+      const expectedRevision = normalizeSceneRevisionHeader(
+        getRequestHeaderValue(request, 'if-match') ??
+          getRequestHeaderValue(request, 'x-iwsdk-scene-revision'),
+      );
+      if (currentRevision.exists && expectedRevision == null) {
+        sendJsonError(
+          response,
+          409,
+          'Scene file revision is required before overwriting an existing scene.',
+          {
+            code: 'scene_revision_required',
+            currentRevision: currentRevision.revision,
+            path: relativeScenePath,
+          },
+        );
+        return;
+      }
+      if (
+        expectedRevision != null &&
+        expectedRevision !== currentRevision.revision
+      ) {
+        sendJsonError(response, 409, 'Scene file changed on disk.', {
+          code: 'scene_revision_conflict',
+          currentRevision: currentRevision.revision,
+          expectedRevision,
+          path: relativeScenePath,
+        });
+        return;
+      }
+      mkdirSync(path.dirname(scenePath), { recursive: true });
+      writeFileSync(scenePath, serialized, 'utf8');
+      const writtenRevision = getSceneFileRevision(scenePath);
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(
+        JSON.stringify({
+          bytes: Buffer.byteLength(serialized),
+          path: relativeScenePath,
+          previousRevision: currentRevision.revision,
+          revision: writtenRevision.revision,
+          savedAt: new Date().toISOString(),
+          writtenRevision: writtenRevision.revision,
+        }),
+      );
+      return;
+    }
+
+    response.statusCode = 405;
+    response.setHeader('Allow', 'GET, HEAD, PUT');
+    response.end('Method not allowed');
+  } catch (error) {
+    response.statusCode = 400;
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.end(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+async function handleWorkspaceScenesRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  workspaceRoot: string,
+): Promise<void> {
+  try {
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const files = listSceneFiles(workspaceRoot);
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(
+        request.method === 'HEAD' ? undefined : JSON.stringify({ files }),
+      );
+      return;
+    }
+
+    if (request.method === 'POST') {
+      const body = JSON.parse((await readRequestBody(request)) || '{}') as {
+        overwrite?: unknown;
+        path?: unknown;
+      };
+      const scenePath = resolveManagedScenePath(body.path, workspaceRoot);
+      if (existsSync(scenePath) && body.overwrite !== true) {
+        response.statusCode = 409;
+        response.setHeader('Content-Type', 'application/json; charset=utf-8');
+        response.end(
+          JSON.stringify({
+            error:
+              'Scene file already exists. Pass overwrite: true to replace it.',
+          }),
+        );
+        return;
+      }
+
+      const document: SceneDocument = {
+        nodes: [],
+        units: 'meters',
+        version: CURRENT_SCENE_VERSION,
+      };
+      const serialized = serializeSceneDocument(document);
+      const previousRevision = getSceneFileRevision(scenePath);
+      mkdirSync(path.dirname(scenePath), { recursive: true });
+      writeFileSync(scenePath, serialized, 'utf8');
+      const writtenRevision = getSceneFileRevision(scenePath);
+      response.statusCode = 201;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(
+        JSON.stringify({
+          document,
+          path: path.relative(workspaceRoot, scenePath),
+          previousRevision: previousRevision.revision,
+          revision: writtenRevision.revision,
+          writtenRevision: writtenRevision.revision,
+        }),
+      );
+      return;
+    }
+
+    response.statusCode = 405;
+    response.setHeader('Allow', 'GET, HEAD, POST');
+    response.end('Method not allowed');
+  } catch (error) {
+    response.statusCode = 400;
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.end(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+function resolveEditorScenePath(
+  url: string | undefined,
+  workspaceRoot: string,
+): string {
+  const parsed = new URL(url ?? '', 'http://iwsdk.local');
+  return resolveManagedScenePath(
+    parsed.searchParams.get('scene'),
+    workspaceRoot,
+  );
+}
+
+function resolveManagedScenePath(
+  requestedScene: unknown,
+  workspaceRoot: string,
+): string {
+  const scenePath =
+    typeof requestedScene === 'string' && requestedScene.trim().length > 0
+      ? requestedScene.trim()
+      : path.join(SCENE_ROOT_RELATIVE_PATH, 'scene.iwsdk.scene.json');
+  const relativeScene = scenePath.replace(/^\/+/, '');
+  const resolved = path.resolve(workspaceRoot, relativeScene);
+  const sceneRoot = path.resolve(workspaceRoot, SCENE_ROOT_RELATIVE_PATH);
+  const relativeToWorkspace = path.relative(workspaceRoot, resolved);
+  const relativeToSceneRoot = path.relative(sceneRoot, resolved);
+
+  if (
+    relativeToWorkspace === '' ||
+    relativeToWorkspace.startsWith('..') ||
+    path.isAbsolute(relativeToWorkspace)
+  ) {
+    throw new Error('Scene path must stay inside the Vite workspace root');
+  }
+  if (
+    relativeToSceneRoot === '' ||
+    relativeToSceneRoot.startsWith('..') ||
+    path.isAbsolute(relativeToSceneRoot)
+  ) {
+    throw new Error('Scene path must stay inside public/scenes/');
+  }
+  if (!resolved.endsWith(SCENE_FILE_SUFFIX)) {
+    throw new Error(`Scene path must end with ${SCENE_FILE_SUFFIX}`);
+  }
+
+  return resolved;
+}
+
+function listSceneFiles(workspaceRoot: string) {
+  const sceneRoot = path.resolve(workspaceRoot, SCENE_ROOT_RELATIVE_PATH);
+  if (!existsSync(sceneRoot)) {
+    return [];
+  }
+
+  const files: Array<{
+    modifiedAt: string;
+    path: string;
+    revision: string;
+    size: number;
+  }> = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolutePath);
+        continue;
+      }
+      if (!entry.isFile() || !absolutePath.endsWith(SCENE_FILE_SUFFIX)) {
+        continue;
+      }
+      const stats = statSync(absolutePath);
+      files.push({
+        modifiedAt: stats.mtime.toISOString(),
+        path: path.relative(workspaceRoot, absolutePath),
+        revision: sceneFileRevisionFromStats(stats),
+        size: stats.size,
+      });
+    }
+  };
+
+  visit(sceneRoot);
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function getSceneFileRevision(filePath: string): {
+  exists: boolean;
+  modifiedAt?: string;
+  revision: string;
+  size?: number;
+} {
+  if (!existsSync(filePath)) {
+    return { exists: false, revision: 'missing' };
+  }
+  const stats = statSync(filePath);
+  return {
+    exists: true,
+    modifiedAt: stats.mtime.toISOString(),
+    revision: sceneFileRevisionFromStats(stats),
+    size: stats.size,
+  };
+}
+
+function sceneFileRevisionFromStats(stats: { mtimeMs: number; size: number }) {
+  return `${Math.round(stats.mtimeMs * 1000)}-${stats.size}`;
+}
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** @deprecated Use `iwsdkDev` instead */

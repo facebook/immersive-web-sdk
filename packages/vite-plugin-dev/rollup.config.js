@@ -15,10 +15,14 @@ import json from '@rollup/plugin-json';
 
 // Plugin build config
 const pluginConfig = {
-  input: 'src/index.ts',
+  input: {
+    index: 'src/index.ts',
+    'editor/scene-editor-session': 'src/editor/scene-editor-session.ts',
+  },
   output: [
     {
-      file: 'dist/index.js',
+      dir: 'dist',
+      entryFileNames: '[name].js',
       format: 'esm',
       sourcemap: true,
     },

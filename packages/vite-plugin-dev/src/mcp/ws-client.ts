@@ -7,6 +7,8 @@
 
 import type { XRDevice } from 'iwer';
 
+type MCPPageRole = 'app' | 'editor' | 'preview';
+
 /**
  * Interface that any framework can implement to provide MCP tools.
  * The vite plugin will route requests to this runtime when available.
@@ -27,6 +29,10 @@ declare global {
   interface Window {
     FRAMEWORK_MCP_RUNTIME?: FrameworkMCPRuntime;
     __IWSDK_MCP_TRACE?: boolean;
+    __IWSDK_MCP_PAGE_ID?: string;
+    __IWSDK_MCP_PAGE_ROLE?: MCPPageRole;
+    __IWSDK_MCP_TAB_GENERATION?: number;
+    __IWSDK_SCENE_SESSION_ID?: string;
   }
 }
 
@@ -70,10 +76,17 @@ export class MCPWebSocketClient {
   // new ID when the tab is closed and reopened.
   readonly tabId: string;
   readonly tabGeneration: number;
+  readonly pageRole: MCPPageRole;
+  readonly sceneSessionId: string | undefined;
 
   constructor(device: XRDevice, options: { verbose?: boolean } = {}) {
     this.device = device;
     this.verbose = options.verbose ?? false;
+    this.pageRole = this.detectPageRole();
+    this.sceneSessionId =
+      typeof window !== 'undefined'
+        ? window.__IWSDK_SCENE_SESSION_ID
+        : undefined;
 
     // sessionStorage is scoped per tab — survives reloads/HMR but not tab close
     let id =
@@ -97,6 +110,12 @@ export class MCPWebSocketClient {
       sessionStorage.setItem('iwer-mcp-gen', String(gen));
     }
     this.tabGeneration = gen;
+
+    if (typeof window !== 'undefined') {
+      window.__IWSDK_MCP_PAGE_ID = this.tabId;
+      window.__IWSDK_MCP_PAGE_ROLE = this.pageRole;
+      window.__IWSDK_MCP_TAB_GENERATION = this.tabGeneration;
+    }
   }
 
   private isTraceEnabled(): boolean {
@@ -104,6 +123,23 @@ export class MCPWebSocketClient {
       this.verbose ||
       (typeof window !== 'undefined' && window.__IWSDK_MCP_TRACE === true)
     );
+  }
+
+  private detectPageRole(): MCPPageRole {
+    if (typeof window === 'undefined') {
+      return 'app';
+    }
+
+    const explicit = window.__IWSDK_MCP_PAGE_ROLE;
+    if (explicit === 'app' || explicit === 'editor' || explicit === 'preview') {
+      return explicit;
+    }
+
+    const pathname = window.location.pathname ?? '';
+    return pathname.startsWith('/__iwsdk/editor') ||
+      pathname.startsWith('/__iwsdk/workspace')
+      ? 'editor'
+      : 'app';
   }
 
   private trace(message: string, details: Record<string, unknown> = {}): void {
@@ -198,6 +234,10 @@ export class MCPWebSocketClient {
       this.ws?.send(
         JSON.stringify({
           type: 'iwsdk_browser_hello',
+          pageId: this.tabId,
+          pageRole: this.pageRole,
+          role: this.pageRole,
+          sceneSessionId: this.sceneSessionId,
           tabId: this.tabId,
           tabGeneration: this.tabGeneration,
         }),

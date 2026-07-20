@@ -90,7 +90,11 @@ function createBrowserState(
 
 async function startRuntimeFixture(
   workspaceRoot: string,
-  handler: (request: { method: string; params?: unknown }) => RuntimeResponse,
+  handler: (request: {
+    method: string;
+    params?: unknown;
+    target?: unknown;
+  }) => RuntimeResponse,
 ) {
   const server = new WebSocketServer({ port: 0 });
   await new Promise<void>((resolve) => {
@@ -106,10 +110,12 @@ async function startRuntimeFixture(
         id: string;
         method: string;
         params?: unknown;
+        target?: unknown;
       };
       const response = handler({
         method: request.method,
         params: request.params,
+        target: request.target,
       });
       socket.send(
         JSON.stringify({
@@ -303,6 +309,49 @@ describe('mcp stdio interface shaping', () => {
         data: ONE_BY_ONE_PNG_BASE64,
         mimeType: 'image/png',
       });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
+  test('routes native scene screenshots to the editor page target', async () => {
+    let observedTarget: unknown;
+    const runtime = await startRuntimeFixture(appRoot, ({ method, target }) => {
+      if (method === 'scene_screenshot') {
+        observedTarget = target;
+        return {
+          result: {
+            imageData: ONE_BY_ONE_PNG_BASE64,
+            mimeType: 'image/png',
+          },
+          _tabId: 'editor-tab',
+          _tabGeneration: 1,
+        };
+      }
+
+      return {
+        result: { ok: true },
+        _tabId: 'tab-1',
+        _tabGeneration: 1,
+      };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'scene_screenshot',
+        arguments: { view: 'top' },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0]).toMatchObject({
+        type: 'image',
+        data: ONE_BY_ONE_PNG_BASE64,
+        mimeType: 'image/png',
+      });
+      expect(observedTarget).toEqual({ role: 'editor' });
     } finally {
       await mcp.close();
       await runtime.close();

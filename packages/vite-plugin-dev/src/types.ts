@@ -51,6 +51,37 @@ export interface AiOptions {
 }
 
 /**
+ * Managed IWSDK workspace configuration.
+ * Enables the Playwright-managed runtime/editor/split workspace without
+ * requiring an AI mode.
+ */
+export interface WorkspaceOptions {
+  /**
+   * Enable the managed workspace.
+   * @default false unless ai is configured
+   */
+  enabled?: boolean;
+
+  /**
+   * Launch the managed browser when the dev server starts.
+   * @default true
+   */
+  open?: boolean;
+
+  /**
+   * Launch the managed workspace headlessly.
+   * @default false for workspace-only, derived from ai.mode when ai is set
+   */
+  headless?: boolean;
+
+  /**
+   * Screenshot size constraint for managed browser captures.
+   * @default { width: 800, height: 800 }
+   */
+  screenshotSize?: { width?: number; height?: number };
+}
+
+/**
  * XR emulator configuration
  */
 export interface EmulatorOptions {
@@ -130,6 +161,13 @@ export interface DevPluginOptions {
   ai?: AiOptions;
 
   /**
+   * Managed workspace configuration. AI modes imply a managed workspace, but
+   * this option can be used for manual editor workflows without an active AI
+   * mode.
+   */
+  workspace?: WorkspaceOptions;
+
+  /**
    * Enable verbose logging
    * @default false
    */
@@ -149,6 +187,14 @@ export interface ProcessedDevOptions {
   };
   ai?: {
     mode: AiMode;
+    headless: boolean;
+    devUI: boolean;
+    viewport: { width: number; height: number } | null;
+    screenshotSize: { width: number; height: number };
+  };
+  workspace?: {
+    enabled: boolean;
+    open: boolean;
     headless: boolean;
     devUI: boolean;
     viewport: { width: number; height: number } | null;

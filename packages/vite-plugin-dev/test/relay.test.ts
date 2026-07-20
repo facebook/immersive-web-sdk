@@ -199,4 +199,221 @@ describe('createRelayHandler', () => {
     relay.cleanStale(1);
     expect(relay.pendingCount()).toBe(0);
   });
+
+  test('defaults command requests to app browser clients when page roles are registered', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const app = createMockWs();
+    const editor = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, app, editor]);
+    relay.registerBrowserClient(app, {
+      pageId: 'app-tab',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(editor, {
+      pageId: 'editor-tab',
+      role: 'editor',
+      tabGeneration: 1,
+    });
+
+    const request = JSON.stringify({
+      id: 'target-default',
+      method: 'get_session_status',
+      params: {},
+    });
+    relay.onMessage(command, request, clients);
+
+    expect(app.send).toHaveBeenCalledWith(request);
+    expect(editor.send).not.toHaveBeenCalled();
+  });
+
+  test('routes explicit editor-targeted requests only to matching editor clients', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const app = createMockWs();
+    const editor = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, app, editor]);
+    relay.registerBrowserClient(app, {
+      pageId: 'app-tab',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(editor, {
+      pageId: 'editor-tab',
+      role: 'editor',
+      sceneSessionId: 'scene-1',
+      tabGeneration: 3,
+    });
+
+    const request = JSON.stringify({
+      id: 'target-editor',
+      method: 'scene_screenshot',
+      params: {},
+      target: {
+        role: 'editor',
+        pageId: 'editor-tab',
+        tabGeneration: 3,
+        sceneSessionId: 'scene-1',
+      },
+    });
+    relay.onMessage(command, request, clients);
+
+    expect(app.send).not.toHaveBeenCalled();
+    expect(editor.send).toHaveBeenCalledWith(request);
+  });
+
+  test('fails targeted requests when generation is stale', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const app = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, app]);
+    relay.registerBrowserClient(app, {
+      pageId: 'app-tab',
+      role: 'app',
+      tabGeneration: 2,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'stale-target',
+        method: 'get_session_status',
+        params: {},
+        target: {
+          role: 'app',
+          pageId: 'app-tab',
+          tabGeneration: 1,
+        },
+      }),
+      clients,
+    );
+
+    expect(app.send).not.toHaveBeenCalled();
+    expect(command.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
+      id: 'stale-target',
+      error: {
+        code: -32004,
+      },
+    });
+    expect(relay.pendingCount()).toBe(0);
+  });
+
+  test('drops responses from non-target browser clients', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const app = createMockWs();
+    const editor = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, app, editor]);
+    relay.registerBrowserClient(app, {
+      pageId: 'app-tab',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(editor, {
+      pageId: 'editor-tab',
+      role: 'editor',
+      tabGeneration: 1,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'target-response',
+        method: 'scene_screenshot',
+        params: {},
+        target: { role: 'editor' },
+      }),
+      clients,
+    );
+
+    relay.onMessage(
+      app,
+      JSON.stringify({ id: 'target-response', result: { wrong: true } }),
+      clients,
+    );
+    expect(command.send).not.toHaveBeenCalled();
+
+    const editorResponse = JSON.stringify({
+      id: 'target-response',
+      result: { ok: true },
+    });
+    relay.onMessage(editor, editorResponse, clients);
+    expect(command.send).toHaveBeenCalledWith(editorResponse);
+  });
+
+  test('keeps a pending request alive when one broadcast target disconnects', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const appA = createMockWs();
+    const appB = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, appA, appB]);
+    relay.registerBrowserClient(appA, {
+      pageId: 'app-a',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(appB, {
+      pageId: 'app-b',
+      role: 'app',
+      tabGeneration: 1,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'multi-target',
+        method: 'get_session_status',
+        params: {},
+      }),
+      clients,
+    );
+    expect(relay.pendingCount()).toBe(1);
+
+    relay.unregisterClient(appA);
+    clients.delete(appA);
+    expect(relay.pendingCount()).toBe(1);
+    expect(command.send).not.toHaveBeenCalled();
+
+    const response = JSON.stringify({
+      id: 'multi-target',
+      result: { active: true },
+    });
+    relay.onMessage(appB, response, clients);
+    expect(command.send).toHaveBeenCalledWith(response);
+    expect(relay.pendingCount()).toBe(0);
+  });
+
+  test('notifies the requester when every pending target disconnects', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const app = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, app]);
+    relay.registerBrowserClient(app, {
+      pageId: 'app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'target-gone',
+        method: 'get_session_status',
+        params: {},
+      }),
+      clients,
+    );
+
+    relay.unregisterClient(app);
+
+    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
+      error: {
+        code: -32004,
+      },
+      id: 'target-gone',
+    });
+    expect(relay.pendingCount()).toBe(0);
+  });
 });

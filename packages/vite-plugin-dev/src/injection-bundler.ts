@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { readFile } from 'fs/promises';
+import { access, readFile } from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { ProcessedDevOptions, InjectionBundleResult } from './types.js';
@@ -25,8 +25,9 @@ export async function buildInjectionBundle(
       console.log('🔄 Loading pre-built IWSDK injection bundle...');
     }
 
-    // Load the pre-built injection bundle
-    const bundlePath = path.resolve(__dirname, 'injection-bundle.js');
+    // Load the pre-built injection bundle. Source-mode tests import this file
+    // from `src/`, while published builds import it from `dist/`.
+    const bundlePath = await resolveInjectionBundlePath();
     let bundleCode = await readFile(bundlePath, 'utf8');
 
     // Create the configuration object to inject
@@ -69,4 +70,22 @@ export async function buildInjectionBundle(
     );
     throw error;
   }
+}
+
+async function resolveInjectionBundlePath(): Promise<string> {
+  const candidates = [
+    path.resolve(__dirname, 'injection-bundle.js'),
+    path.resolve(__dirname, '..', 'dist', 'injection-bundle.js'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Try the next source/build layout.
+    }
+  }
+
+  return candidates[0];
 }

@@ -8,7 +8,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
-import { chromium } from 'playwright';
+import { chromium, type Browser, type LaunchOptions } from 'playwright';
 import sharp from 'sharp';
 
 /**
@@ -113,12 +113,19 @@ export interface ManagedBrowser {
   queryLogs(options?: LogQuery): CapturedLog[];
   /** Read the managed browser tab identity used by MCP metadata. */
   getTabMetadata(): Promise<{ id: string | null; generation: number | null }>;
+  /** Switch the managed workspace view before a browser-level capture. */
+  setWorkspaceView(view: 'runtime' | 'editor' | 'split'): Promise<boolean>;
   /** Take a screenshot of the browser page via CDP. */
   screenshot(): Promise<Buffer>;
   /** Register a callback invoked when the page/browser closes unexpectedly. */
   onClose(callback: () => void): void;
   /** Whether the underlying Playwright page has been closed. */
   isClosed(): boolean;
+}
+
+export interface ManagedBrowserAccess {
+  headerName: string;
+  token: string;
 }
 
 let chromiumInstalled = false;
@@ -137,8 +144,10 @@ async function ensureChromiumInstalled(): Promise<void> {
     return installPromise;
   }
 
-  const execPath = chromium.executablePath();
-  if (fs.existsSync(execPath)) {
+  if (
+    fs.existsSync(chromium.executablePath()) ||
+    findSystemChromium() != null
+  ) {
     chromiumInstalled = true;
     return;
   }
@@ -212,6 +221,29 @@ type GpuBackend = {
 };
 
 const VALID_GPU_VALUES = ['auto', 'gpu', 'swiftshader'];
+
+export function findSystemChromium(): string | undefined {
+  const candidates =
+    os.platform() === 'darwin'
+      ? [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        ]
+      : os.platform() === 'win32'
+        ? [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+          ]
+        : [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+          ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
 
 /**
  * Resolve the GPU / ANGLE backend for Chromium.
@@ -291,6 +323,7 @@ export async function launchManagedBrowser(
     height: 800,
   },
   traceMcp = false,
+  managedAccess: ManagedBrowserAccess | null = null,
 ): Promise<ManagedBrowser> {
   await ensureChromiumInstalled();
 
@@ -304,20 +337,58 @@ export async function launchManagedBrowser(
       : `🖥️  IWSDK: Using hardware GPU (${backend.useAngle})`,
   );
 
-  const browser = await chromium.launch({
+  const browserArgs = [
+    '--enable-webgl',
+    `--use-gl=${backend.useGl}`,
+    `--use-angle=${backend.useAngle}`,
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+  ];
+  const browserLaunchOptions: LaunchOptions = {
+    args: browserArgs,
     headless,
-    args: [
-      '--enable-webgl',
-      `--use-gl=${backend.useGl}`,
-      `--use-angle=${backend.useAngle}`,
-      '--disable-background-timer-throttling',
-      '--disable-renderer-backgrounding',
-    ],
-  });
+  };
+  let browser: Browser;
+  const playwrightExecutableExists = fs.existsSync(chromium.executablePath());
+  const systemChromium = findSystemChromium();
+  const launchSystemChromium = (executablePath: string) =>
+    chromium.launch({
+      ...browserLaunchOptions,
+      args: [...browserArgs, '--no-sandbox'],
+      executablePath,
+    });
+
+  if (!playwrightExecutableExists && systemChromium != null) {
+    if (verbose) {
+      console.log(
+        `🖥️  IWSDK: Using system Chrome because Playwright Chromium is missing (${systemChromium})`,
+      );
+    }
+    browser = await launchSystemChromium(systemChromium);
+  } else {
+    try {
+      browser = await chromium.launch(browserLaunchOptions);
+    } catch (error) {
+      if (systemChromium == null) {
+        throw error;
+      }
+      console.warn(
+        `⚠️  IWSDK: Playwright Chromium launch failed; retrying with ${systemChromium}`,
+      );
+      browser = await launchSystemChromium(systemChromium);
+    }
+  }
 
   const context = await browser.newContext({
     ignoreHTTPSErrors: true, // Accept self-signed certs (e.g. from mkcert)
     viewport, // null = freely resizable; { width, height } = fixed viewport
+    ...(managedAccess
+      ? {
+          extraHTTPHeaders: {
+            [managedAccess.headerName]: managedAccess.token,
+          },
+        }
+      : {}),
   });
   const page = await context.newPage();
 
@@ -433,6 +504,26 @@ export async function launchManagedBrowser(
           generation: Number.isFinite(generation) ? generation : null,
         };
       }),
+    setWorkspaceView: async (view) =>
+      page.evaluate(async (nextView) => {
+        const pathname = window.location.pathname ?? '';
+        const isWorkspace =
+          pathname.startsWith('/__iwsdk/workspace') ||
+          document.documentElement.dataset.iwsdkWorkspaceView != null;
+        if (!isWorkspace) {
+          return false;
+        }
+
+        const runtime = (window as any).IWSDK_SCENE_EDITOR?.runtime;
+        if (runtime && typeof runtime.dispatch === 'function') {
+          await runtime.dispatch('workspace_set_view', { view: nextView });
+          return true;
+        }
+
+        (window as any).__IWSDK_WORKSPACE_VIEW = nextView;
+        document.documentElement.dataset.iwsdkWorkspaceView = nextView;
+        return true;
+      }, view),
     screenshot: async () => {
       const raw = await page.screenshot({ type: 'png' });
       // In non-agent modes (viewport is null / freely resizable), downscale

@@ -16,6 +16,7 @@ import {
   isRuntimeBrowserCommandReady,
   RUNTIME_MCP_TOOLS,
   RUNTIME_OPERATIONS,
+  resolveRuntimeOperationRequest,
   type RuntimeSession,
 } from './runtime-contract.js';
 import {
@@ -245,10 +246,12 @@ export async function startRuntimeMcpStdioServer({
     }
 
     try {
+      const command = resolveRuntimeOperationRequest(operation, args);
       const rawResponse = await sendRuntimeCommand({
         port: session.port,
         method: operation.wsMethod,
-        params: args,
+        params: command.params,
+        target: command.target,
         runtimeSession: session,
       });
       reportToolCall(
@@ -272,7 +275,7 @@ export async function startRuntimeMcpStdioServer({
           : rawResponse;
       const result = normalizedResponse.result ?? normalizedResponse;
       if (
-        name === 'browser_screenshot' &&
+        (name === 'browser_screenshot' || name === 'scene_screenshot') &&
         isRecord(result) &&
         typeof result.imageData === 'string' &&
         typeof result.mimeType === 'string'

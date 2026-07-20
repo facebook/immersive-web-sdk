@@ -33,7 +33,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
     "clean": "rm -rf dist",
-    "test": "pnpm build && vitest run",
+    "test": "corepack pnpm@10.18.3 build && vitest run",
     "test:watch": "vitest"
   },
   "keywords": [

@@ -38,8 +38,18 @@ export interface RuntimeOperationDefinition {
   cliPath: [string, string] | string[];
   mcpName: string;
   wsMethod: string;
+  target?: RuntimePageTarget;
   description: string;
   inputSchema: JsonSchema;
+}
+
+export type RuntimePageRole = 'app' | 'editor' | 'preview';
+
+export interface RuntimePageTarget {
+  role?: RuntimePageRole;
+  pageId?: string;
+  tabGeneration?: number;
+  sceneSessionId?: string;
 }
 
 export const IWSDK_PROJECT_STATE_DIR = '.iwsdk';
@@ -173,6 +183,83 @@ export const MCP_CONFIG_TARGETS: Record<AiTool, McpConfigTarget> = {
   cursor: { file: '.cursor/mcp.json', jsonKey: 'mcpServers', format: 'json' },
   copilot: { file: '.vscode/mcp.json', jsonKey: 'servers', format: 'json' },
   codex: { file: '.codex/config.toml', jsonKey: null, format: 'toml' },
+};
+
+const VECTOR3_SCHEMA: JsonSchema = {
+  type: 'array',
+  items: { type: 'number' },
+  description: '[x, y, z] in meters or degrees depending on the field',
+};
+
+const SCENE_TRANSFORM_SCHEMA: JsonSchema = {
+  type: 'object',
+  description:
+    'Scene node transform. position is meters, rotationDeg is Euler degrees, scale is a scalar or [x,y,z].',
+  properties: {
+    position: VECTOR3_SCHEMA,
+    rotationDeg: VECTOR3_SCHEMA,
+    scale: {
+      oneOf: [{ type: 'number' }, VECTOR3_SCHEMA],
+      description: 'Uniform scale number or non-uniform [x, y, z] scale',
+    },
+    lookAt: VECTOR3_SCHEMA,
+    placeOn: {
+      oneOf: [
+        { type: 'string' },
+        {
+          type: 'object',
+          properties: {
+            target: { type: 'string' },
+            clearance: { type: 'number' },
+            align: { type: 'string', enum: ['center', 'preserve-xz'] },
+          },
+          required: ['target'],
+        },
+      ],
+      description:
+        'Place this node on another node by id, using asset bounds when available.',
+    },
+  },
+};
+
+const SCENE_CAMERA_VIEW_SCHEMA: JsonSchema = {
+  type: 'string',
+  enum: [
+    'current',
+    'top',
+    'front',
+    'back',
+    'left',
+    'right',
+    'quarter',
+    'orbit',
+  ],
+  description:
+    'Named editor camera view. "current" preserves the active camera.',
+};
+
+const SCENE_CAMERA_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    view: SCENE_CAMERA_VIEW_SCHEMA,
+    orbitStep: {
+      type: 'number',
+      description:
+        'Deterministic 45-degree orbit step when view is "orbit" (0-7 wrap around; negative values are allowed).',
+    },
+    step: {
+      type: 'number',
+      description: 'Alias for orbitStep when view is "orbit".',
+    },
+    position: VECTOR3_SCHEMA,
+    lookAt: VECTOR3_SCHEMA,
+    fov: {
+      type: 'number',
+      minimum: 1,
+      maximum: 179,
+      description: 'Vertical field of view in degrees',
+    },
+  },
 };
 
 export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
@@ -576,10 +663,17 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'browser_screenshot',
     description:
-      'Capture a screenshot of the browser. Returns the image directly.',
+      'Capture a screenshot of the managed browser target. Returns the image directly.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        target: {
+          type: 'string',
+          enum: ['runtime', 'editor', 'workspace'],
+          description:
+            'Semantic browser target to capture. runtime captures the app; editor/workspace captures the managed workspace editor.',
+        },
+      },
     },
   },
 
@@ -747,19 +841,157 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
 
   // =============================================================================
-  // Framework-Specific Tools (IWSDK or any framework with FRAMEWORK_MCP_RUNTIME)
+  // Managed Workspace Tools
   // =============================================================================
+  {
+    name: 'workspace_get_state',
+    description:
+      'Get the managed IWSDK workspace state, including current view, runtime readiness, editor readiness, selected scene path, scene session id, and dirty state.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'workspace_set_view',
+    description:
+      'Set the visible managed IWSDK workspace view. This changes UI presentation only; tool routing remains semantic and deterministic.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: {
+          type: 'string',
+          enum: ['runtime', 'editor', 'split'],
+          description: 'Workspace view to show',
+        },
+      },
+      required: ['view'],
+    },
+  },
+  {
+    name: 'workspace_open_scene',
+    description:
+      'Open a scene file from public/scenes in the managed IWSDK workspace editor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Scene file path under public/scenes, ending in .iwsdk.scene.json',
+        },
+      },
+      required: ['path'],
+    },
+  },
+
+  // =============================================================================
+  // Native Scene Composition Editor Tools
+  // =============================================================================
+  {
+    name: 'scene_list_files',
+    description:
+      'List IWSDK scene JSON files available under public/scenes in the managed workspace.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Optional case-insensitive scene path filter',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_open',
+    description:
+      'Open an existing IWSDK scene JSON file from public/scenes in the managed workspace editor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Scene file path under public/scenes, ending in .iwsdk.scene.json',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'scene_create',
+    description:
+      'Create a new IWSDK scene JSON file under public/scenes and open it in the managed workspace editor by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Scene file path under public/scenes, ending in .iwsdk.scene.json',
+        },
+        overwrite: {
+          type: 'boolean',
+          description: 'Replace an existing scene file when true',
+        },
+        open: {
+          type: 'boolean',
+          description:
+            'Open the newly-created scene in the editor. Defaults to true.',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'scene_list_assets',
+    description:
+      'List assets available to the native IWSDK scene editor, including ids, names, URIs, and bounds metadata when present.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Optional case-insensitive asset id/name filter',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_list_component_schemas',
+    description:
+      'List typed component schemas available to the native IWSDK scene editor. Use this before adding or editing component payloads so scene JSON uses typed component props.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Optional case-insensitive component id/name/description filter',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_get_document',
+    description:
+      'Get the current native IWSDK scene JSON document from the editor page.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
   {
     name: 'scene_get_hierarchy',
     description:
-      'Get the Three.js scene hierarchy as a JSON tree. Returns object names, UUIDs, and entity indices where available. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
+      'Get the current native IWSDK scene document hierarchy from the editor page. Returns native scene node ids, not Object3D UUIDs.',
     inputSchema: {
       type: 'object',
       properties: {
         parentId: {
           type: 'string',
           description:
-            'UUID of parent Object3D to start from. Defaults to scene root if omitted.',
+            'Scene node id of the parent to start from. Defaults to scene root if omitted.',
         },
         maxDepth: {
           type: 'number',
@@ -770,19 +1002,288 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'scene_get_selection',
+    description: 'Get the current native scene editor selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_select',
+    description: 'Select one or more scene node ids in the native editor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Scene node ids to select. Pass [] to clear selection.',
+        },
+      },
+      required: ['nodeIds'],
+    },
+  },
+  {
+    name: 'scene_add_node',
+    description: 'Add a node to the native scene JSON document.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node: {
+          type: 'object',
+          description:
+            'Scene node to add. Must include id. asset must reference a known asset id when present.',
+        },
+        parentId: {
+          type: 'string',
+          description: 'Optional parent scene node id',
+        },
+        index: {
+          type: 'number',
+          description: 'Optional insertion index within the parent children',
+        },
+      },
+      required: ['node'],
+    },
+  },
+  {
+    name: 'scene_remove_node',
+    description: 'Remove a node from the native scene JSON document.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string', description: 'Scene node id to remove' },
+      },
+      required: ['nodeId'],
+    },
+  },
+  {
+    name: 'scene_duplicate_node',
+    description:
+      'Duplicate a node and its children in the native scene editor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string', description: 'Scene node id to duplicate' },
+        newNodeId: {
+          type: 'string',
+          description: 'Optional id for the duplicated root node',
+        },
+        parentId: {
+          type: 'string',
+          description:
+            'Optional parent id for the duplicate. Defaults to the original parent.',
+        },
+      },
+      required: ['nodeId'],
+    },
+  },
+  {
+    name: 'scene_set_transform',
+    description:
+      'Replace the transform for a native scene node. Use scene_place_on and scene_look_at for deterministic placement/orientation helpers.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string', description: 'Scene node id' },
+        transform: SCENE_TRANSFORM_SCHEMA,
+      },
+      required: ['nodeId', 'transform'],
+    },
+  },
+  {
+    name: 'scene_apply_patch',
+    description:
+      'Apply one native scene JSON patch operation with undo support. Prefer specific tools for common edits.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        patch: {
+          type: 'object',
+          description:
+            'ScenePatch operation such as addNode, removeNode, moveNode, renameNode, updateTransform, updateComponent, reorderChildren, updateAssetRef, setEditorMetadata, or setNodeMetadata.',
+        },
+      },
+      required: ['patch'],
+    },
+  },
+  {
+    name: 'scene_place_on',
+    description:
+      'Place a node on another node by using scene asset bounds. Useful for desks, floors, shelves, plinths, and panels.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string', description: 'Node being placed' },
+        targetId: { type: 'string', description: 'Support node id' },
+        clearance: {
+          type: 'number',
+          description: 'Optional vertical clearance in meters',
+        },
+        align: {
+          type: 'string',
+          enum: ['center', 'preserve-xz'],
+          description: 'Whether to center x/z on the target or preserve x/z',
+        },
+      },
+      required: ['nodeId', 'targetId'],
+    },
+  },
+  {
+    name: 'scene_look_at',
+    description:
+      'Yaw a scene node so it faces a target point while preserving pitch and roll.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string', description: 'Node to orient' },
+        target: VECTOR3_SCHEMA,
+      },
+      required: ['nodeId', 'target'],
+    },
+  },
+  {
+    name: 'scene_validate',
+    description:
+      'Validate the current native scene JSON document and return structured issues with paths and suggested fixes where available.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_save',
+    description:
+      'Save the current native scene JSON document from the editor page to disk.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_undo',
+    description: 'Undo the most recent native scene editor command.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_redo',
+    description: 'Redo the most recently undone native scene editor command.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_get_logs',
+    description: 'Get native scene editor logs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        count: {
+          type: 'number',
+          description: 'Maximum number of recent logs to return',
+        },
+        level: {
+          type: 'string',
+          enum: ['info', 'warn', 'error'],
+          description: 'Optional log level filter',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_set_camera',
+    description:
+      'Set the native scene editor camera to a named view or explicit pose.',
+    inputSchema: {
+      type: 'object',
+      properties: SCENE_CAMERA_SCHEMA.properties,
+    },
+  },
+  {
+    name: 'scene_screenshot',
+    description:
+      'Capture a native scene editor screenshot. Supports current/top/front/back/left/right/quarter/orbit views and explicit camera poses.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...SCENE_CAMERA_SCHEMA.properties,
+        width: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Optional screenshot width in pixels',
+        },
+        height: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Optional screenshot height in pixels',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_compare_screenshots',
+    description:
+      'Capture two native scene editor screenshots and report whether the image payloads match. Useful for checking that named camera views or before/after scene edits produce distinct visual evidence.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        first: {
+          type: 'object',
+          description:
+            'First camera request. Accepts the same fields as scene_screenshot.',
+          properties: SCENE_CAMERA_SCHEMA.properties,
+        },
+        second: {
+          type: 'object',
+          description:
+            'Second camera request. Accepts the same fields as scene_screenshot.',
+          properties: SCENE_CAMERA_SCHEMA.properties,
+        },
+        width: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Optional screenshot width in pixels',
+        },
+        height: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Optional screenshot height in pixels',
+        },
+      },
+      required: ['first', 'second'],
+    },
+  },
+
+  // =============================================================================
+  // Framework-Specific Tools (IWSDK or any framework with FRAMEWORK_MCP_RUNTIME)
+  // =============================================================================
+  {
     name: 'scene_get_object_transform',
     description:
-      'Get local and global transforms of an Object3D. Includes positionRelativeToXROrigin which can be used directly with xr_look_at tool. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
+      'Get local and global transforms of an Object3D by Object3D UUID or native scene node id. Includes positionRelativeToXROrigin which can be used directly with xr_look_at tool. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
     inputSchema: {
       type: 'object',
       properties: {
         uuid: {
           type: 'string',
           description:
-            'UUID of the Object3D (get this from scene_get_hierarchy)',
+            'UUID of the Object3D (get this from get_scene_hierarchy/runtime hierarchy, not the native editor scene hierarchy)',
+        },
+        nodeId: {
+          type: 'string',
+          description:
+            'Native scene node id (get this from scene_get_hierarchy when using the native scene editor)',
         },
       },
-      required: ['uuid'],
     },
   },
 
@@ -829,14 +1330,13 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'ecs_query_entity',
     description:
-      'Get all component data for an entity. Use entityIndex from scene_get_hierarchy or ecs_find_entities. Returns serialized component values including vectors, entity refs, and Object3D references. Requires FRAMEWORK_MCP_RUNTIME.',
+      'Get all component data for an entity. Use entityIndex from ecs_find_entities. Returns serialized component values including vectors, entity refs, and Object3D references. Requires FRAMEWORK_MCP_RUNTIME.',
     inputSchema: {
       type: 'object',
       properties: {
         entityIndex: {
           type: 'number',
-          description:
-            'Entity index (get this from scene_get_hierarchy or ecs_find_entities)',
+          description: 'Entity index (get this from ecs_find_entities)',
         },
         components: {
           type: 'array',
@@ -924,8 +1424,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
       properties: {
         entityIndex: {
           type: 'number',
-          description:
-            'Entity index (from ecs_find_entities or scene_get_hierarchy)',
+          description: 'Entity index (from ecs_find_entities)',
         },
         componentId: {
           type: 'string',
@@ -1000,7 +1499,6 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   browser_screenshot: 'screenshot',
   browser_get_console_logs: 'get_console_logs',
   browser_reload_page: 'reload_page',
-  scene_get_hierarchy: 'get_scene_hierarchy',
   scene_get_object_transform: 'get_object_transform',
 };
 
@@ -1024,7 +1522,33 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   xr_set_device_state: ['xr', 'set-device-state'],
   browser_get_console_logs: ['browser', 'logs'],
   browser_reload_page: ['browser', 'reload'],
+  workspace_get_state: ['workspace', 'state'],
+  workspace_set_view: ['workspace', 'set-view'],
+  workspace_open_scene: ['workspace', 'open-scene'],
+  scene_list_files: ['scene', 'files'],
+  scene_open: ['scene', 'open'],
+  scene_create: ['scene', 'create'],
+  scene_list_assets: ['scene', 'assets'],
+  scene_list_component_schemas: ['scene', 'component-schemas'],
+  scene_get_document: ['scene', 'document'],
   scene_get_hierarchy: ['scene', 'hierarchy'],
+  scene_get_selection: ['scene', 'selection'],
+  scene_select: ['scene', 'select'],
+  scene_add_node: ['scene', 'add-node'],
+  scene_remove_node: ['scene', 'remove-node'],
+  scene_duplicate_node: ['scene', 'duplicate-node'],
+  scene_set_transform: ['scene', 'set-transform'],
+  scene_apply_patch: ['scene', 'apply-patch'],
+  scene_place_on: ['scene', 'place-on'],
+  scene_look_at: ['scene', 'look-at'],
+  scene_validate: ['scene', 'validate'],
+  scene_save: ['scene', 'save'],
+  scene_undo: ['scene', 'undo'],
+  scene_redo: ['scene', 'redo'],
+  scene_get_logs: ['scene', 'logs'],
+  scene_set_camera: ['scene', 'set-camera'],
+  scene_screenshot: ['scene', 'screenshot'],
+  scene_compare_screenshots: ['scene', 'compare-screenshots'],
   scene_get_object_transform: ['scene', 'transform'],
   ecs_pause: ['ecs', 'pause'],
   ecs_resume: ['ecs', 'resume'],
@@ -1039,9 +1563,54 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   ecs_diff: ['ecs', 'diff'],
 };
 
+export const SCENE_EDITOR_MCP_TOOL_NAMES = [
+  'scene_list_assets',
+  'scene_list_component_schemas',
+  'scene_get_document',
+  'scene_get_hierarchy',
+  'scene_get_selection',
+  'scene_select',
+  'scene_add_node',
+  'scene_remove_node',
+  'scene_duplicate_node',
+  'scene_set_transform',
+  'scene_apply_patch',
+  'scene_place_on',
+  'scene_look_at',
+  'scene_validate',
+  'scene_save',
+  'scene_undo',
+  'scene_redo',
+  'scene_get_logs',
+  'scene_set_camera',
+  'scene_screenshot',
+  'scene_compare_screenshots',
+] as const;
+
+export const SCENE_FILE_MCP_TOOL_NAMES = [
+  'scene_list_files',
+  'scene_open',
+  'scene_create',
+] as const;
+
+export const WORKSPACE_MCP_TOOL_NAMES = [
+  'workspace_get_state',
+  'workspace_set_view',
+  'workspace_open_scene',
+] as const;
+
+const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
+  ...SCENE_EDITOR_MCP_TOOL_NAMES,
+  ...SCENE_FILE_MCP_TOOL_NAMES,
+  ...WORKSPACE_MCP_TOOL_NAMES,
+]);
+
 export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
   RUNTIME_MCP_TOOLS.map((tool) => {
     const cliPath = RUNTIME_CLI_PATHS[tool.name];
+    const target = EDITOR_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
+      ? ({ role: 'editor' } as const)
+      : undefined;
     return {
       id: cliPath ? cliPath.join('.') : tool.name,
       domain: cliPath?.[0] ?? 'misc',
@@ -1049,6 +1618,7 @@ export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
       cliPath: cliPath ?? ['misc', tool.name],
       mcpName: tool.name,
       wsMethod: RUNTIME_TOOL_TO_METHOD[tool.name] ?? tool.name,
+      ...(target ? { target } : {}),
       description: tool.description,
       inputSchema: tool.inputSchema,
     };
@@ -1067,4 +1637,41 @@ export function getRuntimeOperationByCliPath(
   return RUNTIME_OPERATIONS.find(
     (operation) => operation.domain === domain && operation.action === action,
   );
+}
+
+export function resolveRuntimeOperationRequest(
+  operation: RuntimeOperationDefinition,
+  params: unknown,
+): { params: unknown; target?: RuntimePageTarget } {
+  if (operation.mcpName !== 'browser_screenshot' || !isRecord(params)) {
+    return { params, target: operation.target };
+  }
+
+  const { target: requestedTarget, ...rest } = params;
+  if (requestedTarget == null) {
+    return { params: rest, target: operation.target };
+  }
+  if (
+    requestedTarget !== 'runtime' &&
+    requestedTarget !== 'editor' &&
+    requestedTarget !== 'workspace'
+  ) {
+    throw new Error(
+      'browser_screenshot.target must be runtime, editor, or workspace',
+    );
+  }
+
+  return {
+    params: {
+      ...rest,
+      __iwsdkScreenshotTarget: requestedTarget,
+    },
+    target: {
+      role: requestedTarget === 'runtime' ? 'app' : 'editor',
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

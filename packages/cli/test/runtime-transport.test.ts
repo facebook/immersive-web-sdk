@@ -112,6 +112,65 @@ describe('runtime command transport', () => {
     expect(elapsedMs).toBeLessThan(1000);
   });
 
+  test('sends page target metadata with runtime commands', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    let received: unknown;
+    await new Promise<void>((resolve) => {
+      server.once('listening', () => resolve());
+    });
+
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    server.on('connection', (socket) => {
+      socket.on('message', (chunk) => {
+        const request = JSON.parse(chunk.toString()) as { id: string };
+        received = request;
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            result: { ok: true },
+          }),
+        );
+      });
+    });
+
+    try {
+      await sendRuntimeCommand({
+        port,
+        method: 'scene_screenshot',
+        target: { role: 'editor', sceneSessionId: 'scene-a' },
+        timeoutMs: 3000,
+        runtimeSession: {
+          schemaVersion: 1,
+          sessionId: 'session-target',
+          workspaceRoot: '/tmp/app',
+          pid: process.pid,
+          port,
+          localUrl: `http://localhost:${port}`,
+          networkUrls: [],
+          aiTools: [],
+          registeredAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          browser: {
+            status: 'connected',
+            connected: true,
+            commandReady: true,
+            connectedClientCount: 2,
+            lastTransitionAt: new Date().toISOString(),
+          },
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(received).toMatchObject({
+      method: 'scene_screenshot',
+      target: { role: 'editor', sceneSessionId: 'scene-a' },
+    });
+  });
+
   test('classifies closed-before-response as browser_not_ready while warming', async () => {
     const server = new WebSocketServer({ port: 0 });
     await new Promise<void>((resolve) => {

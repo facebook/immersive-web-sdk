@@ -28,6 +28,11 @@ const DEVICE_CONFIGS = {
   oculusQuest1,
 } as const;
 
+type SEMConstructor = Parameters<XRDevice['installSEM']>[0];
+// @iwer/sem is runtime-compatible with installSEM, but its published type lags
+// IWER's SEMConstructor interface.
+const SEM_CONSTRUCTOR = SyntheticEnvironmentModule as unknown as SEMConstructor;
+
 // Activation check function
 function shouldActivate(
   activationMode: ProcessedDevOptions['activation'],
@@ -163,7 +168,7 @@ function initDevRuntime(config: ProcessedDevOptions): void {
       }
 
       // Install SEM and load environment from CDN
-      xrDevice.installSEM(SyntheticEnvironmentModule);
+      xrDevice.installSEM(SEM_CONSTRUCTOR);
 
       if (config.verbose) {
         console.log(

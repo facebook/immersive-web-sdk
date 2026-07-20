@@ -20,6 +20,7 @@ import {
   isRuntimeBrowserCommandReady,
   RUNTIME_OPERATIONS,
   getRuntimeOperationByCliPath,
+  resolveRuntimeOperationRequest,
   type RuntimeSession,
 } from '../runtime-contract.js';
 import {
@@ -107,13 +108,17 @@ export async function handleRuntimeOperation(
     throw new Error(formatMissingRuntimeMessage(workspaceRoot));
   }
 
+  const parsedParams =
+    typeof options.inputJson === 'string'
+      ? safeJsonParse(options.inputJson, '--input-json')
+      : {};
+  const command = resolveRuntimeOperationRequest(operation, parsedParams);
+
   const rawResult = await sendRuntimeCommand({
     port: session.port,
     method: operation.wsMethod,
-    params:
-      typeof options.inputJson === 'string'
-        ? safeJsonParse(options.inputJson, '--input-json')
-        : {},
+    params: command.params,
+    target: command.target,
     timeoutMs: parseIntegerOption(
       options.timeout,
       '--timeout',
@@ -132,7 +137,8 @@ export async function handleRuntimeOperation(
   }
 
   if (
-    operation.mcpName === 'browser_screenshot' &&
+    (operation.mcpName === 'browser_screenshot' ||
+      operation.mcpName === 'scene_screenshot') &&
     isScreenshotResult(result)
   ) {
     const screenshotPath = await saveScreenshot(result, options.outputFile);
