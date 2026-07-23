@@ -8,7 +8,12 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
-import { chromium, type Browser, type LaunchOptions } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type LaunchOptions,
+} from 'playwright';
 import sharp from 'sharp';
 
 /**
@@ -126,6 +131,22 @@ export interface ManagedBrowser {
 export interface ManagedBrowserAccess {
   headerName: string;
   token: string;
+}
+
+export type ManagedBrowserReadiness = 'iwer' | 'workspace';
+
+async function closeAfterLaunchFailure(
+  browser: Browser,
+  context?: BrowserContext,
+): Promise<void> {
+  if (context) {
+    try {
+      await context.close();
+    } catch {}
+  }
+  try {
+    await browser.close();
+  } catch {}
 }
 
 let chromiumInstalled = false;
@@ -324,6 +345,7 @@ export async function launchManagedBrowser(
   },
   traceMcp = false,
   managedAccess: ManagedBrowserAccess | null = null,
+  readiness: ManagedBrowserReadiness = 'iwer',
 ): Promise<ManagedBrowser> {
   await ensureChromiumInstalled();
 
@@ -379,18 +401,26 @@ export async function launchManagedBrowser(
     }
   }
 
-  const context = await browser.newContext({
-    ignoreHTTPSErrors: true, // Accept self-signed certs (e.g. from mkcert)
-    viewport, // null = freely resizable; { width, height } = fixed viewport
-    ...(managedAccess
-      ? {
-          extraHTTPHeaders: {
-            [managedAccess.headerName]: managedAccess.token,
-          },
-        }
-      : {}),
+  const context = await browser
+    .newContext({
+      ignoreHTTPSErrors: true, // Accept self-signed certs (e.g. from mkcert)
+      viewport, // null = freely resizable; { width, height } = fixed viewport
+      ...(managedAccess
+        ? {
+            extraHTTPHeaders: {
+              [managedAccess.headerName]: managedAccess.token,
+            },
+          }
+        : {}),
+    })
+    .catch(async (error) => {
+      await closeAfterLaunchFailure(browser);
+      throw error;
+    });
+  const page = await context.newPage().catch(async (error) => {
+    await closeAfterLaunchFailure(browser, context);
+    throw error;
   });
-  const page = await context.newPage();
 
   // Server-side console capture — accumulates logs from Playwright via CDP
   const consoleCapture = new ServerSideConsoleCapture();
@@ -422,34 +452,43 @@ export async function launchManagedBrowser(
     console.error('[browser:pageerror]', text);
   });
 
-  // Capture unhandled promise rejections by re-emitting as console.error
-  // (which Playwright's page.on('console') already captures via CDP)
-  await page.addInitScript(() => {
-    window.addEventListener('unhandledrejection', (event) => {
-      const reason = event.reason;
-      // reason.stack already includes "ErrorName: message" as its first line
-      const text =
-        reason instanceof Error
-          ? reason.stack || `${reason.name}: ${reason.message}`
-          : String(reason);
-      console.error(`[unhandledrejection] ${text}`);
+  try {
+    // Capture unhandled promise rejections by re-emitting as console.error
+    // (which Playwright's page.on('console') already captures via CDP)
+    await page.addInitScript(() => {
+      window.addEventListener('unhandledrejection', (event) => {
+        const reason = event.reason;
+        // reason.stack already includes "ErrorName: message" as its first line
+        const text =
+          reason instanceof Error
+            ? reason.stack || `${reason.name}: ${reason.message}`
+            : String(reason);
+        console.error(`[unhandledrejection] ${text}`);
+      });
     });
-  });
 
-  // Mark this tab as the Playwright-managed tab. The injection template
-  // checks this flag and only initializes the MCP WebSocket client when
-  // present, so manually-opened browser tabs are not remote-controlled.
-  await page.addInitScript((traceEnabled: boolean) => {
-    (window as any).__IWER_MCP_MANAGED = true;
-    (window as any).__IWSDK_MCP_TRACE = traceEnabled;
-  }, traceMcp);
+    // Mark this tab as the Playwright-managed tab. The injection template
+    // checks this flag and only initializes the MCP WebSocket client when
+    // present, so manually-opened browser tabs are not remote-controlled.
+    await page.addInitScript((traceEnabled: boolean) => {
+      (window as any).__IWER_MCP_MANAGED = true;
+      (window as any).__IWSDK_MCP_TRACE = traceEnabled;
+    }, traceMcp);
 
-  await page.goto(url, { waitUntil: 'commit' });
+    await page.goto(url, { waitUntil: 'commit' });
 
-  // Wait for IWER to inject and XR device to be available
-  await page.waitForFunction(() => (window as any).IWER_DEVICE !== undefined, {
-    timeout: 15000,
-  });
+    await page.waitForFunction(
+      (target: ManagedBrowserReadiness) =>
+        target === 'iwer'
+          ? (window as any).IWER_DEVICE !== undefined
+          : (window as any).__IWSDK_SCENE_EDITOR_READY === true,
+      readiness,
+      { timeout: 15000 },
+    );
+  } catch (error) {
+    await closeAfterLaunchFailure(browser, context);
+    throw error;
+  }
 
   if (verbose) {
     console.log(

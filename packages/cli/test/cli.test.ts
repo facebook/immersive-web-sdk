@@ -10,6 +10,7 @@ import { existsSync } from 'fs';
 import { mkdir, readFile, realpath, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   INTERNAL_BROWSER_PROBE_METHOD,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
@@ -24,19 +25,12 @@ import {
   unregisterRuntimeSession,
 } from '../src/runtime-state.js';
 
-const CLI_PATH = path.join(
-  '/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk',
-  'packages',
-  'cli',
-  'dist',
-  'cli.js',
+const CLI_PACKAGE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
 );
-const CLI_PACKAGE_JSON_PATH = path.join(
-  '/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk',
-  'packages',
-  'cli',
-  'package.json',
-);
+const CLI_PATH = path.join(CLI_PACKAGE_ROOT, 'dist', 'cli.js');
+const CLI_PACKAGE_JSON_PATH = path.join(CLI_PACKAGE_ROOT, 'package.json');
 
 const ONE_BY_ONE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0ZQAAAAASUVORK5CYII=';
@@ -355,6 +349,7 @@ function buildManagedRuntimeScript(
     finalBrowserDelayMs?: number;
     finalBrowserError?: RuntimeBrowserState['lastError'];
     probeReadyDelayMs?: number;
+    workspaceOnly?: boolean;
   } = {},
 ): string {
   const initialBrowser = JSON.stringify(
@@ -366,10 +361,7 @@ function buildManagedRuntimeScript(
     (options.finalBrowserStatus ?? 'connected')
       ? JSON.stringify(
           createBrowserState(options.finalBrowserStatus ?? 'connected', {
-            commandReady:
-              (options.finalBrowserStatus ?? 'connected') === 'connected'
-                ? false
-                : undefined,
+            commandReady: false,
             ...(options.finalBrowserError
               ? {
                   lastError: options.finalBrowserError,
@@ -407,7 +399,7 @@ async function writeSession(port, browser) {
     port,
     localUrl: 'http://localhost:' + port,
     networkUrls: [],
-    aiMode: 'agent',
+    ${options.workspaceOnly ? '' : "aiMode: 'agent',"}
     aiTools: ['claude', 'cursor'],
     browser,
     registeredAt: now,
@@ -1020,6 +1012,36 @@ process.exit(1);
     expect(down.exitCode).toBe(0);
   });
 
+  test('accepts a launched workspace-only browser without marking MCP commands ready', async () => {
+    const fixtureScript = path.join(appA, 'dev-workspace-only.mjs');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-workspace-only', {
+        finalBrowserDelayMs: 100,
+        finalBrowserStatus: 'waiting_for_connection',
+        workspaceOnly: true,
+      }),
+      'utf8',
+    );
+
+    await createAppFixture(appA, {
+      scripts: {
+        'dev:runtime': 'node dev-workspace-only.mjs',
+      },
+    });
+
+    const up = await runCli(['dev', 'up', '--timeout', '15000'], appA);
+    expect(up.exitCode).toBe(0);
+    const parsedUp = JSON.parse(up.stdout);
+    expect(parsedUp.data.session.aiMode).toBeUndefined();
+    expect(parsedUp.data.session.browser.status).toBe('waiting_for_connection');
+    expect(parsedUp.data.session.browser.commandReady).toBe(false);
+    expect(parsedUp.data.session.browser.lastCommandReadyAt).toBeUndefined();
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode).toBe(0);
+  });
+
   test('waits for browser command readiness when attaching to an existing runtime', async () => {
     const fixtureScript = path.join(appA, 'dev-attach-probe-delay.mjs');
     const sessionFile = getRuntimeSessionFilePath(appA);
@@ -1166,6 +1188,7 @@ process.exit(1);
       buildManagedRuntimeScript('fixture-browser-fail', {
         finalBrowserStatus: 'launch_failed',
         finalBrowserDelayMs: 50,
+        workspaceOnly: true,
         finalBrowserError: {
           cause: 'browser_launch_failed',
           message: 'Playwright sandbox denied',

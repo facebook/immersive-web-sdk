@@ -143,6 +143,112 @@ describe('launchManagedBrowser', () => {
 
     expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), 'runtime');
   });
+
+  test('waits for workspace readiness when IWER is disabled', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    const { browser } = createMockBrowser(page);
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await launchManagedBrowser(
+      'http://127.0.0.1:5173/__iwsdk/workspace',
+      false,
+      false,
+      null,
+      { height: 800, width: 800 },
+      false,
+      null,
+      'workspace',
+    );
+
+    expect(page.waitForFunction).toHaveBeenCalledWith(
+      expect.any(Function),
+      'workspace',
+      { timeout: 15000 },
+    );
+
+    const readinessCheck = page.waitForFunction.mock.calls[0]?.[0] as (
+      target: string,
+    ) => boolean;
+    const previousWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { IWSDK_SCENE_EDITOR: {} },
+    });
+    try {
+      expect(readinessCheck('workspace')).toBe(false);
+      (globalThis.window as any).__IWSDK_SCENE_EDITOR_READY = true;
+      expect(readinessCheck('workspace')).toBe(true);
+    } finally {
+      if (previousWindow === undefined) {
+        delete (globalThis as any).window;
+      } else {
+        Object.defineProperty(globalThis, 'window', {
+          configurable: true,
+          value: previousWindow,
+        });
+      }
+    }
+  });
+
+  test('closes the browser when readiness fails', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    page.waitForFunction.mockRejectedValueOnce(new Error('not ready'));
+    const { browser, context } = createMockBrowser(page);
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await expect(
+      launchManagedBrowser(
+        'http://127.0.0.1:5173/__iwsdk/workspace',
+        false,
+        false,
+        null,
+        { height: 800, width: 800 },
+        false,
+        null,
+        'workspace',
+      ),
+    ).rejects.toThrow('not ready');
+
+    expect(context.close).toHaveBeenCalledTimes(1);
+    expect(browser.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves the readiness error when cleanup also fails', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    page.waitForFunction.mockRejectedValueOnce(new Error('not ready'));
+    const { browser, context } = createMockBrowser(page);
+    context.close.mockRejectedValueOnce(new Error('context cleanup failed'));
+    browser.close.mockRejectedValueOnce(new Error('browser cleanup failed'));
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await expect(
+      launchManagedBrowser(
+        'http://127.0.0.1:5173/__iwsdk/workspace',
+        false,
+        false,
+        null,
+        { height: 800, width: 800 },
+        false,
+        null,
+        'workspace',
+      ),
+    ).rejects.toThrow('not ready');
+
+    expect(context.close).toHaveBeenCalledTimes(1);
+    expect(browser.close).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createMockBrowser(page: ReturnType<typeof createMockPage>) {

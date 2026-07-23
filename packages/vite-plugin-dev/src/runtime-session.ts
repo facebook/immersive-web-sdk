@@ -117,6 +117,10 @@ export async function registerRuntimeSession(
         getRuntimeSessionFilePath(workspaceRoot),
       );
       const now = new Date().toISOString();
+      const hasBrowserInput = Object.prototype.hasOwnProperty.call(
+        input,
+        'browser',
+      );
       const session: RuntimeSession = {
         schemaVersion: IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
         sessionId: input.sessionId,
@@ -126,7 +130,7 @@ export async function registerRuntimeSession(
         localUrl: input.localUrl,
         networkUrls: input.networkUrls ?? [],
         aiMode: input.aiMode,
-        browser: input.browser ?? existing?.browser,
+        browser: hasBrowserInput ? input.browser : existing?.browser,
         registeredAt: existing?.registeredAt ?? now,
         updatedAt: now,
       };

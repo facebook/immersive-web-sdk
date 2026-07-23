@@ -91,6 +91,37 @@ describe('runtime session writer', () => {
     expect(written.browser.connectedClientCount).toBe(1);
   });
 
+  test('clears stale browser state when registration explicitly omits a launch', async () => {
+    await registerRuntimeSession({
+      sessionId: 'previous-session',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5175,
+      localUrl: 'https://localhost:5175',
+      browser: {
+        status: 'launching',
+        connected: false,
+        commandReady: false,
+        connectedClientCount: 0,
+        lastTransitionAt: new Date().toISOString(),
+      },
+    });
+
+    const restarted = await registerRuntimeSession({
+      sessionId: 'workspace-open-false',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5176,
+      localUrl: 'https://localhost:5176',
+      browser: undefined,
+    });
+
+    const sessionFile = path.join(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH);
+    const written = JSON.parse(await readFile(sessionFile, 'utf8'));
+    expect(restarted.browser).toBeUndefined();
+    expect(written.browser).toBeUndefined();
+  });
+
   test('serializes concurrent browser state writes so the latest update wins', async () => {
     await registerRuntimeSession({
       sessionId: 'session-3',

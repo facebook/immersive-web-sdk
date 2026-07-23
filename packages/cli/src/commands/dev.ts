@@ -112,6 +112,17 @@ function isBrowserProbeResult(
   );
 }
 
+function isWorkspaceBrowserReady(session: RuntimeSession): boolean {
+  if (session.aiMode || !session.browser) {
+    return false;
+  }
+
+  return (
+    session.browser.status === 'waiting_for_connection' ||
+    session.browser.status === 'connected'
+  );
+}
+
 async function probeBrowserCommandReady(
   session: RuntimeSession,
   timeoutMs: number,
@@ -259,7 +270,11 @@ async function waitForRuntimeSession(
     const session = await getRuntimeSession(workspaceRoot);
     if (session) {
       lastSession = session;
-      if (!session.browser || isRuntimeBrowserCommandReady(session)) {
+      if (
+        !session.browser ||
+        isWorkspaceBrowserReady(session) ||
+        isRuntimeBrowserCommandReady(session)
+      ) {
         return { session, exit: null, browserReady: true };
       }
       if (session.browser.status === 'launch_failed') {
@@ -275,21 +290,23 @@ async function waitForRuntimeSession(
         };
       }
 
-      const remainingMs = Math.max(deadline - Date.now(), 1);
-      const probe = await probeBrowserCommandReady(
-        session,
-        Math.min(remainingMs, 2500),
-      );
-      if (probe.ready) {
-        const refreshedSession = await getRuntimeSession(workspaceRoot);
-        return {
-          session: refreshedSession ?? session,
-          exit: null,
-          browserReady: true,
-        };
-      }
-      if (probe.browserIssue) {
-        lastBrowserIssue = probe.browserIssue;
+      if (session.aiMode) {
+        const remainingMs = Math.max(deadline - Date.now(), 1);
+        const probe = await probeBrowserCommandReady(
+          session,
+          Math.min(remainingMs, 2500),
+        );
+        if (probe.ready) {
+          const refreshedSession = await getRuntimeSession(workspaceRoot);
+          return {
+            session: refreshedSession ?? session,
+            exit: null,
+            browserReady: true,
+          };
+        }
+        if (probe.browserIssue) {
+          lastBrowserIssue = probe.browserIssue;
+        }
       }
     }
 
@@ -309,7 +326,9 @@ async function waitForRuntimeSession(
     session: lastSession,
     exit: null,
     browserReady: Boolean(
-      lastSession && isRuntimeBrowserCommandReady(lastSession),
+      lastSession &&
+        (isWorkspaceBrowserReady(lastSession) ||
+          isRuntimeBrowserCommandReady(lastSession)),
     ),
     browserIssue:
       lastBrowserIssue ??

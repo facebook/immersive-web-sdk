@@ -423,11 +423,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         };
       };
 
-      currentBrowserState = createBrowserState(
-        'launching',
-        { connected: false },
-        null,
-      );
+      // An unopened workspace has no managed browser lifecycle yet. Omitting
+      // browser state lets `iwsdk dev up` report the registered runtime while
+      // preserving lazy launch on the first browser command.
+      currentBrowserState = pluginOptions.workspace.open
+        ? createBrowserState('launching', { connected: false }, null)
+        : null;
 
       const publishBrowserState = (browser: RuntimeBrowserState): void => {
         currentBrowserState = browser;
@@ -473,6 +474,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 headerName: MANAGED_WORKSPACE_HEADER,
                 token: managedWorkspaceToken,
               },
+              pluginOptions.ai ? 'iwer' : 'workspace',
             );
             managedBrowser = browser;
             consecutiveFailures = 0;

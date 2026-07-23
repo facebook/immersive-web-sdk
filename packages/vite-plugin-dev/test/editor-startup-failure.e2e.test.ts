@@ -59,11 +59,13 @@ describe('editor startup failure diagnostics', () => {
         page.evaluate(() => ({
           hasEditor: Boolean((window as any).IWSDK_SCENE_EDITOR),
           hasHooks: Boolean((window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS),
+          ready: (window as any).__IWSDK_SCENE_EDITOR_READY === true,
         })),
       )
       .toEqual({
         hasEditor: false,
         hasHooks: false,
+        ready: false,
       });
     expect(consoleErrors.join('\n')).toContain(
       '[IWSDK Scene Editor] Failed to initialize:',

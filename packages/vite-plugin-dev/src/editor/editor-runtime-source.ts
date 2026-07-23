@@ -335,6 +335,7 @@ export function createEditorRuntimeModuleSource(
   lucideIconNodes = LUCIDE_ICON_NODES,
 ): string {
   return `
+window.__IWSDK_SCENE_EDITOR_READY = false;
 let SceneEditorSession;
 let OrbitControls;
 let TransformControls;
@@ -6011,6 +6012,7 @@ function shouldRetryEditorStartup(error) {
 }
 
 init().then(() => {
+  window.__IWSDK_SCENE_EDITOR_READY = true;
   sessionStorage.removeItem(EDITOR_OPTIMIZE_RELOAD_KEY);
 }).catch((error) => {
   if (shouldRetryEditorStartup(error)) {
