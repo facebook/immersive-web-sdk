@@ -104,6 +104,9 @@ export class Locomotor {
       return;
     }
 
+    this.position.copy(this.config.initialPlayerPosition!);
+    this.targetPosition.copy(this.config.initialPlayerPosition!);
+
     if (this.useWorker) {
       // Create worker using lazy loading pattern (await will be handled by plugin)
       this.worker = new Worker(new URL('../worker/worker.js', import.meta.url));
@@ -125,7 +128,6 @@ export class Locomotor {
 
       this.applyConfigToEngine(this.config);
 
-      this.position.copy(this.engine.playerPosition);
       this.isGrounded = this.engine.isGrounded;
     }
 
