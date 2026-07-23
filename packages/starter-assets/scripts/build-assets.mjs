@@ -20,7 +20,7 @@ const VARIANTS_SRC = path.join(PKG_ROOT, 'variants-src');
 const DIST_ROOT = path.join(PKG_ROOT, 'dist');
 const DIST_ASSETS = path.join(DIST_ROOT, 'assets');
 
-const VARIANT_RE = /^starter-(vr|ar)-manual-(ts|js)$/;
+const VARIANT_RE = /^starter-(vr|ar|browser)-manual-(ts|js)$/;
 
 function toVariantId(dirName) {
   const m = dirName.match(VARIANT_RE);
@@ -30,7 +30,7 @@ function toVariantId(dirName) {
 
 function titleFromId(id) {
   const [mode, kind, lang] = id.split('-');
-  const modeTitle = mode.toUpperCase();
+  const modeTitle = mode === 'browser' ? 'Browser' : mode.toUpperCase();
   const kindTitle = kind === 'manual' ? 'Native Scene' : kind;
   const langTitle = lang.toUpperCase();
   return `${modeTitle} ${kindTitle} (${langTitle})`;
@@ -314,7 +314,7 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
     // IMPORTANT: the source length may have changed after Pass 1 replacements; recompute n
     n = source.length;
     const ctxMatch = (expr) => {
-      const m = expr.match(/\bmode\s*=\s*'(ar|vr)'/);
+      const m = expr.match(/\bmode\s*=\s*'(ar|vr|browser)'/);
       if (!m) return false;
       const [, val] = m;
       return String(ctx.mode) === val;
@@ -420,9 +420,7 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
     const abs = path.join(starterDir, rel);
     let content = await fsp.readFile(abs, 'utf8');
     const relPath = rel.replaceAll('\\', '/');
-    const ctx = {
-      mode: id.startsWith('ar-') ? 'ar' : 'vr',
-    };
+    const ctx = { mode: id.split('-')[0] };
     if (/\.(mjs|cjs|js|jsx|ts|tsx)$/.test(relPath)) {
       content = transformTemplate(content, ctx);
     }
@@ -469,13 +467,29 @@ async function generateRecipeForStarter(starterDir, casRoot, casVersion) {
 
   // Inject Chef feature variables per variant id
   const isAR = id.startsWith('ar-');
-  const appFeaturesObj = { enableGrabbing: true, enableLocomotion: !isAR };
-  const xrFeaturesObj = { handTracking: true };
+  const isBrowser = id.startsWith('browser-');
+  const appFeaturesObj = {
+    locomotion: isBrowser
+      ? {
+          useWorker: true,
+          browserControls: true,
+          initialPlayerPosition: [-4, 0, -6],
+        }
+      : isAR
+        ? false
+        : { useWorker: true },
+    grabbing: true,
+    physics: false,
+    sceneUnderstanding: false,
+    environmentRaycast: false,
+  };
+  const xrFeaturesObj = isBrowser ? {} : { handTracking: true };
   edits['@appFeaturesStr'] = toJsObjectLiteral(appFeaturesObj);
   edits['@xrFeaturesStr'] = toJsObjectLiteral(xrFeaturesObj);
-  edits['@xrConfigStr'] =
-    `{ sessionMode: SessionMode.Immersive${isAR ? 'AR' : 'VR'}, ` +
-    `offer: 'always', features: ${toJsObjectLiteral(xrFeaturesObj)} }`;
+  edits['@xrConfigStr'] = isBrowser
+    ? 'false'
+    : `{ sessionMode: SessionMode.Immersive${isAR ? 'AR' : 'VR'}, ` +
+      `offer: 'always', features: ${toJsObjectLiteral(xrFeaturesObj)} }`;
   edits['@appName'] = title;
 
   const recipe = { name: id, version: casVersion, edits };

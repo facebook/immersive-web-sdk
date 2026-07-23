@@ -7,7 +7,7 @@
  */
 
 /**
- * Generate 4 native-scene starter variants (TS + JS) from the starter template.
+ * Generate 6 native-scene starter variants (TS + JS) from the starter template.
  * Outputs to variants-src/ and formats files with Prettier.
  */
 import fs from 'fs';
@@ -31,6 +31,10 @@ const VARIANTS = [
   {
     key: 'ar-manual',
     outName: 'starter-ar-manual-ts',
+  },
+  {
+    key: 'browser-manual',
+    outName: 'starter-browser-manual-ts',
   },
 ];
 
@@ -101,20 +105,37 @@ function readTemplate() {
 }
 
 function applyTemplateBlocks(source, { mode }) {
-  let result = source;
-  let previous;
-  do {
-    previous = result;
-    result = result.replace(
-      /\/\*\s*@template:if\s+mode='(ar|vr)'\s*\*\/([\s\S]*?)\/\*\s*@template:else\s*\*\/([\s\S]*?)\/\*\s*@template:end\s*\*\//g,
-      (_match, expectedMode, whenTrue, whenFalse) =>
-        mode === expectedMode ? whenTrue : whenFalse,
-    );
-    result = result.replace(
-      /\/\*\s*@template:if\s+mode='(ar|vr)'\s*\*\/([\s\S]*?)\/\*\s*@template:end\s*\*\//g,
-      (_match, expectedMode, body) => (mode === expectedMode ? body : ''),
-    );
-  } while (result !== previous);
+  const directive =
+    /(?:\/\*|<!--)\s*@template:(if\s+mode='(ar|vr|browser)'|else|end)\s*(?:\*\/|-->)/g;
+  const stack = [];
+  const included = () =>
+    stack.length === 0 ? true : stack[stack.length - 1].include;
+  let result = '';
+  let cursor = 0;
+  let match;
+
+  while ((match = directive.exec(source)) !== null) {
+    if (included()) {
+      result += source.slice(cursor, match.index);
+    }
+
+    const command = match[1];
+    if (command.startsWith('if')) {
+      const parent = included();
+      const condition = match[2] === mode;
+      stack.push({ parent, condition, include: parent && condition });
+    } else if (command === 'else') {
+      const frame = stack[stack.length - 1];
+      if (!frame) throw new Error('Unexpected @template:else');
+      frame.include = frame.parent && !frame.condition;
+    } else {
+      if (!stack.pop()) throw new Error('Unexpected @template:end');
+    }
+    cursor = directive.lastIndex;
+  }
+
+  if (stack.length > 0) throw new Error('Unclosed @template:if block');
+  result += source.slice(cursor);
   return result;
 }
 
@@ -122,11 +143,12 @@ function composeIndexTs({ mode }) {
   const isAR = mode === 'ar';
   let t = readTemplate();
 
-  // Session mode & offer
-  t = t.replace(
-    /\/\*\s*@session-mode\s*\*\/\s*SessionMode\.[A-Za-z]+/,
-    `SessionMode.Immersive${isAR ? 'AR' : 'VR'}`,
-  );
+  if (mode !== 'browser') {
+    t = t.replace(
+      /\/\*\s*@session-mode\s*\*\/\s*SessionMode\.[A-Za-z]+/,
+      `SessionMode.Immersive${isAR ? 'AR' : 'VR'}`,
+    );
+  }
 
   // Clean up excess blank lines
   t = applyTemplateBlocks(t, { mode });
@@ -249,6 +271,7 @@ function pruneViteTemplate(t, { mode }) {
 }
 
 async function generateTsVariant(v) {
+  const mode = v.key.split('-')[0];
   const dest = path.join(OUT_ROOT, v.outName);
   await emptyDir(dest);
   await copyDir(STARTER_DIR, dest, (full, _rel, ent) => {
@@ -260,12 +283,12 @@ async function generateTsVariant(v) {
     return true;
   });
   const viteComposed = pruneViteTemplate(readViteTemplate(), {
-    mode: v.key.startsWith('ar') ? 'ar' : 'vr',
+    mode,
   });
   const cfgDst = path.join(dest, 'vite.config.ts');
   await fsp.writeFile(cfgDst, viteComposed);
   const composed = composeIndexTs({
-    mode: v.key.startsWith('ar') ? 'ar' : 'vr',
+    mode,
   });
   const indexDst = path.join(dest, 'src', 'index.ts');
   await ensureDir(path.dirname(indexDst));
@@ -275,10 +298,26 @@ async function generateTsVariant(v) {
   const entries = await fsp.readdir(dir).catch(() => []);
   await Promise.all(
     entries
-      .filter((n) => /^index-(vr|ar)-manual\.ts$/.test(n))
+      .filter((n) => /^index-(vr|ar|browser)-manual\.ts$/.test(n))
       .map((n) => removeIfExists(path.join(dir, n))),
   );
   await removeIfExists(path.join(dest, 'src', 'index.template.ts'));
+  if (mode === 'browser') {
+    await removeIfExists(path.join(dest, 'src', 'panel.ts'));
+  } else {
+    await removeIfExists(path.join(dest, 'src', 'mouselook.ts'));
+    await removeIfExists(
+      path.join(dest, 'public', 'scenes', 'browser.iwsdk.scene.json'),
+    );
+  }
+  const welcomePath = path.join(dest, 'ui', 'welcome.uikitml');
+  const welcomeTemplate = await fsp.readFile(welcomePath, 'utf8');
+  await fsp.writeFile(
+    welcomePath,
+    applyTemplateBlocks(welcomeTemplate, { mode })
+      .replace(/^[ \t]+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n'),
+  );
   await cleanTsconfig(dest);
   try {
     const readmePath = path.join(dest, 'README.md');
@@ -320,7 +359,7 @@ async function main() {
     await generateJsVariant(tsDir, v.outName);
     console.log(`  • ${v.outName} and ${v.outName.replace(/-ts$/, '-js')}`);
   }
-  console.log('✅ Done generating 4 variants.');
+  console.log('✅ Done generating 6 variants.');
 }
 
 main().catch((err) => {

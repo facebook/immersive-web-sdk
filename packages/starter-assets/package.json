@@ -1,14 +1,14 @@
 {
   "name": "@iwsdk/starter-assets",
   "version": "0.4.2",
-  "description": "CDN-ready assets and recipes for IWSDK native scene starters.",
+  "description": "CDN-ready assets and recipes for IWSDK browser, VR, and AR native scene starters.",
   "type": "module",
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "clean": "node -e \"const fs=require('fs');const p=['dist','variants-src','recipes','vr-manual-ts','vr-manual-js','ar-manual-ts','ar-manual-js'];for(const d of p){fs.rmSync(d,{recursive:true,force:true});}\"",
+    "clean": "node -e \"const fs=require('fs');const p=['dist','variants-src','recipes','vr-manual-ts','vr-manual-js','ar-manual-ts','ar-manual-js','browser-manual-ts','browser-manual-js'];for(const d of p){fs.rmSync(d,{recursive:true,force:true});}\"",
     "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > scripts/version.js",
     "starter:sync": "node scripts/generate-starters.mjs",
     "build": "corepack pnpm@10.18.3 -s prebuild && corepack pnpm@10.18.3 -s starter:sync && node scripts/build-assets.mjs",

@@ -8,16 +8,21 @@ CDN-hosted native scene starter templates and assets for the IWSDK project scaff
 
 - **Recipes** - Chef-compatible project templates for all IWSDK variants
 - **Assets** - GLTF models, textures, and other starter content
-- **Templates** - Pre-configured Vite projects for VR/AR development
+- **Templates** - Pre-configured Vite projects for desktop, VR, and AR development
 
 ## Template Variants
 
-| ID             | Description                         |
-| -------------- | ----------------------------------- |
-| `vr-manual-ts` | VR + TypeScript + native scene JSON |
-| `vr-manual-js` | VR + JavaScript + native scene JSON |
-| `ar-manual-ts` | AR + TypeScript + native scene JSON |
-| `ar-manual-js` | AR + JavaScript + native scene JSON |
+| ID                  | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `vr-manual-ts`      | VR + TypeScript + native scene JSON         |
+| `vr-manual-js`      | VR + JavaScript + native scene JSON         |
+| `ar-manual-ts`      | AR + TypeScript + native scene JSON         |
+| `ar-manual-js`      | AR + JavaScript + native scene JSON         |
+| `browser-manual-ts` | Desktop 3D + TypeScript + native scene JSON |
+| `browser-manual-js` | Desktop 3D + JavaScript + native scene JSON |
+
+Desktop variants run with `xr: false`, canvas pointer input, browser locomotion,
+and pointer-lock mouse look. Their dev config keeps IWER injection disabled.
 
 ## CDN URLs
 
@@ -46,7 +51,7 @@ pnpm --filter @iwsdk/starter-assets build
 
 This runs:
 
-- `starter:sync` - Generates variant source files
+- `starter:sync` - Generates the desktop, VR, and AR TypeScript/JavaScript variants
 - `build-assets.mjs` - Creates `dist/assets/` and `dist/recipes/`
 
 ## License

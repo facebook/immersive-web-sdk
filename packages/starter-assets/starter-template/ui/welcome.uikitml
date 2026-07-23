@@ -24,7 +24,9 @@
     text-align: left;
     margin-top: 0.3;
   }
-  
+
+  /* @template:if mode='browser' */
+  /* @template:else */
   #xr-button {
     width: 100%;
     padding: 1.5;
@@ -39,9 +41,20 @@
     text-align: center;
     cursor: pointer;
   }
+  /* @template:end */
 </style>
 <div class="panel-container">
+  <!-- @template:if mode='browser' -->
+  <span class="heading"> Hello, Desktop 3D! </span>
+  <span class="sub-heading">
+    Build interactive 3D experiences for the web with Immersive Web SDK.</span
+  >
+  <!-- @template:else -->
   <span class="heading"> Hello, Immersive Web! </span>
-  <span class="sub-heading"> Explore locomotion, grab interactions, spatial UI panel and more - start building for the immersive web with Immersive Web SDK today.</span>
+  <span class="sub-heading">
+    Explore locomotion, grab interactions, spatial UI panel and more - start
+    building for the immersive web with Immersive Web SDK today.</span
+  >
   <button id="xr-button">Enter XR</button>
+  <!-- @template:end -->
 </div>

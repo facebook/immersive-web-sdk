@@ -12,11 +12,18 @@ import {
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
+  /* @template:if mode='browser' */
+  /* @template:else */
   SessionMode,
+  /* @template:end */
   SRGBColorSpace,
   World,
 } from '@iwsdk/core';
+/* @template:if mode='browser' */
+import { BrowserMouseLookSystem } from './mouselook.js';
+/* @template:else */
 import { PanelSystem } from './panel.js';
+/* @template:end */
 import { RobotSystem } from './robot.js';
 
 const assets: AssetManifest = {
@@ -36,19 +43,40 @@ let sceneLevel = './scenes/vr.iwsdk.scene.json';
 /* @template:if mode='ar' */
 sceneLevel = './scenes/ar.iwsdk.scene.json';
 /* @template:end */
+/* @template:if mode='browser' */
+sceneLevel = './scenes/browser.iwsdk.scene.json';
+/* @template:end */
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,
+  /* @template:if mode='browser' */
+  xr: false,
+  render: {
+    near: 0.001,
+    far: 200,
+    camera: {
+      position: [0, 1.6, 0],
+      lookAt: [0, 1.4, -1.8],
+    },
+  },
+  input: {
+    canvasPointerEvents: true,
+  },
+  /* @template:else */
   xr: {
     sessionMode: /* @session-mode */ SessionMode.ImmersiveAR,
     offer: 'always',
     // Optional structured features; layers/local-floor are offered by default
     features: {},
   } /* @chef:xr-config */,
+  /* @template:end */
   features: {} /* @chef:app */,
   level: sceneLevel,
 }).then((world) => {
+  /* @template:if mode='browser' */
+  /* @template:else */
   const { camera } = world;
+  /* @template:end */
   /* @template:if mode='ar' */
   camera.position.set(0, 1, 0.5);
   /* @template:end */
@@ -70,5 +98,10 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   logoBanner.position.set(0, 1, 1.8);
   logoBanner.rotateY(Math.PI);
 
-  world.registerSystem(PanelSystem).registerSystem(RobotSystem);
+  world.registerSystem(RobotSystem);
+  /* @template:if mode='browser' */
+  world.registerSystem(BrowserMouseLookSystem);
+  /* @template:else */
+  world.registerSystem(PanelSystem);
+  /* @template:end */
 });

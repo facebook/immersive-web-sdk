@@ -22,12 +22,20 @@ export default defineConfig({
         /* @template:if mode='ar' */
         environment: 'living_room',
         /* @template:end */
-        // The IWER WebXR emulator is injected during `dev` by default (real
-        // headset browsers like OculusBrowser are skipped automatically). Set
-        // `iwer: false` to disable it and use only native WebXR.
+        /* @template:if mode='browser' */
+        // Browser starters exercise IWSDK's native non-XR input path.
+        iwer: false,
+        /* @template:else */
+        // IWER is injected during `dev` by default. Real headset browsers are
+        // skipped automatically.
         iwer: true,
+        /* @template:end */
       },
+      /* @template:if mode='browser' */
+      workspace: { enabled: true },
+      /* @template:else */
       ai: { mode: 'agent' },
+      /* @template:end */
       verbose: true,
     }),
     iwsdkExampleAssets({
