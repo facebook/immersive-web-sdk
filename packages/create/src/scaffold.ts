@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import { constants } from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import type { Recipe } from '@pmndrs/chef';
@@ -15,29 +16,227 @@ import ora from 'ora';
 import { Ora } from 'ora';
 import prettier from 'prettier';
 
-async function applyRecipe(recipes: Recipe | Recipe[], outDir: string) {
+export type ScaffoldOptions = {
+  force?: boolean;
+};
+
+type ProjectFile = {
+  collisionKey: string;
+  contents: Buffer;
+  outPath: string;
+  relativePath: string;
+};
+
+type StagedProjectFile = ProjectFile & {
+  stagedPath: string;
+};
+
+async function getStat(targetPath: string) {
+  try {
+    return await fsp.lstat(targetPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function resolveOutputPath(outDir: string, recipePath: string) {
+  const invalidSegment = recipePath
+    .split('/')
+    .some((segment) => segment === '' || segment === '.' || segment === '..');
+  if (
+    recipePath.includes('\0') ||
+    recipePath.includes('\\') ||
+    invalidSegment ||
+    /^[a-zA-Z]:/.test(recipePath)
+  ) {
+    throw new Error(`Recipe output path "${recipePath}" is not safe.`);
+  }
+  const outPath = path.resolve(outDir, ...recipePath.split('/'));
+  const relativePath = path.relative(outDir, outPath);
+  if (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    throw new Error(`Recipe output path "${recipePath}" escapes the target.`);
+  }
+  return {
+    collisionKey: relativePath.normalize('NFC').toLowerCase(),
+    outPath,
+    relativePath,
+  };
+}
+
+async function buildProjectFiles(
+  recipes: Recipe | Recipe[],
+  outDir: string,
+): Promise<ProjectFile[]> {
   const recipeArray = Array.isArray(recipes) ? recipes : [recipes];
   const result = await buildProject(recipeArray, undefined, { allowUrl: true });
   const decoder = new TextDecoder('utf-8');
+  const files: ProjectFile[] = [];
+  const outputPaths = new Set<string>();
   for (const [rel, bytes] of Object.entries(result)) {
-    const outPath = path.join(outDir, rel);
-    await fsp.mkdir(path.dirname(outPath), { recursive: true });
-    const ext = path.extname(rel).toLowerCase();
+    const { collisionKey, outPath, relativePath } = resolveOutputPath(
+      outDir,
+      rel,
+    );
+    if (outputPaths.has(collisionKey)) {
+      throw new Error(`Recipe output path "${rel}" resolves more than once.`);
+    }
+    outputPaths.add(collisionKey);
+    const ext = path.extname(relativePath).toLowerCase();
     const isTs = ext === '.ts' || ext === '.tsx' || ext === '.d.ts';
     if (!isTs) {
-      await fsp.writeFile(outPath, Buffer.from(bytes as any));
+      files.push({
+        collisionKey,
+        contents: Buffer.from(bytes),
+        outPath,
+        relativePath,
+      });
       continue;
     }
     // Attempt to format TS content with Prettier; fall back on error
     try {
-      const text =
-        typeof bytes === 'string'
-          ? (bytes as string)
-          : decoder.decode(bytes as Uint8Array);
-      const formatted = await prettier.format(text, { filepath: rel });
-      await fsp.writeFile(outPath, formatted, 'utf8');
+      const formatted = await prettier.format(decoder.decode(bytes), {
+        filepath: relativePath,
+      });
+      files.push({
+        collisionKey,
+        contents: Buffer.from(formatted, 'utf8'),
+        outPath,
+        relativePath,
+      });
     } catch {
-      await fsp.writeFile(outPath, Buffer.from(bytes as any));
+      files.push({
+        collisionKey,
+        contents: Buffer.from(bytes),
+        outPath,
+        relativePath,
+      });
+    }
+  }
+  return files;
+}
+
+function assertManifestPaths(files: ProjectFile[]) {
+  const outputPaths = new Set(files.map((file) => file.collisionKey));
+  for (const file of files) {
+    let ancestor = path.dirname(file.relativePath);
+    while (ancestor !== '.') {
+      if (outputPaths.has(ancestor.normalize('NFC').toLowerCase())) {
+        throw new Error(
+          `Recipe output "${ancestor}" cannot be both a file and a directory.`,
+        );
+      }
+      ancestor = path.dirname(ancestor);
+    }
+  }
+}
+
+async function ensureTargetDirectory(outDir: string, force: boolean) {
+  let targetStat = await getStat(outDir);
+  if (targetStat == null) {
+    await fsp.mkdir(outDir, { recursive: true });
+    targetStat = await getStat(outDir);
+  }
+  if (targetStat?.isSymbolicLink()) {
+    throw new Error('Refusing to scaffold into a symbolic-link target.');
+  }
+  if (!targetStat?.isDirectory()) {
+    throw new Error('Scaffold target is not a directory.');
+  }
+  if (!force && (await fsp.readdir(outDir)).length > 0) {
+    throw new Error(
+      'Target directory is not empty. Re-run with --force to overwrite conflicting generated files; unrelated files will be preserved.',
+    );
+  }
+}
+
+async function assertOutputPaths(files: ProjectFile[], outDir: string) {
+  const targetStat = await getStat(outDir);
+  if (targetStat?.isSymbolicLink()) {
+    throw new Error('Refusing to scaffold into a symbolic-link target.');
+  }
+  if (!targetStat?.isDirectory()) {
+    throw new Error('Scaffold target is not a directory.');
+  }
+  for (const file of files) {
+    const pathParts = file.relativePath.split(path.sep);
+    let currentPath = outDir;
+    for (let index = 0; index < pathParts.length; index++) {
+      currentPath = path.join(currentPath, pathParts[index]);
+      const currentStat = await getStat(currentPath);
+      if (currentStat == null) {
+        break;
+      }
+      const displayPath = path.relative(outDir, currentPath);
+      if (currentStat.isSymbolicLink()) {
+        throw new Error(
+          `Refusing to scaffold through symbolic link "${displayPath}".`,
+        );
+      }
+      const isOutputFile = index === pathParts.length - 1;
+      if (!isOutputFile && !currentStat.isDirectory()) {
+        throw new Error(
+          `Cannot create "${file.relativePath}": "${displayPath}" is not a directory.`,
+        );
+      }
+      if (isOutputFile && !currentStat.isFile()) {
+        throw new Error(
+          `Cannot overwrite "${file.relativePath}": the existing path is not a regular file.`,
+        );
+      }
+    }
+  }
+}
+
+async function createOutputDirectories(files: ProjectFile[]) {
+  const directories = Array.from(
+    new Set(files.map((file) => path.dirname(file.outPath))),
+  ).sort((left, right) => left.length - right.length);
+  for (const directory of directories) {
+    await fsp.mkdir(directory, { recursive: true });
+  }
+}
+
+async function stageProjectFiles(
+  files: ProjectFile[],
+): Promise<StagedProjectFile[]> {
+  const stagedFiles: StagedProjectFile[] = [];
+  try {
+    for (const file of files) {
+      const stagedPath = path.join(
+        path.dirname(file.outPath),
+        `.${path.basename(file.outPath)}.iwsdk-${randomUUID()}.tmp`,
+      );
+      await fsp.writeFile(stagedPath, file.contents, { flag: 'wx' });
+      stagedFiles.push({ ...file, stagedPath });
+    }
+    return stagedFiles;
+  } catch (error) {
+    await Promise.allSettled(
+      stagedFiles.map((file) => fsp.rm(file.stagedPath, { force: true })),
+    );
+    throw error;
+  }
+}
+
+async function commitProjectFiles(files: StagedProjectFile[], force: boolean) {
+  for (const file of files) {
+    if (force) {
+      await fsp.rename(file.stagedPath, file.outPath);
+    } else {
+      await fsp.copyFile(
+        file.stagedPath,
+        file.outPath,
+        constants.COPYFILE_EXCL,
+      );
+      await fsp.rm(file.stagedPath);
     }
   }
 }
@@ -45,6 +244,7 @@ async function applyRecipe(recipes: Recipe | Recipe[], outDir: string) {
 export async function scaffoldProject(
   recipes: Recipe | Recipe[],
   outDir: string,
+  options: ScaffoldOptions = {},
 ) {
   const scaffoldSpinner: Ora = ora({
     text: `Scaffolding in ${chalk.gray(outDir)} ...`,
@@ -54,8 +254,25 @@ export async function scaffoldProject(
     isEnabled: process.stderr.isTTY,
   }).start();
   try {
-    await mkdir(outDir, { recursive: true });
-    await applyRecipe(recipes, outDir);
+    const resolvedOutDir = path.resolve(outDir);
+    const force = options.force === true;
+    const files = await buildProjectFiles(recipes, resolvedOutDir);
+    assertManifestPaths(files);
+    await ensureTargetDirectory(resolvedOutDir, force);
+    await assertOutputPaths(files, resolvedOutDir);
+    await createOutputDirectories(files);
+    // Recheck after directory creation so no file is changed when a generated
+    // path has an incompatible shape or resolves through a symlink.
+    await assertOutputPaths(files, resolvedOutDir);
+    const stagedFiles = await stageProjectFiles(files);
+    try {
+      await assertOutputPaths(files, resolvedOutDir);
+      await commitProjectFiles(stagedFiles, force);
+    } finally {
+      await Promise.allSettled(
+        stagedFiles.map((file) => fsp.rm(file.stagedPath, { force: true })),
+      );
+    }
     scaffoldSpinner.stopAndPersist({
       symbol: chalk.green('✔'),
       text: 'Project files created',

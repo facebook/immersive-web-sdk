@@ -7,7 +7,15 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'fs/promises';
 import { createServer, type Server } from 'http';
 import { createRequire } from 'module';
 import { AddressInfo } from 'net';
@@ -25,6 +33,11 @@ import {
   vi,
 } from 'vitest';
 import { iwsdkDev } from '../../vite-plugin-dev/src/index.js';
+import {
+  formatAppFeatures,
+  formatXRConfiguration,
+  getRecommendedConfiguration,
+} from '../src/catalog.js';
 
 type Middleware = (
   request: Readable & {
@@ -87,6 +100,8 @@ const BUNDLE_PACKAGE_PATHS: Record<string, string> = {
 };
 const maybeInstallE2ETest =
   process.env.IWSDK_CREATE_INSTALL_E2E === '1' ? test : test.skip;
+const EXPERIENCE_TARGETS = ['browser', 'vr', 'ar'] as const;
+type ExperienceTarget = (typeof EXPERIENCE_TARGETS)[number];
 
 const tempDirs: string[] = [];
 let browser:
@@ -119,23 +134,246 @@ afterEach(async () => {
       .splice(0)
       .map((tempDir) => rm(tempDir, { force: true, recursive: true })),
   );
-});
+}, 60000);
 
-describe('create-iwsdk native scene flow E2E', () => {
+describe('create-iwsdk scene flow E2E', () => {
+  test('scaffolds in place when the current directory is empty', async () => {
+    const workspace = await makeTempDir();
+    const bundleServer = await startBundleServer();
+
+    try {
+      const result = await runCreate(
+        [
+          '.',
+          '-y',
+          '--target',
+          'browser',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      const packageJson = JSON.parse(
+        await readFile(path.join(workspace, 'package.json'), 'utf8'),
+      );
+      expect(packageJson.name).toBe(path.basename(workspace).toLowerCase());
+      expect(result.stdout).not.toContain('cd .');
+      await stat(path.join(workspace, 'src', 'index.ts'));
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
+  test('requires --force before scaffolding into a non-empty directory', async () => {
+    const workspace = await makeTempDir();
+    const sentinelPath = path.join(workspace, 'cloud-harness.txt');
+    await writeFile(sentinelPath, 'preserve me', 'utf8');
+
+    const result = await runCreate(
+      ['.', '-y', '--target', 'browser', '--no-install', '--no-git'],
+      workspace,
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain(
+      'Current directory is not empty',
+    );
+    expect(result.stderr + result.stdout).toContain('--force');
+    expect(await readFile(sentinelPath, 'utf8')).toBe('preserve me');
+    await expect(
+      stat(path.join(workspace, 'package.json')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  test('rechecks an unforced target immediately before writing', async () => {
+    const workspace = await makeTempDir();
+    const readmePath = path.join(workspace, 'README.md');
+    let injectedContent = false;
+    const bundleServer = await startBundleServer({
+      onRequest: async (relativePath) => {
+        if (relativePath === 'bundle.json' && !injectedContent) {
+          injectedContent = true;
+          await writeFile(readmePath, 'arrived during fetch', 'utf8');
+        }
+      },
+    });
+
+    try {
+      const result = await runCreate(
+        [
+          '.',
+          '-y',
+          '--target',
+          'browser',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr + result.stdout).toContain(
+        'Target directory is not empty',
+      );
+      expect(result.stderr + result.stdout).toContain('--force');
+      expect(await readFile(readmePath, 'utf8')).toBe('arrived during fetch');
+      await expect(
+        stat(path.join(workspace, 'package.json')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
+  test('rejects generated-path symlinks without writing outside the target', async () => {
+    const workspace = await makeTempDir();
+    const externalDirectory = await makeTempDir();
+    const externalSource = path.join(externalDirectory, 'index.ts');
+    await writeFile(externalSource, 'preserve me', 'utf8');
+    await symlink(externalDirectory, path.join(workspace, 'src'), 'dir');
+    const bundleServer = await startBundleServer();
+
+    try {
+      const result = await runCreate(
+        [
+          '.',
+          '-y',
+          '--force',
+          '--target',
+          'browser',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr + result.stdout).toContain(
+        'Refusing to scaffold through symbolic link "src"',
+      );
+      expect(await readFile(externalSource, 'utf8')).toBe('preserve me');
+      await expect(
+        stat(path.join(workspace, 'package.json')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
+  test('preflights every generated path before a forced overlay', async () => {
+    const workspace = await makeTempDir();
+    const readmePath = path.join(workspace, 'README.md');
+    const sourcePath = path.join(workspace, 'src');
+    await writeFile(readmePath, 'preserve me', 'utf8');
+    await writeFile(sourcePath, 'not a directory', 'utf8');
+    const bundleServer = await startBundleServer();
+
+    try {
+      const result = await runCreate(
+        [
+          '.',
+          '-y',
+          '--force',
+          '--target',
+          'browser',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr + result.stdout).toContain(
+        '"src" is not a directory',
+      );
+      expect(await readFile(readmePath, 'utf8')).toBe('preserve me');
+      expect(await readFile(sourcePath, 'utf8')).toBe('not a directory');
+      await expect(
+        stat(path.join(workspace, 'package.json')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
+  test('force-overlays generated files while preserving an existing repository', async () => {
+    const repository = await makeTempDir();
+    const workspace = path.join(repository, 'existing-app');
+    await mkdir(workspace);
+    const bundleServer = await startBundleServer();
+    const gitInit = await runCommand('git', ['init'], repository);
+    expect(gitInit.exitCode, gitInit.stderr + gitInit.stdout).toBe(0);
+    const sentinelPath = path.join(workspace, 'cloud-harness.txt');
+    await writeFile(sentinelPath, 'preserve me', 'utf8');
+    await writeFile(path.join(workspace, 'README.md'), 'replace me', 'utf8');
+
+    try {
+      const result = await runCreate(
+        [
+          '.',
+          '-y',
+          '--force',
+          '--target',
+          'browser',
+          '--no-install',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      expect(result.stderr + result.stdout).toContain(
+        '--force will overwrite conflicting generated files',
+      );
+      expect(await readFile(sentinelPath, 'utf8')).toBe('preserve me');
+      expect(
+        await readFile(path.join(workspace, 'README.md'), 'utf8'),
+      ).not.toBe('replace me');
+      await stat(path.join(repository, '.git', 'HEAD'));
+      await expect(stat(path.join(workspace, '.git'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+      await stat(path.join(workspace, 'package.json'));
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
   test('scaffolds every supported starter with scene JSON and editor-readable scenes', async () => {
     const workspace = await makeTempDir();
     const bundleServer = await startBundleServer();
 
     try {
-      for (const mode of ['vr', 'ar'] as const) {
+      for (const target of EXPERIENCE_TARGETS) {
         for (const language of ['ts', 'js'] as const) {
-          const appName = `app-${mode}-${language}`;
+          const appName = `app-${target}-${language}`;
           const result = await runCreate(
             [
               appName,
               '-y',
-              '--mode',
-              mode,
+              '--target',
+              target,
               '--language',
               language,
               '--no-install',
@@ -158,7 +396,7 @@ describe('create-iwsdk native scene flow E2E', () => {
             appRoot,
             'public',
             'scenes',
-            `${mode}.iwsdk.scene.json`,
+            `${target}.iwsdk.scene.json`,
           );
           const scene = JSON.parse(await readFile(sceneFile, 'utf8'));
           const viteConfig = await readFile(
@@ -172,6 +410,13 @@ describe('create-iwsdk native scene flow E2E', () => {
             path.join(appRoot, 'src', `index.${language}`),
             'utf8',
           );
+          const mouseLookSource =
+            target === 'browser'
+              ? await readFile(
+                  path.join(appRoot, 'src', `mouselook.${language}`),
+                  'utf8',
+                )
+              : undefined;
 
           expect(packageJson.devDependencies).toHaveProperty(
             '@iwsdk/vite-plugin-dev',
@@ -183,7 +428,14 @@ describe('create-iwsdk native scene flow E2E', () => {
             units: 'meters',
             version: 'iwsdk.scene.v1',
           });
-          expect(source).toContain(`./scenes/${mode}.iwsdk.scene.json`);
+          expect(source).toContain(`./scenes/${target}.iwsdk.scene.json`);
+          assertGeneratedSettings(source, viteConfig, result.stdout, target);
+          if (mouseLookSource != null) {
+            expect(mouseLookSource).toContain('stopImmediatePropagation');
+            expect(mouseLookSource).toMatch(
+              /addEventListener\(['"]pointerdown['"], onPointerDown, true\)/,
+            );
+          }
           expect(viteConfig).toContain('iwsdkDev');
           expect(viteConfig).not.toMatch(
             new RegExp(
@@ -199,7 +451,7 @@ describe('create-iwsdk native scene flow E2E', () => {
           const documentResponse = await runMiddleware(
             editorMiddleware,
             'GET',
-            `/__iwsdk/editor/document?scene=public/scenes/${mode}.iwsdk.scene.json`,
+            `/__iwsdk/editor/document?scene=public/scenes/${target}.iwsdk.scene.json`,
             '',
             MANAGED_WORKSPACE_HEADERS,
           );
@@ -212,14 +464,14 @@ describe('create-iwsdk native scene flow E2E', () => {
           const editorShell = await runMiddleware(
             editorMiddleware,
             'GET',
-            `/__iwsdk/workspace?scene=public/scenes/${mode}.iwsdk.scene.json`,
+            `/__iwsdk/workspace?scene=public/scenes/${target}.iwsdk.scene.json`,
             '',
             MANAGED_WORKSPACE_HEADERS,
           );
           expect(editorShell.statusCode).toBe(200);
           expect(editorShell.body).toContain('IWSDK Scene Editor');
           expect(editorShell.body).toContain(
-            `/__iwsdk/editor/document?scene=public/scenes/${mode}.iwsdk.scene.json`,
+            `/__iwsdk/editor/document?scene=public/scenes/${target}.iwsdk.scene.json`,
           );
         }
       }
@@ -233,6 +485,11 @@ describe('create-iwsdk native scene flow E2E', () => {
     const help = await runCreate(['--help'], workspace);
 
     expect(help.exitCode).toBe(0);
+    expect(help.stdout).toMatch(
+      /Project directory \(use "\." for the current\s+directory\)/,
+    );
+    expect(help.stdout).toContain('--force');
+    expect(help.stdout).toContain('Use the desktop 3D starting point');
     expect(help.stdout).not.toMatch(
       new RegExp(
         `${LEGACY_EDITOR_LABEL}|${LEGACY_FLAGS.map(escapeRegex).join('|')}`,
@@ -256,6 +513,128 @@ describe('create-iwsdk native scene flow E2E', () => {
     }
   });
 
+  test('applies noninteractive browser feature flags deterministically', async () => {
+    const workspace = await makeTempDir();
+    const bundleServer = await startBundleServer();
+
+    try {
+      const appName = 'browser-overrides-app';
+      const result = await runCreate(
+        [
+          appName,
+          '-y',
+          '--target',
+          'browser',
+          '--language',
+          'ts',
+          '--no-locomotion',
+          '--no-grabbing',
+          '--physics',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'none',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      const source = await readFile(
+        path.join(workspace, appName, 'src', 'index.ts'),
+        'utf8',
+      );
+      const configuration = getRecommendedConfiguration('browser', {
+        locomotionEnabled: false,
+        grabbingEnabled: false,
+        physicsEnabled: true,
+      });
+      const expectedFeatures = formatAppFeatures(configuration.featureFlags);
+      const expectedXR = formatXRConfiguration(configuration);
+
+      expect(normalizeWhitespace(source)).toContain(
+        normalizeWhitespace(`features: ${expectedFeatures}`),
+      );
+      expect(normalizeWhitespace(source)).toContain(
+        normalizeWhitespace(`xr: ${expectedXR}`),
+      );
+      expect(normalizeWhitespace(result.stdout)).toContain(
+        normalizeWhitespace(`features: ${expectedFeatures}`),
+      );
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
+  test('rejects feature flags that do not apply to the selected target', async () => {
+    const workspace = await makeTempDir();
+    const cases = [
+      { option: '--locomotion', target: 'ar' },
+      { option: '--scene-understanding', target: 'vr' },
+      { option: '--environment-raycast', target: 'browser' },
+    ] as const;
+
+    for (const { option, target } of cases) {
+      const result = await runCreate(
+        [
+          `incompatible-${target}-app`,
+          '-y',
+          '--target',
+          target,
+          option,
+          '--no-install',
+        ],
+        workspace,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr + result.stdout).toContain(
+        `${option} is not available for --target ${target}`,
+      );
+      expect(result.stderr + result.stdout).not.toMatch(
+        /Preparing SDK bundle/i,
+      );
+    }
+  });
+
+  test('reports accurate recovery when an AI guidance recipe is unavailable', async () => {
+    const workspace = await makeTempDir();
+    const bundleServer = await startBundleServer({
+      missingPaths: ['recipes/base-agents-config.recipe.json'],
+    });
+
+    try {
+      const appName = 'missing-ai-guidance-app';
+      const result = await runCreate(
+        [
+          appName,
+          '-y',
+          '--target',
+          'vr',
+          '--no-install',
+          '--no-git',
+          '--ai-tools',
+          'codex',
+          '--canary',
+          bundleServer.origin,
+        ],
+        workspace,
+      );
+      const output = result.stderr + result.stdout;
+
+      expect(result.exitCode, output).toBe(0);
+      expect(output).toContain('Could not configure Codex guidance');
+      expect(output).toContain(
+        'Re-run this create command in a new directory to retry',
+      );
+      expect(output).not.toContain('iwsdk adapter sync');
+      await stat(path.join(workspace, appName, 'package.json'));
+    } finally {
+      await bundleServer.close();
+    }
+  });
+
   maybeInstallE2ETest(
     'installs, builds, and serves every generated starter with the native editor route',
     async () => {
@@ -266,15 +645,15 @@ describe('create-iwsdk native scene flow E2E', () => {
 
       try {
         await assertBundleTarballsExist();
-        for (const mode of ['vr', 'ar'] as const) {
+        for (const target of EXPERIENCE_TARGETS) {
           for (const language of ['ts', 'js'] as const) {
-            const appName = `installed-${mode}-${language}-app`;
+            const appName = `installed-${target}-${language}-app`;
             const result = await runCreate(
               [
                 appName,
                 '-y',
-                '--mode',
-                mode,
+                '--target',
+                target,
                 '--language',
                 language,
                 '--no-git',
@@ -333,27 +712,46 @@ describe('create-iwsdk native scene flow E2E', () => {
               const appPage = await waitForHttpOk(`${baseUrl}/`, devServer);
               expect(await appPage.text()).toContain('scene-container');
 
-              const scenePath = `public/scenes/${mode}.iwsdk.scene.json`;
+              const scenePath = `public/scenes/${target}.iwsdk.scene.json`;
               const editorPage = await waitForHttpOk(
                 `${baseUrl}/__iwsdk/editor?scene=${scenePath}`,
                 devServer,
+                45000,
+                MANAGED_WORKSPACE_HEADERS,
               );
               expect(await editorPage.text()).toContain('IWSDK Scene Editor');
 
               const documentResponse = await waitForHttpOk(
                 `${baseUrl}/__iwsdk/editor/document?scene=${scenePath}`,
                 devServer,
+                45000,
+                MANAGED_WORKSPACE_HEADERS,
               );
               expect(await documentResponse.json()).toMatchObject({
                 units: 'meters',
                 version: 'iwsdk.scene.v1',
               });
 
+              const runtimeSession = await waitForManagedBrowserLaunch(
+                appRoot,
+                devServer,
+              );
+              if (target === 'browser') {
+                expect(runtimeSession.aiMode).toBeUndefined();
+                expect(runtimeSession.browser).toMatchObject({
+                  commandReady: false,
+                  connected: false,
+                  status: 'waiting_for_connection',
+                });
+              } else {
+                expect(runtimeSession.aiMode).toBe('agent');
+              }
+
               if (language === 'ts') {
                 await smokeGeneratedAppEditorFlow({
                   appRoot,
                   baseUrl,
-                  mode,
+                  target,
                   scenePath,
                 });
               }
@@ -373,12 +771,12 @@ describe('create-iwsdk native scene flow E2E', () => {
 async function smokeGeneratedAppEditorFlow({
   appRoot,
   baseUrl,
-  mode,
+  target,
   scenePath,
 }: {
   appRoot: string;
   baseUrl: string;
-  mode: 'ar' | 'vr';
+  target: ExperienceTarget;
   scenePath: string;
 }) {
   const scenePublicUrl = scenePath.replace(/^public\//, '');
@@ -391,7 +789,7 @@ async function smokeGeneratedAppEditorFlow({
   const evidenceDir =
     CREATE_E2E_EVIDENCE_DIR == null
       ? undefined
-      : path.join(CREATE_E2E_EVIDENCE_DIR, `generated-${mode}`);
+      : path.join(CREATE_E2E_EVIDENCE_DIR, `generated-${target}`);
   if (evidenceDir != null) {
     await mkdir(evidenceDir, { recursive: true });
   }
@@ -400,6 +798,7 @@ async function smokeGeneratedAppEditorFlow({
     viewport: { height: 720, width: 960 },
   });
   const editorPage = await browser.newPage({
+    extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
     viewport: { height: 720, width: 960 },
   });
   const appDiagnostics = collectPageDiagnostics(appPage, assetIds);
@@ -417,12 +816,29 @@ async function smokeGeneratedAppEditorFlow({
       undefined,
       { timeout: 30000 },
     );
-    await appPage.waitForTimeout(1000);
-    const appScreenshotStats = await getPageScreenshotStats(
+    let appScreenshotStats = await getPageScreenshotStats(
       appPage,
       evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
     );
-    expect(appScreenshotStats.uniqueColors).toBeGreaterThan(8);
+    const renderDeadline = Date.now() + 30000;
+    while (
+      appScreenshotStats.uniqueColors <= 8 &&
+      Date.now() < renderDeadline
+    ) {
+      await appPage.waitForTimeout(250);
+      appScreenshotStats = await getPageScreenshotStats(
+        appPage,
+        evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
+      );
+    }
+    expect(
+      appScreenshotStats.uniqueColors,
+      `generated ${target} app should render a nonblank frame\n${JSON.stringify(
+        appDiagnostics.snapshot(),
+        null,
+        2,
+      )}`,
+    ).toBeGreaterThan(8);
 
     await editorPage.goto(`${baseUrl}/__iwsdk/editor?scene=${scenePath}`, {
       waitUntil: 'domcontentloaded',
@@ -640,7 +1056,8 @@ async function smokeGeneratedAppEditorFlow({
             },
             browser: {
               baseUrl,
-              mode,
+              mode: target,
+              target,
               scenePath,
             },
             editor: {
@@ -761,16 +1178,60 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function startBundleServer(): Promise<{
-  close: () => Promise<void>;
-  origin: string;
-}>;
-async function startBundleServer(options?: {
+function assertGeneratedSettings(
+  source: string,
+  viteConfig: string,
+  output: string,
+  target: ExperienceTarget,
+) {
+  const configuration = getRecommendedConfiguration(target);
+  const expectedFeatures = formatAppFeatures(configuration.featureFlags);
+  const expectedXR = formatXRConfiguration(configuration);
+  expect(normalizeWhitespace(source)).toContain(
+    normalizeWhitespace(`features: ${expectedFeatures}`),
+  );
+  expect(normalizeWhitespace(output)).toContain(
+    normalizeWhitespace(`xr: ${expectedXR}`),
+  );
+  expect(normalizeWhitespace(output)).toContain(
+    normalizeWhitespace(`features: ${expectedFeatures}`),
+  );
+
+  if (target === 'browser') {
+    expect(source).toMatch(/\bxr:\s*false\b/);
+    expect(source).toMatch(/canvasPointerEvents:\s*true/);
+    expect(source).not.toMatch(/SessionMode\.Immersive(?:AR|VR)/);
+    expect(viteConfig).toMatch(/iwer:\s*false/);
+    return;
+  }
+
+  expect(source).toMatch(
+    new RegExp(
+      `sessionMode:\\s*SessionMode\\.Immersive${target === 'ar' ? 'AR' : 'VR'}`,
+    ),
+  );
+  expect(source).not.toMatch(/\bxr:\s*false\b/);
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').replace(/,\s*}/g, ' }').trim();
+}
+
+type BundleServerOptions = {
+  missingPaths?: readonly string[];
+  onRequest?: (relativePath: string) => Promise<void> | void;
   packages?: Record<string, string>;
-}): Promise<{
+};
+
+type TestBundleServer = {
   close: () => Promise<void>;
   origin: string;
-}> {
+};
+
+async function startBundleServer(
+  options: BundleServerOptions = {},
+): Promise<TestBundleServer> {
+  const missingPaths = new Set(options?.missingPaths ?? []);
   const packages = options?.packages ?? {};
   const server: Server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -778,6 +1239,12 @@ async function startBundleServer(options?: {
       /^\/+/,
       '',
     );
+    await options?.onRequest?.(relativePath);
+
+    if (missingPaths.has(relativePath)) {
+      response.writeHead(404).end();
+      return;
+    }
 
     if (relativePath === 'bundle.json') {
       response.writeHead(200, { 'content-type': 'application/json' }).end(
@@ -912,6 +1379,7 @@ async function waitForHttpOk(
   url: string,
   processHandle: { hasExited(): boolean; output(): string },
   timeoutMs = 45000,
+  headers?: Record<string, string>,
 ): Promise<Response> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
@@ -922,7 +1390,7 @@ async function waitForHttpOk(
       );
     }
     try {
-      const response = await fetch(url, { cache: 'no-store' });
+      const response = await fetch(url, { cache: 'no-store', headers });
       if (response.ok) {
         return response;
       }
@@ -934,6 +1402,62 @@ async function waitForHttpOk(
   }
   throw new Error(
     `Timed out waiting for ${url}: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }\n${processHandle.output()}`,
+  );
+}
+
+async function waitForManagedBrowserLaunch(
+  appRoot: string,
+  processHandle: { hasExited(): boolean; output(): string },
+  timeoutMs = 45000,
+): Promise<{
+  aiMode?: string;
+  browser: {
+    commandReady: boolean;
+    connected: boolean;
+    status: string;
+  };
+}> {
+  const sessionPath = path.join(appRoot, '.iwsdk', 'runtime', 'session.json');
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    if (processHandle.hasExited()) {
+      throw new Error(
+        `Dev server exited before the managed browser launched:\n${processHandle.output()}`,
+      );
+    }
+
+    try {
+      const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+      if (session.browser?.status === 'launch_failed') {
+        throw new Error(
+          `Managed browser launch failed: ${JSON.stringify(session.browser)}`,
+        );
+      }
+      if (
+        session.browser?.status === 'waiting_for_connection' ||
+        session.browser?.status === 'connected'
+      ) {
+        return session;
+      }
+    } catch (error) {
+      lastError = error;
+      if (
+        error instanceof Error &&
+        error.message.startsWith('Managed browser launch failed:')
+      ) {
+        throw error;
+      }
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(
+    `Timed out waiting for the managed browser: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }\n${processHandle.output()}`,
   );
@@ -1019,7 +1543,9 @@ function collectPageDiagnostics(page: any, assetIds: string[]) {
       consoleErrors.push(message.text());
     }
   });
-  page.on('pageerror', (error: Error) => consoleErrors.push(error.message));
+  page.on('pageerror', (error: Error) =>
+    consoleErrors.push(error.stack ?? error.message),
+  );
   page.on('requestfailed', (request: any) => {
     failedRequests.push(
       `${request.method()} ${request.url()} ${

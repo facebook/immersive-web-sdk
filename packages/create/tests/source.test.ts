@@ -231,6 +231,21 @@ describe('BundleSource', () => {
     );
   });
 
+  it('prepare() rejects package paths outside the bundle directory', async () => {
+    setupManifestFetch({
+      ...manifest,
+      packages: {
+        ...manifest.packages,
+        '@iwsdk/core': 'packages/../../outside.tgz',
+      },
+    });
+    const source = new BundleSource('https://example.com/bundle');
+
+    await expect(source.prepare()).rejects.toThrow(
+      'Invalid bundle package path: "packages/../../outside.tgz".',
+    );
+  });
+
   it('prepare() throws when fetch fails', async () => {
     fetchMock.mockResolvedValue(mockFetchResponse('', false, 500));
     const source = new BundleSource('https://example.com/bundle');

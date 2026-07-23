@@ -16,22 +16,51 @@ import { Command } from 'commander';
 import ora from 'ora';
 import semver from 'semver';
 import {
+  EXPERIENCE_TARGETS,
+  FEATURE_CATALOG,
+  ScaffoldConfiguration,
+  formatAppFeatures,
+  formatWorldOptions,
+  formatXRConfiguration,
+  formatXRFeatures,
+  getRecommendedConfiguration,
+  getVariantId,
+} from './catalog.js';
+import {
+  hasCliOption,
+  validateFeatureOptionsForTarget,
+} from './cli-options.js';
+import {
   installDependencies,
   installDependenciesFromBundle,
   printNextSteps,
   printPrerequisites,
 } from './installer.js';
+import {
+  isValidProjectTarget,
+  resolveProjectTarget,
+  targetHasContent,
+} from './project-target.js';
 import { promptFlow } from './prompts.js';
 import { scaffoldProject } from './scaffold.js';
 import { resolveSource, SDK_PACKAGES_DIR } from './source.js';
-import { PromptResult, TriState, VariantId, AiTool } from './types.js';
+import {
+  AiTool,
+  ExperienceTarget,
+  FeatureFlags,
+  Language,
+  PromptResult,
+  XRMode,
+} from './types.js';
 import { VERSION, NODE_ENGINE } from './version.js';
 
 type CliOptions = {
   yes?: boolean;
   canary?: string | boolean;
-  mode?: 'vr' | 'ar';
-  language?: 'ts' | 'js';
+  force?: boolean;
+  target?: ExperienceTarget;
+  mode?: XRMode;
+  language?: Language;
   xr?: boolean;
   install?: boolean;
   git?: boolean;
@@ -42,6 +71,144 @@ type CliOptions = {
   environmentRaycast?: boolean;
   aiTools?: string;
 };
+
+const VALID_AI_TOOLS: AiTool[] = ['claude', 'cursor', 'copilot', 'codex'];
+
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
+function resolveBooleanFlag(
+  args: string[],
+  enabledFlag: string,
+  disabledFlag: string,
+): boolean | undefined {
+  const enabled = hasFlag(args, enabledFlag);
+  const disabled = hasFlag(args, disabledFlag);
+  if (enabled && disabled) {
+    throw new Error(`Use either ${enabledFlag} or ${disabledFlag}, not both.`);
+  }
+  if (disabled) {
+    return false;
+  }
+  if (enabled) {
+    return true;
+  }
+  return undefined;
+}
+
+function resolveExplicitTarget(
+  options: CliOptions,
+  args: string[],
+): ExperienceTarget | undefined {
+  const target = options.target;
+  const mode = options.mode;
+  const xrFlag = hasFlag(args, '--xr');
+  const noXrFlag = hasFlag(args, '--no-xr');
+
+  if (target && target !== 'vr' && target !== 'ar' && target !== 'browser') {
+    throw new Error(
+      `Invalid --target "${target}". Must be "vr", "ar", or "browser".`,
+    );
+  }
+  if (mode && mode !== 'vr' && mode !== 'ar') {
+    throw new Error(`Invalid --mode "${mode}". Must be "vr" or "ar".`);
+  }
+  if (xrFlag && noXrFlag) {
+    throw new Error('Use either --xr or --no-xr, not both.');
+  }
+  if (target === 'browser' && (mode || xrFlag)) {
+    throw new Error('--target browser cannot be combined with --mode or --xr.');
+  }
+  if (target && target !== 'browser' && noXrFlag) {
+    throw new Error(`--target ${target} cannot be combined with --no-xr.`);
+  }
+  if (target && mode && target !== mode) {
+    throw new Error(`--target ${target} conflicts with --mode ${mode}.`);
+  }
+  if (mode && noXrFlag) {
+    throw new Error('--mode cannot be combined with --no-xr.');
+  }
+
+  if (target) {
+    return target;
+  }
+  if (noXrFlag) {
+    return 'browser';
+  }
+  if (mode) {
+    return mode;
+  }
+  if (xrFlag) {
+    return 'vr';
+  }
+  return undefined;
+}
+
+function parseAiTools(raw: string | undefined): AiTool[] {
+  if (!raw || raw.trim() === '' || raw.trim() === 'none') {
+    return [];
+  }
+  const requested = raw
+    .split(',')
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+  if (requested.includes('none')) {
+    throw new Error('--ai-tools none cannot be combined with other tools.');
+  }
+  const invalid = requested.filter(
+    (tool) => !VALID_AI_TOOLS.includes(tool as AiTool),
+  );
+  if (invalid.length > 0) {
+    throw new Error(`Unsupported AI tools: ${invalid.join(', ')}.`);
+  }
+  return Array.from(new Set(requested)) as AiTool[];
+}
+
+function isInsideGitWorkTree(directory: string): boolean {
+  try {
+    return (
+      execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+        cwd: directory,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim() === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function printConfigurationSummary(result: PromptResult): void {
+  const config: ScaffoldConfiguration = {
+    target: result.target,
+    xrEnabled: result.xrEnabled,
+    mode: result.mode,
+    featureFlags: result.featureFlags,
+    xrFeatureStates: result.xrFeatureStates,
+  };
+  const enabledFeatures = Object.entries(result.featureFlags)
+    .filter(([key, enabled]) => key !== 'locomotionUseWorker' && enabled)
+    .map(([key]) => FEATURE_CATALOG[key as keyof FeatureFlags].label);
+
+  console.log(chalk.bold('\nProject configuration'));
+  console.log(`  Starting point: ${EXPERIENCE_TARGETS[result.target].label}`);
+  console.log(
+    `  Language: ${result.language === 'ts' ? 'TypeScript' : 'JavaScript'}`,
+  );
+  console.log(
+    `  SDK features: ${enabledFeatures.length > 0 ? enabledFeatures.join(', ') : 'none'}`,
+  );
+  console.log('  Generated World.create options:');
+  for (const line of formatWorldOptions(config).split('\n')) {
+    console.log(`    ${line}`);
+  }
+  console.log(
+    chalk.dim(
+      '  Change these later in src/index.ts; no re-scaffold is required.\n',
+    ),
+  );
+}
 
 async function main() {
   // Enforce Node engines range from generated version.ts
@@ -86,42 +253,38 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .name('Create IWSDK')
     .description('Official CLI for creating Immersive Web SDK projects')
     .version(version)
-    .argument('[name]', 'Project name')
+    .argument('[name]', 'Project directory (use "." for the current directory)')
     .option(
       '--canary [url]',
       'Use canary SDK bundle (optionally from a custom URL)',
     )
     .option('-y, --yes', 'Use defaults and skip prompts')
-    .option('--mode <mode>', 'Experience mode: vr or ar', 'vr')
-    .option('--language <lang>', 'Language: ts or js', 'ts')
-    .option('--xr', 'Enable XR support', true)
-    .option('--no-xr', 'Disable XR support for a browser-only 3D project')
-    .option('--install', 'Install dependencies after scaffolding', true)
+    .option(
+      '--force',
+      'Overwrite conflicting generated files in a non-empty target directory',
+    )
+    .option('--target <target>', 'Starting point: vr, ar, or browser')
+    .option('--mode <mode>', 'XR mode alias: vr or ar')
+    .option('--language <lang>', 'Language: ts or js')
+    .option('--xr', 'Use an XR starting point (VR unless --mode is provided)')
+    .option('--no-xr', 'Use the desktop 3D starting point')
+    .option('--install', 'Install dependencies after scaffolding')
     .option('--no-install', 'Skip dependency installation')
-    .option('--git', 'Initialize git repository', true)
+    .option('--git', 'Initialize git repository')
     .option('--no-git', 'Skip git initialization')
-    .option('--locomotion', 'Enable locomotion feature', true)
+    .option('--locomotion', 'Enable locomotion feature')
     .option('--no-locomotion', 'Disable locomotion feature')
-    .option('--grabbing', 'Enable grabbing feature', true)
+    .option('--grabbing', 'Enable grabbing feature')
     .option('--no-grabbing', 'Disable grabbing feature')
-    .option('--physics', 'Enable physics feature', false)
-    .option('--no-physics', 'Disable physics feature (default)')
-    .option(
-      '--scene-understanding',
-      'Enable scene understanding (AR mode)',
-      true,
-    )
+    .option('--physics', 'Enable physics feature')
+    .option('--no-physics', 'Disable physics feature')
+    .option('--scene-understanding', 'Enable scene understanding (AR mode)')
     .option('--no-scene-understanding', 'Disable scene understanding')
-    .option(
-      '--environment-raycast',
-      'Enable environment raycast (AR mode)',
-      true,
-    )
+    .option('--environment-raycast', 'Enable environment raycast (AR mode)')
     .option('--no-environment-raycast', 'Disable environment raycast')
     .option(
       '--ai-tools <tools>',
       'AI tools to configure (comma-separated: claude,cursor,copilot,codex; or "none")',
-      'claude,cursor,copilot,codex',
     )
     .action((n: string | undefined, opts: CliOptions) => {
       nameArg = n;
@@ -130,17 +293,11 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
   program.parse(process.argv);
 
   try {
-    // Validate flag values
-    if (
-      cliOpts.mode !== undefined &&
-      cliOpts.mode !== 'vr' &&
-      cliOpts.mode !== 'ar'
-    ) {
-      console.error(
-        chalk.red(`Invalid --mode "${cliOpts.mode}". Must be "vr" or "ar".`),
-      );
-      process.exit(1);
-    }
+    // Collapse the target selector and legacy XR flags into one starting point.
+    const explicitTarget = resolveExplicitTarget(
+      cliOpts,
+      process.argv.slice(2),
+    );
     if (
       cliOpts.language !== undefined &&
       cliOpts.language !== 'ts' &&
@@ -169,7 +326,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
 
     // Warn if flags are provided without --yes (they only take effect in non-interactive mode)
     const explicitFlags = [
-      '--mode',
       '--language',
       '--install',
       '--no-install',
@@ -187,13 +343,13 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       '--no-environment-raycast',
       '--ai-tools',
     ];
-    const hasExplicitFlags = process.argv.some((arg) =>
-      explicitFlags.includes(arg),
+    const hasExplicitFlags = explicitFlags.some((flag) =>
+      hasCliOption(process.argv, flag),
     );
     if (hasExplicitFlags && !cliOpts.yes) {
       console.warn(
         chalk.yellow(
-          'Warning: CLI flags (--mode, --language, etc.) only take effect with -y/--yes.\n' +
+          'Warning: advanced CLI flags (--language, --physics, etc.) only take effect with -y/--yes.\n' +
             'Add -y to use non-interactive mode, or remove flags for interactive prompts.',
         ),
       );
@@ -202,77 +358,97 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     // Build PromptResult from CLI flags or interactive prompts
     let res: PromptResult;
     if (cliOpts.yes) {
-      const mode = (cliOpts.mode || 'vr') as 'vr' | 'ar';
-      const language = (cliOpts.language || 'ts') as 'ts' | 'js';
-      const xrEnabled = cliOpts.xr ?? true;
-      const variantId = `${mode}-manual-${language}` as VariantId;
-
-      const validAiTools = ['claude', 'cursor', 'copilot', 'codex'] as const;
-      const rawAiTools = (cliOpts.aiTools || 'claude,cursor,copilot,codex')
-        .split(',')
-        .map((t) => t.trim());
-      const aiTools = rawAiTools.includes('none')
-        ? []
-        : rawAiTools.filter((t): t is AiTool =>
-            validAiTools.includes(t as AiTool),
-          );
-
-      const locomotionEnabled =
-        xrEnabled && mode === 'vr' ? (cliOpts.locomotion ?? true) : false;
+      const target = explicitTarget ?? 'vr';
+      validateFeatureOptionsForTarget(target, process.argv);
+      const language = cliOpts.language ?? 'ts';
+      const overrides: Partial<FeatureFlags> = {};
+      const locomotion = resolveBooleanFlag(
+        process.argv,
+        '--locomotion',
+        '--no-locomotion',
+      );
+      const grabbing = resolveBooleanFlag(
+        process.argv,
+        '--grabbing',
+        '--no-grabbing',
+      );
+      const physics = resolveBooleanFlag(
+        process.argv,
+        '--physics',
+        '--no-physics',
+      );
+      const sceneUnderstanding = resolveBooleanFlag(
+        process.argv,
+        '--scene-understanding',
+        '--no-scene-understanding',
+      );
+      const environmentRaycast = resolveBooleanFlag(
+        process.argv,
+        '--environment-raycast',
+        '--no-environment-raycast',
+      );
+      if (locomotion !== undefined) {
+        overrides.locomotionEnabled = locomotion;
+      }
+      if (grabbing !== undefined) {
+        overrides.grabbingEnabled = grabbing;
+      }
+      if (physics !== undefined) {
+        overrides.physicsEnabled = physics;
+      }
+      if (sceneUnderstanding !== undefined) {
+        overrides.sceneUnderstandingEnabled = sceneUnderstanding;
+      }
+      if (environmentRaycast !== undefined) {
+        overrides.environmentRaycastEnabled = environmentRaycast;
+      }
+      const configuration = getRecommendedConfiguration(target, overrides);
 
       res = {
         name: nameArg || 'iwsdk-app',
-        id: variantId,
-        installNow: cliOpts.install ?? true,
-        xrEnabled,
-        mode,
+        id: getVariantId(target, language),
+        installNow:
+          resolveBooleanFlag(process.argv, '--install', '--no-install') ?? true,
+        target,
+        xrEnabled: configuration.xrEnabled,
+        mode: configuration.mode,
         language,
         features: [],
-        featureFlags: {
-          locomotionEnabled,
-          locomotionUseWorker: locomotionEnabled ? true : undefined,
-          grabbingEnabled: xrEnabled ? (cliOpts.grabbing ?? true) : false,
-          physicsEnabled: cliOpts.physics ?? false,
-          sceneUnderstandingEnabled:
-            xrEnabled && mode === 'ar'
-              ? (cliOpts.sceneUnderstanding ?? true)
-              : false,
-          environmentRaycastEnabled:
-            xrEnabled && mode === 'ar'
-              ? (cliOpts.environmentRaycast ?? true)
-              : false,
-        },
-        gitInit: cliOpts.git ?? true,
-        aiTools,
-        xrFeatureStates: !xrEnabled
-          ? {}
-          : mode === 'ar'
-            ? {
-                handTracking: 'optional',
-                anchors: 'optional',
-                hitTest: 'optional',
-                planeDetection: 'optional',
-                meshDetection: 'optional',
-                layers: 'optional',
-              }
-            : { handTracking: 'optional', layers: 'optional' },
+        featureFlags: configuration.featureFlags,
+        gitInit: resolveBooleanFlag(process.argv, '--git', '--no-git') ?? true,
+        aiTools: parseAiTools(cliOpts.aiTools),
+        xrFeatureStates: configuration.xrFeatureStates,
       };
     } else {
-      const xrFlagProvided =
-        process.argv.includes('--xr') || process.argv.includes('--no-xr');
-      res = await promptFlow(
-        nameArg,
-        xrFlagProvided ? { xrEnabled: cliOpts.xr ?? true } : {},
+      res = await promptFlow(nameArg, { target: explicitTarget });
+    }
+
+    // Validate the requested directory (both interactive and non-interactive paths).
+    if (!isValidProjectTarget(res.name)) {
+      throw new Error(
+        `Invalid project name "${res.name}". ` +
+          'Use "." for the current directory, or use only letters, numbers, hyphens, underscores, dots, and @.',
       );
     }
 
-    // Validate project name (both interactive and non-interactive paths)
-    if (!/^[a-zA-Z0-9._@-]+$/.test(res.name)) {
+    const projectTarget = resolveProjectTarget(res.name, process.cwd());
+    const hasTargetContent = targetHasContent(projectTarget);
+    if (hasTargetContent && !cliOpts.force) {
       throw new Error(
-        `Invalid project name "${res.name}". ` +
-          'Use only letters, numbers, hyphens, underscores, dots, and @.',
+        `${projectTarget.inPlace ? 'Current directory' : `Directory "${projectTarget.displayPath}"`} is not empty. ` +
+          'Re-run with --force to overwrite conflicting generated files; unrelated files will be preserved.',
       );
     }
+    if (hasTargetContent) {
+      console.warn(
+        chalk.yellow(
+          `Warning: --force will overwrite conflicting generated files in ${projectTarget.displayPath}; unrelated files will be preserved.`,
+        ),
+      );
+    }
+    res.name = projectTarget.appName;
+
+    printConfigurationSummary(res);
 
     const source = resolveSource(cliOpts.canary);
 
@@ -317,134 +493,83 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       resolvedRecipe.edits = resolvedRecipe.edits || {};
       // Project name
       resolvedRecipe.edits['@appName'] = res.name;
-      // World features (stringified JS object-literal expected by recipes)
-      const ff = res.featureFlags || {
-        locomotionEnabled: res.xrEnabled && res.mode === 'vr',
-        locomotionUseWorker: true,
-        grabbingEnabled: res.xrEnabled,
-        physicsEnabled: false,
-        sceneUnderstandingEnabled: false,
-        environmentRaycastEnabled: false,
+      const configuration: ScaffoldConfiguration = {
+        target: res.target,
+        xrEnabled: res.xrEnabled,
+        mode: res.mode,
+        featureFlags: res.featureFlags,
+        xrFeatureStates: res.xrFeatureStates,
       };
-      const locomotionLiteral = ff.locomotionEnabled
-        ? ff.locomotionUseWorker
-          ? '{ useWorker: true }'
-          : 'true'
-        : 'false';
-      const sceneUnderstandingLiteral =
-        res.xrEnabled && res.mode === 'ar' && ff.sceneUnderstandingEnabled
-          ? 'true'
-          : 'false';
-      const environmentRaycastLiteral =
-        res.xrEnabled && res.mode === 'ar' && ff.environmentRaycastEnabled
-          ? 'true'
-          : 'false';
-      resolvedRecipe.edits['@appFeaturesStr'] =
-        `{ locomotion: ${locomotionLiteral}, grabbing: ${ff.grabbingEnabled ? 'true' : 'false'}, physics: ${ff.physicsEnabled ? 'true' : 'false'}, sceneUnderstanding: ${sceneUnderstandingLiteral}, environmentRaycast: ${environmentRaycastLiteral} }`;
-      // XR features (tri-state -> JS object literal)
-      const toFlag = (s: TriState) =>
-        s === 'required'
-          ? '{ required: true }'
-          : s === 'optional'
-            ? 'true'
-            : 'false';
-      const entries: string[] = [];
-      for (const [k, v] of Object.entries(res.xrFeatureStates || {})) {
-        entries.push(`${k}: ${toFlag(v as TriState)}`);
-      }
-      const xrLiteral = `{ ${entries.join(', ')} }`;
-      resolvedRecipe.edits['@xrFeaturesStr'] = xrLiteral;
-      resolvedRecipe.edits['@xrConfigStr'] = res.xrEnabled
-        ? `{ sessionMode: SessionMode.Immersive${res.mode === 'ar' ? 'AR' : 'VR'}, offer: 'always', features: ${xrLiteral} }`
-        : 'false';
+      resolvedRecipe.edits['@appFeaturesStr'] = formatAppFeatures(
+        configuration.featureFlags,
+      );
+      resolvedRecipe.edits['@xrFeaturesStr'] = formatXRFeatures(
+        configuration.xrFeatureStates,
+      );
+      resolvedRecipe.edits['@xrConfigStr'] =
+        formatXRConfiguration(configuration);
 
-      const outDir = join(process.cwd(), res.name);
-
-      // Check if target directory already exists and is non-empty
-      if (fs.existsSync(outDir) && fs.readdirSync(outDir).length > 0) {
-        throw new Error(
-          `Directory "${res.name}" already exists and is not empty. ` +
-            'Please choose a different name or remove the existing directory.',
-        );
-      }
+      const outDir = projectTarget.outDir;
 
       // Load AI tool configuration recipes based on user selection
       const aiRecipes: Recipe[] = [];
+      const loadAiRecipe = async (fileName: string, label: string) => {
+        try {
+          const recipe = await source.fetchRecipe(fileName);
+          aiRecipes.push(source.resolveRecipeUrls(recipe));
+        } catch (error) {
+          console.warn(
+            chalk.yellow(
+              `Could not configure ${label}: ${error instanceof Error ? error.message : String(error)}. ` +
+                'Project creation will continue without it. Re-run this create command in a new directory to retry, or add the missing configuration manually.',
+            ),
+          );
+        }
+      };
 
       if (res.aiTools.includes('codex')) {
         // AGENTS.md recipe — Codex reads AGENTS.md natively; other tools have
         // their own config files with equivalent content.
-        try {
-          const rawAgentsRecipe = await source.fetchRecipe(
-            'base-agents-config.recipe.json',
-          );
-          aiRecipes.push(source.resolveRecipeUrls(rawAgentsRecipe));
-        } catch {
-          // Not yet published — skip silently
-        }
+        await loadAiRecipe('base-agents-config.recipe.json', 'Codex guidance');
       }
 
       // Claude Code recipe (conditional)
       if (res.aiTools.includes('claude')) {
-        try {
-          const rawClaudeRecipe = await source.fetchRecipe(
-            'base-claude-config.recipe.json',
-          );
-          aiRecipes.push(source.resolveRecipeUrls(rawClaudeRecipe));
-        } catch {
-          // Not yet published — skip silently
-        }
+        await loadAiRecipe('base-claude-config.recipe.json', 'Claude Code');
       }
 
       // Cursor recipe (conditional)
       if (res.aiTools.includes('cursor')) {
-        try {
-          const rawCursorRecipe = await source.fetchRecipe(
-            'base-cursor-config.recipe.json',
-          );
-          aiRecipes.push(source.resolveRecipeUrls(rawCursorRecipe));
-        } catch {
-          // Not yet published — skip silently
-        }
+        await loadAiRecipe('base-cursor-config.recipe.json', 'Cursor');
       }
 
       // Copilot recipe (conditional)
       if (res.aiTools.includes('copilot')) {
-        try {
-          const rawCopilotRecipe = await source.fetchRecipe(
-            'base-copilot-config.recipe.json',
-          );
-          aiRecipes.push(source.resolveRecipeUrls(rawCopilotRecipe));
-        } catch {
-          // Not yet published — skip silently
-        }
+        await loadAiRecipe('base-copilot-config.recipe.json', 'GitHub Copilot');
       }
 
       // Codex recipe (conditional)
       if (res.aiTools.includes('codex')) {
-        try {
-          const rawCodexRecipe = await source.fetchRecipe(
-            'base-codex-config.recipe.json',
-          );
-          aiRecipes.push(source.resolveRecipeUrls(rawCodexRecipe));
-        } catch {
-          // Not yet published — skip silently
-        }
+        await loadAiRecipe('base-codex-config.recipe.json', 'Codex adapter');
       }
 
       const recipes: Recipe[] = [resolvedRecipe, ...aiRecipes];
-      await scaffoldProject(recipes, outDir);
+      await scaffoldProject(recipes, outDir, { force: cliOpts.force });
 
       // Git init
-      if (res.gitInit) {
+      if (
+        res.gitInit &&
+        !(projectTarget.inPlace && isInsideGitWorkTree(outDir))
+      ) {
         try {
           const gitInit = spawn('git', ['init'], {
             cwd: outDir,
             stdio: 'ignore',
           });
-          await new Promise<void>((resolve) =>
-            gitInit.on('exit', () => resolve()),
-          );
+          await new Promise<void>((resolve) => {
+            gitInit.once('error', () => resolve());
+            gitInit.once('exit', () => resolve());
+          });
         } catch {}
       }
 
@@ -496,15 +621,25 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
             ],
             { cwd: outDir, stdio: 'ignore', timeout: 15000 },
           );
-        } catch {
-          // Non-fatal: adapter sync failure shouldn't block project creation
+        } catch (error) {
+          console.warn(
+            chalk.yellow(
+              `Project created, but coding-tool adapter sync failed: ${error instanceof Error ? error.message : String(error)}. ` +
+                `Run "npx iwsdk adapter sync --tools ${res.aiTools.join(',')}" from the project directory.`,
+            ),
+          );
         }
       }
 
       const prereqs = [...(res.prerequisites || [])];
       // Print prerequisites first, then next steps
       printPrerequisites(prereqs);
-      printNextSteps(res.name, res.installNow, res.actionItems || []);
+      printNextSteps(
+        projectTarget.displayPath,
+        res.installNow,
+        res.actionItems || [],
+        projectTarget.inPlace,
+      );
     } finally {
       await source.cleanup();
     }

@@ -1,7 +1,7 @@
 ---
 name: iwsdk-dev
 description: >
-  MUST read this skill BEFORE developing VR/MR/browser-first 3D applications
+  MUST read this skill BEFORE developing VR/MR/desktop 3D applications
   using IWSDK (Immersive Web SDK). Covers project scaffolding, headless
   browser setup, CLI tools, reference system, ECS debugging, XR emulation,
   verification workflows, deployment, and known issues.
@@ -9,9 +9,9 @@ description: >
 
 # IWSDK Development Guide
 
-**Current version: 0.4.2** · [iwsdk.dev](https://iwsdk.dev) · [GitHub](https://github.com/facebook/immersive-web-sdk)
+[iwsdk.dev](https://iwsdk.dev) · [GitHub](https://github.com/facebook/immersive-web-sdk)
 
-This guide is for AI agents and developers building WebXR or browser-first 3D
+This guide is for AI agents and developers building WebXR or desktop browser 3D
 applications with IWSDK in cloud/headless Linux environments (no physical GPU,
 no display server). It assumes Node.js satisfies IWSDK's package engine range:
 `>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0`.
@@ -35,35 +35,65 @@ MCP-only workflows.
 
 ## 1. Project Scaffolding
 
-Always use the official `@iwsdk/create` package. Use `--yes` to bypass
-interactive prompts.
+Always use the official `@iwsdk/create` package.
 
-**Do not hardcode scaffolding flags.** Infer the correct flags from the
-request. When ambiguous, ask.
+The interactive CLI is a short human-facing flow: project name when absent,
+starting point, then recommended settings or an advanced setup. It does not ask
+users to classify every low-level WebXR capability. Recommended settings use
+TypeScript, initialize Git, and install dependencies.
 
-### Step 1: XR vs Browser-First
+**Agent workflow:** infer the requested experience and features, map that intent
+to the flags below, and run with `--yes`. The Create CLI deliberately does not
+infer product intent for an agent. Do not replay or script the interactive
+questions. When the request is ambiguous in a way that changes the starter or a
+material feature, ask the user.
+
+Cloud coding harnesses often start inside an already-created repository. In
+that case, scaffold in place with `.` and pass `--force` explicitly:
+
+```bash
+npx @iwsdk/create@latest . --yes --force --target vr
+```
+
+Create refuses every non-empty target without `--force`. Forced scaffolding
+overwrites conflicting generated files, preserves unrelated files, and reuses
+the existing Git repository. `--yes` answers setup questions; it does not grant
+overwrite permission.
+
+### Step 1: Starting Point
 
 | Target | Flag | When to use |
 |--------|------|-------------|
-| **XR** | `--xr` (default) | VR or AR headset experiences. Proceed to Step 2. |
-| **Browser-first** | `--no-xr` | Desktop/mobile browser 3D app. No headset required. The scaffold sets `xr: false`, but `@iwsdk/create` does **not** currently wire browser locomotion, mouselook, or browser grabbing for you; add `features.locomotion: { browserControls: true }` and app-owned camera controls manually when needed. |
+| **VR** | `--target vr` | Fully immersive virtual environment. |
+| **Mixed reality** | `--target ar` | Passthrough experience with virtual content in the physical environment. |
+| **Desktop 3D** | `--target browser` | Desktop browser 3D app without an immersive session. This dedicated starter has `xr: false`, browser locomotion, right-button mouselook, canvas pointer input, grabbing, and IWER disabled. |
 
-### Step 2: XR Mode (XR only)
+The flag value remains `ar` because it maps to WebXR's `immersive-ar` session
+mode; the user-facing starting point is mixed reality / passthrough.
 
-| Mode | Flag | When to use |
-|------|------|-------------|
-| **VR** | `--mode vr` | Fully immersive virtual environment. |
-| **AR** | `--mode ar` | Augmented / mixed reality with passthrough. |
-
-### Step 3: Features
+### Step 2: Features
 
 | Feature | Flag | Enable when… | Disable when… |
 |---------|------|-------------|---------------|
 | **Physics** | `--physics` / `--no-physics` | Gravity, collisions, bouncing, throwing. | UI-only, data viz, grid-snapping board games. |
-| **Locomotion** | `--locomotion` / `--no-locomotion` | VR user moves through a large space (teleport/slide). For browser-first, configure `features.locomotion: { browserControls: true }` manually after scaffolding. | Stationary experience. |
-| **Grabbing** | `--grabbing` / `--no-grabbing` | XR users pick up, move, or manipulate objects. With `--no-xr`, the create flag is ignored; add browser interaction behavior manually. | Gaze/pointer-only or observational. |
-| **Scene Understanding** | `--scene-understanding` / `--no-scene-understanding` | AR: interact with real-world surfaces. | AR without surface interaction. |
-| **Environment Raycast** | `--environment-raycast` / `--no-environment-raycast` | AR: cast rays against real-world geometry. | No real-world hit testing needed. |
+| **Locomotion** | `--locomotion` / `--no-locomotion` | VR user moves through a large space (teleport/slide). The Desktop 3D starter already supplies browser controls. | Stationary VR experience. |
+| **Grabbing** | `--grabbing` / `--no-grabbing` | VR/MR users pick up, move, or manipulate objects. The Desktop 3D starter has browser interaction behavior built in. | Gaze/pointer-only or observational VR/MR experience. |
+| **Scene Understanding** | `--scene-understanding` / `--no-scene-understanding` | MR: interact with real-world surfaces. | MR without surface interaction. |
+| **Environment Raycast** | `--environment-raycast` / `--no-environment-raycast` | MR: cast rays against real-world geometry. | No real-world hit testing needed. |
+
+Create derives WebXR feature requirements from the target and these high-level
+features. Raw tri-state WebXR settings are not interactive choices and are not
+agent-facing scaffolding flags.
+
+### Step 3: Project Setup
+
+| Choice | Flag | Default with `--yes` |
+|--------|------|----------------------|
+| **Language** | `--language ts` / `--language js` | TypeScript |
+| **Coding-tool files** | `--ai-tools <tools>` (comma-separated) or `--ai-tools none` | None |
+| **Git** | `--git` / `--no-git` | Initialize a repository |
+| **Dependencies** | `--install` / `--no-install` | Install dependencies |
+| **Existing target** | `--force` | Required only when the target directory contains files |
 
 ### Step 4: Source (optional)
 
@@ -77,13 +107,16 @@ request. When ambiguous, ask.
 
 ```bash
 # VR game (stationary, physics for gameplay)
-npx @iwsdk/create@0.4.2 space-pong --yes --mode vr --physics --no-locomotion --grabbing
+npx @iwsdk/create@latest space-pong --yes --target vr --physics --no-locomotion --grabbing
 
-# AR object placer
-npx @iwsdk/create@0.4.2 ar-placer --yes --mode ar --physics --scene-understanding
+# Mixed reality object placer
+npx @iwsdk/create@latest mr-placer --yes --target ar --physics --scene-understanding --environment-raycast
 
-# Browser-first 3D game (no headset). Add browser locomotion/camera controls in code.
-npx @iwsdk/create@0.4.2 browser-game --yes --no-xr --physics
+# Desktop 3D game (no headset; browser controls are already scaffolded)
+npx @iwsdk/create@latest desktop-game --yes --target browser --physics
+
+# Existing cloud-harness repository (explicitly confirm generated-file overwrite)
+npx @iwsdk/create@latest . --yes --force --target vr
 ```
 
 ---

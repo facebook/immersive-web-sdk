@@ -17,16 +17,22 @@ Use this file as a compact start-here index. The full skill is authoritative whe
 
 ```bash
 # VR game
-npx @iwsdk/create@0.4.2 my-iwsdk-app --yes --mode vr --physics --grabbing
+npx @iwsdk/create@latest my-iwsdk-app --yes --target vr --physics --grabbing
 
-# AR app
-npx @iwsdk/create@0.4.2 my-ar-app --yes --mode ar --physics --scene-understanding
+# Mixed reality app
+npx @iwsdk/create@latest my-mr-app --yes --target ar --physics --scene-understanding
 
-# Browser-first 3D app
-npx @iwsdk/create@0.4.2 my-browser-app --yes --no-xr --physics
+# Desktop 3D app
+npx @iwsdk/create@latest my-desktop-app --yes --target browser --physics
+
+# Harness already opened inside a repository
+npx @iwsdk/create@latest . --yes --force --target vr
 ```
 
-Choose flags based on the requested experience. For browser-first apps, add browser locomotion and camera controls in application code when needed.
+Choose flags based on the requested experience. The Desktop 3D starter includes
+browser locomotion and camera controls. `.` scaffolds in place; a non-empty
+target requires `--force`, which overwrites conflicting generated files while
+preserving unrelated files. `--yes` alone never permits overwrites.
 
 ## Run
 

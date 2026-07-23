@@ -12,7 +12,15 @@
 
 ```bash
 npm create @iwsdk@latest
+
+# Cloud harness or repository that is already checked out
+npm create @iwsdk@latest . -- --yes --force --target vr
 ```
+
+`.` selects the current directory. If the target contains any files, Create
+requires the explicit `--force` confirmation. Forced scaffolding overwrites
+conflicting generated files but preserves unrelated files and an existing Git
+repository. `--yes` never implies overwrite permission.
 
 Or with other package managers:
 
@@ -29,14 +37,30 @@ bun create @iwsdk
 
 ## Interactive Prompts
 
-The CLI will guide you through:
+The default path is intentionally short and deterministic:
 
-1. **Project name** - Directory name for your new project
-2. **Language** - TypeScript or JavaScript
-3. **Platform** - VR (Virtual Reality) or AR (Augmented Reality)
-4. **XR Features** - Hand tracking, layers, anchors, hit-test, plane/mesh detection (tri-state: No/Optional/Required)
-5. **SDK Features** - Locomotion (VR), Scene Understanding (AR), Grabbing, Physics
-6. **Git & Install** - Initialize git repo and install dependencies
+1. **Project name** - Asked only when it is not provided as an argument
+2. **Starting point** - Virtual reality, mixed reality/passthrough, or Desktop 3D
+3. **Setup** - Create with recommended settings or customize the setup
+
+Recommended settings create a TypeScript project, initialize Git, and install
+dependencies. They also apply a small target-specific baseline:
+
+| Starting point              | Recommended baseline                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Virtual reality             | Locomotion on a worker and grabbing enabled; physics disabled                                             |
+| Mixed reality / passthrough | Grabbing enabled; physics, room surfaces/anchors, and real-world placement disabled                       |
+| Desktop 3D                  | Dedicated non-XR scene with browser camera, input, locomotion, and interaction behavior; physics disabled |
+
+Choose **Customize setup...** to select JavaScript, change applicable SDK
+features, configure coding-tool integrations, or opt out of Git initialization
+and dependency installation. The CLI derives low-level WebXR feature settings
+from those choices instead of asking for raw `No` / `Optional` / `Required`
+states.
+
+Before writing files, Create prints the resolved starting point, language, SDK
+features, and generated `World.create` options. These settings remain editable
+in `src/index.ts`; changing them does not require scaffolding again.
 
 ## What You Get
 
@@ -44,6 +68,7 @@ A fully configured project with:
 
 - ⚡ **Vite** - Fast dev server with HMR
 - 🎮 **WebXR Emulator** - Develop without VR hardware
+- 🖥️ **Desktop 3D starter** - Browser-native camera, movement, pointer input, and interactions
 - 📦 **GLTF Optimization** - Automatic asset compression
 - 🔒 **HTTPS** - Required for WebXR, auto-configured
 - 🧩 **Native scene workflow** - IWSDK scene JSON and editor tooling
@@ -54,20 +79,12 @@ A fully configured project with:
 $ npm create @iwsdk@latest
 
 ===============================================
-IWSDK Create CLI v0.2.2
+IWSDK Create CLI v<current version>
 Node v20.19.0
 
 ? Project name › iwsdk-app
-? Which language do you want to use? › TypeScript
-? What type of experience are you building? › Virtual Reality
-? Enable Hand Tracking? › Optional
-? Enable WebXR Layers? › Optional
-? Enable locomotion? › Yes
-? Deploy locomotion engine on a Worker? › Yes (recommended)
-? Enable grabbing (one/two-hand, distance)? › Yes
-? Enable physics simulation (Havok)? › No
-? Set up a Git repository? › Yes
-? Install dependencies now? › Yes
+? What should this project start as? › Virtual reality - Start inside an authored virtual environment.
+? Setup › Create with recommended settings
 ```
 
 ## Command Line Options
@@ -79,27 +96,62 @@ npm create @iwsdk@latest my-app
 # Skip all prompts and use defaults
 npm create @iwsdk@latest my-app -- -y
 
+# Create a mixed reality starter non-interactively
+npm create @iwsdk@latest mr-app -- -y --target ar
+
+# Create a desktop browser 3D starter non-interactively
+npm create @iwsdk@latest desktop-app -- -y --target browser
+
+# Scaffold into the current, already-populated repository
+npm create @iwsdk@latest . -- -y --force --target vr
+
 # Use canary SDK bundle
 npm create @iwsdk@latest -- --canary
 ```
 
-| Flag           | Description                              |
-| -------------- | ---------------------------------------- |
-| `[name]`       | Project name (first positional argument) |
-| `-y, --yes`    | Skip prompts and use defaults (VR + TS)  |
-| `--canary`     | Use the default canary SDK bundle        |
-| `--canary URL` | Use a custom HTTP(S) SDK bundle          |
+Use `-y` / `--yes` for deterministic non-interactive scaffolding. Without it,
+`--target` and its compatibility aliases can preselect the starting point, but
+the interactive setup controls language, features, coding-tool integrations,
+Git, and installation.
+
+| Flag                                                 | Description                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `[name]`                                             | Project directory; use `.` to scaffold in the current directory                                  |
+| `-y, --yes`                                          | Skip prompts; defaults to VR, TypeScript, recommended features, Git, and dependency installation |
+| `--force`                                            | Confirm overwriting conflicting generated files when the target directory is non-empty           |
+| `--target <target>`                                  | Starting point: `vr`, `ar`, or `browser`                                                         |
+| `--mode <mode>`                                      | Compatibility alias for XR targets: `vr` or `ar`                                                 |
+| `--xr` / `--no-xr`                                   | Compatibility selectors for VR (or `--mode ar`) and Desktop 3D                                   |
+| `--language <lang>`                                  | `ts` or `js`                                                                                     |
+| `--locomotion` / `--no-locomotion`                   | Enable or disable VR locomotion                                                                  |
+| `--grabbing` / `--no-grabbing`                       | Enable or disable VR/MR grabbing                                                                 |
+| `--physics` / `--no-physics`                         | Enable or disable physics                                                                        |
+| `--scene-understanding` / `--no-scene-understanding` | Enable or disable MR room surfaces and anchors                                                   |
+| `--environment-raycast` / `--no-environment-raycast` | Enable or disable MR real-world placement                                                        |
+| `--ai-tools <tools>`                                 | Comma-separated `claude`, `cursor`, `copilot`, and `codex`, or `none`                            |
+| `--install` / `--no-install`                         | Install or skip dependencies                                                                     |
+| `--git` / `--no-git`                                 | Initialize or skip a Git repository                                                              |
+| `--canary`                                           | Use the default canary SDK bundle                                                                |
+| `--canary URL`                                       | Use a custom HTTP(S) SDK bundle                                                                  |
+
+Automation and coding agents should map the requested experience to a target
+and high-level feature flags before invoking Create, then pass those choices
+with `--yes`. When the harness starts inside an existing repository, pass `.`
+and `--force`; do not treat `--yes` as overwrite consent. The CLI does not infer
+application intent from an open-ended description.
 
 ## Generated Templates
 
 Based on your choices, one of these variants is generated:
 
-| Template ID    | Description                       |
-| -------------- | --------------------------------- |
-| `vr-manual-ts` | VR + TypeScript + native workflow |
-| `vr-manual-js` | VR + JavaScript + native workflow |
-| `ar-manual-ts` | AR + TypeScript + native workflow |
-| `ar-manual-js` | AR + JavaScript + native workflow |
+| Template ID         | Description                                   |
+| ------------------- | --------------------------------------------- |
+| `vr-manual-ts`      | VR + TypeScript + native workflow             |
+| `vr-manual-js`      | VR + JavaScript + native workflow             |
+| `ar-manual-ts`      | MR/passthrough + TypeScript + native workflow |
+| `ar-manual-js`      | MR/passthrough + JavaScript + native workflow |
+| `browser-manual-ts` | Desktop 3D + TypeScript + native workflow     |
+| `browser-manual-js` | Desktop 3D + JavaScript + native workflow     |
 
 The scaffolded project includes native scene JSON under `public/scenes/` and is
 ready for declarative scene authoring through the IWSDK managed workspace.
@@ -135,6 +187,7 @@ pnpm --filter @iwsdk/create dev
 
 - `src/cli.ts` — Entrypoint: parses flags, runs prompts, scaffolds project
 - `src/prompts.ts` — Interactive questions and defaults
+- `src/project-target.ts` — Target-directory validation and in-place resolution
 - `src/recipes.ts` — Fetch helpers for CDN-hosted recipes
 - `src/scaffold.ts` — Wraps Chef's `buildProject` and writes files
 - `src/installer.ts` — Dependency installation and next steps

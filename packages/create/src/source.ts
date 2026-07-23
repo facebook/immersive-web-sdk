@@ -199,6 +199,9 @@ export class BundleSource implements ResolvedSource {
           'Please update your CLI or use a compatible bundle.',
       );
     }
+    for (const packagePath of Object.values(this.manifest.packages)) {
+      this.manifestSubPath(packagePath);
+    }
   }
 
   async fetchIndex(): Promise<
@@ -290,11 +293,30 @@ export class BundleSource implements ResolvedSource {
   }
 
   /**
-   * Strip the leading `packages/` prefix from a manifest path.
+   * Validate a manifest path and strip its leading `packages/` prefix.
    * e.g. `packages/core/iwsdk-core.tgz` → `core/iwsdk-core.tgz`
    */
   private manifestSubPath(relPath: string): string {
-    return relPath.replace(/^packages\//, '');
+    if (typeof relPath !== 'string') {
+      throw new Error(`Invalid bundle package path: "${String(relPath)}".`);
+    }
+    const prefix = 'packages/';
+    const subPath = relPath.startsWith(prefix)
+      ? relPath.slice(prefix.length)
+      : '';
+    const hasUnsafeSegment = subPath
+      .split('/')
+      .some((segment) => segment === '' || segment === '.' || segment === '..');
+    if (
+      subPath === '' ||
+      subPath.includes('\0') ||
+      subPath.includes('\\') ||
+      hasUnsafeSegment ||
+      /^[a-zA-Z]:/.test(subPath)
+    ) {
+      throw new Error(`Invalid bundle package path: "${relPath}".`);
+    }
+    return subPath;
   }
 }
 

@@ -1,137 +1,145 @@
 {
   "app": {
     "afterReloadScreenshot": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-ar/app-after-reload.png",
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-browser/app-after-reload.png",
       "stats": {
-        "sampledPixels": 152,
+        "sampledPixels": 225,
         "uniqueColors": 32
       }
     },
     "hierarchy": {
       "name": "(unnamed)",
-      "uuid": "2fa580e2-5c06-41ec-9dce-cd91ba143293",
+      "uuid": "e0b88231-5605-400b-af89-9a8abeb7c5f3",
       "entityIndex": 0,
       "children": [
         {
           "name": "(unnamed)",
-          "uuid": "da8f6861-20d0-4ff7-bcf8-b19850ba75d0",
+          "uuid": "4a7046d7-1cd5-43cd-961d-21548b9ef510",
           "entityIndex": 2,
           "children": [
             {
               "name": "xr-origin-head",
-              "uuid": "13567ea7-ad54-4e36-b81c-4ff878e1fd70",
+              "uuid": "b7d5eb9d-9f5d-4089-bd27-92c7b2eae60d",
               "entityIndex": 4,
               "children": [
                 {
                   "name": "(unnamed)",
-                  "uuid": "852f84ab-822c-4fb7-a65d-f3c63252ae49"
+                  "uuid": "59d947cd-0e4a-4068-94c3-b32d88b1a0cd"
                 }
               ]
             },
             {
               "name": "(unnamed)",
-              "uuid": "23ba14ba-626a-4792-856e-dee916e40b8a",
+              "uuid": "bd399933-3c89-4d57-8eda-d885cad3938f",
               "entityIndex": 5,
               "children": [
                 {
                   "name": "(unnamed)",
-                  "uuid": "da6722fa-b0f6-48e2-a277-70b603498a6c"
+                  "uuid": "736da0db-a5ba-4aa1-b5dd-a407cf42ec12"
                 }
               ]
             },
             {
               "name": "(unnamed)",
-              "uuid": "6272fa60-08fe-45d1-b447-d89fd4dff3c9",
+              "uuid": "953201c1-6f24-4e4b-b5ae-6fd7169e6dc3",
               "entityIndex": 6,
               "children": [
                 {
                   "name": "(unnamed)",
-                  "uuid": "a8969a1d-c584-4541-8587-08586650d133"
+                  "uuid": "90cd297b-c345-4d10-ae44-bd4da675f522"
+                },
+                {
+                  "name": "(unnamed)",
+                  "uuid": "1520516c-7dc2-4ae7-8024-03306aa08489",
+                  "children": [
+                    {
+                      "name": "(unnamed)",
+                      "uuid": "729c790c-db9a-4ab5-b79c-93de1d8a237f"
+                    },
+                    {
+                      "name": "(unnamed)",
+                      "uuid": "18018006-2a78-427c-bb9b-06e23bd23b8c"
+                    }
+                  ]
                 }
               ]
             },
             {
               "name": "(unnamed)",
-              "uuid": "a77a7f13-8398-432f-a672-bf68fc306376",
+              "uuid": "c3a70547-2908-4288-bf01-215f743c9bfb",
               "entityIndex": 7
             },
             {
               "name": "(unnamed)",
-              "uuid": "4db87e43-1396-4053-ad54-ae2e81fbecd4",
+              "uuid": "187fc8fc-7ecf-49cb-86c5-b2b93bd9842d",
               "entityIndex": 8
             },
             {
               "name": "(unnamed)",
-              "uuid": "d4844018-7e81-4145-babe-f797a0f3bd91",
+              "uuid": "d2d5cf35-5191-42c2-8acb-582476da62f9",
               "entityIndex": 9
             },
             {
               "name": "(unnamed)",
-              "uuid": "c86d5197-9843-4054-9f80-f9681c1bc37f",
+              "uuid": "8984a422-6d8d-43ed-bc61-263409497d8f",
               "entityIndex": 10
             },
             {
               "name": "(unnamed)",
-              "uuid": "27050065-9faa-4972-8884-3399cf52e9d6"
+              "uuid": "b5098e7b-35bb-4a8a-afa4-284c23b5783e"
             },
             {
               "name": "(unnamed)",
-              "uuid": "fcf09eb1-1387-40b9-8458-b3884181f754"
+              "uuid": "6ba38e2f-fcca-44e3-9c49-9af65e28c794"
             },
             {
               "name": "(unnamed)",
-              "uuid": "0fdf6078-4c39-4a4a-b4d3-4e1a67284d96",
+              "uuid": "978e4661-f73f-48d7-a825-9d0ad0b2c32e",
               "entityIndex": 3,
               "children": [
                 {
                   "name": "(unnamed)",
-                  "uuid": "3a1936a2-b99f-4a7b-a877-463a535812dc",
+                  "uuid": "9e35c6a9-4edb-4606-9059-538d1dc251c0"
+                },
+                {
+                  "name": "(unnamed)",
+                  "uuid": "c33f3ea7-8980-4442-a6dc-1eb5f563ce2b",
                   "children": [
                     {
                       "name": "(unnamed)",
-                      "uuid": "d3ad4fcc-b1ce-4657-ab85-30715c5aae62",
+                      "uuid": "8b15fcab-f611-47a7-a959-afc51c38be19",
                       "children": [
                         {
                           "name": "(unnamed)",
-                          "uuid": "5afe1577-1387-4bff-a6c9-2f5c5d4e35d2",
+                          "uuid": "b936e713-7f55-4136-b952-2e3645d5b4bf",
                           "children": [
                             {
                               "name": "(unnamed)",
-                              "uuid": "663d0c19-ff43-4773-8670-f7c400f01c52"
+                              "uuid": "c4888c2f-2b1c-4721-a981-1954551ed904"
                             }
                           ]
                         },
                         {
                           "name": "(unnamed)",
-                          "uuid": "32b7a029-ae58-4bb5-918c-9368517f680c",
+                          "uuid": "406b30d7-c4d2-4599-909b-c8619af76e29",
                           "children": [
                             {
                               "name": "(unnamed)",
-                              "uuid": "5c3c8aaa-0347-44cb-a640-4893bc9fca4d"
+                              "uuid": "2ea1d40f-d4da-4540-a14d-f09873822eab"
                             }
                           ]
                         },
                         {
                           "name": "(unnamed)",
-                          "uuid": "c0f796b7-238f-4551-b66d-67faa09ebe02",
-                          "children": [
-                            {
-                              "name": "(unnamed)",
-                              "uuid": "fa8ad84b-fe9c-40c9-a749-7afce5d041b2"
-                            }
-                          ]
+                          "uuid": "be459f1f-2763-4d99-82dd-f058b9da6beb"
                         },
                         {
                           "name": "(unnamed)",
-                          "uuid": "2ab80092-79ce-4823-8ced-97647b9ec4f5"
+                          "uuid": "d24d159b-fbda-4213-8e10-6db218a49324"
                         },
                         {
                           "name": "(unnamed)",
-                          "uuid": "63a304f1-e45f-4d8e-9aab-48cfb1d67b4e"
-                        },
-                        {
-                          "name": "(unnamed)",
-                          "uuid": "5161aef8-d12e-4411-9976-a6317b7142b7"
+                          "uuid": "74cd5afb-2478-489d-b954-84ddef68f462"
                         }
                       ]
                     }
@@ -142,96 +150,132 @@
           ]
         },
         {
+          "name": "(unnamed)",
+          "uuid": "953d8547-1efd-4687-91e1-2295fedcb99b"
+        },
+        {
+          "name": "(unnamed)",
+          "uuid": "1b2ed073-2e1b-4c2e-8317-678932cc3e04"
+        },
+        {
           "name": "LevelRoot",
-          "uuid": "f18b5200-0623-4016-bc60-c430e9020e96",
+          "uuid": "39e70daa-b34e-4916-b7e3-d5c1d709cde4",
           "entityIndex": 1,
           "children": [
             {
-              "name": "Plant Sansevieria",
-              "uuid": "662900fb-d1a3-4626-816d-e0fe9e41b101",
-              "sceneNodeId": "plant-sansevieria",
+              "name": "Environment",
+              "uuid": "a2f14ca4-dd10-4c99-939f-eba3764b013b",
+              "sceneNodeId": "environment",
               "entityIndex": 11,
               "children": [
                 {
+                  "name": "floorBase_geo002",
+                  "uuid": "04f2be5b-e11e-4cdc-896d-37828385883a",
+                  "sceneNodeId": "environment"
+                },
+                {
+                  "name": "backWall_geo",
+                  "uuid": "f08568d1-f5c3-4193-a4ea-7ab9d94ed718",
+                  "sceneNodeId": "environment"
+                },
+                {
+                  "name": "ceiling_geo002",
+                  "uuid": "62ac19c8-861f-40d4-a0e0-58a29840278a",
+                  "sceneNodeId": "environment"
+                },
+                {
+                  "name": "tableSurface_geo",
+                  "uuid": "b2f64be0-683c-46e3-90e4-0a69a2ab3edb",
+                  "sceneNodeId": "environment"
+                }
+              ]
+            },
+            {
+              "name": "Plant Sansevieria",
+              "uuid": "599ba954-f87d-4699-8a63-dddf83cba049",
+              "sceneNodeId": "plant-sansevieria",
+              "entityIndex": 12,
+              "children": [
+                {
                   "name": "PlantSansevieria",
-                  "uuid": "3f47d131-4356-48a9-a3fc-e29c02c4bed5",
+                  "uuid": "8ca4cedc-1e67-4af4-8aef-56b2100c748b",
                   "sceneNodeId": "plant-sansevieria"
                 }
               ]
             },
             {
               "name": "Robot",
-              "uuid": "6e37e2cb-4f3d-4816-b1cd-ff926cffa7f4",
+              "uuid": "ec091774-9907-4bcb-9819-d34cb4eff25e",
               "sceneNodeId": "robot",
-              "entityIndex": 12,
+              "entityIndex": 13,
               "children": [
                 {
                   "name": "Robot_01",
-                  "uuid": "d2a14fbb-7982-418d-87a2-20c8b62b396e",
+                  "uuid": "2feeb7a5-d996-4799-b171-061a0f8f164c",
                   "sceneNodeId": "robot",
                   "children": [
                     {
                       "name": "Head",
-                      "uuid": "c7ef26c2-6e49-4530-93a7-984a401df9cf",
+                      "uuid": "aa3181b9-8b26-4df5-9247-9181fb15144a",
                       "sceneNodeId": "robot",
                       "children": [
                         {
                           "name": "Ball_geo",
-                          "uuid": "f9731810-f2c6-4fa4-812a-aa90eb9fc974",
+                          "uuid": "8a73cefc-b581-4c02-aa4a-b74b690c77e7",
                           "sceneNodeId": "robot"
                         },
                         {
                           "name": "Face_Case_geo",
-                          "uuid": "6b0d2540-23d3-46ee-a7f8-80fc7827d65c",
+                          "uuid": "68166209-8e2d-4b54-9b0a-37ae5554a691",
                           "sceneNodeId": "robot"
                         },
                         {
                           "name": "Face_Screen_geo",
-                          "uuid": "05833abb-09cb-4093-a97b-f85a7abf764c",
+                          "uuid": "1d1abcab-bbbc-437a-b4fd-e6c1298b5765",
                           "sceneNodeId": "robot"
                         }
                       ]
                     },
                     {
                       "name": "Lower_Sphere",
-                      "uuid": "db86ab86-edb1-4577-b0cb-ea624715ee05",
+                      "uuid": "a2a31f3e-85c3-4f47-90c0-61b89346ce2d",
                       "sceneNodeId": "robot",
                       "children": [
                         {
                           "name": "Inner_geo",
-                          "uuid": "a20bfd24-2695-4c48-be1e-17d5056eb520",
+                          "uuid": "e6c0174e-581a-45d0-be35-3defa58e49d3",
                           "sceneNodeId": "robot"
                         },
                         {
                           "name": "Outer_geo",
-                          "uuid": "1ae14e3b-ffdb-4c24-a7b0-df7e79a03f5a",
+                          "uuid": "fe6149c5-45a0-46c3-a35f-5bfdcce3db1a",
                           "sceneNodeId": "robot"
                         }
                       ]
                     },
                     {
                       "name": "Middle_Section_geo",
-                      "uuid": "4b5518d9-b1f9-467f-ae15-d94cd5b5f48b",
+                      "uuid": "7205b4e0-5528-4e55-a34e-b71a47e729f2",
                       "sceneNodeId": "robot"
                     },
                     {
                       "name": "Shoulder_L_geo",
-                      "uuid": "f69405d9-1e27-4a15-bcf3-3c1048f33f8b",
+                      "uuid": "1eb31449-4b1c-4384-b5c2-12cbedcc541c",
                       "sceneNodeId": "robot",
                       "children": [
                         {
                           "name": "Arm",
-                          "uuid": "c6d17879-ae78-420c-8f97-0077663ed802",
+                          "uuid": "6fdd941b-d8e6-4f8f-b059-2a9c5cd93298",
                           "sceneNodeId": "robot",
                           "children": [
                             {
                               "name": "Finger_L1",
-                              "uuid": "06e3a80f-3e7b-4e44-8288-16a8286c8704",
+                              "uuid": "87120ade-1048-40be-8fed-8d276c83b862",
                               "sceneNodeId": "robot"
                             },
                             {
                               "name": "Finger_L2",
-                              "uuid": "8f78e92a-34ef-4477-b5c0-1ef5fb3b65d7",
+                              "uuid": "b92e33d2-1720-4940-a0b1-b4913627bc24",
                               "sceneNodeId": "robot"
                             }
                           ]
@@ -240,22 +284,22 @@
                     },
                     {
                       "name": "Shoulder_R_geo",
-                      "uuid": "725bb08f-81fa-4a64-bb29-2f8edb119a06",
+                      "uuid": "5cf3c4f1-5e13-4115-9ed5-cbd0eeb43451",
                       "sceneNodeId": "robot",
                       "children": [
                         {
                           "name": "Arm001",
-                          "uuid": "636ae47e-d2e6-439a-9295-b2ed78b6ccc5",
+                          "uuid": "994d3be8-ae7f-423e-8505-758569f3916e",
                           "sceneNodeId": "robot",
                           "children": [
                             {
                               "name": "Finger_R1",
-                              "uuid": "dc9ef965-5365-440d-80e1-9336cb2606e3",
+                              "uuid": "d33a9c8f-961a-4e4c-afe7-5563e0ffc053",
                               "sceneNodeId": "robot"
                             },
                             {
                               "name": "Finger_R2",
-                              "uuid": "3c6dbd0b-30db-4063-afbd-b8f141369426",
+                              "uuid": "faadcf90-ce0a-4f6c-99a4-fbc868184b37",
                               "sceneNodeId": "robot"
                             }
                           ]
@@ -264,27 +308,27 @@
                     },
                     {
                       "name": "Thrusters_geo",
-                      "uuid": "6fc72bb2-6584-4c1b-aa21-78712bb9fa42",
+                      "uuid": "c48c70cc-47f7-4b9f-8fdd-087283a7c60e",
                       "sceneNodeId": "robot"
                     },
                     {
                       "name": "Top_Body",
-                      "uuid": "b25b0f3e-6924-4770-898a-245dd794e020",
+                      "uuid": "b20df804-ddad-4f3b-949e-75f5ada3e6e7",
                       "sceneNodeId": "robot",
                       "children": [
                         {
                           "name": "Back_geo",
-                          "uuid": "9d218c0a-fcb6-4cc4-ac35-46895a9d063a",
+                          "uuid": "fb43f04f-f7e8-4704-bf0b-efb5436c083e",
                           "sceneNodeId": "robot"
                         },
                         {
                           "name": "Body_Case_geo",
-                          "uuid": "65c49143-80db-42e8-9686-bae110f400b9",
+                          "uuid": "d32a2624-98bd-4838-be4c-62fa2cfd6186",
                           "sceneNodeId": "robot"
                         },
                         {
                           "name": "Body_Screen_geo",
-                          "uuid": "23a9c204-73eb-42c8-b81f-9262e75875db",
+                          "uuid": "feffdfd7-f437-4a2d-b6d0-4b55c7b93c1f",
                           "sceneNodeId": "robot"
                         }
                       ]
@@ -293,19 +337,19 @@
                 },
                 {
                   "name": "(unnamed)",
-                  "uuid": "665efb29-7e42-40a0-9049-d3412f4569e1",
+                  "uuid": "aebc0908-1975-4f3c-8e10-188b676ee5da",
                   "children": [
                     {
                       "name": "(unnamed)",
-                      "uuid": "c9683ad8-0b6b-4b2d-84fa-b2b0bd53baf8"
+                      "uuid": "fa727952-2902-416b-b0bf-fa955a55a641"
                     },
                     {
                       "name": "(unnamed)",
-                      "uuid": "19608909-4296-44ee-b0f0-1bb82f207228"
+                      "uuid": "87812dc4-cc28-4ead-bdbb-4e9d447d9546"
                     },
                     {
                       "name": "(unnamed)",
-                      "uuid": "4879ba28-17cc-47f8-b9c3-202a9e4edd8d"
+                      "uuid": "473b1486-4a94-40a1-a395-3f379ffe36ff"
                     }
                   ]
                 }
@@ -313,40 +357,40 @@
             },
             {
               "name": "Welcome Panel",
-              "uuid": "b20cbc85-794d-48b6-890d-6dc8829d90c4",
+              "uuid": "8b463ad7-185c-444d-ae44-39acbd1e5d6a",
               "sceneNodeId": "welcome-panel",
-              "entityIndex": 13
+              "entityIndex": 14
             },
             {
               "name": "Scaffold Added Plant",
-              "uuid": "96c91fa1-9898-451e-b53c-c588fda3b81d",
+              "uuid": "8962b226-a259-4b9d-823c-e53723368ba8",
               "sceneNodeId": "scaffold-added-plant",
-              "entityIndex": 14,
+              "entityIndex": 15,
               "children": [
                 {
                   "name": "PlantSansevieria",
-                  "uuid": "df32145b-798a-4f47-9fbf-f3fcac394a7a",
+                  "uuid": "591f2174-e432-48d7-9a2d-a5e7a060e0bd",
                   "sceneNodeId": "scaffold-added-plant"
                 }
               ]
             },
             {
               "name": "(unnamed)",
-              "uuid": "dec41ae8-f674-463f-8af9-a267b17a039c",
-              "entityIndex": 15
+              "uuid": "0e9c9f08-8845-46ab-82a1-1394137a6bab",
+              "entityIndex": 16
             }
           ]
         },
         {
           "name": "(unnamed)",
-          "uuid": "6d3f75f7-7277-4d88-b231-284a83156df8"
+          "uuid": "05f477ca-25cc-4b91-850c-24c4b8cd5f27"
         }
       ]
     },
     "initialScreenshot": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-ar/app.png",
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-browser/app.png",
       "stats": {
-        "sampledPixels": 354,
+        "sampledPixels": 225,
         "uniqueColors": 32
       }
     },
@@ -355,6 +399,9 @@
         "total": 1
       },
       "DistanceGrabbable": {
+        "total": 1
+      },
+      "LocomotionEnvironment": {
         "total": 1
       },
       "PanelUI": {
@@ -372,23 +419,29 @@
     }
   },
   "browser": {
-    "baseUrl": "http://127.0.0.1:51653",
-    "mode": "ar",
-    "target": "ar",
-    "scenePath": "public/scenes/ar.iwsdk.scene.json"
+    "baseUrl": "http://127.0.0.1:51151",
+    "mode": "browser",
+    "target": "browser",
+    "scenePath": "public/scenes/browser.iwsdk.scene.json"
   },
   "editor": {
     "proofBefore": {
       "assetLoads": [
         {
+          "assetId": "environment-desk",
+          "loadedAt": 1784669749229,
+          "status": "loaded",
+          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
+        },
+        {
           "assetId": "plant-sansevieria",
-          "loadedAt": 1784669803776,
+          "loadedAt": 1784669749201,
           "status": "loaded",
           "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
         },
         {
           "assetId": "robot",
-          "loadedAt": 1784669803805,
+          "loadedAt": 1784669749289,
           "status": "loaded",
           "url": "/iwsdk-assets/robot/robot.gltf"
         }
@@ -612,24 +665,41 @@
           "width": 960
         }
       },
-      "materialCount": 20,
-      "meshCount": 20,
-      "nodeObjectCount": 3,
+      "materialCount": 24,
+      "meshCount": 24,
+      "nodeObjectCount": 4,
       "objectHierarchy": [
+        {
+          "assetId": "environment-desk",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [
+            0,
+            -0.1069,
+            0
+          ],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "worldPosition": [
+            0,
+            -0.1069,
+            0
+          ]
+        },
         {
           "assetId": "plant-sansevieria",
           "fallback": null,
           "helperType": null,
           "localPosition": [
             1.2,
-            0.2,
+            0.85,
             -1.8
           ],
           "nodeId": "plant-sansevieria",
           "parentNodeId": null,
           "worldPosition": [
             1.2,
-            0.2,
+            0.85,
             -1.8
           ]
         },
@@ -639,14 +709,14 @@
           "helperType": null,
           "localPosition": [
             -1.2,
-            0.4,
+            0.95,
             -1.8
           ],
           "nodeId": "robot",
           "parentNodeId": null,
           "worldPosition": [
             -1.2,
-            0.4,
+            0.95,
             -1.8
           ]
         },
@@ -766,7 +836,7 @@
       "worldReady": true
     },
     "screenshot": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-ar/editor.png",
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-uj-improvements/immersive-web-sdk/docs/test-evidence/native-scene-starters/current/generated-browser/editor.png",
       "stats": {
         "sampledPixels": 364,
         "uniqueColors": 32
@@ -775,31 +845,31 @@
     "toolResult": {
       "saved": {
         "dirty": false,
-        "bytes": 2927,
-        "path": "public/scenes/ar.iwsdk.scene.json",
-        "previousRevision": "1784669803996920-2927",
-        "revision": "1784669804217979-2927",
-        "savedAt": "2026-07-21T21:36:44.218Z",
-        "writtenRevision": "1784669804217979-2927"
+        "bytes": 3519,
+        "path": "public/scenes/browser.iwsdk.scene.json",
+        "previousRevision": "1784669749485271-3519",
+        "revision": "1784669749688545-3519",
+        "savedAt": "2026-07-21T21:35:49.688Z",
+        "writtenRevision": "1784669749688545-3519"
       },
       "screenshotViews": [
         {
-          "imageDataLength": 11144,
+          "imageDataLength": 171160,
           "mimeType": "image/png",
           "view": "top"
         },
         {
-          "imageDataLength": 23104,
+          "imageDataLength": 141380,
           "mimeType": "image/png",
           "view": "front"
         },
         {
-          "imageDataLength": 24268,
+          "imageDataLength": 146092,
           "mimeType": "image/png",
           "view": "right"
         },
         {
-          "imageDataLength": 43372,
+          "imageDataLength": 173484,
           "mimeType": "image/png",
           "view": "quarter"
         }
@@ -813,6 +883,16 @@
   "network": {
     "app": {
       "assetResponses": {
+        "environment-desk": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
         "plant-sansevieria": [
           200,
           200,
@@ -846,6 +926,16 @@
     },
     "editor": {
       "assetResponses": {
+        "environment-desk": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
         "plant-sansevieria": [
           200,
           200,
@@ -879,6 +969,24 @@
   "scene": {
     "after": {
       "assets": [
+        {
+          "bounds": {
+            "max": [
+              862.17626953125,
+              871.5792236328125,
+              117.95475769042969
+            ],
+            "min": [
+              -862.1762084960938,
+              -704.1123046875,
+              -423.6421203613281
+            ]
+          },
+          "id": "environment-desk",
+          "name": "Environment Desk",
+          "type": "gltf",
+          "uri": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
+        },
         {
           "bounds": {
             "max": [
@@ -925,6 +1033,26 @@
       ],
       "nodes": [
         {
+          "asset": "environment-desk",
+          "components": {
+            "LocomotionEnvironment": {}
+          },
+          "id": "environment",
+          "name": "Environment",
+          "transform": {
+            "position": [
+              0,
+              -0.106921583,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              180,
+              0
+            ]
+          }
+        },
+        {
           "asset": "plant-sansevieria",
           "components": {
             "DistanceGrabbable": {
@@ -933,19 +1061,13 @@
             "RayInteractable": {}
           },
           "id": "plant-sansevieria",
-          "metadata": {
-            "validation": {
-              "allowFloating": true
-            }
-          },
           "name": "Plant Sansevieria",
           "transform": {
             "position": [
               1.2,
-              0.2,
+              0.85,
               -1.8
-            ],
-            "scale": 2
+            ]
           }
         },
         {
@@ -960,18 +1082,14 @@
             "Robot": {}
           },
           "id": "robot",
-          "metadata": {
-            "validation": {
-              "allowFloating": true
-            }
-          },
           "name": "Robot",
           "transform": {
             "position": [
               -1.2,
-              0.4,
+              0.95,
               -1.8
-            ]
+            ],
+            "scale": 0.5
           }
         },
         {
@@ -1033,6 +1151,24 @@
       "units": "meters",
       "assets": [
         {
+          "id": "environment-desk",
+          "name": "Environment Desk",
+          "type": "gltf",
+          "uri": "/iwsdk-assets/environment-desk/environmentDesk.gltf",
+          "bounds": {
+            "min": [
+              -862.1762084960938,
+              -704.1123046875,
+              -423.6421203613281
+            ],
+            "max": [
+              862.17626953125,
+              871.5792236328125,
+              117.95475769042969
+            ]
+          }
+        },
+        {
           "id": "plant-sansevieria",
           "name": "Plant Sansevieria",
           "type": "gltf",
@@ -1078,21 +1214,35 @@
       ],
       "nodes": [
         {
+          "id": "environment",
+          "name": "Environment",
+          "asset": "environment-desk",
+          "transform": {
+            "position": [
+              0,
+              -0.106921583,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              180,
+              0
+            ]
+          },
+          "components": {
+            "LocomotionEnvironment": {}
+          }
+        },
+        {
           "id": "plant-sansevieria",
           "name": "Plant Sansevieria",
-          "metadata": {
-            "validation": {
-              "allowFloating": true
-            }
-          },
           "asset": "plant-sansevieria",
           "transform": {
             "position": [
               1.2,
-              0.2,
+              0.85,
               -1.8
-            ],
-            "scale": 2
+            ]
           },
           "components": {
             "RayInteractable": {},
@@ -1104,18 +1254,14 @@
         {
           "id": "robot",
           "name": "Robot",
-          "metadata": {
-            "validation": {
-              "allowFloating": true
-            }
-          },
           "asset": "robot",
           "transform": {
             "position": [
               -1.2,
-              0.4,
+              0.95,
               -1.8
-            ]
+            ],
+            "scale": 0.5
           },
           "components": {
             "AudioSource": {

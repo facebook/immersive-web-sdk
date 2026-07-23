@@ -6,19 +6,56 @@
  */
 
 import prompts from 'prompts';
-import { PromptResult, TriState, VariantId, AiTool } from './types.js';
+import {
+  EXPERIENCE_TARGETS,
+  FEATURE_CATALOG,
+  FeatureKey,
+  getRecommendedConfiguration,
+  getVariantId,
+} from './catalog.js';
+import { isValidProjectTarget } from './project-target.js';
+import {
+  AiTool,
+  ExperienceTarget,
+  FeatureFlags,
+  Language,
+  PromptResult,
+} from './types.js';
+
+const ADVANCED_FEATURE_KEYS = [
+  'locomotionEnabled',
+  'grabbingEnabled',
+  'physicsEnabled',
+  'sceneUnderstandingEnabled',
+  'environmentRaycastEnabled',
+] as const satisfies readonly FeatureKey[];
+
+export type PromptDefaults = {
+  target?: ExperienceTarget;
+};
+
+function validateProjectName(value: string): true | string {
+  const name = value.trim();
+  if (isValidProjectTarget(name)) {
+    return true;
+  }
+  return 'Use "." for the current directory, or a name containing only letters, numbers, hyphens, underscores, dots, and @';
+}
 
 export async function promptFlow(
   nameArg?: string,
-  defaults: { xrEnabled?: boolean } = {},
+  defaults: PromptDefaults = {},
 ): Promise<PromptResult> {
   let cancelled = false;
   const onCancel = () => {
     cancelled = true;
     return false;
   };
-  const actionItems: PromptResult['actionItems'] = [];
-  const prerequisites: PromptResult['prerequisites'] = [];
+  const assertNotCancelled = () => {
+    if (cancelled) {
+      throw new Error('Input cancelled');
+    }
+  };
 
   const name =
     nameArg ||
@@ -29,323 +66,157 @@ export async function promptFlow(
           name: 'name',
           message: 'Project name',
           initial: 'iwsdk-app',
-          validate: (v: string) =>
-            /^[a-zA-Z0-9._@-]+$/.test(v.trim())
-              ? true
-              : 'Project name must contain only letters, numbers, hyphens, underscores, dots, and @',
+          validate: validateProjectName,
         },
         { onCancel },
       )
     ).name;
+  assertNotCancelled();
 
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
+  const target =
+    defaults.target ??
+    ((
+      await prompts(
+        {
+          type: 'select',
+          name: 'target',
+          message: 'What should this project start as?',
+          choices: Object.entries(EXPERIENCE_TARGETS).map(
+            ([value, definition]) => ({
+              title: `${definition.label} - ${definition.description}`,
+              value,
+            }),
+          ),
+          initial: 0,
+        },
+        { onCancel },
+      )
+    ).target as ExperienceTarget);
+  assertNotCancelled();
 
-  const { aiTools } = await prompts(
-    {
-      type: 'multiselect',
-      name: 'aiTools',
-      message: 'Which AI coding tools do you use?',
-      choices: [
-        { title: 'Claude Code (Anthropic)', value: 'claude', selected: true },
-        { title: 'Cursor', value: 'cursor' },
-        { title: 'GitHub Copilot', value: 'copilot' },
-        { title: 'OpenAI Codex', value: 'codex' },
-        { title: 'None', value: 'none' },
-      ],
-      hint: '- Space to select, Enter to confirm',
-    },
-    { onCancel },
-  );
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
-
-  // If "none" is selected, clear all other selections
-  const resolvedAiTools: AiTool[] = (aiTools as string[])?.includes('none')
-    ? []
-    : (aiTools as AiTool[]) || [];
-
-  const { language } = await prompts(
+  const { setup = 'recommended' } = await prompts(
     {
       type: 'select',
-      name: 'language',
-      message: 'Which language do you want to use?',
+      name: 'setup',
+      message: 'Setup',
       choices: [
-        { title: 'TypeScript', value: 'ts' },
-        { title: 'JavaScript', value: 'js' },
+        {
+          title: 'Create with recommended settings',
+          value: 'recommended',
+        },
+        { title: 'Customize setup...', value: 'advanced' },
       ],
       initial: 0,
     },
     { onCancel },
   );
+  assertNotCancelled();
 
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
+  let language: Language = 'ts';
+  let aiTools: AiTool[] = [];
+  let gitInit = true;
+  let installNow = true;
+  let configuration = getRecommendedConfiguration(target);
 
-  const xrEnabled =
-    defaults.xrEnabled ??
-    !!(
-      await prompts(
+  if (setup === 'advanced') {
+    const languageAnswer = await prompts(
+      {
+        type: 'select',
+        name: 'language',
+        message: 'Language',
+        choices: [
+          { title: 'TypeScript (recommended)', value: 'ts' },
+          { title: 'JavaScript', value: 'js' },
+        ],
+        initial: 0,
+      },
+      { onCancel },
+    );
+    assertNotCancelled();
+    language = (languageAnswer.language as Language) || 'ts';
+
+    const overrides: Partial<FeatureFlags> = {};
+    for (const key of ADVANCED_FEATURE_KEYS) {
+      const definition = FEATURE_CATALOG[key];
+      if (
+        !(definition.targets as readonly ExperienceTarget[]).includes(target)
+      ) {
+        continue;
+      }
+      const answer = await prompts(
         {
           type: 'toggle',
-          name: 'xrEnabled',
-          message: 'Enable XR support?',
-          initial: true,
+          name: 'enabled',
+          message: `${definition.label}: ${definition.description}`,
+          initial: !!configuration.featureFlags[key],
           active: 'Yes',
           inactive: 'No',
         },
         { onCancel },
-      )
-    ).xrEnabled;
-
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
-
-  const { mode = 'vr' } = xrEnabled
-    ? await prompts(
-        {
-          type: 'select',
-          name: 'mode',
-          message: 'What type of XR experience are you building?',
-          choices: [
-            { title: 'Virtual Reality', value: 'vr' },
-            { title: 'Augmented Reality', value: 'ar' },
-          ],
-          initial: 0,
-        },
-        { onCancel },
-      )
-    : { mode: 'vr' as const };
-
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
-
-  const xrFeatureKeys = !xrEnabled
-    ? ([] as const)
-    : mode === 'vr'
-      ? (['handTracking', 'layers'] as const)
-      : ([
-          'handTracking',
-          'anchors',
-          'hitTest',
-          'planeDetection',
-          'meshDetection',
-          'layers',
-        ] as const);
-  const xrFeatureStates: Record<string, TriState> = {};
-  for (const key of xrFeatureKeys) {
-    const initial =
-      mode === 'ar' ? 1 : key === 'handTracking' || key === 'layers' ? 1 : 0;
-    const label =
-      key === 'handTracking'
-        ? 'Hand Tracking'
-        : key === 'planeDetection'
-          ? 'Plane Detection'
-          : key === 'meshDetection'
-            ? 'Mesh Detection'
-            : key === 'hitTest'
-              ? 'Hit Test'
-              : key === 'anchors'
-                ? 'Anchors'
-                : key === 'layers'
-                  ? 'WebXR Layers'
-                  : key;
-    const { state } = await prompts(
-      {
-        type: 'select',
-        name: 'state',
-        message: `Enable ${label}?`,
-        choices: [
-          { title: 'No', value: 'no' },
-          { title: 'Optional', value: 'optional' },
-          { title: 'Required', value: 'required' },
-        ],
-        initial,
-      },
-      { onCancel },
-    );
-    if (cancelled) {
-      throw new Error('Input cancelled');
-    }
-    xrFeatureStates[key] = (state as TriState) || 'no';
-  }
-
-  // New per-feature prompts (replaces multiselect)
-  // Order differs by mode:
-  //  - VR: Locomotion → Grabbing → Physics
-  //  - AR: Scene Understanding → Grabbing → Physics
-
-  let locomotionEnabled = false;
-  let locomotionUseWorker: boolean | undefined = undefined;
-  let sceneUnderstandingEnabled = false;
-  let environmentRaycastEnabled = false;
-
-  if (xrEnabled && mode === 'vr') {
-    // Locomotion (VR only)
-    const ans = await prompts(
-      {
-        type: 'toggle',
-        name: 'locomotionEnabled',
-        message: 'Enable locomotion?',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
-      },
-      { onCancel },
-    );
-    if (cancelled) {
-      throw new Error('Input cancelled');
-    }
-    locomotionEnabled = !!ans.locomotionEnabled;
-
-    if (locomotionEnabled) {
-      const followUp = await prompts(
-        {
-          type: 'select',
-          name: 'useWorker',
-          message:
-            'Deploy locomotion engine on a Worker? (recommended for performance)',
-          choices: [
-            { title: 'Yes (recommended)', value: true },
-            { title: 'No', value: false },
-          ],
-          initial: 0,
-        },
-        { onCancel },
       );
-      if (cancelled) {
-        throw new Error('Input cancelled');
-      }
-      locomotionUseWorker = !!followUp.useWorker;
+      assertNotCancelled();
+      overrides[key] = !!answer.enabled;
     }
-  } else if (xrEnabled) {
-    // AR: Scene Understanding first (requires room scanning)
-    const sceneAns = await prompts(
+    configuration = getRecommendedConfiguration(target, overrides);
+
+    const aiAnswer = await prompts(
       {
-        type: 'toggle',
-        name: 'sceneUnderstandingEnabled',
-        message:
-          'Enable Scene Understanding (planes/meshes/anchors)? Requires room scanning.',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
+        type: 'multiselect',
+        name: 'aiTools',
+        message: 'Configure coding-tool integrations?',
+        choices: [
+          { title: 'Claude Code (Anthropic)', value: 'claude' },
+          { title: 'Cursor', value: 'cursor' },
+          { title: 'GitHub Copilot', value: 'copilot' },
+          { title: 'OpenAI Codex', value: 'codex' },
+        ],
+        hint: '- Space to select, Enter to continue with none',
       },
       { onCancel },
     );
-    if (cancelled) {
-      throw new Error('Input cancelled');
-    }
-    sceneUnderstandingEnabled = !!sceneAns.sceneUnderstandingEnabled;
+    assertNotCancelled();
+    aiTools = (aiAnswer.aiTools as AiTool[]) || [];
 
-    // Environment Raycast (no room scanning required)
-    const raycastAns = await prompts(
-      {
-        type: 'toggle',
-        name: 'environmentRaycastEnabled',
-        message:
-          'Enable Environment Raycast (hit-test surfaces)? No room scanning required.',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
-      },
+    const operationalAnswers = await prompts(
+      [
+        {
+          type: 'toggle',
+          name: 'gitInit',
+          message: 'Set up a Git repository?',
+          initial: true,
+          active: 'Yes',
+          inactive: 'No',
+        },
+        {
+          type: 'toggle',
+          name: 'installNow',
+          message: 'Install dependencies now?',
+          initial: true,
+          active: 'Yes',
+          inactive: 'No',
+        },
+      ],
       { onCancel },
     );
-    if (cancelled) {
-      throw new Error('Input cancelled');
-    }
-    environmentRaycastEnabled = !!raycastAns.environmentRaycastEnabled;
+    assertNotCancelled();
+    gitInit = !!operationalAnswers.gitInit;
+    installNow = !!operationalAnswers.installNow;
   }
 
-  let grabbingEnabled = false;
-  if (xrEnabled) {
-    const grabbingAnswer = await prompts(
-      {
-        type: 'toggle',
-        name: 'grabbingEnabled',
-        message: 'Enable grabbing (one/two-hand, distance)?',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
-      },
-      { onCancel },
-    );
-    if (cancelled) {
-      throw new Error('Input cancelled');
-    }
-    grabbingEnabled = !!grabbingAnswer.grabbingEnabled;
-  }
-
-  // Physics (default: disabled)
-  const { physicsEnabled } = await prompts(
-    {
-      type: 'toggle',
-      name: 'physicsEnabled',
-      message: 'Enable physics simulation (Havok)?',
-      initial: false,
-      active: 'Yes',
-      inactive: 'No',
-    },
-    { onCancel },
-  );
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
-
-  // UI library selection removed (no-op currently)
-
-  const { gitInit, installNow } = await prompts(
-    [
-      {
-        type: 'toggle',
-        name: 'gitInit',
-        message: 'Set up a Git repository?',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
-      },
-      {
-        type: 'toggle',
-        name: 'installNow',
-        message:
-          'Install dependencies now? (We will print the command to start the dev server.)',
-        initial: true,
-        active: 'Yes',
-        inactive: 'No',
-      },
-    ],
-    { onCancel },
-  );
-
-  if (cancelled) {
-    throw new Error('Input cancelled');
-  }
-
-  const id = `${mode}-manual-${language}` as VariantId;
   return {
     name,
-    id,
+    id: getVariantId(target, language),
     installNow,
-    xrEnabled,
-    mode,
+    target,
+    xrEnabled: configuration.xrEnabled,
+    mode: configuration.mode,
     language,
     features: [],
-    featureFlags: {
-      locomotionEnabled: !!locomotionEnabled,
-      locomotionUseWorker,
-      grabbingEnabled: !!grabbingEnabled,
-      physicsEnabled: !!physicsEnabled,
-      sceneUnderstandingEnabled: !!sceneUnderstandingEnabled,
-      environmentRaycastEnabled: !!environmentRaycastEnabled,
-    },
+    featureFlags: configuration.featureFlags,
     gitInit,
-    aiTools: resolvedAiTools,
-    xrFeatureStates,
-    actionItems,
-    prerequisites,
+    aiTools,
+    xrFeatureStates: configuration.xrFeatureStates,
+    actionItems: [],
+    prerequisites: [],
   };
 }

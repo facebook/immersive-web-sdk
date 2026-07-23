@@ -156,6 +156,7 @@ export function printNextSteps(
   appName: string,
   installed: boolean,
   actionItems: ActionItem[] = [],
+  inPlace = false,
 ) {
   const startCmd = 'npm run dev';
   console.log('\nNext steps:');
@@ -175,7 +176,9 @@ export function printNextSteps(
     itemStream.write(`${itemColor.bold.yellow(prefix)} ${item.message}\n`);
   }
   // Commands go to stdout
-  console.log(stdoutColor.gray(`  cd ${appName}`));
+  if (!inPlace) {
+    console.log(stdoutColor.gray(`  cd ${appName}`));
+  }
   if (!installed) {
     console.log(stdoutColor.gray('  npm install'));
   }
