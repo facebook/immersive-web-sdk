@@ -9,6 +9,7 @@ import * as path from 'path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import fs from 'fs-extra';
 import type { ProcessedUIKitOptions, UIKitCompilationStat } from './types.js';
+import { warnForNestedInlineSpans } from './validation.js';
 
 // Global debounce timer for all file changes
 let globalDebounceTimer: NodeJS.Timeout | null = null;
@@ -179,6 +180,7 @@ async function compileUIKitMLFile(
           );
         },
       });
+      warnForNestedInlineSpans(parseResult, sourcePath);
 
       if (verbose) {
         console.log(`[compile-uikitml] Real parse result for ${fileName}:`);

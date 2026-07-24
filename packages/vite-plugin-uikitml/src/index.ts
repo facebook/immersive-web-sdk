@@ -20,6 +20,7 @@ import type {
   ProcessedUIKitOptions,
   UIKitCompilationStat,
 } from './types.js';
+import { warnForNestedInlineSpans } from './validation.js';
 
 // Export types
 export type { CompileUIKitOptions } from './types.js';
@@ -119,6 +120,7 @@ async function compileUIKitMLFile(
           );
         },
       });
+      warnForNestedInlineSpans(parseResult, sourcePath);
     } catch (error) {
       console.error(`[compile-uikitml] Error parsing UIKitML content:`, error);
       throw error;
