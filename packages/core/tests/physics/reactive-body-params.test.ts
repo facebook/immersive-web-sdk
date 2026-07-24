@@ -24,6 +24,7 @@ import {
   PhysicsShape,
   PhysicsShapeType,
 } from '../../src/physics/physicsShape.js';
+import { Object3D, Quaternion, Vector3 } from '../../src/runtime/three.js';
 
 // physics-system.ts -> runtime barrel -> xr-input cursor-visual.ts touches
 // `document` at module load; provide a minimal canvas stub before importing.
@@ -58,14 +59,30 @@ const BODY_ID = 7;
 function createHavokStub() {
   const bodies = new Map<
     number,
-    { gravity: number; damping: number; angular: number }
+    {
+      angular: number;
+      angularVelocity: [number, number, number];
+      damping: number;
+      gravity: number;
+      linearVelocity: [number, number, number];
+      transform: {
+        position: [number, number, number];
+        quaternion: [number, number, number, number];
+      };
+    }
   >([
     [
       BODY_ID,
       {
-        gravity: DEFAULT_GRAVITY_FACTOR,
-        damping: DEFAULT_LINEAR_DAMPING,
         angular: DEFAULT_ANGULAR_DAMPING,
+        angularVelocity: [4, 5, 6],
+        damping: DEFAULT_LINEAR_DAMPING,
+        gravity: DEFAULT_GRAVITY_FACTOR,
+        linearVelocity: [1, 2, 3],
+        transform: {
+          position: [0, 0, 0],
+          quaternion: [0, 0, 0, 1],
+        },
       },
     ],
   ]);
@@ -76,6 +93,9 @@ function createHavokStub() {
   let setGravityCount = 0;
   let setDampingCount = 0;
   let setAngularCount = 0;
+  let setQTransformCount = 0;
+  let setLinearVelocityCount = 0;
+  let setAngularVelocityCount = 0;
   return {
     bodies,
     get getGravityCount() {
@@ -95,6 +115,15 @@ function createHavokStub() {
     },
     get setAngularCount() {
       return setAngularCount;
+    },
+    get setQTransformCount() {
+      return setQTransformCount;
+    },
+    get setLinearVelocityCount() {
+      return setLinearVelocityCount;
+    },
+    get setAngularVelocityCount() {
+      return setAngularVelocityCount;
     },
     HP_Body_GetGravityFactor: (id: [bigint]) => {
       getGravityCount++;
@@ -119,6 +148,30 @@ function createHavokStub() {
     HP_Body_SetAngularDamping: (id: [bigint], v: number) => {
       bodies.get(key(id))!.angular = v;
       setAngularCount++;
+    },
+    HP_Body_SetQTransform: (
+      id: [bigint],
+      transform: [[number, number, number], [number, number, number, number]],
+    ) => {
+      bodies.get(key(id))!.transform = {
+        position: [...transform[0]],
+        quaternion: [...transform[1]],
+      };
+      setQTransformCount++;
+    },
+    HP_Body_SetLinearVelocity: (
+      id: [bigint],
+      velocity: [number, number, number],
+    ) => {
+      bodies.get(key(id))!.linearVelocity = [...velocity];
+      setLinearVelocityCount++;
+    },
+    HP_Body_SetAngularVelocity: (
+      id: [bigint],
+      velocity: [number, number, number],
+    ) => {
+      bodies.get(key(id))!.angularVelocity = [...velocity];
+      setAngularVelocityCount++;
     },
   };
 }
@@ -152,6 +205,7 @@ function setup({ withBody = true }: { withBody?: boolean } = {}) {
   (system as any).subscribeReactiveOverrides();
 
   const entity = world.createEntity();
+  entity.object3D = new Object3D();
   entity.addComponent(PhysicsShape, {
     shape: PhysicsShapeType.Box,
     dimensions: [1, 1, 1],
@@ -333,5 +387,79 @@ describe('PhysicsSystem reactive gravityFactor / linearDamping (T270859059)', ()
     // No `_engineBody` yet: the sync must not touch Havok (body 0 is unknown).
     expect(() => sync(system)).not.toThrow();
     expect(havok.setGravityCount).toBe(0);
+  });
+});
+
+describe('PhysicsSystem.setBodyTransform', () => {
+  it('sets the Havok transform, mirrors Object3D, and clears velocity by default', () => {
+    const { system, havok, entity } = setup();
+    const position = new Vector3(1, 2, 3);
+    const quaternion = new Quaternion(0, 0.70710678, 0, 0.70710678);
+    entity.getVectorView(PhysicsBody, '_linearVelocity').set([1, 2, 3]);
+    entity.getVectorView(PhysicsBody, '_angularVelocity').set([4, 5, 6]);
+
+    system.setBodyTransform(entity, { position, quaternion });
+
+    const body = havok.bodies.get(BODY_ID)!;
+    expect(havok.setQTransformCount).toBe(1);
+    expect(body.transform.position).toEqual([1, 2, 3]);
+    expect(body.transform.quaternion).toEqual([
+      quaternion.x,
+      quaternion.y,
+      quaternion.z,
+      quaternion.w,
+    ]);
+    expect(entity.object3D!.position.toArray()).toEqual([1, 2, 3]);
+    expect(entity.object3D!.quaternion.toArray()).toEqual([
+      quaternion.x,
+      quaternion.y,
+      quaternion.z,
+      quaternion.w,
+    ]);
+
+    expect(havok.setLinearVelocityCount).toBe(1);
+    expect(havok.setAngularVelocityCount).toBe(1);
+    expect(body.linearVelocity).toEqual([0, 0, 0]);
+    expect(body.angularVelocity).toEqual([0, 0, 0]);
+    expect(
+      Array.from(entity.getVectorView(PhysicsBody, '_linearVelocity')),
+    ).toEqual([0, 0, 0]);
+    expect(
+      Array.from(entity.getVectorView(PhysicsBody, '_angularVelocity')),
+    ).toEqual([0, 0, 0]);
+  });
+
+  it('can preserve existing velocities', () => {
+    const { system, havok, entity } = setup();
+
+    system.setBodyTransform(
+      entity,
+      {
+        position: [2, 3, 4],
+        quaternion: [0, 0, 0, 1],
+      },
+      { resetVelocity: false },
+    );
+
+    const body = havok.bodies.get(BODY_ID)!;
+    expect(havok.setQTransformCount).toBe(1);
+    expect(body.transform.position).toEqual([2, 3, 4]);
+    expect(body.linearVelocity).toEqual([1, 2, 3]);
+    expect(body.angularVelocity).toEqual([4, 5, 6]);
+    expect(havok.setLinearVelocityCount).toBe(0);
+    expect(havok.setAngularVelocityCount).toBe(0);
+  });
+
+  it('is a no-op until the engine body exists', () => {
+    const { system, havok, entity } = setup({ withBody: false });
+
+    system.setBodyTransform(entity, {
+      position: new Vector3(1, 2, 3),
+      quaternion: new Quaternion(),
+    });
+
+    expect(havok.setQTransformCount).toBe(0);
+    expect(havok.setLinearVelocityCount).toBe(0);
+    expect(havok.setAngularVelocityCount).toBe(0);
   });
 });

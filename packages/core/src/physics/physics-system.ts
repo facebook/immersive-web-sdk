@@ -43,6 +43,41 @@ import {
   sequentialIndices,
 } from './utils';
 
+type Vector3Input = Vector3 | readonly [number, number, number];
+type QuaternionInput = Quaternion | readonly [number, number, number, number];
+
+/** Pose passed to {@link PhysicsSystem.setBodyTransform}. */
+export interface PhysicsBodyTransformPose {
+  position: Vector3Input;
+  quaternion: QuaternionInput;
+}
+
+/** Options for {@link PhysicsSystem.setBodyTransform}. */
+export interface PhysicsBodyTransformOptions {
+  /**
+   * Clear linear and angular velocity after teleporting the body.
+   *
+   * @default true
+   */
+  resetVelocity?: boolean;
+}
+
+const ZERO_VECTOR = [0, 0, 0] as const;
+
+function vector3ToArray(value: Vector3Input): [number, number, number] {
+  return 'x' in value
+    ? [value.x, value.y, value.z]
+    : [value[0], value[1], value[2]];
+}
+
+function quaternionToArray(
+  value: QuaternionInput,
+): [number, number, number, number] {
+  return 'w' in value
+    ? [value.x, value.y, value.z, value.w]
+    : [value[0], value[1], value[2], value[3]];
+}
+
 /**
  * Manages physics simulation using the Havok physics engine.
  *
@@ -151,6 +186,66 @@ export class PhysicsSystem extends createSystem(
     });
 
     this.subscribeReactiveOverrides();
+  }
+
+  /**
+   * Teleport an existing Havok body to `pose`.
+   *
+   * @remarks
+   * No-ops until the entity has a live {@link PhysicsBody}. The pose is pushed
+   * directly to Havok and mirrored onto `entity.object3D` immediately so callers
+   * do not need to wait for the next physics tick before reading the reset
+   * transform. Linear and angular velocity are cleared by default, which is the
+   * expected behavior for reset/home-position flows.
+   *
+   * @example Reset a fallen prop to its home pose
+   * ```ts
+   * const physics = world.getSystem(PhysicsSystem);
+   * physics.setBodyTransform(prop, {
+   *   position: homePosition,
+   *   quaternion: homeQuaternion,
+   * });
+   * ```
+   */
+  setBodyTransform(
+    entity: Entity,
+    pose: PhysicsBodyTransformPose,
+    options: PhysicsBodyTransformOptions = {},
+  ): void {
+    if (!this.havok || !entity.hasComponent(PhysicsBody)) {
+      return;
+    }
+
+    const engineBody = entity.getValue(PhysicsBody, '_engineBody');
+    if (!engineBody) {
+      return;
+    }
+
+    const body = [BigInt(engineBody)] as [bigint];
+    const position = vector3ToArray(pose.position);
+    const quaternion = quaternionToArray(pose.quaternion);
+
+    this.havok.HP_Body_SetQTransform(body, [position, quaternion]);
+
+    if (entity.object3D) {
+      entity.object3D.position.set(position[0], position[1], position[2]);
+      entity.object3D.quaternion.set(
+        quaternion[0],
+        quaternion[1],
+        quaternion[2],
+        quaternion[3],
+      );
+      entity.object3D.updateMatrixWorld(true);
+    }
+
+    if (options.resetVelocity === false) {
+      return;
+    }
+
+    this.havok.HP_Body_SetLinearVelocity(body, [...ZERO_VECTOR]);
+    this.havok.HP_Body_SetAngularVelocity(body, [...ZERO_VECTOR]);
+    entity.getVectorView(PhysicsBody, '_linearVelocity').set(ZERO_VECTOR);
+    entity.getVectorView(PhysicsBody, '_angularVelocity').set(ZERO_VECTOR);
   }
 
   /**
