@@ -6,8 +6,20 @@
  */
 
 import type { PointerEventsMap } from '@pmndrs/pointer-events';
-import { Entity as ElicsEntity } from 'elics';
-import type { Object3D, Object3DEventMap } from '../runtime/index.js';
+import { Entity as ElicsEntity, Types } from 'elics';
+import type { AnyComponent } from 'elics';
+import type { Color, Object3D, Object3DEventMap } from '../runtime/index.js';
+
+export type ColorValueInput =
+  | number
+  | string
+  | Color
+  | readonly [number, number, number]
+  | readonly [number, number, number, number];
+
+type ColorKeys<C extends AnyComponent> = {
+  [K in keyof C['schema']]: C['schema'][K]['type'] extends 'Color' ? K : never;
+}[keyof C['schema']];
 
 /** Options for {@link Entity.dispose}. @category ECS */
 export interface EntityDisposeOptions {
@@ -41,8 +53,92 @@ declare module 'elics' {
      * ```
      */
     dispose(options?: EntityDisposeOptions): void;
+    setValue<C extends AnyComponent, K extends ColorKeys<C>>(
+      component: C,
+      key: K,
+      value: ColorValueInput,
+    ): void;
   }
 }
+
+function normalizeColorValue(value: unknown): [number, number, number, number] {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
+      throw new Error(
+        'Color hex numbers must be RGB integers between 0x000000 and 0xffffff. Use #RRGGBBAA strings when alpha is needed.',
+      );
+    }
+    return [
+      ((value >> 16) & 0xff) / 255,
+      ((value >> 8) & 0xff) / 255,
+      (value & 0xff) / 255,
+      1,
+    ];
+  }
+
+  if (typeof value === 'string') {
+    const match = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.exec(value);
+    if (!match) {
+      throw new Error('Color strings must use #RRGGBB or #RRGGBBAA.');
+    }
+
+    const hex = match[1];
+    return [
+      parseInt(hex.slice(0, 2), 16) / 255,
+      parseInt(hex.slice(2, 4), 16) / 255,
+      parseInt(hex.slice(4, 6), 16) / 255,
+      hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
+    ];
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { isColor?: unknown }).isColor === true &&
+    typeof (value as { toArray?: unknown }).toArray === 'function'
+  ) {
+    const [r = 1, g = 1, b = 1] = (value as Color).toArray();
+    return [r, g, b, 1];
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length !== 3 && value.length !== 4) {
+      throw new Error('Color arrays must have 3 or 4 entries.');
+    }
+    if (
+      !value.every(
+        (entry) => typeof entry === 'number' && Number.isFinite(entry),
+      )
+    ) {
+      throw new Error('Color array entries must be finite numbers.');
+    }
+    const [r, g, b, a = 1] = value;
+    return [r, g, b, a];
+  }
+
+  throw new Error(
+    'Color values must be a hex number, #RRGGBB/#RRGGBBAA string, THREE.Color, or RGB/RGBA array.',
+  );
+}
+
+const originalSetValue = ElicsEntity.prototype.setValue;
+
+ElicsEntity.prototype.setValue = function setValueWithColorCoercion(
+  this: ElicsEntity,
+  component: any,
+  key: any,
+  value: any,
+) {
+  if (component.schema[key]?.type === Types.Color) {
+    ((this as any).getVectorView(component, key) as Float32Array).set(
+      normalizeColorValue(value),
+    );
+    (this as any).queryManager.updateEntityValue(this, component);
+    return;
+  }
+
+  (originalSetValue as any).call(this, component, key, value);
+};
 
 // Add dispose method to Entity prototype
 ElicsEntity.prototype.dispose = function (
