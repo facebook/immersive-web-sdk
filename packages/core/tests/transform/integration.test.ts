@@ -5,13 +5,71 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Quaternion, Vector3 } from '../../src/runtime/three.js';
+import { signal } from '@preact/signals-core';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { World } from '../../src/ecs/world.js';
+import { LevelTag } from '../../src/level/level-tag.js';
+import {
+  Object3D,
+  Quaternion,
+  Scene,
+  Vector3,
+} from '../../src/runtime/three.js';
 import { SyncedEuler } from '../../src/transform/synced-euler.js';
 import { SyncedQuaternion } from '../../src/transform/synced-quaternion.js';
 import { SyncedVector3 } from '../../src/transform/synced-vector3.js';
+import { Transform } from '../../src/transform/transform.js';
+
+// world.ts -> @iwsdk/xr-input -> cursor-visual.ts touches `document` at module
+// load; provide a minimal canvas stub before importing.
+vi.hoisted(() => {
+  (globalThis as any).document = {
+    createElement: () => ({
+      getContext: () => ({
+        arc: () => {},
+        beginPath: () => {},
+        clearRect: () => {},
+        fill: () => {},
+        fillStyle: '',
+        lineWidth: 0,
+        stroke: () => {},
+        strokeStyle: '',
+      }),
+      height: 0,
+      width: 0,
+    }),
+  };
+});
 
 describe('Transform Integration Tests', () => {
+  describe('World.createTransformEntity', () => {
+    it('links the Object3D parent before the next TransformSystem update', () => {
+      const world = createTransformWorld();
+      const parentObject = new Object3D();
+      parentObject.position.set(1, 2, 3);
+      const parent = world.createTransformEntity(
+        parentObject,
+        world.activeLevel.value,
+      );
+
+      const childObject = new Object3D();
+      childObject.position.set(4, 0, 0);
+      const child = world.createTransformEntity(childObject, parent);
+
+      expect(childObject.parent).toBe(parentObject);
+      expect(parentObject.children).toContain(childObject);
+      expect(child.getValue(Transform, 'parent')).toBe(parent);
+
+      parentObject.updateMatrixWorld(true);
+      childObject.updateMatrixWorld(true);
+
+      const worldPosition = childObject.getWorldPosition(new Vector3());
+      expect(worldPosition.x).toBeCloseTo(5);
+      expect(worldPosition.y).toBeCloseTo(2);
+      expect(worldPosition.z).toBeCloseTo(3);
+    });
+  });
+
   describe('Continuous Rotation (Bug Fix)', () => {
     let euler: SyncedEuler;
     let quat: SyncedQuaternion;
@@ -263,3 +321,17 @@ describe('Transform Integration Tests', () => {
     });
   });
 });
+
+function createTransformWorld(): World {
+  const world = new World();
+  world.registerComponent(Transform).registerComponent(LevelTag);
+
+  world.scene = new Scene();
+  world.sceneEntity = world.createTransformEntity(world.scene);
+  const activeLevel = world.createTransformEntity(undefined, {
+    parent: world.sceneEntity,
+  });
+  world.activeLevel = signal(activeLevel);
+
+  return world;
+}

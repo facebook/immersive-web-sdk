@@ -237,6 +237,11 @@ export class World extends ElicsWorld {
       }
     }
 
+    const parentObject = parent?.object3D;
+    if (parentObject && parentObject !== obj && obj.parent !== parentObject) {
+      parentObject.add(obj);
+    }
+
     entity.addComponent(Transform, { parent });
 
     // Tag entity with current level, unless persistent
