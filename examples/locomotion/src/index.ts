@@ -109,6 +109,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     .addComponent(RayInteractable);
   settingsPanel.object3D!.position.set(0, 1.182, 1.856);
   settingsPanel.object3D!.rotateY(Math.PI);
+  settingsPanel.object3D!.visible = false;
 
   world.registerSystem(SettingsSystem).registerSystem(ElevatorSystem);
 });

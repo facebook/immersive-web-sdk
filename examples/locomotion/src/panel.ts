@@ -28,6 +28,10 @@ interface ConfigOptions {
   [key: string]: string;
 }
 
+const SETTINGS_PANEL_DISTANCE = 2.2;
+const SETTINGS_PANEL_EYE_OFFSET = 0.25;
+const FALLBACK_FORWARD_EPSILON = 0.0001;
+
 export class SettingsSystem extends createSystem({
   settingsPanel: {
     required: [PanelUI, PanelDocument],
@@ -38,7 +42,9 @@ export class SettingsSystem extends createSystem({
     where: [eq(PanelUI, 'config', './ui/welcome.json')],
   },
 }) {
-  private vec3!: Vector3;
+  private headPosition = new Vector3();
+  private panelForward = new Vector3();
+  private panelPosition = new Vector3();
 
   init() {
     this.queries.settingsPanel.subscribe('qualify', (entity) => {
@@ -77,8 +83,6 @@ export class SettingsSystem extends createSystem({
         exitButton.setProperties({ display: is2D ? 'none' : 'flex' });
       });
     });
-
-    this.vec3 = new Vector3();
   }
 
   setupUIInteractions(entity: any) {
@@ -190,19 +194,37 @@ export class SettingsSystem extends createSystem({
 
   update() {
     if (this.input.gamepads.left?.getSelectStart()) {
-      this.player.head.getWorldPosition(this.vec3);
       this.queries.settingsPanel.entities.forEach((entity) => {
         if (entity.object3D!.visible) {
           entity.object3D!.visible = false;
         } else {
           entity.object3D!.visible = true;
-          this.player.raySpaces.left.getWorldPosition(
-            entity.object3D!.position,
-          );
-          entity.object3D!.position.y += 0.3;
-          entity.object3D!.lookAt(this.vec3);
+          this.placeSettingsPanel(entity);
         }
       });
     }
+  }
+
+  private placeSettingsPanel(entity: any) {
+    this.player.head.getWorldPosition(this.headPosition);
+    this.player.head.getWorldDirection(this.panelForward);
+    this.panelForward.y = 0;
+
+    if (this.panelForward.lengthSq() < FALLBACK_FORWARD_EPSILON) {
+      this.panelForward.set(0, 0, -1);
+    } else {
+      this.panelForward.normalize();
+    }
+
+    this.panelPosition
+      .copy(this.headPosition)
+      .addScaledVector(this.panelForward, SETTINGS_PANEL_DISTANCE);
+    this.panelPosition.y = Math.max(
+      0.8,
+      this.headPosition.y - SETTINGS_PANEL_EYE_OFFSET,
+    );
+
+    entity.object3D!.position.copy(this.panelPosition);
+    entity.object3D!.lookAt(this.headPosition);
   }
 }
