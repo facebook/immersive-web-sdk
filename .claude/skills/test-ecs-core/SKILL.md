@@ -101,7 +101,7 @@ Assert these framework systems are present with correct priorities:
 | `EnvironmentSystem` | 0        |
 | `LevelSystem`       | 0        |
 | `AudioSystem`       | 0        |
-| `PanelUISystem`     | 0        |
+| `PanelUISystem`     | -3.8     |
 
 Also verify entity counts:
 

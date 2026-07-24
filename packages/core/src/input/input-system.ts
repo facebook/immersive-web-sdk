@@ -257,6 +257,12 @@ export class InputSystem extends createSystem(
     const down = (event: PointerEvent) => {
       event.stopPropagation();
       maybeRefreshBVH();
+      // pointerdown implies the pointer is over the entity; ensure Hovered is
+      // present even if a pointerleave/pointerdown sequence cleared it
+      // (flat-geometry poke: the sphere can exit then re-contact from behind).
+      if (!entity.hasComponent(Hovered)) {
+        entity.addComponent(Hovered);
+      }
       if (!entity.hasComponent(Pressed)) {
         entity.addComponent(Pressed);
       }

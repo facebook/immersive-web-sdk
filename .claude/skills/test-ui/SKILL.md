@@ -162,8 +162,8 @@ npx iwsdk ecs systems 2>/dev/null
 
 Assert:
 
-- `PanelUISystem` at priority 0, config: kits, preferredColorScheme
-- `ScreenSpaceUISystem` at priority 0
+- `PanelUISystem` at priority -3.8, config: kits, preferredColorScheme
+- `ScreenSpaceUISystem` at priority -3.75
 - `FollowSystem` at priority 0
 
 ---
