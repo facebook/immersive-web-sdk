@@ -249,12 +249,75 @@ describe('launchManagedBrowser', () => {
     expect(context.close).toHaveBeenCalledTimes(1);
     expect(browser.close).toHaveBeenCalledTimes(1);
   });
+
+  test('scopes managed access to protected launch-origin paths', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    const { browser, context } = createMockBrowser(page);
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await launchManagedBrowser(
+      'http://127.0.0.1:5173/__iwsdk/workspace',
+      true,
+      false,
+      { height: 800, width: 800 },
+      { height: 800, width: 800 },
+      false,
+      {
+        headerName: 'x-iwsdk-managed-workspace',
+        pathnames: [
+          '/__iwsdk/workspace',
+          '/__iwsdk/workspace/scenes',
+          '/__iwsdk/editor/document',
+        ],
+        token: 'managed-token',
+      },
+    );
+
+    expect(browser.newContext).toHaveBeenCalledWith({
+      ignoreHTTPSErrors: true,
+      viewport: { height: 800, width: 800 },
+    });
+    expect(context.route.mock.invocationCallOrder[0]!).toBeLessThan(
+      context.newPage.mock.invocationCallOrder[0]!,
+    );
+    expect(context.route).toHaveBeenCalledWith(
+      'http://127.0.0.1:5173/**',
+      expect.any(Function),
+    );
+
+    const handler = context.route.mock.calls[0]![1];
+    const protectedRoute = createMockRoute(
+      'http://127.0.0.1:5173/__iwsdk/workspace?scene=main',
+    );
+    await handler(protectedRoute);
+    expect(protectedRoute.continue).toHaveBeenCalledWith({
+      headers: {
+        accept: 'text/html',
+        'x-iwsdk-managed-workspace': 'managed-token',
+      },
+    });
+
+    for (const requestUrl of [
+      'http://127.0.0.1:5173/models/controller.glb',
+      'http://127.0.0.1:5174/__iwsdk/workspace',
+      'https://cdn.example.com/controller.glb',
+    ]) {
+      const route = createMockRoute(requestUrl);
+      await handler(route);
+      expect(route.continue).toHaveBeenCalledWith();
+    }
+  });
 });
 
 function createMockBrowser(page: ReturnType<typeof createMockPage>) {
   const context = {
     close: vi.fn(),
     newPage: vi.fn().mockResolvedValue(page),
+    route: vi.fn(),
   };
   const browser = {
     close: vi.fn(),
@@ -262,6 +325,16 @@ function createMockBrowser(page: ReturnType<typeof createMockPage>) {
     on: vi.fn(),
   };
   return { browser, context };
+}
+
+function createMockRoute(url: string) {
+  return {
+    continue: vi.fn(),
+    request: vi.fn(() => ({
+      headers: vi.fn(() => ({ accept: 'text/html' })),
+      url: vi.fn(() => url),
+    })),
+  };
 }
 
 function createMockPage() {

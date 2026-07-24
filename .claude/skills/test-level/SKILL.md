@@ -166,7 +166,7 @@ Assert: LevelSystem has config key: `defaultLighting`.
 **Test 4.1: LevelRoot is Child of Scene Root**
 
 ```bash
-npx iwsdk scene hierarchy --input-json '{"maxDepth":2}' 2>/dev/null
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":2}' 2>/dev/null
 ```
 
 Assert:

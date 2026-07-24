@@ -129,7 +129,7 @@ npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["ScreenSp
 Assert:
 
 - `height` = `"50%"` (CSS expression)
-- `width` = `"auto"`
+- `width` = `"25vw"`
 - `top` = `"20px"`
 - `left` = `"20px"`
 - `bottom` = `"auto"`

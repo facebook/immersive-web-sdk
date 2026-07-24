@@ -430,7 +430,7 @@ iwsdk xr       status | enter | exit | get-transform | set-transform |
                get-gamepad-state | set-gamepad-state |
                get-device-state | set-device-state
 iwsdk browser  screenshot | logs | reload
-iwsdk scene    hierarchy | transform
+iwsdk scene    hierarchy | runtime-hierarchy | transform
 iwsdk ecs      pause | resume | step | query | find | systems |
                components | toggle-system | set-component | snapshot | diff
 ```
@@ -438,10 +438,14 @@ iwsdk ecs      pause | resume | step | query | find | systems |
 ### Scene Inspection
 
 ```bash
-npx iwsdk scene hierarchy
-npx iwsdk scene hierarchy --input-json '{"maxDepth":3}'
+npx iwsdk scene runtime-hierarchy
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}'
 npx iwsdk scene transform --input-json '{"uuid":"<uuid>"}'
 ```
+
+`scene hierarchy` inspects the native editor document and returns scene node
+IDs. Use `scene runtime-hierarchy` when you need live Object3D UUIDs for
+`scene transform`.
 
 ### Native Scene Composition Tools
 

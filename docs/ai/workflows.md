@@ -32,6 +32,7 @@ xr_get_session_status      ↔ iwsdk xr status
 xr_accept_session          ↔ iwsdk xr enter
 browser_screenshot         ↔ iwsdk browser screenshot
 scene_get_hierarchy        ↔ iwsdk scene hierarchy
+scene_get_runtime_hierarchy ↔ iwsdk scene runtime-hierarchy
 ecs_diff                   ↔ iwsdk ecs diff
 ```
 
@@ -65,7 +66,7 @@ Position a controller near a target object, then interact with it.
 ### Point at an object
 
 ```text
-1. scene_get_hierarchy         → find the object's UUID
+1. scene_get_runtime_hierarchy → find the object's UUID
 2. scene_get_object_transform  → get its world position (use positionRelativeToXROrigin)
 3. xr_look_at                  → orient the right controller toward the object
    device: "controller-right"
@@ -155,9 +156,9 @@ The diff shows added/removed/changed entities and field-level value changes — 
 Navigate the Three.js scene hierarchy to understand the scene structure.
 
 ```text
-1. scene_get_hierarchy         → get the top-level scene tree
+1. scene_get_runtime_hierarchy → get the top-level scene tree
    maxDepth: 3
-2. scene_get_hierarchy         → drill into a specific subtree
+2. scene_get_runtime_hierarchy → drill into a specific subtree
    parentId: "uuid-of-interesting-group"
    maxDepth: 5
 3. scene_get_object_transform  → get transforms for a specific object
@@ -204,7 +205,7 @@ A complete workflow for verifying a grab interaction:
 ```text
  1. xr_accept_session                → enter XR
  2. browser_screenshot               → verify the scene loaded
- 3. scene_get_hierarchy              → find the grabbable cube
+ 3. scene_get_runtime_hierarchy      → find the grabbable cube
  4. scene_get_object_transform       → get its position
  5. xr_look_at                       → point right controller at the cube
     moveToDistance: 0.05

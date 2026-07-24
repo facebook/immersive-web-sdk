@@ -63,6 +63,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       top: '20px',
       left: '20px',
       height: '50%',
+      width: '25vw',
     });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
 

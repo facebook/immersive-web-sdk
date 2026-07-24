@@ -152,7 +152,7 @@ From the ecs_list_components output, verify Transform field defaults:
 2. Get the scene hierarchy to find the entity's Object3D UUID:
 
    ```bash
-   npx iwsdk scene hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
+   npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
    ```
 
    Find the node matching the entity index.
@@ -361,7 +361,7 @@ Transform fields default to `[NaN, NaN, NaN]` — by design. NaN sentinel means 
 
 ### UUIDs change on reload
 
-Three.js Object3D UUIDs regenerate on page reload. Always call `npx iwsdk scene hierarchy` after reload.
+Three.js Object3D UUIDs regenerate on page reload. Always call `npx iwsdk scene runtime-hierarchy` after reload.
 
 ### ecs_step timeout
 

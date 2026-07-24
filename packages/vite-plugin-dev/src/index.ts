@@ -472,6 +472,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               traceEnabled,
               {
                 headerName: MANAGED_WORKSPACE_HEADER,
+                pathnames: [
+                  WORKSPACE_ROUTE,
+                  WORKSPACE_SCENES_ROUTE,
+                  `${EDITOR_ROUTE}/document`,
+                ],
                 token: managedWorkspaceToken,
               },
               pluginOptions.ai ? 'iwer' : 'workspace',

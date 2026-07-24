@@ -118,7 +118,8 @@
         "ScreenSpace": {
           "top": "20px",
           "left": "20px",
-          "height": "40%"
+          "height": "40%",
+          "width": "25vw"
         }
       }
     }

@@ -14,7 +14,7 @@ When invoked, perform these steps:
 1. **Run automated checks first:**
 
    ```bash
-   cd /Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk
+   cd "$(git rev-parse --show-toplevel)"
    pnpm run format:check 2>&1 | head -50
    pnpm run lint 2>&1 | head -100
    ```

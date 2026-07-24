@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Check three.js version consistency
+npm run three:check || exit 1
+
+npx lint-staged

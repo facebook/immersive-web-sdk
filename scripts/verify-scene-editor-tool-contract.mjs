@@ -131,17 +131,26 @@ function main() {
     contractSource,
     'SCENE_FILE_MCP_TOOL_NAMES',
   );
+  const appRuntimeSceneTools = extractArray(
+    contractSource,
+    'APP_RUNTIME_SCENE_MCP_TOOL_NAMES',
+  );
   const runtimeCliPathTools = unique(extractRuntimeCliPaths(contractSource));
   const sessionTools = extractArray(sessionSource, 'SCENE_EDITOR_TOOL_METHODS');
   const dispatchCases = unique(extractDispatchCases(sessionSource));
   const sessionRuntimeTools = runtimeTools.filter(
     (tool) =>
-      tool !== 'scene_get_object_transform' && !sceneFileTools.includes(tool),
+      !appRuntimeSceneTools.includes(tool) && !sceneFileTools.includes(tool),
   );
   const failures = [];
 
   assertUnique('SCENE_EDITOR_MCP_TOOL_NAMES', editorContractTools, failures);
   assertUnique('SCENE_FILE_MCP_TOOL_NAMES', sceneFileTools, failures);
+  assertUnique(
+    'APP_RUNTIME_SCENE_MCP_TOOL_NAMES',
+    appRuntimeSceneTools,
+    failures,
+  );
   assertUnique('SCENE_EDITOR_TOOL_METHODS', sessionTools, failures);
 
   assertSameSet(
@@ -170,6 +179,13 @@ function main() {
     sceneFileTools,
     'RUNTIME_MCP_TOOLS scene file tool definitions',
     runtimeTools.filter((tool) => sceneFileTools.includes(tool)),
+    failures,
+  );
+  assertSameSet(
+    'APP_RUNTIME_SCENE_MCP_TOOL_NAMES',
+    appRuntimeSceneTools,
+    'RUNTIME_MCP_TOOLS app-runtime scene tool definitions',
+    runtimeTools.filter((tool) => appRuntimeSceneTools.includes(tool)),
     failures,
   );
   assertSameSet(

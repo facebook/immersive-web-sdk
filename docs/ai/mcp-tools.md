@@ -454,9 +454,12 @@ produce distinct visual evidence.
 
 These tools require IWSDK's `MCPRuntime` (automatically available in IWSDK projects).
 
-### `scene_get_hierarchy`
+### `scene_get_runtime_hierarchy`
 
 Get the Three.js scene hierarchy as a JSON tree. Returns object names, UUIDs, types, and entity indices where available.
+
+Use `scene_get_hierarchy` instead when inspecting the native scene document in
+the managed editor; its node IDs are not Object3D UUIDs.
 
 | Parameter  | Type     | Required | Description                                                    |
 | ---------- | -------- | -------- | -------------------------------------------------------------- |
@@ -467,9 +470,9 @@ Get the Three.js scene hierarchy as a JSON tree. Returns object names, UUIDs, ty
 
 Get local and global transforms of an Object3D. Includes `positionRelativeToXROrigin` which can be used directly with `xr_look_at`.
 
-| Parameter | Type     | Required | Description                                       |
-| --------- | -------- | -------- | ------------------------------------------------- |
-| `uuid`    | `string` | Yes      | UUID of the Object3D (from `scene_get_hierarchy`) |
+| Parameter | Type     | Required | Description                                               |
+| --------- | -------- | -------- | --------------------------------------------------------- |
+| `uuid`    | `string` | Yes      | UUID of the Object3D (from `scene_get_runtime_hierarchy`) |
 
 ## ECS Debugging
 
@@ -500,10 +503,10 @@ Advance N ECS frames with a fixed timestep while paused. Must call `ecs_pause` f
 
 Get all component data for an entity.
 
-| Parameter     | Type       | Required | Description                                                      |
-| ------------- | ---------- | -------- | ---------------------------------------------------------------- |
-| `entityIndex` | `number`   | Yes      | Entity index (from `scene_get_hierarchy` or `ecs_find_entities`) |
-| `components`  | `string[]` | No       | Specific component IDs to include (defaults to all)              |
+| Parameter     | Type       | Required | Description                                                              |
+| ------------- | ---------- | -------- | ------------------------------------------------------------------------ |
+| `entityIndex` | `number`   | Yes      | Entity index (from `scene_get_runtime_hierarchy` or `ecs_find_entities`) |
+| `components`  | `string[]` | No       | Specific component IDs to include (defaults to all)                      |
 
 ### `ecs_find_entities`
 

@@ -193,6 +193,7 @@ export function usageLines(): string[] {
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',
     '  browser <action>',
+    '  workspace <action>',
     '  scene <action>',
     '  ecs <action>',
   ];

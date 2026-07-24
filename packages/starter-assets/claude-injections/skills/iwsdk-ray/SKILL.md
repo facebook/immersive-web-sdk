@@ -24,10 +24,10 @@ xr_get_session_status → if not sessionActive → xr_accept_session
 
 ### Step 2: Locate the target
 
-**For scene objects:** Find by name using `scene_get_hierarchy`, then get the UUID.
+**For scene objects:** Find by name using `scene_get_runtime_hierarchy`, then get the UUID.
 
 ```
-scene_get_hierarchy → find node matching target name
+scene_get_runtime_hierarchy → find node matching target name
 ```
 
 **For UI elements:** UI buttons/elements are children of PanelUI entities and may not have names by default. To locate precisely:
@@ -35,7 +35,7 @@ scene_get_hierarchy → find node matching target name
 1. Read the UIKITML source file to find the element's `id` (e.g., `<button id="xr-button">`)
 2. Find the system or code that loads the panel via `PanelDocument`
 3. Add `.name = "element-id"` on the Object3D returned by `getElementById()` — this is harmless and makes it discoverable
-4. Reload, then find it by name in `scene_get_hierarchy`
+4. Reload, then find it by name in `scene_get_runtime_hierarchy`
 
 If the element already has a name in the hierarchy, skip straight to getting its transform.
 
@@ -65,13 +65,15 @@ Based on the user's intent and the target's components, choose ONE of the follow
 
 ### Branch A: Click / Select (objects with RayInteractable, or UI buttons)
 
-For simple clicks — fires selectstart, select, selectend events. Use for UI buttons and objects that respond to Pressed component.
+For simple clicks, send an explicit trigger press and release. Use for UI buttons and objects that respond to the Pressed component.
 
 ```
-xr_select({ device: "controller-right" })
+xr_set_select_value({ device: "controller-right", value: 1 })
+xr_set_select_value({ device: "controller-right", value: 0 })
 ```
 
-This is a quick press-and-release. Done.
+This emits the pointer down/up path without using `xr_select`, which can wedge
+the 0.4.2 headless runtime.
 
 ### Branch B: Distance Grab (objects with DistanceGrabbable)
 
@@ -138,7 +140,7 @@ browser_screenshot
 
 ## Notes
 
-- **Click vs hold:** `xr_select` is for quick clicks. `xr_set_gamepad_state` with trigger held is for distance grabs. Never use `xr_select` for DistanceGrabbable — the object needs sustained trigger pressure.
+- **Click vs hold:** use `xr_set_select_value` 1→0 for quick clicks. Hold it at 1 while moving a DistanceGrabbable, then release with 0.
 - **Trigger vs squeeze:** Ray interactions use the **trigger (button index 0)**. Proximity grabs (OneHandGrabbable/TwoHandsGrabbable) use **squeeze (button index 1)**. Don't mix them up.
 - **UI element discovery:** Always prefer the precise approach — name the Object3D via PanelDocument's `getElementById` + `.name`, then find it in the hierarchy. Guessing positions based on panel offset is fragile.
 - **DistanceGrabbable movement modes:** Check the entity's DistanceGrabbable component to see which `movementMode` is set. Use `ecs_query_entity` if unsure.

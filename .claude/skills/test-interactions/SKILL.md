@@ -104,7 +104,7 @@ Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
 **Test 1.3: Get Robot World Position**
 
 ```bash
-npx iwsdk scene hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
 ```
 
 Find the robot's Object3D UUID (match `entityIndex` = `<robot>`).

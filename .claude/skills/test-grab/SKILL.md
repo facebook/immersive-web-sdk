@@ -104,7 +104,7 @@ Assert: At least 1 entity. Save first as `<twohand>`.
 Get entity positions via scene hierarchy:
 
 ```bash
-npx iwsdk scene hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
 ```
 
 Find Object3D UUIDs for each grab entity, then query their transforms:

@@ -93,7 +93,7 @@ npx iwsdk ecs find --input-json '{"withComponents":["AudioSource"]}' 2>/dev/null
 
 Assert: At least 1 entity. Save the first as `<audio>`.
 
-The audio example uses a GLXF level that creates entities via composition. The Spinner entity has an AudioSource.
+The audio example uses a native scene level that creates entities via composition. The Spinner entity has an AudioSource.
 
 **Test 1.2: Verify Loaded State**
 
@@ -123,7 +123,17 @@ Assert: `_pool` exists with `available` array matching `maxInstances`.
 npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
 ```
 
-Assert: `_playRequested` was consumed (response shows `newValue: false` — the AudioSystem processed it within the same frame).
+The set response may briefly show `newValue: true`. Wait one frame, then query the
+component and assert `_playRequested` is `false`; the AudioSystem consumes the
+request asynchronously.
+
+```bash
+sleep 1
+```
+
+```bash
+npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+```
 
 **Test 2.2: Play with Loop for Observable State**
 

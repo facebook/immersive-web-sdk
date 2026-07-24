@@ -32,7 +32,17 @@ describe('runtime contract scene editor tools', () => {
     }
   });
 
-  test('keeps legacy object transform on the app/framework runtime path', () => {
+  test('exposes runtime hierarchy and object transforms on the app path', () => {
+    expect(
+      getRuntimeOperationByToolName('scene_get_runtime_hierarchy'),
+    ).toMatchObject({
+      cliPath: ['scene', 'runtime-hierarchy'],
+      mcpName: 'scene_get_runtime_hierarchy',
+      wsMethod: 'get_scene_hierarchy',
+    });
+    expect(
+      getRuntimeOperationByToolName('scene_get_runtime_hierarchy')?.target,
+    ).toBeUndefined();
     expect(
       getRuntimeOperationByToolName('scene_get_object_transform'),
     ).toMatchObject({

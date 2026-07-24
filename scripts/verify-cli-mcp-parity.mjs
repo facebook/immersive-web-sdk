@@ -56,7 +56,10 @@ const DEFAULT_DEV_TIMEOUT_MS = 120000;
 const NUMBER_TOLERANCE = 2e-2;
 const TAB_CHANGE_WARNING = 'WARNING: Active browser tab changed';
 const INVALID_UUID = '00000000-0000-0000-0000-000000000000';
-const HARNESS_RUNTIME_ENV = { IWSDK_RUNTIME_TRACE: '1' };
+const HARNESS_RUNTIME_ENV = {
+  IWSDK_DISABLE_MKCERT: '1',
+  IWSDK_RUNTIME_TRACE: '1',
+};
 const NODE_BINARY = 'node';
 
 let normalizationWorkspaceRoots = [];
@@ -628,16 +631,6 @@ async function prepareExampleClone(targetRoot, packageName) {
     JSON.stringify(packageJson, null, 2) + '\n',
     'utf8',
   );
-
-  const viteConfigPath = path.join(targetRoot, 'vite.config.ts');
-  const viteConfig = await readFile(viteConfigPath, 'utf8');
-  await writeFile(
-    viteConfigPath,
-    viteConfig
-      .replace("import mkcert from 'vite-plugin-mkcert';\n", '')
-      .replace(/^\s*mkcert\(\),\n/m, ''),
-    'utf8',
-  );
 }
 
 async function installWorkspace(workspaceRoot, label) {
@@ -690,12 +683,29 @@ async function waitFor(predicate, label, timeoutMs = 30000) {
 async function warmBrowser(workspaceRoot, label) {
   console.log(`[${label}] warming managed browser`);
   await waitForBrowserCommandReady(workspaceRoot, label);
+  const viewOutcome = await callCliToolOutcome(
+    workspaceRoot,
+    'workspace_set_view',
+    { view: 'runtime' },
+  );
+  assert(
+    viewOutcome.ok,
+    `[${label}] workspace_set_view failed: ${JSON.stringify(viewOutcome.error)}`,
+  );
+  await waitFor(async () => {
+    const state = await callCliToolOutcome(
+      workspaceRoot,
+      'workspace_get_state',
+      {},
+    );
+    return state.ok && state.result.runtime?.ready === true;
+  }, `${label} runtime workspace view`);
   await runBrowserWarmup({
     runAttempt: async () => {
       const outcome = await callCliToolOutcome(
         workspaceRoot,
         'browser_screenshot',
-        {},
+        { target: 'runtime' },
         { trace: true },
       );
       if (outcome.ok && outcome.result?.status !== 'browser_relaunched') {
@@ -795,7 +805,12 @@ const SMOKE_STEPS = [
     args: () => ({ count: 10, level: ['warn', 'error'] }),
     expectTabMetadata: true,
   },
-  { name: 'browser_screenshot', args: () => ({}) },
+  {
+    name: 'scene_get_runtime_hierarchy',
+    args: () => ({ maxDepth: 1 }),
+    expectTabMetadata: true,
+  },
+  { name: 'browser_screenshot', args: () => ({ target: 'runtime' }) },
   {
     name: 'scene_get_object_transform',
     args: () => ({ uuid: INVALID_UUID }),

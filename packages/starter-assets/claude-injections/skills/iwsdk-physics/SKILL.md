@@ -282,7 +282,11 @@ update(delta, time) {
 Combine grab components with physics for throwable objects:
 
 ```typescript
-import { RayInteractable, OneHandGrabbable, DistanceGrabbable } from '@iwsdk/core';
+import {
+  RayInteractable,
+  OneHandGrabbable,
+  DistanceGrabbable,
+} from '@iwsdk/core';
 
 // Physics components
 entity.addComponent(PhysicsShape, { shape: PhysicsShapeType.Auto });
@@ -299,7 +303,7 @@ entity.addComponent(DistanceGrabbable, {
 });
 ```
 
-When grabbed, the `PhysicsSystem` automatically detects the `Pressed` component and overrides physics with `HP_Body_SetTargetQTransform`, making the object follow the hand. On release, the object resumes dynamic simulation with natural velocity for realistic throwing.
+When grabbed, the `GrabSystem` drives the held body kinematically (via `HP_Body_SetTargetQTransform`), making the object follow the hand. On release, the object resumes dynamic simulation with natural velocity for realistic throwing. Note: near-field grabs do not add `Hovered`/`Pressed` tags — assert grab behavior with ECS snapshot/diff, not tag queries.
 
 ### Reading Velocity for Game Logic
 

@@ -524,6 +524,17 @@ describe('runtime commands and project resolution', () => {
       expect(parsedStatus.data.operation).toBe('xr.status');
       expect(parsedStatus.data.result.running).toBe(true);
 
+      const workspaceState = await runCli(
+        ['workspace', 'state'],
+        path.join(appA, 'src'),
+      );
+      expect(workspaceState.exitCode).toBe(0);
+      const parsedWorkspaceState = JSON.parse(workspaceState.stdout);
+      expect(parsedWorkspaceState.data.operation).toBe('workspace.state');
+      expect(parsedWorkspaceState.data.result.method).toBe(
+        'workspace_get_state',
+      );
+
       const screenshot = await runCli(
         ['browser', 'screenshot'],
         path.join(appA, 'src'),
@@ -598,6 +609,14 @@ describe('runtime introspection and raw output', () => {
     expect(ecsHelp.stdout).toContain('Usage: iwsdk ecs toggle-system');
     expect(ecsHelp.stdout).toContain('name (required)');
     expect(ecsHelp.stdout).not.toContain('systemName');
+
+    const workspaceHelp = await runCli(
+      ['workspace', 'set-view', '--help'],
+      appA,
+    );
+    expect(workspaceHelp.exitCode).toBe(0);
+    expect(workspaceHelp.stdout).toContain('Usage: iwsdk workspace set-view');
+    expect(workspaceHelp.stdout).toContain('view (required) [enum]');
   });
 
   test('returns underlying runtime payloads with --raw', async () => {

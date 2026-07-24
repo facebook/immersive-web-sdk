@@ -12,9 +12,11 @@ import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
 
+const useMkcert = process.env.IWSDK_DISABLE_MKCERT !== '1';
+
 export default defineConfig({
   plugins: [
-    mkcert(),
+    ...(useMkcert ? [mkcert()] : []),
     iwsdkDev({
       emulator: {
         device: 'metaQuest3',

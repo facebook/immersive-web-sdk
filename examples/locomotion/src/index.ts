@@ -93,7 +93,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       height: '40%',
       right: 'auto',
       bottom: 'auto',
-      width: 'auto',
+      width: '25vw',
       zOffset: 0.2,
     });
   welcomePanel.object3D!.position.set(0, 1.6, -2);

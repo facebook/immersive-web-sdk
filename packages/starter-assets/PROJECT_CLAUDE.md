@@ -170,7 +170,7 @@ new GLTFLoader().loadAsync(url);
 
 // ✅ GOOD - Declare in AssetManifest passed to World.create({ assets })
 const world = await World.create(container, {
-  assets: { myModel: { url: '/models/scene.glb', type: AssetType.GLTF } },
+  assets: { myModel: { url: './models/scene.glb', type: AssetType.GLTF } },
 });
 const gltf = AssetManager.getGLTF('myModel');
 // `getGLTF` returns a fresh clone of `scene`/`scenes` per call, so it's
@@ -242,11 +242,12 @@ root.addComponent(DomeGradient, { sky: [0.2, 0.6, 0.8, 1.0] });
 #### DON'T forget `_needsUpdate` after changing environment properties
 
 ```typescript
-// ❌ BAD - Changes are silently ignored
+// ❌ BAD - Changes are silently ignored (and setValue THROWS on vector
+// fields in elics 3.4.x — use getVectorView for Vec2/Vec3/Vec4/Color)
 root.setValue(DomeGradient, 'sky', [0.1, 0.2, 0.8, 1.0]);
 
-// ✅ GOOD - Set _needsUpdate to apply changes
-root.setValue(DomeGradient, 'sky', [0.1, 0.2, 0.8, 1.0]);
+// ✅ GOOD - vector write via getVectorView, then _needsUpdate (scalar)
+root.getVectorView(DomeGradient, 'sky').set([0.1, 0.2, 0.8, 1.0]);
 root.setValue(DomeGradient, '_needsUpdate', true);
 ```
 
@@ -288,13 +289,14 @@ Use the iwsdk-project-code-reviewer agent to review my code
 
 ### `/iwsdk-planner`
 
-**IWSDK project planning and best practices guide**
+**IWSDK experience pipeline and planning guide**
 
 Use when:
 
-- Planning new IWSDK features
+- Building a new experience/game end-to-end (runs a phased ideation → design → grounding → architecture → build → verify → ship pipeline with per-phase artifacts under `design/`)
+- Planning new IWSDK features (quick single-feature checklist)
 - Designing systems/components
-- Need guidance on ECS, signals, or reactive patterns
+- Need guidance on ECS, signals, or reactive patterns (see its `references/api-reference.md`)
 
 ### `/iwsdk-grab`
 
@@ -347,7 +349,7 @@ Use when:
 
 ## Planning Rule
 
-When planning any new feature or system, ALWAYS invoke `/iwsdk-planner` first to load the full API reference and best practices.
+When planning any new feature or system, ALWAYS invoke `/iwsdk-planner` first. For a new experience built from an idea, follow its full phased pipeline; for a contained feature, use its Quick Planning checklist. Its `references/api-reference.md` is the API ground truth for grounding and review.
 
 ---
 
@@ -406,10 +408,11 @@ WebXR emulator control for testing without a headset. Starter projects expose th
 
 **Scene Inspection** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
 
-| Tool                         | Purpose                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `scene_get_hierarchy`        | Three.js scene tree with names, UUIDs, and entity indices                                  |
-| `scene_get_object_transform` | Local + global transforms; includes position relative to XR origin (use with `xr_look_at`) |
+| Tool                          | Purpose                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `scene_get_hierarchy`         | Native editor document tree with stable scene node ids                                     |
+| `scene_get_runtime_hierarchy` | Live Three.js tree with names, UUIDs, and entity indices                                   |
+| `scene_get_object_transform`  | Local + global transforms; includes position relative to XR origin (use with `xr_look_at`) |
 
 **ECS Debugging** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
 
@@ -434,7 +437,7 @@ WebXR emulator control for testing without a headset. Starter projects expose th
 - **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
 - **Diff state changes:** `ecs_snapshot({"label":"before"})` → trigger action → `ecs_snapshot({"label":"after"})` → `ecs_diff({"from":"before","to":"after"})`
 - **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system({"name":"SystemName","paused":true})` to pause one system while others run
-- **Look at an object:** `scene_get_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
+- **Look at an object:** `scene_get_runtime_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
 
 **Connection check — always call first:**
 
@@ -564,9 +567,10 @@ Types.Float64; // 64-bit float
 Types.Int8; // 8-bit integer
 Types.Int16; // 16-bit integer
 Types.Int32; // 32-bit integer
-Types.Uint32; // 32-bit unsigned
 Types.Boolean; // true/false
 Types.String; // text
+Types.FilePath; // file path string
+Types.Vec2; // [x, y]
 Types.Vec3; // [x, y, z]
 Types.Vec4; // [x, y, z, w]
 Types.Color; // [r, g, b, a] - RGBA!
@@ -682,7 +686,7 @@ init() {
 
 ```typescript
 entity.addComponent(AudioSource, {
-  src: '/audio/click.mp3',
+  src: './audio/click.mp3',
   positional: true,
   volume: 0.5,
   playbackMode: PlaybackMode.Restart, // or Overlap, Ignore, FadeRestart
@@ -746,7 +750,7 @@ If something isn't appearing or working but no errors show in console:
 
 1. **Don't use level filter for console logs** — call `mcp__iwsdk-runtime__browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
 2. **Run type check** — `npx tsc --noEmit` often reveals issues that don't appear as runtime errors
-3. **Check scene hierarchy** — use `mcp__iwsdk-runtime__scene_get_hierarchy` to verify entities exist and find entity indices
+3. **Check runtime hierarchy** — use `mcp__iwsdk-runtime__scene_get_runtime_hierarchy` to verify live entities exist and find entity indices
 4. **Reload and check logs immediately** — some errors only appear during initialization
 5. **Inspect ECS state** — use `mcp__iwsdk-runtime__ecs_find_entities` to check if entities have expected components, then `mcp__iwsdk-runtime__ecs_query_entity` to read their values
 6. **Diff before/after** — take `mcp__iwsdk-runtime__ecs_snapshot` before and after an action to see exactly what changed (or didn't)

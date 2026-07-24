@@ -130,6 +130,7 @@ export interface ManagedBrowser {
 
 export interface ManagedBrowserAccess {
   headerName: string;
+  pathnames: readonly string[];
   token: string;
 }
 
@@ -405,18 +406,31 @@ export async function launchManagedBrowser(
     .newContext({
       ignoreHTTPSErrors: true, // Accept self-signed certs (e.g. from mkcert)
       viewport, // null = freely resizable; { width, height } = fixed viewport
-      ...(managedAccess
-        ? {
-            extraHTTPHeaders: {
-              [managedAccess.headerName]: managedAccess.token,
-            },
-          }
-        : {}),
     })
     .catch(async (error) => {
       await closeAfterLaunchFailure(browser);
       throw error;
     });
+  if (managedAccess) {
+    const managedOrigin = new URL(url).origin;
+    await context.route(`${managedOrigin}/**`, async (route) => {
+      const request = route.request();
+      const requestUrl = new URL(request.url());
+      const needsAccess =
+        requestUrl.origin === managedOrigin &&
+        managedAccess.pathnames.includes(requestUrl.pathname);
+      if (!needsAccess) {
+        await route.continue();
+        return;
+      }
+      await route.continue({
+        headers: {
+          ...request.headers(),
+          [managedAccess.headerName]: managedAccess.token,
+        },
+      });
+    });
+  }
   const page = await context.newPage().catch(async (error) => {
     await closeAfterLaunchFailure(browser, context);
     throw error;

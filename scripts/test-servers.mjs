@@ -170,6 +170,71 @@ function readAllPorts() {
   return ports;
 }
 
+function runIwsdk(dir, args) {
+  return new Promise((resolve) => {
+    const child = spawn('npx', ['iwsdk', ...args], {
+      cwd: join(EXAMPLES, dir),
+      env: { ...process.env, IWSDK_DISABLE_MKCERT: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.stderr.on('data', (chunk) => (stderr += chunk));
+    child.on('error', (error) =>
+      resolve({ code: 1, stdout, stderr: error.message }),
+    );
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+async function activateRuntimeView(dir) {
+  const switched = await runIwsdk(dir, [
+    'workspace',
+    'set-view',
+    '--input-json',
+    '{"view":"runtime"}',
+  ]);
+  if (switched.code !== 0) {
+    return {
+      dir,
+      ok: false,
+      reason: switched.stderr.trim() || switched.stdout.trim(),
+    };
+  }
+
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const state = await runIwsdk(dir, ['workspace', 'state', '--raw']);
+    if (state.code === 0) {
+      try {
+        if (JSON.parse(state.stdout).runtime?.ready === true) {
+          return { dir, ok: true };
+        }
+      } catch {
+        // Keep polling until the runtime iframe reports ready.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  return { dir, ok: false, reason: 'runtime iframe did not become ready' };
+}
+
+async function activateRuntimeViews() {
+  console.error('Switching managed workspaces to runtime view...');
+  const results = await Promise.all(ALL_DIRS.map(activateRuntimeView));
+  const failed = results.filter((result) => !result.ok);
+  if (failed.length > 0) {
+    for (const result of failed) {
+      console.error(`  ${result.dir}: ${result.reason}`);
+    }
+    return false;
+  }
+  console.error(`All ${results.length} runtime views ready.`);
+  return true;
+}
+
 if (command === 'ports') {
   const ports = readAllPorts();
   const missing = ALL_DIRS.filter((d) => !ports[d]);
@@ -221,6 +286,7 @@ if (command === 'start') {
     const child = spawn('npm', ['run', 'dev'], {
       cwd,
       detached: true,
+      env: { ...process.env, IWSDK_DISABLE_MKCERT: '1' },
       stdio: ['ignore', logFd, logFd],
     });
     child.unref();
@@ -239,6 +305,9 @@ if (command === 'start') {
     const ports = readAllPorts();
     const ready = Object.keys(ports).length;
     if (ready === ALL_DIRS.length) {
+      if (!(await activateRuntimeViews())) {
+        process.exit(1);
+      }
       console.error(`All ${ready} servers ready.`);
       // Output port map to stdout as JSON
       console.log(JSON.stringify(ports, null, 2));

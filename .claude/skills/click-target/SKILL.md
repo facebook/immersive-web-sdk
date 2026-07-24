@@ -16,7 +16,7 @@ Find a target object in the scene and click it using a controller, then verify t
 
 ### 1. Get Scene Hierarchy
 
-Use `mcp__iwsdk-dev-mcp__scene_get_hierarchy` to find the target object's UUID.
+Use `mcp__iwsdk-dev-mcp__scene_get_runtime_hierarchy` to find the target object's UUID.
 
 - Look for objects with entityIndex (these are ECS entities)
 - PanelUI elements typically have nested children for their content

@@ -24,10 +24,10 @@ xr_get_session_status → if not sessionActive → xr_accept_session
 
 ### Step 2: Locate the target
 
-Find the object by name in the scene hierarchy. Use `scene_get_hierarchy` and match against the name from `$ARGUMENTS`.
+Find the object by name in the live runtime hierarchy. Use `scene_get_runtime_hierarchy` and match against the name from `$ARGUMENTS`.
 
 ```
-scene_get_hierarchy → find node matching the target name
+scene_get_runtime_hierarchy → find node matching the target name
 ```
 
 If the object is not found, report the available named objects and stop.

@@ -53,7 +53,7 @@ npx iwsdk xr status
 ## Inspect And Debug
 
 ```bash
-npx iwsdk scene hierarchy --maxDepth 3
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}'
 npx iwsdk ecs components
 npx iwsdk ecs systems
 npx iwsdk ecs snapshot --label before

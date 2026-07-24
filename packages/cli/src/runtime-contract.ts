@@ -1267,6 +1267,26 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   // Framework-Specific Tools (IWSDK or any framework with FRAMEWORK_MCP_RUNTIME)
   // =============================================================================
   {
+    name: 'scene_get_runtime_hierarchy',
+    description:
+      'Get the live Three.js Object3D hierarchy from the app runtime, including names, UUIDs, and ECS entity indices. Use scene_get_hierarchy for the native scene document in the editor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parentId: {
+          type: 'string',
+          description:
+            'Object3D UUID to start from. Defaults to the runtime scene root if omitted.',
+        },
+        maxDepth: {
+          type: 'number',
+          description:
+            'Maximum depth to traverse (default: 5). Use to limit context size.',
+        },
+      },
+    },
+  },
+  {
     name: 'scene_get_object_transform',
     description:
       'Get local and global transforms of an Object3D by Object3D UUID or native scene node id. Includes positionRelativeToXROrigin which can be used directly with xr_look_at tool. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
@@ -1276,7 +1296,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
         uuid: {
           type: 'string',
           description:
-            'UUID of the Object3D (get this from get_scene_hierarchy/runtime hierarchy, not the native editor scene hierarchy)',
+            'UUID of the Object3D (get this from scene_get_runtime_hierarchy, not the native editor scene hierarchy)',
         },
         nodeId: {
           type: 'string',
@@ -1499,6 +1519,7 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   browser_screenshot: 'screenshot',
   browser_get_console_logs: 'get_console_logs',
   browser_reload_page: 'reload_page',
+  scene_get_runtime_hierarchy: 'get_scene_hierarchy',
   scene_get_object_transform: 'get_object_transform',
 };
 
@@ -1549,6 +1570,7 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_set_camera: ['scene', 'set-camera'],
   scene_screenshot: ['scene', 'screenshot'],
   scene_compare_screenshots: ['scene', 'compare-screenshots'],
+  scene_get_runtime_hierarchy: ['scene', 'runtime-hierarchy'],
   scene_get_object_transform: ['scene', 'transform'],
   ecs_pause: ['ecs', 'pause'],
   ecs_resume: ['ecs', 'resume'],
@@ -1597,6 +1619,11 @@ export const WORKSPACE_MCP_TOOL_NAMES = [
   'workspace_get_state',
   'workspace_set_view',
   'workspace_open_scene',
+] as const;
+
+export const APP_RUNTIME_SCENE_MCP_TOOL_NAMES = [
+  'scene_get_runtime_hierarchy',
+  'scene_get_object_transform',
 ] as const;
 
 const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([

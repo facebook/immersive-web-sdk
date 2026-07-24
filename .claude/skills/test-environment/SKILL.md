@@ -148,12 +148,12 @@ npx iwsdk ecs components 2>/dev/null
 
 Assert these components exist with correct schemas:
 
-| Component      | Key Fields                                                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `DomeGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)        |
-| `DomeTexture`  | `src` (String), `blurriness` (Float32), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean) |
-| `IBLGradient`  | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)        |
-| `IBLTexture`   | `src` (String, default: "room"), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean)        |
+| Component      | Key Fields                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| `DomeGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)          |
+| `DomeTexture`  | `src` (FilePath), `blurriness` (Float32), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean) |
+| `IBLGradient`  | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)          |
+| `IBLTexture`   | `src` (FilePath, default: "room"), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean)        |
 
 ---
 
@@ -162,7 +162,7 @@ Assert these components exist with correct schemas:
 **Test 4.1: Dome Mesh in Scene**
 
 ```bash
-npx iwsdk scene hierarchy --input-json '{"maxDepth":2}' 2>/dev/null
+npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":2}' 2>/dev/null
 ```
 
 The gradient dome mesh is added directly to the scene (not under LevelRoot). Look for an unnamed mesh node at the scene root level.
