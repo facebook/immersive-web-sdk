@@ -9,6 +9,16 @@ import type { PointerEventsMap } from '@pmndrs/pointer-events';
 import { Entity as ElicsEntity } from 'elics';
 import type { Object3D, Object3DEventMap } from '../runtime/index.js';
 
+/** Options for {@link Entity.dispose}. @category ECS */
+export interface EntityDisposeOptions {
+  /**
+   * Whether to dispose GPU resources attached to this entity's Object3D tree.
+   *
+   * @defaultValue true
+   */
+  disposeResources?: boolean;
+}
+
 declare module 'elics' {
   interface Entity {
     object3D?: Object3D<Object3DEventMap & PointerEventsMap>;
@@ -25,15 +35,23 @@ declare module 'elics' {
      * ```ts
      * // Remove entity and free GPU resources
      * entity.dispose();
+     *
+     * // Remove entity while preserving shared geometry/materials
+     * entity.dispose({ disposeResources: false });
      * ```
      */
-    dispose(): void;
+    dispose(options?: EntityDisposeOptions): void;
   }
 }
 
 // Add dispose method to Entity prototype
-ElicsEntity.prototype.dispose = function (this: ElicsEntity) {
-  (this as any)._disposeResources = true;
+ElicsEntity.prototype.dispose = function (
+  this: ElicsEntity,
+  options?: EntityDisposeOptions,
+) {
+  if (options?.disposeResources !== false) {
+    (this as any)._disposeResources = true;
+  }
   this.destroy();
 };
 
