@@ -13,3 +13,8 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: true
   sharp: true
+minimumReleaseAgeExclude:
+  - '@iwer/devui@2.3.0'
+  - '@iwer/sem@2.3.0'
+  - iwer@2.3.0
+  - lucide-react@1.26.0
