@@ -197,6 +197,9 @@ export class Locomotor {
     }
 
     if (this.useWorker && this.worker) {
+      // lerp alpha must stay within [0, 1] — an alpha > 1 makes each frame's
+      // positional error multiply by |1 - alpha|, diverging exponentially
+      // when a stalled frame produces a large delta.
       this.position.lerp(this.targetPosition, Math.min(delta * 10, 1));
     } else if (!this.useWorker && this.engine) {
       this.engine.update(delta);
