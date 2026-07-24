@@ -176,7 +176,7 @@ Excellent work! Your WebXR scene now has professional environment and lighting, 
 
 You'll learn how to:
 
-- Add Interactable and Grabbable components to objects
+- Add RayInteractable and Grabbable components to objects
 - Use the grab system for natural VR interactions
 - Understand how systems automatically handle interaction behaviors
 - Make your GLTF models and primitive objects grabbable and interactive

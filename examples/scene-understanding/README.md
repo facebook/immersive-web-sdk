@@ -199,7 +199,7 @@ this.queries.meshEntities.entities.forEach((meshEntity) => {
 // Let user grab and position an anchored object
 const entity = world.createTransformEntity(mesh);
 entity.addComponent(DistanceGrabbable);
-entity.addComponent(Interactable);
+entity.addComponent(RayInteractable);
 entity.addComponent(XRAnchor);
 ```
 

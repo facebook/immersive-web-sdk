@@ -28,7 +28,7 @@ Grab and locomotion are **built-in systems** that you enable via the `features` 
 
 ## Browser Pointer Interaction
 
-Canvas pointer forwarding is enabled by default. Add `Interactable` or `RayInteractable` to an entity and react to `Hovered` or `Pressed` in a system to support both browser clicks and XR rays through the same ECS path.
+Canvas pointer forwarding is enabled by default. Add `RayInteractable` to an entity and react to `Hovered` or `Pressed` in a system to support both browser clicks and XR rays through the same ECS path.
 
 ```javascript
 World.create(document.getElementById('scene-container'), {
@@ -40,7 +40,7 @@ World.create(document.getElementById('scene-container'), {
     new MeshStandardMaterial({ color: 0x3355ff }),
   );
 
-  world.createTransformEntity(cube).addComponent(Interactable);
+  world.createTransformEntity(cube).addComponent(RayInteractable);
 });
 ```
 
@@ -86,7 +86,7 @@ robotMesh.scale.setScalar(0.5);
 
 world
   .createTransformEntity(robotMesh)
-  .addComponent(Interactable) // Makes it interactive
+  .addComponent(RayInteractable) // Makes it interactive
   .addComponent(OneHandGrabbable, {
     // Makes it grabbable with one hand
     translate: true, // Can move it around
@@ -124,7 +124,7 @@ plantMesh.position.set(1.2, 0.85, -1.8);
 
 world
   .createTransformEntity(plantMesh)
-  .addComponent(Interactable)
+  .addComponent(RayInteractable)
   .addComponent(DistanceGrabbable, {
     translate: true,
     rotate: true,
@@ -194,7 +194,7 @@ import {
   AssetManifest,
   AssetType,
   EnvironmentType,
-  Interactable,
+  RayInteractable,
   LocomotionEnvironment,
   OneHandGrabbable,
   DistanceGrabbable,
@@ -226,7 +226,7 @@ World.create(/* ... */, {
   plantMesh.position.set(1.2, 0.85, -1.8);
   world
     .createTransformEntity(plantMesh)
-    .addComponent(Interactable)
+    .addComponent(RayInteractable)
     .addComponent(DistanceGrabbable);
 
   // Make robot grabbable with one hand
@@ -235,7 +235,7 @@ World.create(/* ... */, {
   robotMesh.scale.setScalar(0.5);
   world
     .createTransformEntity(robotMesh)
-    .addComponent(Interactable)
+    .addComponent(RayInteractable)
     .addComponent(OneHandGrabbable);
 
   // ... rest of your existing setup

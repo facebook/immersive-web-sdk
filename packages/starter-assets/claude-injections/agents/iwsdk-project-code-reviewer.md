@@ -354,7 +354,7 @@ this.scene.add(mesh);
 world.createTransformEntity(mesh, parentEntity);
 ```
 
-### 17. Manual Raycaster instead of Interactable
+### 17. Manual Raycaster instead of RayInteractable
 
 Flag: `new THREE.Raycaster()` or `new Raycaster()` for interaction detection.
 
@@ -362,8 +362,8 @@ Flag: `new THREE.Raycaster()` or `new Raycaster()` for interaction detection.
 // ❌ BAD - no BVH acceleration, doesn't work in XR, no pointer events
 const raycaster = new Raycaster();
 
-// ✅ GOOD - add Interactable component, query Hovered/Pressed in system
-entity.addComponent(Interactable);
+// ✅ GOOD - add RayInteractable component, query Hovered/Pressed in system
+entity.addComponent(RayInteractable);
 ```
 
 ### 18. Environment components on wrong entity

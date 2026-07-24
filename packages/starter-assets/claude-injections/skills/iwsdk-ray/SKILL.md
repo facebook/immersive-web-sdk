@@ -63,7 +63,7 @@ The controller ray is now pointing at the target. What happens next depends on t
 
 Based on the user's intent and the target's components, choose ONE of the following.
 
-### Branch A: Click / Select (objects with Interactable, or UI buttons)
+### Branch A: Click / Select (objects with RayInteractable, or UI buttons)
 
 For simple clicks — fires selectstart, select, selectend events. Use for UI buttons and objects that respond to Pressed component.
 

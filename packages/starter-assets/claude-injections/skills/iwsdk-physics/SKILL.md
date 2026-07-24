@@ -282,14 +282,14 @@ update(delta, time) {
 Combine grab components with physics for throwable objects:
 
 ```typescript
-import { Interactable, OneHandGrabbable, DistanceGrabbable } from '@iwsdk/core';
+import { RayInteractable, OneHandGrabbable, DistanceGrabbable } from '@iwsdk/core';
 
 // Physics components
 entity.addComponent(PhysicsShape, { shape: PhysicsShapeType.Auto });
 entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
 
 // Grab components
-entity.addComponent(Interactable);
+entity.addComponent(RayInteractable);
 entity.addComponent(OneHandGrabbable);
 
 // Optional: allow grabbing from a distance
@@ -505,7 +505,7 @@ Physics components can be configured declaratively in native scene JSON files:
 **Grabbed object doesn't follow hand:**
 
 - Ensure `grabbing: true` in features
-- Verify the entity has `Interactable` and a grabbable component (`OneHandGrabbable`, `TwoHandsGrabbable`, or `DistanceGrabbable`)
+- Verify the entity has `RayInteractable` and a grabbable component (`OneHandGrabbable`, `TwoHandsGrabbable`, or `DistanceGrabbable`)
 
 **PhysicsManipulation has no effect:**
 
@@ -533,7 +533,7 @@ import {
   PhysicsBody,
   PhysicsState,
   PhysicsManipulation,
-  Interactable,
+  RayInteractable,
   OneHandGrabbable,
 } from '@iwsdk/core';
 import {
@@ -581,7 +581,7 @@ World.create(document.getElementById('scene-container'), {
     friction: 0.5,
   });
   ballEntity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  ballEntity.addComponent(Interactable);
+  ballEntity.addComponent(RayInteractable);
   ballEntity.addComponent(OneHandGrabbable);
 
   // Dynamic box with initial impulse

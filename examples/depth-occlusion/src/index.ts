@@ -16,7 +16,6 @@ import {
   DepthOccludable,
   DepthSensingSystem,
   DistanceGrabbable,
-  Interactable,
   Mesh,
   MeshStandardMaterial,
   MovementMode,
@@ -64,7 +63,7 @@ export class OcclusionDemoSystem extends createSystem({
     this.scene.add(mesh);
 
     const entity = this.world.createTransformEntity(mesh);
-    entity.addComponent(Interactable);
+    entity.addComponent(RayInteractable);
     entity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });
@@ -87,7 +86,7 @@ export class OcclusionDemoSystem extends createSystem({
     this.scene.add(mesh);
 
     const entity = this.world.createTransformEntity(mesh);
-    entity.addComponent(Interactable);
+    entity.addComponent(RayInteractable);
     entity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });
@@ -117,7 +116,7 @@ export class OcclusionDemoSystem extends createSystem({
     this.scene.add(mesh);
 
     const entity = this.world.createTransformEntity(mesh);
-    entity.addComponent(Interactable);
+    entity.addComponent(RayInteractable);
     entity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });
@@ -131,7 +130,7 @@ export class OcclusionDemoSystem extends createSystem({
     this.scene.add(plantMesh);
 
     const entity = this.world.createTransformEntity(plantMesh);
-    entity.addComponent(Interactable);
+    entity.addComponent(RayInteractable);
     entity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });
@@ -147,7 +146,7 @@ export class OcclusionDemoSystem extends createSystem({
     this.scene.add(robotMesh);
 
     const entity = this.world.createTransformEntity(robotMesh);
-    entity.addComponent(Interactable);
+    entity.addComponent(RayInteractable);
     entity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });

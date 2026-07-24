@@ -6,7 +6,7 @@
  */
 
 import { AssetManifest, AssetType, SessionMode, World } from '@iwsdk/core';
-import { Interactable, PanelUI, ScreenSpace } from '@iwsdk/core';
+import { RayInteractable, PanelUI, ScreenSpace } from '@iwsdk/core';
 import { PanelSystem } from './panel.js';
 import { RaycastPlantSystem } from './raycast-plant.js';
 
@@ -51,7 +51,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       maxHeight: 0.8,
       maxWidth: 1.6,
     })
-    .addComponent(Interactable)
+    .addComponent(RayInteractable)
     .addComponent(ScreenSpace, {
       top: '20px',
       left: '20px',

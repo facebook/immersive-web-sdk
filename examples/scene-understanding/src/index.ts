@@ -15,7 +15,6 @@ import {
   eq,
   FrontSide,
   IBLTexture,
-  Interactable,
   Mesh,
   MeshStandardMaterial,
   MovementMode,
@@ -58,19 +57,19 @@ export class SceneShowSystem extends createSystem({
     this.anchoredMesh.position.set(0, 1, -1);
     this.scene.add(this.anchoredMesh);
     const anchoredEntity = this.world.createTransformEntity(this.anchoredMesh);
-    anchoredEntity.addComponent(Interactable);
+    anchoredEntity.addComponent(RayInteractable);
     anchoredEntity.addComponent(DistanceGrabbable, {
       movementMode: MovementMode.MoveFromTarget,
     });
     anchoredEntity.addComponent(XRAnchor);
 
     this.queries.planeEntities.subscribe('qualify', (planeEntity) => {
-      if (!planeEntity.hasComponent(Interactable)) {
+      if (!planeEntity.hasComponent(RayInteractable)) {
         console.log(
           'SceneShowSystem configure + planeEntity ' + planeEntity.index,
         );
         planeEntity.object3D!.visible = false;
-        planeEntity.addComponent(Interactable);
+        planeEntity.addComponent(RayInteractable);
         planeEntity.object3D!.addEventListener('pointerenter', () => {
           if (planeEntity.object3D) {
             planeEntity.object3D.visible = true;
@@ -85,8 +84,8 @@ export class SceneShowSystem extends createSystem({
     });
 
     this.queries.meshEntities.subscribe('qualify', (meshEntity) => {
-      if (!meshEntity.hasComponent(Interactable)) {
-        meshEntity.addComponent(Interactable);
+      if (!meshEntity.hasComponent(RayInteractable)) {
+        meshEntity.addComponent(RayInteractable);
         meshEntity.object3D!.visible = false;
         meshEntity.object3D!.addEventListener('pointerenter', () => {
           if (meshEntity.object3D) {

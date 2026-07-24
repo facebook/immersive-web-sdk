@@ -17,7 +17,7 @@ IWSDK is built on three pillars:
 
 IWSDK is a 3D web framework with first-class XR support. `World.create()` always creates a persistent `world.player` origin and keeps `world.camera` under it, even when `xr: false` is used for browser-only apps. For first-person browser movement, move `world.player`; for orbit, editor, product, cinematic, or third-person cameras, it is fine to keep `world.player` at the origin and drive `world.camera`. Remember that `world.camera.position` is local to `world.player`, so use `camera.getWorldPosition(...)` when world-space viewer position matters.
 
-Use `input.canvasPointerEvents` for browser mouse/touch canvas events. Browser canvas pointers and XR rays both feed Three/Object3D pointer events and ECS `Hovered`/`Pressed` tags on `Interactable`/`RayInteractable` entities. XR-specific input is available at `world.input.xr`; keyboard and standard browser gamepads live at `world.input.keyboard` and `world.input.browserGamepads`. Reusable systems should prefer `world.input.actions` for intent such as `locomotion.move` or `locomotion.jump`; opt into browser locomotion bindings with `features.locomotion.browserControls`.
+Use `input.canvasPointerEvents` for browser mouse/touch canvas events. Browser canvas pointers and XR rays both feed Three/Object3D pointer events and ECS `Hovered`/`Pressed` tags on `RayInteractable` entities. XR-specific input is available at `world.input.xr`; keyboard and standard browser gamepads live at `world.input.keyboard` and `world.input.browserGamepads`. Reusable systems should prefer `world.input.actions` for intent such as `locomotion.move` or `locomotion.jump`; opt into browser locomotion bindings with `features.locomotion.browserControls`.
 
 ## Critical Best Practices
 
@@ -60,7 +60,7 @@ Instead of polling or storing state, react to entity lifecycle events:
 
 ```typescript
 export class ReactiveSystem extends createSystem({
-  interactables: { required: [Interactable, Transform] },
+  interactables: { required: [RayInteractable, Transform] },
 }) {
   init() {
     // React when entities enter the query
@@ -151,7 +151,7 @@ Types.Object; // Any JS object (avoid if possible - not optimized)
 import { createComponent, Types } from '@iwsdk/core';
 
 // Tag component (no data, just marks entities)
-export const Interactable = createComponent('Interactable', {}, '');
+export const Selectable = createComponent('Selectable', {}, '');
 
 // Data component with proper types
 export const Health = createComponent('Health', {
@@ -1100,7 +1100,7 @@ world.getPersistentRoot(); // Returns the scene Object3D
 | Visibility               | Show/hide objects              |
 | LevelTag                 | Marks level membership         |
 | LevelRoot                | Level root marker              |
-| Interactable             | Marks interactive objects      |
+| RayInteractable          | Marks interactive objects      |
 | Hovered                  | Currently hovered              |
 | Pressed                  | Currently pressed/grabbed      |
 | OneHandGrabbable         | Single-hand manipulation       |
@@ -1132,7 +1132,7 @@ world.getPersistentRoot(); // Returns the scene Object3D
 | System                   | Priority | Purpose                        |
 | ------------------------ | -------- | ------------------------------ |
 | LocomotionSystem         | -5       | Movement (teleport/slide/turn) |
-| InputSystem              | -4       | Interactable state management  |
+| InputSystem              | -4       | RayInteractable state management |
 | GrabSystem               | -3       | Grab handling                  |
 | PhysicsSystem            | -2       | Physics simulation             |
 | SceneUnderstandingSystem | -1       | AR plane/mesh detection        |
@@ -1205,7 +1205,7 @@ Before writing custom code, check if IWSDK already provides the functionality. R
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | GLTF loading with GLTFLoader          | `AssetManager.loadGLTF()` or `AssetManifest` in `World.create()`             |
 | Ray/line mesh for controller pointing | `RayPointer` — cylinder + gradient shader + cursor circle (auto)             |
-| Hover/click detection with Raycaster  | `Interactable` + `Hovered` + `Pressed` components                            |
+| Hover/click detection with Raycaster  | `RayInteractable` + `Hovered` + `Pressed` components                  |
 | Custom skybox sphere                  | `DomeGradient` or `DomeTexture` component                                    |
 | PBR environment lighting              | `IBLGradient` or `IBLTexture` component                                      |
 | Teleport arc + landing marker         | `LocomotionSystem` — full visuals included                                   |
@@ -1301,17 +1301,17 @@ const hud = world.createTransformEntity(hudMesh, {
 
 ### Input & Interaction
 
-**Interactable → Hovered/Pressed flow:**
+**RayInteractable → Hovered/Pressed flow:**
 
-1. Add `Interactable` component to any entity that should respond to pointer input
+1. Add `RayInteractable` component to any entity that should respond to pointer input
 2. `InputSystem` automatically performs BVH-accelerated raycasting each frame
-3. When a ray hits an Interactable entity, `Hovered` tag is added
+3. When a ray hits a RayInteractable entity, `Hovered` tag is added
 4. When the user presses the select button while hovering, `Pressed` tag is added
 5. Query for `Hovered`/`Pressed` in your system to react to interactions
 
 ```typescript
 // Setup
-entity.addComponent(Interactable);
+entity.addComponent(RayInteractable);
 
 // In your system — react to interactions
 export class MyInteractionSystem extends createSystem({
@@ -1360,7 +1360,7 @@ These visuals are automatically created and managed by IWSDK systems:
 10. **DON'T** confuse PhysicsBody (motion) with PhysicsShape (collision + material)
 11. **DON'T** use raw `GLTFLoader`/`TextureLoader` — use `AssetManager` for caching, DRACO/KTX2 setup
 12. **DON'T** use `scene.add()` — use `createTransformEntity()` for proper ECS integration
-13. **DON'T** use `new Raycaster()` — use `Interactable` component for BVH-accelerated XR interaction
+13. **DON'T** use `new Raycaster()` — use `RayInteractable` component for BVH-accelerated XR interaction
 14. **DON'T** add environment components (`DomeGradient`/`IBLTexture`/etc.) to arbitrary entities — must go on the level root (`world.activeLevel.value`)
 15. **DON'T** forget `_needsUpdate` after changing environment properties — changes are silently ignored without `entity.setValue(DomeGradient, '_needsUpdate', true)`
 16. **DON'T** use `entity.destroy()` for objects with GPU resources — use `entity.dispose()` which also cleans up geometry/materials/textures

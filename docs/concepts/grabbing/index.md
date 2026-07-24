@@ -80,7 +80,7 @@ The system uses reactive ECS queries to manage handle creation and cleanup:
 
 ```ts
 import { World, SessionMode } from '@iwsdk/core';
-import { Interactable, OneHandGrabbable } from '@iwsdk/core';
+import { RayInteractable, OneHandGrabbable } from '@iwsdk/core';
 
 // Enable grabbing system
 World.create(document.getElementById('scene-container'), {
@@ -93,7 +93,7 @@ World.create(document.getElementById('scene-container'), {
 }).then((world) => {
   // Create grabbable object
   const entity = world.createTransformEntity(mesh);
-  entity.addComponent(Interactable);
+  entity.addComponent(RayInteractable);
   entity.addComponent(OneHandGrabbable, {
     rotate: true,
     translate: true,
@@ -129,7 +129,7 @@ The grabbing system integrates with multiple IWSDK systems:
 - **Input System** — Automatic sub-pointer management and event routing
 - **Physics System** — Grabbable objects maintain physics properties during manipulation
 - **Native Scene Editor** — Visual placement and component assignment through the IWSDK editor
-- **Interaction System** — Works with `Interactable`, `Hovered`, and `Pressed` components
+- **Interaction System** — Works with `RayInteractable`, `Hovered`, and `Pressed` components
 
 ## Next Steps
 

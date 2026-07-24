@@ -268,13 +268,13 @@ Combine depth occlusion with grabbing so users can move objects behind real-worl
 import {
   DepthOccludable,
   DistanceGrabbable,
-  Interactable,
+  RayInteractable,
   MovementMode,
   XRAnchor,
 } from '@iwsdk/core';
 
 const entity = world.createTransformEntity(mesh);
-entity.addComponent(Interactable);
+entity.addComponent(RayInteractable);
 entity.addComponent(DistanceGrabbable, {
   movementMode: MovementMode.MoveFromTarget,
 });

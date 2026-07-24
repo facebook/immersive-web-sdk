@@ -388,7 +388,7 @@ ballEntity.addComponent(PhysicsBody, {
 });
 
 // Add grabbing capability (requires GrabSystem)
-ballEntity.addComponent(Interactable);
+ballEntity.addComponent(RayInteractable);
 ballEntity.addComponent(OneHandGrabbable);
 ```
 
