@@ -197,7 +197,7 @@ export class Locomotor {
     }
 
     if (this.useWorker && this.worker) {
-      this.position.lerp(this.targetPosition, delta * 10);
+      this.position.lerp(this.targetPosition, Math.min(delta * 10, 1));
     } else if (!this.useWorker && this.engine) {
       this.engine.update(delta);
       this.position.copy(this.engine.playerPosition);
