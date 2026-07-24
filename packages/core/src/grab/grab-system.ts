@@ -19,6 +19,7 @@ import {
 } from '../runtime/index.js';
 import { DistanceGrabbable } from './distance-grabbable.js';
 import { cancelGrabHandle, findHolderHand } from './grab-helpers.js';
+import { warnIfNoRaycastableMesh } from './grab-warnings.js';
 import { Grabbed } from './grabbed.js';
 import { DistanceGrabHandle, MovementMode, Handle } from './handles.js';
 import { OneHandGrabbable } from './one-hand-grabbable.js';
@@ -247,6 +248,7 @@ export class GrabSystem extends createSystem(
     if (!(object instanceof Object3D)) {
       return;
     }
+    warnIfNoRaycastableMesh(entity, 'OneHandGrabbable');
     const obj = object as Object3D<PointerEventsMap & Object3DEventMap>;
     const rotateMax = entity.getVectorView(OneHandGrabbable, 'rotateMax');
     const rotateMin = entity.getVectorView(OneHandGrabbable, 'rotateMin');
@@ -283,6 +285,7 @@ export class GrabSystem extends createSystem(
     if (!(object instanceof Object3D)) {
       return;
     }
+    warnIfNoRaycastableMesh(entity, 'TwoHandsGrabbable');
     const obj = object as Object3D<PointerEventsMap & Object3DEventMap>;
     const rotateMax = entity.getVectorView(TwoHandsGrabbable, 'rotateMax');
     const rotateMin = entity.getVectorView(TwoHandsGrabbable, 'rotateMin');
@@ -334,6 +337,7 @@ export class GrabSystem extends createSystem(
     if (!(object instanceof Object3D)) {
       return;
     }
+    warnIfNoRaycastableMesh(entity, 'DistanceGrabbable');
     const obj = object as Object3D<PointerEventsMap & Object3DEventMap>;
     const rootEntity = entity.hasComponent(LevelTag)
       ? this.world.activeLevel.value

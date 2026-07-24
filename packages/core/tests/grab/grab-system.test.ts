@@ -6,11 +6,22 @@
  */
 
 import type { HandleStore } from '@pmndrs/handle';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelGrabHandle,
   findHolderHand,
 } from '../../src/grab/grab-helpers.js';
+import {
+  hasRaycastableMesh,
+  resetGrabWarningStateForTests,
+  warnIfNoRaycastableMesh,
+} from '../../src/grab/grab-warnings.js';
+import {
+  BoxGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+} from '../../src/runtime/three.js';
 
 interface FakeHandle {
   inputState: Map<number, unknown>;
@@ -30,6 +41,10 @@ function makeFakeHandle(activePointerIds: number[] = []): FakeHandle {
       this.cancelled = true;
     },
   };
+}
+
+function makeFakeEntity(index: number, object3D: Object3D) {
+  return { index, object3D };
 }
 
 describe('cancelGrabHandle (backs GrabSystem.forceRelease)', () => {
@@ -118,5 +133,65 @@ describe('findHolderHand (backs GrabSystem.getHolderHand)', () => {
     expect(
       findHolderHand(handle as unknown as HandleStore<unknown>, left, right),
     ).toBeNull();
+  });
+});
+
+describe('grab warnings', () => {
+  let consoleWarn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    resetGrabWarningStateForTests();
+    consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleWarn.mockRestore();
+    resetGrabWarningStateForTests();
+  });
+
+  it('detects a raycastable mesh in an Object3D subtree', () => {
+    const root = new Object3D();
+    root.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+
+    expect(hasRaycastableMesh(root)).toBe(true);
+  });
+
+  it('detects when an Object3D subtree has no raycastable mesh', () => {
+    const root = new Object3D();
+    root.add(new Object3D());
+
+    expect(hasRaycastableMesh(root)).toBe(false);
+  });
+
+  it('warns once when a grabbable entity has no raycastable mesh', () => {
+    const root = new Object3D();
+
+    warnIfNoRaycastableMesh(makeFakeEntity(7, root), 'OneHandGrabbable');
+    warnIfNoRaycastableMesh(makeFakeEntity(7, root), 'OneHandGrabbable');
+
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "[IWSDK] Entity #7 has OneHandGrabbable but no raycastable mesh in its Object3D subtree. Grab will not work. Attach a Mesh as a child or to the entity's root Object3D.",
+    );
+  });
+
+  it('includes the Object3D name when available', () => {
+    const root = new Object3D();
+    root.name = 'Grab Anchor';
+
+    warnIfNoRaycastableMesh(makeFakeEntity(12, root), 'DistanceGrabbable');
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[IWSDK] Entity "Grab Anchor" (index 12) has DistanceGrabbable but no raycastable mesh in its Object3D subtree. Grab will not work. Attach a Mesh as a child or to the entity\'s root Object3D.',
+    );
+  });
+
+  it('does not warn when a grabbable entity has a raycastable mesh', () => {
+    const root = new Object3D();
+    root.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+
+    warnIfNoRaycastableMesh(makeFakeEntity(7, root), 'TwoHandsGrabbable');
+
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 });
