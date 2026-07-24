@@ -106,6 +106,7 @@ export class LevelSystem extends createSystem(
     }
 
     // Create a fresh level root and make it active
+    this.world.activeLevelId = url || 'level:default';
     const newRoot: Entity = this.world.createTransformEntity(undefined, {
       parent: this.world.sceneEntity,
     });
