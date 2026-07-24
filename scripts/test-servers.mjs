@@ -12,10 +12,18 @@
  * Usage:
  *   node scripts/test-servers.mjs start   — start 9 dev servers, wait for ready, output port map JSON
  *   node scripts/test-servers.mjs ports   — read .mcp.json files, output port map JSON
- *   node scripts/test-servers.mjs stop    — kill all dev servers by port
+ *   node scripts/test-servers.mjs stop    — kill all dev servers (process-group + port fallback)
  */
 
-import { existsSync, readFileSync, unlinkSync, openSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawn, execSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +49,96 @@ const command = process.argv[2];
 if (!command || !['start', 'ports', 'stop'].includes(command)) {
   console.error('Usage: node scripts/test-servers.mjs <start|ports|stop>');
   process.exit(1);
+}
+
+/**
+ * Path to the pidfile that records the process-group id of a dev server.
+ * Spawned children are detached, so `child.pid` is also the pgid; persisting
+ * it lets `stop` fan SIGTERM out to npm → iwsdk → vite → esbuild even when
+ * the server never reaches command-ready and has no port to look up.
+ */
+function pidfilePath(dir) {
+  return join(EXAMPLES, dir, '.iwsdk', 'runtime', 'server.pid');
+}
+
+function readPgid(dir) {
+  const p = pidfilePath(dir);
+  if (!existsSync(p)) return null;
+  try {
+    const n = parseInt(readFileSync(p, 'utf8').trim(), 10);
+    return Number.isFinite(n) && n > 1 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePgid(dir, pgid) {
+  const p = pidfilePath(dir);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, String(pgid));
+}
+
+function unlinkPgid(dir) {
+  try {
+    unlinkSync(pidfilePath(dir));
+  } catch {
+    // already gone
+  }
+}
+
+/**
+ * Verify a pgid still belongs to the dev server we spawned in `expectedCwd`
+ * before signaling. Linux recycles pids, so a stale pidfile from an aborted
+ * run could point at an unrelated process group.
+ */
+function isOurProcessGroup(pgid, expectedCwd) {
+  let cwd;
+  try {
+    cwd = readlinkSync(`/proc/${pgid}/cwd`);
+  } catch {
+    return false;
+  }
+  if (resolve(cwd) !== resolve(expectedCwd)) return false;
+
+  try {
+    const cmdline = readFileSync(`/proc/${pgid}/cmdline`, 'utf8');
+    const argv = cmdline.split('\0').filter(Boolean);
+    if (argv.length === 0) return false;
+    return argv.some((arg) => /(^|\/)npm($|\s)/.test(arg));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * SIGTERM the process group; if anything survives ~2s, SIGKILL.
+ * Returns false if the group is dead or the pid reuse guard rejects it.
+ */
+function killGroup(pgid, expectedCwd) {
+  if (!isOurProcessGroup(pgid, expectedCwd)) return false;
+
+  try {
+    process.kill(-pgid, 'SIGTERM');
+  } catch {
+    return false;
+  }
+
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-pgid, 0);
+    } catch {
+      return true;
+    }
+    execSync('sleep 0.1');
+  }
+
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch {
+    // gone between checks
+  }
+  return true;
 }
 
 /**
@@ -83,6 +181,18 @@ if (command === 'ports') {
 }
 
 if (command === 'start') {
+  // Sweep leftover process groups from a prior aborted run before spawning.
+  let swept = 0;
+  for (const dir of ALL_DIRS) {
+    const pgid = readPgid(dir);
+    if (pgid && killGroup(pgid, join(EXAMPLES, dir))) {
+      swept++;
+      console.error(`  ${dir}: swept stale process group ${pgid}`);
+    }
+    unlinkPgid(dir);
+  }
+  if (swept > 0) console.error(`Swept ${swept} stale dev server(s).`);
+
   // Remove stale runtime session files so we only consider freshly registered servers.
   for (const dir of ALL_DIRS) {
     const sessionPath = join(
@@ -114,6 +224,7 @@ if (command === 'start') {
       stdio: ['ignore', logFd, logFd],
     });
     child.unref();
+    writePgid(dir, child.pid);
     children.push({ dir, pid: child.pid });
     console.error(`  ${dir}: started (pid ${child.pid})`);
   }
@@ -149,9 +260,18 @@ if (command === 'start') {
 }
 
 if (command === 'stop') {
-  const ports = readAllPorts();
   let killed = 0;
 
+  for (const dir of ALL_DIRS) {
+    const pgid = readPgid(dir);
+    if (pgid && killGroup(pgid, join(EXAMPLES, dir))) {
+      console.log(`${dir}: killed process group ${pgid}`);
+      killed++;
+    }
+    unlinkPgid(dir);
+  }
+
+  const ports = readAllPorts();
   for (const [dir, port] of Object.entries(ports)) {
     try {
       const pids = execSync(`lsof -t -i :${port} 2>/dev/null`, {
@@ -169,7 +289,9 @@ if (command === 'stop') {
         }
       }
       if (pids.length > 0) {
-        console.log(`${dir} (port ${port}): killed ${pids.length} process(es)`);
+        console.log(
+          `${dir} (port ${port}): killed ${pids.length} leftover process(es) via port`,
+        );
         killed++;
       }
     } catch {
