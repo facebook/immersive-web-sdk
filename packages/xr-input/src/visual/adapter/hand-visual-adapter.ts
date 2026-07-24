@@ -84,6 +84,8 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
   private pinchCooldown = 0;
   private pinchData = { prev: false, curr: false };
   private vec3 = new Vector3();
+  private visualOffsetStart = new Vector3();
+  private visualOffsetEnd = new Vector3();
   private mat4 = new Matrix4();
   private pendingCapture?: {
     refSpace: XRSpace;
@@ -239,5 +241,30 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
    */
   getIndexTipSpace(): XRSpace | undefined {
     return this.indexTip;
+  }
+
+  /**
+   * Moves only the rendered hand model by a world-space offset. Tracking state
+   * and pointer poses stay unchanged; the next update resets the model to the
+   * raw grip pose before applying a fresh visual offset.
+   */
+  applyVisualOffsetWorld(offsetWorld: Vector3): void {
+    if (!this.visual) {
+      return;
+    }
+
+    const parent = this.visual.model.parent;
+    if (!parent) {
+      this.visual.model.position.add(offsetWorld);
+      return;
+    }
+
+    parent.getWorldPosition(this.visualOffsetStart);
+    this.visualOffsetEnd.copy(this.visualOffsetStart).add(offsetWorld);
+    parent.worldToLocal(this.visualOffsetStart);
+    parent.worldToLocal(this.visualOffsetEnd);
+    this.visual.model.position.add(
+      this.visualOffsetEnd.sub(this.visualOffsetStart),
+    );
   }
 }

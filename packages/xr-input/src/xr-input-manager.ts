@@ -6,7 +6,7 @@
  */
 
 import { Signal, signal } from '@preact/signals-core';
-import { Group, PerspectiveCamera, Scene, WebXRManager } from 'three';
+import { Group, PerspectiveCamera, Scene, Vector3, WebXRManager } from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { loadInputProfile } from './gamepad/input-profiles.js';
 import { StatefulGamepad } from './gamepad/stateful-gamepad.js';
@@ -99,6 +99,10 @@ export class XRInputManager {
 
   private scene: Scene;
   private hadSession = false;
+  private readonly touchSurfaceVisualOffsets = {
+    left: new Vector3(),
+    right: new Vector3(),
+  };
 
   private processedInputSourceKeys = new Set<string>();
 
@@ -422,6 +426,14 @@ export class XRInputManager {
         squeezeStart,
         squeezeEnd,
       });
+
+      const touchSurfaceVisualOffset = this.multiPointers[
+        handedness
+      ].getTouchSurfaceVisualOffset(this.touchSurfaceVisualOffsets[handedness]);
+      const handAdapter = this.visualAdapters.hand[handedness];
+      if (touchSurfaceVisualOffset && handAdapter.isPrimary) {
+        handAdapter.applyVisualOffsetWorld(touchSurfaceVisualOffset);
+      }
     });
   }
 }

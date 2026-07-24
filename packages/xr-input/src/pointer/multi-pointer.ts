@@ -6,7 +6,7 @@
  */
 
 import { Pointer } from '@pmndrs/pointer-events';
-import type { Object3D, PerspectiveCamera } from 'three';
+import { Vector3, type Object3D, type PerspectiveCamera } from 'three';
 import type { XROrigin } from '../rig/xr-origin.js';
 import { CursorVisual } from './cursor-visual.js';
 import { GrabPointer } from './grab-pointer.js';
@@ -41,6 +41,8 @@ const TOUCH_HYSTERESIS = {
   enterHoverDistance: 0.15, // 15cm - distance to start hover
   exitHoverDistance: 0.2, // 20cm - distance to end hover
 };
+
+const TOUCH_VISUAL_OFFSET_EPSILON_SQ = 0.000001;
 
 type PointerEntry<T> = {
   pointer: Pointer;
@@ -601,6 +603,36 @@ export class MultiPointer {
    */
   getActiveKind(): PointerKind | null {
     return this.activeKind;
+  }
+
+  /**
+   * Computes a world-space offset that keeps the hand visual's fingertip on the
+   * touched surface while the touch pointer is actively selecting.
+   */
+  getTouchSurfaceVisualOffset(target: Vector3 = new Vector3()): Vector3 | null {
+    if (this.activeKind !== 'touch') {
+      return null;
+    }
+
+    if (this.pointerStates.get('touch') !== InteractorState.SELECT) {
+      return null;
+    }
+
+    const intersection = this.touch.pointer.getIntersection();
+    if (
+      !intersection ||
+      intersection.object.isVoidObject ||
+      intersection.details.type !== 'sphere'
+    ) {
+      return null;
+    }
+
+    target.copy(intersection.pointOnFace).sub(intersection.pointerPosition);
+    if (target.lengthSq() < TOUCH_VISUAL_OFFSET_EPSILON_SQ) {
+      return null;
+    }
+
+    return target;
   }
 
   /**
