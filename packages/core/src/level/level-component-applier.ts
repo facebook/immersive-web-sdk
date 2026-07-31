@@ -11,7 +11,7 @@ import type { Entity } from '../ecs/entity.js';
 import type { World } from '../ecs/world.js';
 import { PanelUI } from '../ui/index.js';
 
-/** Component id prefix used by legacy GLXF and accepted by native scene JSON. */
+/** Canonical component id prefix used by native scene JSON. */
 export const LEVEL_COMPONENT_PREFIX = 'com.iwsdk.components.';
 
 const LEVEL_COMPONENT_ALIASES: Record<string, string> = {

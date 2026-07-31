@@ -63,7 +63,7 @@ LOCKFILE_BACKUP="$BASE_DIR/pnpm-lock.yaml.build-tgz.backup"
 WORKSPACE_BACKUP="$BASE_DIR/pnpm-workspace.yaml.build-tgz.backup"
 
 # Package build order (dependencies first)
-LEAF_PACKAGES=("scene-composition" "glxf" "xr-input" "locomotor" "example-assets" "vite-plugin-gltf-optimizer" "cli" "vite-plugin-dev" "vite-plugin-uikitml" "create" "reference-assets" "reference")
+LEAF_PACKAGES=("scene-composition" "xr-input" "locomotor" "example-assets" "cli" "vite-plugin-dev" "vite-plugin-uikitml" "create" "reference-assets" "reference")
 ROOT_PACKAGES=("core")
 
 # Function to backup package.json
@@ -362,6 +362,10 @@ trap cleanup EXIT
 main() {
     echo "Building standalone tgz packages for examples..."
     echo ""
+
+    # Remove artifacts from packages that may have been deleted since the
+    # previous build so they cannot leak into listings or SDK bundles.
+    find "$PACKAGES_DIR" -mindepth 2 -maxdepth 2 -type f -name 'iwsdk-*.tgz' -delete
 
     # Step 1: Build packages without workspace dependencies
     build_leaf_packages

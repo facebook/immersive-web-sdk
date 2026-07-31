@@ -87,7 +87,6 @@ const BUNDLE_PACKAGE_PATHS: Record<string, string> = {
   '@iwsdk/cli': 'packages/cli/iwsdk-cli.tgz',
   '@iwsdk/core': 'packages/core/iwsdk-core.tgz',
   '@iwsdk/example-assets': 'packages/example-assets/iwsdk-example-assets.tgz',
-  '@iwsdk/glxf': 'packages/glxf/iwsdk-glxf.tgz',
   '@iwsdk/locomotor': 'packages/locomotor/iwsdk-locomotor.tgz',
   '@iwsdk/reference': 'packages/reference/iwsdk-reference.tgz',
   '@iwsdk/scene-composition':

@@ -382,7 +382,7 @@ describe('BundleSource.downloadPackages', () => {
     sdkVersion: '0.1.0',
     packages: {
       '@iwsdk/core': 'packages/core/iwsdk-core.tgz',
-      '@iwsdk/glxf': 'packages/glxf/iwsdk-glxf.tgz',
+      '@iwsdk/cli': 'packages/cli/iwsdk-cli.tgz',
     },
   };
 
@@ -447,9 +447,7 @@ describe('BundleSource.downloadPackages', () => {
     expect(fs.existsSync(path.join(tmpDir, 'core', 'iwsdk-core.tgz'))).toBe(
       true,
     );
-    expect(fs.existsSync(path.join(tmpDir, 'glxf', 'iwsdk-glxf.tgz'))).toBe(
-      true,
-    );
+    expect(fs.existsSync(path.join(tmpDir, 'cli', 'iwsdk-cli.tgz'))).toBe(true);
 
     // Verify content
     const content = await fsp.readFile(

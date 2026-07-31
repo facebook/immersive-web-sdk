@@ -41,7 +41,6 @@ IWSDK applications should be built from the official scaffold and verified throu
 - [Core API](https://iwsdk.dev/api/core/): Core runtime, ECS, world, rendering, and framework APIs.
 - [XR input API](https://iwsdk.dev/api/xr-input/): XR input package reference.
 - [Locomotor API](https://iwsdk.dev/api/locomotor/): Locomotion package reference.
-- [Vite plugin APIs](https://iwsdk.dev/api/vite-plugin-gltf-optimizer/): Build-time plugins and optimization references.
 
 ## Examples
 

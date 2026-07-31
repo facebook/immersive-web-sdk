@@ -7,7 +7,6 @@
 
 import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
-import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
@@ -28,9 +27,6 @@ export default defineConfig({
 
     iwsdkExampleAssets({ assetIds: ['plant-sansevieria'] }),
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
-    optimizeGLTF({
-      level: 'medium',
-    }),
   ],
   server: { host: '0.0.0.0' },
   build: {

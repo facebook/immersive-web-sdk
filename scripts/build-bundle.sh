@@ -17,7 +17,6 @@
 #     bundle.json                    ← manifest
 #     packages/
 #       core/iwsdk-core.tgz
-#       glxf/iwsdk-glxf.tgz
 #       locomotor/iwsdk-locomotor.tgz
 #       ...
 #     recipes/
@@ -53,7 +52,7 @@ echo "📥 Collecting @iwsdk/* tgz files..."
 for TGZ in "$PACKAGES_DIR"/*/*.tgz; do
   if [ -f "$TGZ" ]; then
     BASENAME=$(basename "$TGZ")
-    # Derive the monorepo subdirectory name (e.g. core, glxf, locomotor)
+    # Derive the monorepo subdirectory name (e.g. core, xr-input, locomotor)
     SUBDIR=$(basename "$(dirname "$TGZ")")
 
     # Skip @iwsdk/create — it's the CLI tool, not a project dependency

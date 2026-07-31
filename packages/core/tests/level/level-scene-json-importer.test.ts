@@ -17,8 +17,6 @@ import type { Entity } from '../../src/ecs/entity.js';
 import { World } from '../../src/ecs/world.js';
 import { RayInteractable } from '../../src/input/state-tags.js';
 import { LevelComponentApplier } from '../../src/level/level-component-applier.js';
-import { GLXFImporter } from '../../src/level/level-glxf-importer.js';
-import { LevelImporter } from '../../src/level/level-importer.js';
 import { SceneJSONImporter } from '../../src/level/level-scene-json-importer.js';
 import { LevelSystem } from '../../src/level/level-system.js';
 import {
@@ -689,24 +687,17 @@ describe('SceneJSONImporter', () => {
     });
   });
 
-  it('routes native scene JSON URLs separately from legacy GLXF URLs', async () => {
+  it('rejects non-native level URLs before fetching', async () => {
     const { root, world } = makeWorld();
-    const sceneLoad = vi
-      .spyOn(SceneJSONImporter, 'load')
-      .mockResolvedValue(undefined);
-    const glxfLoad = vi
-      .spyOn(GLXFImporter, 'load')
-      .mockResolvedValue(undefined);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
 
-    await LevelImporter.load(
-      world,
-      '/scenes/main.iwsdk.scene.json?cache=1',
-      root,
+    await expect(
+      SceneJSONImporter.load(world, '/legacy/Composition.glxf', root),
+    ).rejects.toThrow(
+      'Expected a native .iwsdk.scene.json or .scene.json document',
     );
-    await LevelImporter.load(world, '/legacy/Composition.glxf', root);
-
-    expect(sceneLoad).toHaveBeenCalledTimes(1);
-    expect(glxfLoad).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('loads in-memory scene documents through the World.loadSceneDocument level path', async () => {
@@ -718,8 +709,8 @@ describe('SceneJSONImporter', () => {
     const createdRoots: FakeEntity[] = [];
     const scene = makeScene();
     const loadDocument = vi
-      .spyOn(LevelImporter, 'loadDocument')
-      .mockResolvedValue(undefined);
+      .spyOn(SceneJSONImporter, 'loadDocument')
+      .mockResolvedValue(undefined as any);
 
     world.sceneEntity = sceneEntity;
     world.scene = runtimeScene;
@@ -765,7 +756,7 @@ describe('SceneJSONImporter', () => {
   it('rejects a superseded level load before registering the next one', async () => {
     const world = new World();
     const scene = makeScene();
-    const firstLoad = world.loadLevel('/first.glxf');
+    const firstLoad = world.loadLevel('/first.iwsdk.scene.json');
     const firstRejection = expect(firstLoad).rejects.toThrow(
       'Level load was superseded by a newer request',
     );

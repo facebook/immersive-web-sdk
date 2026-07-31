@@ -8,10 +8,9 @@ You've built an amazing WebXR experience! Now it's time to optimize and deploy i
 
 ## Production Build Process
 
-Your starter app is already configured with Vite plugins that automatically optimize assets during build. When you run `npm run build`, it:
+Your starter app uses Vite to create a production build. When you run `npm run build`, it:
 
 - Bundles and minifies your JavaScript/TypeScript code
-- Compresses GLTF models with Draco and optimizes textures
 - Generates a deployable static site in the `dist/` folder
 
 ## Building Your Project
@@ -22,74 +21,16 @@ Navigate to your project directory and run:
 npm run build
 ```
 
-This creates a `dist/` folder with your optimized application. The build automatically:
+This creates a `dist/` folder with your application. The build automatically:
 
-- Compresses your GLTF models using Draco compression
-- Optimizes textures with KTX2 compression (when available)
 - Bundles and minifies JavaScript
 - Copies public assets
 
 ## Asset Optimization
 
-Your starter app includes the `@iwsdk/vite-plugin-gltf-optimizer` plugin that automatically compresses GLTF models and textures during build.
-
-### Current Configuration
-
-In your `vite.config.ts`, you can see the optimizer is already configured:
-
-```typescript
-import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
-
-export default defineConfig({
-  plugins: [
-    // ... other plugins
-    optimizeGLTF({
-      level: 'medium',
-    }),
-  ],
-});
-```
-
-### Optimization Levels
-
-The plugin offers three preset levels:
-
-- **`light`**: Fast build, moderate compression
-- **`medium`**: Balanced build time and compression
-- **`aggressive`**: Slower build, maximum compression
-
-### KTX2 Compression Requirements
-
-The optimizer uses KTX2 compression by default for better texture compression. If you don't have KTX-Software installed, you'll see this warning:
-
-```
-⚠️  KTX-Software not found (missing "ktx" CLI). Skipping KTX2 compression.
-   Install from: https://github.com/KhronosGroup/KTX-Software/releases
-```
-
-The build won't crash - it will fall back to standard texture optimization, but installing KTX-Software gives you better compression results. Download and install it from the [KTX-Software releases page](https://github.com/KhronosGroup/KTX-Software/releases) for optimal texture compression.
-
-### Advanced Configuration
-
-For more control, you can customize specific options:
-
-```typescript
-optimizeGLTF({
-  level: 'medium',
-  verbose: true, // Show optimization details
-  geometry: {
-    compress: 'draco', // Draco compression
-    quality: 0.8, // Higher = better quality, larger size
-  },
-  textures: {
-    mode: 'auto', // Automatic texture compression
-    quality: 0.75, // Texture compression quality
-    maxSize: 1024, // Maximum texture resolution
-  },
-});
-```
-
-During build, you'll see optimization results showing significant file size reductions for your GLTF models and textures.
+Vite copies files from `public/` without rewriting them. Optimize large models and
+textures in your asset-production pipeline before adding them to the project, then
+verify their visual quality and download size in a production build.
 
 ## Deploying to GitHub Pages
 

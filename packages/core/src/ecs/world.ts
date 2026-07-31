@@ -261,7 +261,7 @@ export class World extends ElicsWorld {
     launchXR(this, xrOptions);
   }
 
-  /** Request a level change; LevelSystem performs the work and resolves. */
+  /** Request a native scene JSON level change; LevelSystem performs the work and resolves. */
   async loadLevel(url?: string): Promise<void> {
     this.rejectPendingLevelLoad();
     this.requestedLevelDocument = undefined;

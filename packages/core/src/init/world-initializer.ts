@@ -119,7 +119,7 @@ export type WorldOptions = {
   /** Application components registered before the initial level is loaded. */
   components?: ComponentManifest;
 
-  /** Level to load after initialization. Accepts a GLXF URL string or an object with a `url` field. */
+  /** Native scene JSON level to load after initialization. Accepts a URL string or an object with a `url` field. */
   level?: { url?: string } | string;
 
   /** XR session options and offer behavior. Set to `false` for browser-only worlds. */

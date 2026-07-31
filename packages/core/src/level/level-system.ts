@@ -21,7 +21,6 @@ import {
   IBLTexture,
 } from '../environment/index.js';
 import { Vector3 } from '../runtime/index.js';
-import { LevelImporter } from './level-importer.js';
 import { LevelRoot } from './level-root.js';
 import {
   applySceneEnvironment,
@@ -29,7 +28,10 @@ import {
   restoreSceneEnvironment,
   type SceneEnvironmentState,
 } from './level-scene-environment.js';
-import type { SceneJSONLoadResult } from './level-scene-json-importer.js';
+import {
+  SceneJSONImporter,
+  type SceneJSONLoadResult,
+} from './level-scene-json-importer.js';
 import { disposeSceneObjectResources } from './level-scene-object.js';
 import { LevelTag } from './level-tag.js';
 
@@ -39,7 +41,7 @@ import { LevelTag } from './level-tag.js';
  * @remarks
  * - Stages replacement content invisibly and destroys the prior level only after a successful load.
  * - Rejects failed loads while keeping the prior level active.
- * - Loads native scene JSON documents, scene JSON URLs, or legacy GLXF URLs via {@link LevelImporter}.
+ * - Loads native scene JSON documents or native scene JSON URLs.
  * @category Scene
  */
 export class LevelSystem extends createSystem(
@@ -138,9 +140,9 @@ export class LevelSystem extends createSystem(
 
     const doLoad =
       document != null
-        ? LevelImporter.loadDocument(this.world, document, newRoot)
+        ? SceneJSONImporter.loadDocument(this.world, document, newRoot)
         : url
-          ? LevelImporter.load(this.world, url, newRoot)
+          ? SceneJSONImporter.load(this.world, url, newRoot)
           : Promise.resolve();
     void doLoad
       .then((loadResult) => {

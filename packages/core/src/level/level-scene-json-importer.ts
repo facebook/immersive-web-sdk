@@ -74,6 +74,11 @@ export class SceneJSONImporter {
     parentEntity: Entity,
     _options: SceneJSONImportOptions = {},
   ): Promise<SceneJSONLoadResult> {
+    if (!this.canLoadUrl(url)) {
+      throw new Error(
+        `Unsupported level URL "${url}". Expected a native .iwsdk.scene.json or .scene.json document.`,
+      );
+    }
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(

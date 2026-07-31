@@ -279,7 +279,7 @@ export class AssetManager {
     return new GLTFLoadTransaction(limits);
   }
 
-  // GLXF has been removed from the asset pipeline. Use World.loadLevel(url).
+  // Scene documents are loaded through World.loadLevel(url).
 
   /** Fetch any cached asset by logical key. */
   static getAsset(key: string): any {

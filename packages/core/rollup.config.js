@@ -22,7 +22,6 @@ export default {
     // Mark all other dependencies as external
     const externalDeps = [
       'three-mesh-bvh',
-      '@iwsdk/glxf',
       '@iwsdk/locomotor',
       '@iwsdk/scene-composition',
       '@iwsdk/xr-input',

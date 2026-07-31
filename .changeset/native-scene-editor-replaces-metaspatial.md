@@ -23,6 +23,10 @@ schema-driven component editing, agent screenshots from the editor viewport,
 migrated examples/starters, Meta Spatial removal audits, and automated app plus
 editor render-proof evidence.
 
+The legacy `@iwsdk/glxf` package and fallback level importer are removed.
+`World.loadLevel()` now accepts native `.iwsdk.scene.json` and `.scene.json`
+documents only.
+
 Native scene documents use one manifest-backed `asset` content kind plus groups,
 lights, prefabs, deterministic patterns, components, and constraints. glTF assets,
 procedural Three.js geometry, PBR materials, and custom shaders live in a dedicated
