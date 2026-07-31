@@ -950,6 +950,64 @@ describe('SceneEditorSession', () => {
     });
   });
 
+  test('renders isolated UIKitML asset previews through the injected renderer', async () => {
+    const renderUIPreview = vi.fn().mockResolvedValue({
+      assetId: 'welcome-panel',
+      background: '#112233',
+      height: 240,
+      imageData: 'png',
+      mimeType: 'image/png',
+      width: 320,
+    });
+    const session = new SceneEditorSession({
+      document: DOCUMENT,
+      renderUIPreview,
+    });
+
+    await expect(
+      session.dispatch('ui_render_preview', {
+        assetId: 'welcome-panel',
+        background: '#112233',
+        height: 240,
+        width: 320,
+      }),
+    ).resolves.toMatchObject({
+      assetId: 'welcome-panel',
+      imageData: 'png',
+      mimeType: 'image/png',
+    });
+    expect(renderUIPreview).toHaveBeenCalledWith('welcome-panel', {
+      background: '#112233',
+      height: 240,
+      width: 320,
+    });
+  });
+
+  test('lists only UIKitML assets for isolated UI rendering', async () => {
+    const session = new SceneEditorSession({
+      document: DOCUMENT,
+      listAssets: () => [
+        { id: 'table', kind: 'gltf', name: 'Table' },
+        { id: 'welcome-panel', kind: 'uikitml', name: 'Welcome Panel' },
+        { id: 'settings-panel', kind: 'uikitml', name: 'Settings Panel' },
+      ],
+    });
+
+    await expect(session.dispatch('ui_list_assets', {})).resolves.toEqual({
+      assets: [
+        { id: 'welcome-panel', kind: 'uikitml', name: 'Welcome Panel' },
+        { id: 'settings-panel', kind: 'uikitml', name: 'Settings Panel' },
+      ],
+    });
+    await expect(
+      session.dispatch('ui_list_assets', { query: 'settings' }),
+    ).resolves.toEqual({
+      assets: [
+        { id: 'settings-panel', kind: 'uikitml', name: 'Settings Panel' },
+      ],
+    });
+  });
+
   test('keeps the session dirty when an edit lands during an awaited save', async () => {
     let resolveSave:
       | ((value: { bytes: number; path: string }) => void)
@@ -2263,7 +2321,7 @@ describe('SceneEditorSession', () => {
           {
             content: { asset: 'table', type: 'asset' },
             components: {
-              'com.iwsdk.components.PanelUI': { config: 'panel.json' },
+              'com.iwsdk.components.PanelUI': { config: 'panel.uikitml' },
               MissingComponent: {},
             },
             id: 'component-node',

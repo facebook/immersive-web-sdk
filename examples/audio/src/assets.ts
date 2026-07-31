@@ -18,6 +18,11 @@ const assets = {
     type: AssetType.GLTF,
     url: '/iwsdk-assets/robot/robot.gltf',
   },
+  'spatial-audio-panel': {
+    name: 'Spatial Audio Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
+  },
   song: {
     priority: 'background',
     type: AssetType.Audio,

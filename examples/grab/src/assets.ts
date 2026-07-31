@@ -23,6 +23,26 @@ const assets = {
     type: AssetType.GLTF,
     url: '/iwsdk-assets/robot/robot.gltf',
   },
+  'grab-welcome-panel': {
+    name: 'Grab Welcome Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
+  },
+  'distance-grab-panel': {
+    name: 'Distance Grab Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/distance-grabbable.uikitml',
+  },
+  'one-hand-grab-panel': {
+    name: 'One-Hand Grab Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/one-hand-grabbable.uikitml',
+  },
+  'two-hand-grab-panel': {
+    name: 'Two-Hand Grab Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/two-hand-grabbable.uikitml',
+  },
   switchSound: {
     priority: 'background',
     type: AssetType.Audio,

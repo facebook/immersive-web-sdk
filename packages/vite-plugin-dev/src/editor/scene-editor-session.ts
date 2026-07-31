@@ -47,6 +47,8 @@ export const SCENE_EDITOR_TOOL_METHODS = [
   'scene_select',
   'scene_set_camera',
   'scene_screenshot',
+  'ui_list_assets',
+  'ui_render_preview',
 ] as const;
 
 export type SceneEditorToolMethod = (typeof SCENE_EDITOR_TOOL_METHODS)[number];
@@ -96,6 +98,21 @@ export interface SceneEditorScreenshotOptions {
   width?: number;
   height?: number;
   captureMode: SceneEditorCaptureMode;
+}
+
+export interface SceneEditorUIPreviewOptions {
+  background?: string;
+  height?: number;
+  width?: number;
+}
+
+export interface SceneEditorUIPreviewResult {
+  assetId: string;
+  background: string;
+  height: number;
+  imageData: string;
+  mimeType: 'image/png';
+  width: number;
 }
 
 export interface SceneEditorScreenshotComparisonResult {
@@ -184,6 +201,10 @@ export interface SceneEditorSessionOptions {
     camera: SceneEditorCameraState,
     options: SceneEditorScreenshotOptions,
   ) => Promise<SceneEditorScreenshotResult> | SceneEditorScreenshotResult;
+  renderUIPreview?: (
+    assetId: string,
+    options: SceneEditorUIPreviewOptions,
+  ) => Promise<SceneEditorUIPreviewResult> | SceneEditorUIPreviewResult;
   registerReviewCapture?: (
     capture: Record<string, unknown>,
   ) => Promise<{ captureToken: Sha256 }> | { captureToken: Sha256 };
@@ -373,6 +394,10 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
         return this.screenshot(params);
       case 'scene_compare_screenshots':
         return this.compareScreenshots(params);
+      case 'ui_list_assets':
+        return this.listUIAssets(params);
+      case 'ui_render_preview':
+        return this.renderUIPreview(params);
       case 'scene_set_review_lens':
         return this.setReviewLens(params);
       case 'scene_capture_review':
@@ -556,6 +581,20 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
   private listAssets(params: Record<string, unknown>) {
     const query = getOptionalString(params.query)?.toLowerCase();
     const assets = [...(this.options.listAssets?.() ?? [])];
+    return {
+      assets: query
+        ? assets.filter((asset) =>
+            `${asset.id} ${asset.name ?? ''}`.toLowerCase().includes(query),
+          )
+        : assets,
+    };
+  }
+
+  private listUIAssets(params: Record<string, unknown>) {
+    const query = getOptionalString(params.query)?.toLowerCase();
+    const assets = [...(this.options.listAssets?.() ?? [])].filter(
+      (asset) => asset.kind === 'uikitml',
+    );
     return {
       assets: query
         ? assets.filter((asset) =>
@@ -1069,6 +1108,20 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       height: getOptionalNumber(params.height),
       width: getOptionalNumber(params.width),
     });
+  }
+
+  private async renderUIPreview(params: Record<string, unknown>) {
+    if (this.options.renderUIPreview == null) {
+      throw new Error('The editor runtime cannot render UIKitML previews');
+    }
+    return this.options.renderUIPreview(
+      getRequiredString(params.assetId, 'assetId'),
+      {
+        background: getOptionalString(params.background),
+        height: getOptionalNumber(params.height),
+        width: getOptionalNumber(params.width),
+      },
+    );
   }
 
   private async compareScreenshots(

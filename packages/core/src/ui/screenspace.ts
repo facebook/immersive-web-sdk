@@ -9,12 +9,17 @@ import type { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import type { Object3D } from '../runtime/index.js';
 import type { ScenePointerDescendants } from '../runtime/scene-pointer-descendants.js';
-import { MathUtils } from '../runtime/three.js';
 import { UIKitDocument } from './document.js';
 import { ScreenSpace } from './screenspace-component.js';
-import { PanelUI, PanelDocument } from './ui.js';
+import { PanelDocument } from './ui.js';
 
 export { ScreenSpace } from './screenspace-component.js';
+
+interface LayoutEnvironment {
+  canvasWidth: number;
+  canvasHeight: number;
+  projectionScaleY: number;
+}
 
 /**
  * Positions {@link PanelUI} documents relative to the camera with CSS‑like semantics.
@@ -24,15 +29,21 @@ export { ScreenSpace } from './screenspace-component.js';
  *   a camera‑relative plane given by `zOffset`.
  * - Automatically toggles between screen‑space (under the camera) and world‑space depending on
  *   `renderer.xr.isPresenting`.
- * - Sets {@link UIKitDocument.setTargetDimensions} so that the UI scales to the requested size
- *   without distorting aspect ratio.
+ * - Uses {@link UIKitDocument.setTargetDimensions} while camera-local, then restores intrinsic
+ *   size in XR so the entity transform remains the world-space scale authority.
  *
  * @category UI
  */
 export class ScreenSpaceUISystem extends createSystem({
-  panels: { required: [PanelUI, PanelDocument, ScreenSpace] },
+  panels: { required: [ScreenSpace] },
 }) {
   private screenSpaceDescendants: Object3D[] = [];
+  private documentSizes = new WeakMap<
+    UIKitDocument,
+    { width: number; height: number }
+  >();
+  private entityDocuments = new WeakMap<Object3D, UIKitDocument>();
+  private layoutEnvironment?: LayoutEnvironment;
   private layoutHelpers = {
     dimensionContainer: document.createElement('div'),
     positionContainer: document.createElement('div'),
@@ -66,38 +77,46 @@ export class ScreenSpaceUISystem extends createSystem({
   /** Move panels between world and screen space and recompute layout on changes. */
   update(): void {
     this.screenSpaceDescendants.length = 0;
+    const resized = this.resized;
+    const layoutEnvironmentChanged = this.hasLayoutEnvironmentChanged();
 
     this.queries.panels.entities.forEach((entity) => {
       const parent = entity.object3D;
-      const document = PanelDocument.data.document[entity.index] as
-        | UIKitDocument
-        | undefined;
+      const document = this.resolveDocument(entity);
 
       if (!document) {
         return;
       } // Skip if UI not loaded yet
 
       const panelInScreenSpace = document.parent === this.camera;
+      const documentSizeChanged = this.hasDocumentSizeChanged(document);
 
       if (this.renderer.xr.isPresenting && panelInScreenSpace) {
         // Move back to world space when entering XR
         parent?.add(document);
+        document.clearTargetDimensions();
         // Reset position that were set during screen space layout
         document.position.set(0, 0, 0);
       } else if (!this.renderer.xr.isPresenting && !panelInScreenSpace) {
         // Move to screen space when not in XR
         this.camera.add(document);
-        this.calculateLayout(entity);
-      } else if (panelInScreenSpace && this.resized) {
-        // Recalculate layout on resize
-        this.calculateLayout(entity);
-        this.resized = false;
+        this.calculateLayout(entity, document);
+      } else if (
+        panelInScreenSpace &&
+        (resized || documentSizeChanged || layoutEnvironmentChanged)
+      ) {
+        // Recalculate when the viewport, camera projection, or UIKit's intrinsic
+        // layout changes. In particular, three.js restores the browser camera one
+        // frame after XR ends, so the first non-XR layout may still see the XR
+        // projection and must self-correct on the following frame.
+        this.calculateLayout(entity, document);
       }
 
       if (document.parent === this.camera) {
         this.screenSpaceDescendants.push(document);
       }
     });
+    this.resized = false;
 
     const scene = this.scene as typeof this.scene & ScenePointerDescendants;
     scene.screenSpaceDescendants =
@@ -106,14 +125,75 @@ export class ScreenSpaceUISystem extends createSystem({
         : undefined;
   }
 
-  /** Compute pixel size/position and apply camera‑relative transform. */
-  private calculateLayout(entity: Entity) {
-    const document = PanelDocument.data.document[entity.index] as
+  /** Detect every renderer/camera input used to map screen pixels into world units. */
+  private hasLayoutEnvironmentChanged(): boolean {
+    const next = {
+      canvasWidth: this.renderer.domElement.clientWidth,
+      canvasHeight: this.renderer.domElement.clientHeight,
+      // Matrix element 5 is the vertical projection scale. Unlike camera.fov,
+      // it also reflects zoom and direct projection-matrix changes.
+      projectionScaleY: this.camera.projectionMatrix.elements[5],
+    };
+    const previous = this.layoutEnvironment;
+    this.layoutEnvironment = next;
+    return (
+      previous == null ||
+      previous.canvasWidth !== next.canvasWidth ||
+      previous.canvasHeight !== next.canvasHeight ||
+      previous.projectionScaleY !== next.projectionScaleY
+    );
+  }
+
+  /** Resolve legacy component-backed and manifest-backed UIKit documents. */
+  private resolveDocument(entity: Entity): UIKitDocument | undefined {
+    const host = entity.object3D;
+    if (!host) {
+      return undefined;
+    }
+    const cached = this.entityDocuments.get(host);
+    if (cached && !cached.disposed) {
+      return cached;
+    }
+    const componentDocument = PanelDocument.data.document[entity.index] as
       | UIKitDocument
       | undefined;
-    const computedSize = document?.computedSize;
+    if (componentDocument && !componentDocument.disposed) {
+      this.entityDocuments.set(host, componentDocument);
+      return componentDocument;
+    }
+    let discovered: UIKitDocument | undefined;
+    host.traverse((object) => {
+      if (!discovered && object instanceof UIKitDocument && !object.disposed) {
+        discovered = object;
+      }
+    });
+    if (discovered) {
+      this.entityDocuments.set(host, discovered);
+    }
+    return discovered;
+  }
 
-    if (document && computedSize) {
+  /** Track intrinsic UIKit dimensions so late font/content layout invalidates positioning. */
+  private hasDocumentSizeChanged(document: UIKitDocument): boolean {
+    const size = document.computedSize;
+    if (!size) {
+      return false;
+    }
+
+    const previous = this.documentSizes.get(document);
+    this.documentSizes.set(document, size);
+    return (
+      previous == null ||
+      previous.width !== size.width ||
+      previous.height !== size.height
+    );
+  }
+
+  /** Compute pixel size/position and apply camera‑relative transform. */
+  private calculateLayout(entity: Entity, document: UIKitDocument) {
+    const computedSize = document.computedSize;
+
+    if (computedSize) {
       const widthExp = entity.getValue(ScreenSpace, 'width')!;
       const heightExp = entity.getValue(ScreenSpace, 'height')!;
       const top = entity.getValue(ScreenSpace, 'top')!;
@@ -135,10 +215,22 @@ export class ScreenSpaceUISystem extends createSystem({
       // Screen dimensions
       const W = this.renderer.domElement.clientWidth;
       const H = this.renderer.domElement.clientHeight;
+      const projectionScaleY = this.camera.projectionMatrix.elements[5];
+
+      // A hidden or transitioning canvas can temporarily report unusable
+      // dimensions. Leave the document attached and retry when the tracked
+      // layout environment becomes valid instead of writing NaN/Infinity.
+      if (
+        W <= 0 ||
+        H <= 0 ||
+        !Number.isFinite(projectionScaleY) ||
+        projectionScaleY <= 0
+      ) {
+        return;
+      }
 
       // Calculate world-to-pixel conversion for screen space at zOffset
-      const vFOV = MathUtils.degToRad(this.camera.fov);
-      const worldHeightAtZ = 2 * Math.tan(vFOV / 2) * zOffset;
+      const worldHeightAtZ = (2 * zOffset) / projectionScaleY;
       const worldPerPixel = worldHeightAtZ / H;
 
       // Calculate desired world space dimensions
@@ -182,9 +274,9 @@ export class ScreenSpaceUISystem extends createSystem({
    * `ScreenSpace` declares `'auto'` as the default for both axes, but on a
    * floating helper `<div>` the browser resolves an unconstrained `auto`
    * dimension to `0px`. A `0px` target collapses {@link
-   * UIKitDocument.setTargetDimensions} and the panel ends up rendering at
-   * its 3D `maxWidth`/`maxHeight` (meters) inside camera space, blowing the
-   * UI up to most of the viewport. Until aspect-ratio derivation from the
+   * UIKitDocument.setTargetDimensions} and the panel retains its intrinsic
+   * world-space size inside camera space, blowing the UI up to most of the
+   * viewport. Until aspect-ratio derivation from the
    * other axis lands, treat `'auto'` as an unsupported size for screen-space
    * layout: warn once per axis, and clamp the contributing CSS expression to
    * a viewport-relative fallback that produces a sensibly-sized HUD.

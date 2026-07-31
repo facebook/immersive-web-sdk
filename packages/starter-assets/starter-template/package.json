@@ -22,7 +22,6 @@
     "@iwsdk/cli": "file:../packages/cli/iwsdk-cli.tgz",
     "@iwsdk/example-assets": "file:../packages/example-assets/iwsdk-example-assets.tgz",
     "@iwsdk/vite-plugin-dev": "file:../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
-    "@iwsdk/vite-plugin-uikitml": "file:../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",
     "@meta-quest/hzdb": "^1.0.0",
     "@types/three": "*",
     "typescript": "^5.5.0",

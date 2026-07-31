@@ -199,8 +199,6 @@ my-iwsdk-app/
 │   ├── index.ts         # Application entry point and world setup
 │   ├── robot.ts         # Example custom component and system
 │   └── panel.ts         # UI panel interaction system
-├── ui/
-│   └── welcome.uikitml  # Spatial UI markup (compiled to public/ui/)
 ├── public/
 │   ├── audio/           # Audio files (.mp3, .wav, etc.)
 │   │   └── chime.mp3
@@ -209,7 +207,8 @@ my-iwsdk-app/
 │   │   ├── plantSansevieria/
 │   │   └── robot/
 │   ├── textures/        # Standalone texture files
-│   └── ui/              # Compiled UI files (auto-generated)
+│   └── ui/
+│       └── welcome.uikitml  # Runtime-loaded spatial UI markup
 ├── package.json         # Dependencies and scripts
 ├── tsconfig.json        # TypeScript configuration
 ├── vite.config.ts       # Build configuration with IWSDK plugins
@@ -220,10 +219,10 @@ my-iwsdk-app/
 
 - **`src/index.ts`**: This is where your application starts. It creates the ECS world, loads assets, spawns entities, and registers systems - everything happens here.
 - **`src/robot.ts`** & **`src/panel.ts`**: Example custom components and systems showing how to create interactive behaviors.
-- **`ui/welcome.uikitml`**: Spatial UI markup that gets compiled to JSON during build for the 3D interface panel. We'll learn more about UIKitML in [Chapter 10: Spatial UI with UIKitML](./10-spatial-ui-uikitml.md).
+- **`public/ui/welcome.uikitml`**: Spatial UI markup parsed directly by the runtime for the 3D interface panel. We'll learn more about UIKitML in [Chapter 10: Spatial UI with UIKitML](./10-spatial-ui-uikitml.md).
 - **`public/gltf/`**: Organized folder structure for 3D models, with each model in its own subfolder alongside its textures.
 - **`public/audio/`**: Audio files used for sound effects and spatial audio.
-- **`vite.config.ts`**: Build configuration that includes IWSDK-specific plugins for WebXR emulation, UI compilation, and asset optimization.
+- **`vite.config.ts`**: Build configuration that includes IWSDK-specific plugins for WebXR emulation and project assets.
 
 ## Starter Dev Commands
 

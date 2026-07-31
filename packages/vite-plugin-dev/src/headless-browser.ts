@@ -120,14 +120,12 @@ class ServerSideConsoleCapture {
 export interface ManagedBrowser {
   close(): Promise<void>;
   page: unknown; // playwright.Page
+  /** Switch to the application runtime when needed, then capture it. */
+  captureRuntimeScreenshot(): Promise<Buffer>;
   /** Query captured console logs. */
   queryLogs(options?: LogQuery): CapturedLog[];
   /** Read the managed browser tab identity used by MCP metadata. */
   getTabMetadata(): Promise<{ id: string | null; generation: number | null }>;
-  /** Switch the managed workspace view before a browser-level capture. */
-  setWorkspaceView(view: 'runtime' | 'editor'): Promise<boolean>;
-  /** Take a screenshot of the browser page via CDP. */
-  screenshot(): Promise<Buffer>;
   /** Reload the saved editor and workspace runtime, then collect publish evidence. */
   collectRuntimePublishEvidence(
     request: ManagedRuntimePublishRequest,
@@ -140,6 +138,82 @@ export interface ManagedBrowser {
   onClose(callback: () => void): void;
   /** Whether the underlying Playwright page has been closed. */
   isClosed(): boolean;
+}
+
+async function showWorkspaceRuntime(page: Page): Promise<boolean> {
+  return page.evaluate(async () => {
+    const pathname = window.location.pathname ?? '';
+    const isWorkspace =
+      pathname.startsWith('/__iwsdk/workspace') ||
+      document.documentElement.dataset.iwsdkWorkspaceView != null;
+    if (!isWorkspace) {
+      return false;
+    }
+
+    const switchedToRuntime =
+      document.documentElement.dataset.iwsdkWorkspaceView !== 'runtime';
+    if (switchedToRuntime) {
+      const runtimeButton = document.querySelector<HTMLElement>(
+        '[data-workspace-view-button="runtime"]',
+      );
+      if (!runtimeButton) {
+        throw new Error('IWSDK workspace runtime control is unavailable');
+      }
+      runtimeButton.click();
+    }
+
+    const deadline = performance.now() + 10_000;
+    while (
+      document.documentElement.dataset.iwsdkWorkspaceView !== 'runtime' ||
+      (window as any).__IWSDK_WORKSPACE_RUNTIME_READY !== true
+    ) {
+      if (performance.now() >= deadline) {
+        throw new Error('IWSDK workspace runtime view did not become ready');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    if (switchedToRuntime) {
+      const runtimeFrame = document.getElementById('workspace-runtime-frame');
+      if (!(runtimeFrame instanceof HTMLIFrameElement)) {
+        throw new Error('IWSDK workspace runtime iframe is unavailable');
+      }
+
+      // The iframe load event fires before World.create() finishes loading its
+      // level and before the first useful WebGL frame. Give framework runtimes
+      // a short readiness window, with a bounded fallback for non-IWSDK apps.
+      const settleStartedAt = performance.now();
+      const minimumSettleAt = settleStartedAt + 500;
+      const fallbackSettleAt = settleStartedAt + 1_500;
+      while (performance.now() < fallbackSettleAt) {
+        let renderReady = false;
+        const runtime = (runtimeFrame.contentWindow as any)
+          ?.FRAMEWORK_MCP_RUNTIME;
+        if (runtime?.handles?.('get_render_stats')) {
+          try {
+            const stats = await runtime.dispatch('get_render_stats', {});
+            renderReady =
+              stats?.available === true &&
+              stats?.calls > 0 &&
+              stats?.meshCount > 0;
+          } catch {
+            // The framework bridge can exist before its world is queryable.
+          }
+        }
+        if (renderReady && performance.now() >= minimumSettleAt) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await new Promise<void>((resolve) => {
+        runtimeFrame.contentWindow!.requestAnimationFrame(() => {
+          runtimeFrame.contentWindow!.requestAnimationFrame(() => resolve());
+        });
+      });
+    }
+    return true;
+  });
 }
 
 export interface ManagedRuntimePublishRequest {
@@ -418,6 +492,7 @@ async function collectRuntimePreflightEvidence(
   page: Page,
   request: ManagedRuntimePreflightRequest,
 ): Promise<ManagedRuntimePreflightEvidence> {
+  await showWorkspaceRuntime(page);
   return page.evaluate(
     async ({ sampleFrames, warmupFrames }) => {
       const sceneEditor = (window as any).IWSDK_SCENE_EDITOR;
@@ -427,11 +502,6 @@ async function collectRuntimePreflightEvidence(
       }
       if (!(frame instanceof HTMLIFrameElement)) {
         throw new Error('IWSDK workspace runtime iframe is unavailable');
-      }
-      if (sceneEditor.runtime?.dispatch) {
-        await sceneEditor.runtime.dispatch('workspace_set_view', {
-          view: 'runtime',
-        });
       }
       const editorDocument = await sceneEditor.session.dispatch(
         'scene_get_document',
@@ -877,15 +947,13 @@ async function collectRuntimePublishEvidence(
   const reloadToken = `${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+  await showWorkspaceRuntime(page);
   const runtimeSource = await page.evaluate(async () => {
     const sceneEditor = (window as any).IWSDK_SCENE_EDITOR;
     const frame = document.getElementById('workspace-runtime-frame');
     if (!(frame instanceof HTMLIFrameElement) || !sceneEditor?.runtime) {
       throw new Error('IWSDK workspace runtime iframe is unavailable');
     }
-    await sceneEditor.runtime.dispatch('workspace_set_view', {
-      view: 'runtime',
-    });
     const source =
       frame.dataset.workspaceRuntimeSrc || frame.getAttribute('src') || '/';
     frame.src = 'about:blank';
@@ -1373,6 +1441,22 @@ export async function launchManagedBrowser(
   browser.on('disconnected', fireCloseCallback);
 
   return {
+    captureRuntimeScreenshot: async () => {
+      await showWorkspaceRuntime(page);
+      const raw = await page.screenshot({ type: 'png' });
+      // In non-agent modes (viewport is null / freely resizable), downscale
+      // the screenshot to fit within screenshotSize bounds.
+      if (viewport === null) {
+        return sharp(raw)
+          .resize(screenshotSize.width, screenshotSize.height, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .png()
+          .toBuffer();
+      }
+      return raw;
+    },
     collectRuntimePublishEvidence: (request) =>
       collectRuntimePublishEvidence(page, request),
     collectRuntimePreflightEvidence: (request) =>
@@ -1406,41 +1490,6 @@ export async function launchManagedBrowser(
           generation: Number.isFinite(generation) ? generation : null,
         };
       }),
-    setWorkspaceView: async (view) =>
-      page.evaluate(async (nextView) => {
-        const pathname = window.location.pathname ?? '';
-        const isWorkspace =
-          pathname.startsWith('/__iwsdk/workspace') ||
-          document.documentElement.dataset.iwsdkWorkspaceView != null;
-        if (!isWorkspace) {
-          return false;
-        }
-
-        const runtime = (window as any).IWSDK_SCENE_EDITOR?.runtime;
-        if (runtime && typeof runtime.dispatch === 'function') {
-          await runtime.dispatch('workspace_set_view', { view: nextView });
-          return true;
-        }
-
-        (window as any).__IWSDK_WORKSPACE_VIEW = nextView;
-        document.documentElement.dataset.iwsdkWorkspaceView = nextView;
-        return true;
-      }, view),
-    screenshot: async () => {
-      const raw = await page.screenshot({ type: 'png' });
-      // In non-agent modes (viewport is null / freely resizable), downscale
-      // the screenshot to fit within screenshotSize bounds.
-      if (viewport === null) {
-        return sharp(raw)
-          .resize(screenshotSize.width, screenshotSize.height, {
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .png()
-          .toBuffer();
-      }
-      return raw;
-    },
     onClose: (callback: () => void) => {
       closeCallback = callback;
     },

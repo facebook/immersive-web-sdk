@@ -13,6 +13,7 @@
  */
 // DOM-like access for UI elements
 export { UIKitDocument } from './document.js';
+export { UIKitMLAsset, findUIKitDocument } from './uikitml-asset.js';
 
 // Updated components with file-based support
 export {
@@ -22,6 +23,18 @@ export {
   ColorSchemeType,
 } from './ui.js';
 export type { PanelUIProps, ColorScheme } from './ui.js';
+export type {
+  UIKitMLComponentSet,
+  UIKitMLKit,
+  UIKitMLLoadOptions,
+} from './uikitml.js';
+export {
+  DEFAULT_UIKITML_KIT,
+  configureUIKitRenderer,
+  loadUIKitMLAsset,
+  loadUIKitMLComponent,
+  parseUIKitMLSource,
+} from './uikitml.js';
 
 // Behavior components
 export * from './follow.js';

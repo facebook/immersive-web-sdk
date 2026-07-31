@@ -1,6 +1,6 @@
 ---
 name: test-ui
-description: 'Test UI system (PanelUI, ScreenSpace) against the poke example using the iwsdk CLI.'
+description: 'Test UIKitML asset and ScreenSpace UI behavior against the poke example using the iwsdk CLI.'
 argument-hint: '[--suite panel|screenspace|follower|all]'
 ---
 
@@ -86,24 +86,22 @@ Run these commands in order:
 **Test 1.1: Find Panel Entity**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["PanelUI"]}' 2>/dev/null
+npx iwsdk ecs find --input-json '{"withComponents":["ScreenSpace"]}' 2>/dev/null
 ```
 
-Assert: At least 1 entity. Save its `entityIndex` as `<panel>`.
+Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
 
-**Test 1.2: PanelDocument Added After Load**
+**Test 1.2: Manifest-backed Panel Entity**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["PanelUI","PanelDocument"]}' 2>/dev/null
+npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["ScreenSpace","RayInteractable","PokeInteractable"]}' 2>/dev/null
 ```
 
 Assert:
 
-- `PanelUI.config` contains `welcome.json`
-- `PanelUI.maxWidth` = `0.5`
-- `PanelUI.maxHeight` = `0.4`
-- `PanelDocument` component IS present (proves async panel loading succeeded)
-- `PanelDocument.document` is an Object3D reference (loaded UIKitDocument)
+- `ScreenSpace`, `RayInteractable`, and `PokeInteractable` are present.
+- `PanelUI` and `PanelDocument` are absent; the UIKitML document is owned by
+  the manifest-backed scene object.
 
 **Test 1.3: PanelUISystem Query Counts**
 
@@ -113,8 +111,8 @@ npx iwsdk ecs systems 2>/dev/null
 
 Assert:
 
-- PanelUISystem: `unconfiguredPanels: 0` (all panels loaded)
-- PanelUISystem: `configuredPanels: 1` (panel has PanelDocument)
+- `PanelUISystem` is present and has no legacy configured/unconfigured panels.
+- `ScreenSpaceUISystem`: `panels: 1`.
 
 ---
 
@@ -162,7 +160,7 @@ npx iwsdk ecs systems 2>/dev/null
 
 Assert:
 
-- `PanelUISystem` at priority -3.8, config: kits, preferredColorScheme
+- `PanelUISystem` at priority -3.8, config: kit, componentSets, preferredColorScheme
 - `ScreenSpaceUISystem` at priority -3.75
 - `FollowSystem` at priority 0
 
@@ -176,8 +174,8 @@ npx iwsdk ecs components 2>/dev/null
 
 Assert:
 
-- `PanelUI`: config (String), maxWidth (Float32), maxHeight (Float32)
-- `PanelDocument`: document (Object)
+- `PanelUI`: config (String) as a legacy raw-URL compatibility component
+- `PanelDocument`: document (Object) as legacy runtime state
 - `ScreenSpace`: height, width, top, bottom, left, right (all String), zOffset (Float32)
 
 ---
@@ -231,9 +229,11 @@ Only give up after one retry attempt per suite. If the same suite fails twice, m
 
 ## Known Issues & Workarounds
 
-### PanelDocument loading is async
+### UIKitML asset loading is async
 
-`PanelDocument` is added asynchronously after `fetch()` completes. If you query immediately after reload, the panel might not have loaded yet. Check that `unconfiguredPanels: 0` in PanelUISystem before asserting PanelDocument presence.
+`World.create()` resolves after manifest source preloading, and
+`world.assets.instantiate()` resolves after parsing and document creation. The
+poke example creates the entity only after that promise resolves.
 
 ### ScreenSpace re-parenting in XR
 

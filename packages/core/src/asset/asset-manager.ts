@@ -26,6 +26,7 @@ import {
 } from './loaders/gltf-loader.js';
 import { HDRTextureAssetLoader } from './loaders/hdr-texture-loader.js';
 import { TextureAssetLoader } from './loaders/texture-loader.js';
+import { UIKitMLAssetLoader } from './loaders/uikitml-loader.js';
 
 export type { GetGLTFOptions } from './loaders/gltf-loader.js';
 export {
@@ -56,6 +57,7 @@ export enum AssetType {
   Audio = 'audio', // Audio buffers (cached)
   Texture = 'texture', // 3D textures (cached)
   HDRTexture = 'hdr-texture', // HDR/EXR equirect textures (cached)
+  UIKitML = 'uikitml', // Spatial UI documents (cached source)
 }
 
 export interface LoadableAssetManifestEntry {
@@ -87,6 +89,16 @@ export interface RenderableAssetInfo {
   };
 }
 
+/** Asset metadata exposed to authoring tools. */
+export interface AuthoringAssetInfo extends Omit<RenderableAssetInfo, 'kind'> {
+  kind: 'gltf' | 'object3d' | 'uikitml';
+  url?: string;
+}
+
+export interface AssetRegistryOptions {
+  instantiateUIKitML?: (assetId: string) => Promise<Object3D>;
+}
+
 /**
  * World-owned view of the application's renderable asset manifest.
  *
@@ -97,7 +109,10 @@ export interface RenderableAssetInfo {
 export class RenderableAssetRegistry {
   private readonly manifest: AssetManifest;
 
-  constructor(manifest: AssetManifest = {}) {
+  constructor(
+    manifest: AssetManifest = {},
+    private readonly options: AssetRegistryOptions = {},
+  ) {
     this.manifest = manifest;
     for (const [id, entry] of Object.entries(manifest)) {
       if (isObject3DManifestEntry(entry) && entry.parent != null) {
@@ -113,7 +128,35 @@ export class RenderableAssetRegistry {
   }
 
   has(id: string): boolean {
+    return this.kind(id) != null;
+  }
+
+  /** Return whether an id instantiates as a conventional model hierarchy. */
+  hasRenderable(id: string): boolean {
     return isRenderableManifestEntry(this.manifest[id]);
+  }
+
+  /** Return whether an id is available to authoring, including UIKitML. */
+  hasAuthoringAsset(id: string): boolean {
+    return this.kind(id) != null;
+  }
+
+  /** Resolve the authoring kind for a manifest id. */
+  kind(id: string): AuthoringAssetInfo['kind'] | undefined {
+    const entry = this.manifest[id];
+    if (entry == null) {
+      return undefined;
+    }
+    if (isObject3DManifestEntry(entry)) {
+      return 'object3d';
+    }
+    if (entry.type === AssetType.GLTF) {
+      return 'gltf';
+    }
+    if (entry.type === AssetType.UIKitML) {
+      return 'uikitml';
+    }
+    return undefined;
   }
 
   list(): RenderableAssetInfo[] {
@@ -138,6 +181,22 @@ export class RenderableAssetRegistry {
     return result;
   }
 
+  /** List placeable model and UIKitML assets for authoring tools. */
+  catalog(): AuthoringAssetInfo[] {
+    const result: AuthoringAssetInfo[] = this.list();
+    for (const [id, entry] of Object.entries(this.manifest)) {
+      if (!isObject3DManifestEntry(entry) && entry.type === AssetType.UIKitML) {
+        result.push({
+          id,
+          kind: 'uikitml',
+          name: entry.name || id,
+          url: entry.url,
+        });
+      }
+    }
+    return result;
+  }
+
   bounds(id: string): RenderableAssetInfo['bounds'] | undefined {
     const entry = this.manifest[id];
     if (entry == null) {
@@ -153,13 +212,19 @@ export class RenderableAssetRegistry {
     return gltf == null ? undefined : boundsForPrototype(gltf.scene);
   }
 
-  async instantiate(id: string): Promise<Object3D> {
+  async instantiate<T extends Object3D = Object3D>(id: string): Promise<T> {
     const entry = this.manifest[id];
     if (entry == null) {
       throw new Error(`Unknown renderable asset "${id}"`);
     }
     if (isObject3DManifestEntry(entry)) {
-      return cloneObject3D(entry);
+      return cloneObject3D(entry) as unknown as T;
+    }
+    if (entry.type === AssetType.UIKitML) {
+      if (this.options.instantiateUIKitML == null) {
+        throw new Error(`UIKitML asset "${id}" requires the spatialUI feature`);
+      }
+      return this.options.instantiateUIKitML(id) as Promise<T>;
     }
     if (entry.type !== AssetType.GLTF) {
       throw new Error(`Manifest entry "${id}" is not a renderable asset`);
@@ -169,7 +234,7 @@ export class RenderableAssetRegistry {
     if (gltf == null) {
       throw new Error(`Renderable glTF asset "${id}" failed to load`);
     }
-    return gltf.scene;
+    return gltf.scene as unknown as T;
   }
 }
 
@@ -255,6 +320,8 @@ export class AssetManager {
         return TextureAssetLoader.loadTexture(url);
       case AssetType.HDRTexture:
         return HDRTextureAssetLoader.loadHDRTexture(url);
+      case AssetType.UIKitML:
+        return UIKitMLAssetLoader.loadUIKitML(url, key);
       default:
         throw new Error(`Unsupported asset type: ${type}`);
     }
@@ -315,6 +382,20 @@ export class AssetManager {
   /** Get a cached Texture by logical key. */
   static getTexture(key: string): Texture | null {
     return TextureAssetLoader.getTexture(key);
+  }
+
+  /** Load and cache UIKitML source by URL or manifest key. */
+  static loadUIKitML(
+    urlOrKey: string,
+    key?: string,
+    forceReload = false,
+  ): Promise<string> {
+    return UIKitMLAssetLoader.loadUIKitML(urlOrKey, key, forceReload);
+  }
+
+  /** Get cached UIKitML source by URL or manifest key. */
+  static getUIKitML(keyOrUrl: string): string | null {
+    return UIKitMLAssetLoader.getUIKitML(keyOrUrl);
   }
 
   /** Load an HDR equirectangular texture; optionally register a logical key. */

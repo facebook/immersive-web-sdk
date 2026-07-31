@@ -25,7 +25,7 @@ This section gathers the big ideas behind IWSDK — how the engine is structured
 
 ## Spatial UI
 
-- High‑performance 3D UI using UIKit (Yoga‑based layout, MSDF text) with familiar authoring via UIKitML, compiled by a Vite plugin.
+- High‑performance 3D UI using UIKit (Yoga‑based layout, MSDF text) with familiar authoring via UIKitML parsed directly at runtime.
 - Begin: [/concepts/spatial-ui](/concepts/spatial-ui)
   - Highlights: [UIKit](/concepts/spatial-ui/uikit), [UIKitML](/concepts/spatial-ui/uikitml), [UIKitDocument](/concepts/spatial-ui/uikit-document), [Flow](/concepts/spatial-ui/flow)
 

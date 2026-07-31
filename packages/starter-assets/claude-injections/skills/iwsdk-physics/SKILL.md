@@ -209,7 +209,6 @@ const ball = new Mesh(
   new MeshStandardMaterial({ color: new Color(0xff4444), side: FrontSide }),
 );
 ball.position.set(0, 2, -1);
-scene.add(ball);
 
 // 2. Wrap as ECS entity
 const entity = world.createTransformEntity(ball);
@@ -217,7 +216,7 @@ const entity = world.createTransformEntity(ball);
 // 3. Add physics components
 entity.addComponent(PhysicsShape, {
   shape: PhysicsShapeType.Sphere,
-  dimensions: [0.2],
+  dimensions: [0.2, 0, 0],
   restitution: 0.6, // Bouncy
 });
 entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
@@ -237,7 +236,6 @@ const ground = new Mesh(
   new MeshStandardMaterial({ color: 0x888888 }),
 );
 ground.position.set(0, -0.05, 0);
-scene.add(ground);
 
 const groundEntity = world.createTransformEntity(ground);
 groundEntity.addComponent(PhysicsShape, {
@@ -265,7 +263,6 @@ const platform = new Mesh(
   new BoxGeometry(3, 0.2, 3),
   new MeshStandardMaterial({ color: 0x4488ff }),
 );
-scene.add(platform);
 
 const platformEntity = world.createTransformEntity(platform);
 platformEntity.addComponent(PhysicsShape, {
@@ -281,6 +278,26 @@ update(delta, time) {
   }
 }
 ```
+
+### Resetting or Teleporting an Existing Body
+
+Do not remove/re-add physics components or write only to the Object3D of a dynamic
+body. Use the live physics system so Havok and the render transform update together:
+
+```typescript
+import { PhysicsSystem } from '@iwsdk/core';
+
+const physics = world.getSystem(PhysicsSystem);
+physics.setBodyTransform(entity, {
+  position: homePosition,
+  quaternion: homeQuaternion,
+});
+```
+
+Velocity is cleared by default. Pass `{ resetVelocity: false }` only when a teleport
+must preserve motion. `gravityFactor`, `linearDamping`, and `angularDamping` can be
+changed reactively with `entity.setValue`; changing motion state or shape requires
+deliberate body lifecycle handling.
 
 ### Making an Object Grabbable with Physics
 
@@ -443,7 +460,7 @@ Physics components can be configured declaratively in native scene JSON files:
 ```json
 {
   "id": "dynamic-box",
-  "asset": "box",
+  "content": { "type": "asset", "asset": "box" },
   "transform": { "position": [0, 1.5, -1] },
   "components": {
     "PhysicsShape": {
@@ -558,15 +575,12 @@ World.create(document.getElementById('scene-container'), {
   xr: { sessionMode: SessionMode.ImmersiveVR },
   features: { physics: true, grabbing: true },
 }).then((world) => {
-  const { scene } = world;
-
   // Static floor
   const floor = new Mesh(
     new BoxGeometry(10, 0.1, 10),
     new MeshStandardMaterial({ color: 0x555555 }),
   );
   floor.position.set(0, -0.05, 0);
-  scene.add(floor);
   const floorEntity = world.createTransformEntity(floor);
   floorEntity.addComponent(PhysicsShape, {
     shape: PhysicsShapeType.Box,
@@ -581,11 +595,10 @@ World.create(document.getElementById('scene-container'), {
     new MeshStandardMaterial({ color: new Color(0xff4444), side: FrontSide }),
   );
   ball.position.set(0, 1.5, -1);
-  scene.add(ball);
   const ballEntity = world.createTransformEntity(ball);
   ballEntity.addComponent(PhysicsShape, {
     shape: PhysicsShapeType.Sphere,
-    dimensions: [0.15],
+    dimensions: [0.15, 0, 0],
     restitution: 0.8,
     friction: 0.5,
   });
@@ -599,7 +612,6 @@ World.create(document.getElementById('scene-container'), {
     new MeshStandardMaterial({ color: new Color(0x4488ff), side: FrontSide }),
   );
   box.position.set(0.5, 2, -1);
-  scene.add(box);
   const boxEntity = world.createTransformEntity(box);
   boxEntity.addComponent(PhysicsShape, {
     shape: PhysicsShapeType.Box,

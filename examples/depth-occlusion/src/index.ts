@@ -20,20 +20,18 @@ import {
   MeshStandardMaterial,
   MovementMode,
   OcclusionShadersMode,
-  PanelUI,
   PokeInteractable,
   RayInteractable,
   ReferenceSpaceType,
   ScreenSpace,
   SessionMode,
   SphereGeometry,
+  UIKitMLAsset,
   Vector3,
   World,
   XRAnchor,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
-import { SettingsSystem } from './panel.js';
+import { configureWelcomePanel } from './panel.js';
 
 /**
  * Demo system that creates occludable objects and configures occlusion materials.
@@ -180,6 +178,11 @@ const assets: AssetManifest = {
     type: AssetType.GLTF,
     priority: 'critical',
   },
+  welcomePanel: {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: './ui/welcome.uikitml',
+  },
 };
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
@@ -200,9 +203,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   },
   features: {
     grabbing: true,
-    spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { scene, camera } = world;
 
   scene.background = null;
@@ -222,13 +225,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
 
   world.registerSystem(OcclusionDemoSystem);
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -237,6 +236,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       height: '50%',
     });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
-  world.registerSystem(SettingsSystem);
+  configureWelcomePanel(world, panel);
 });

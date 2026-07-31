@@ -48,7 +48,7 @@ export class FileService {
       '@types/webxr/',
       '@pmndrs/pointer-events/',
       '@pmndrs/uikit/',
-      '@pmndrs/uikitml/',
+      '@drawcall/uikitml/',
       '@preact/signals-core/',
       '@babylonjs/havok/',
       'elics/',

@@ -28,7 +28,7 @@ export default {
       '@pmndrs/handle',
       '@pmndrs/pointer-events',
       '@pmndrs/uikit',
-      '@pmndrs/uikitml',
+      '@drawcall/uikitml',
       '@preact/signals-core',
       '@babylonjs/havok',
       'elics',

@@ -93,8 +93,6 @@ const BUNDLE_PACKAGE_PATHS: Record<string, string> = {
     'packages/scene-composition/iwsdk-scene-composition.tgz',
   '@iwsdk/vite-plugin-dev':
     'packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
-  '@iwsdk/vite-plugin-uikitml':
-    'packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
   '@iwsdk/xr-input': 'packages/xr-input/iwsdk-xr-input.tgz',
 };
 const maybeInstallE2ETest =
@@ -438,7 +436,7 @@ describe('create-iwsdk scene flow E2E', () => {
               path.join('src', `mouselook.${language}`),
               path.join('src', `robot.${language}`),
               path.join('src', `panel.${language}`),
-              path.join('ui', 'welcome.uikitml'),
+              path.join('public', 'ui', 'welcome.uikitml'),
               path.join('public', 'audio'),
               path.join('public', 'textures'),
             ]) {
@@ -1663,6 +1661,9 @@ function collectPageDiagnostics(page: any, assetIds: string[]) {
 function filterIgnorableBrowserErrors(errors: string[]): string[] {
   return errors.filter(
     (error) =>
+      // Chromium can surface an empty pageerror for a rejected browser API
+      // without an Error payload. Keep diagnostics that contain a message.
+      error.trim().length > 0 &&
       !error.includes(
         'Failed to load resource: the server responded with a status of 404',
       ) &&
@@ -1678,7 +1679,10 @@ function filterIgnorableRequestFailures(failures: string[]): string[] {
     (failure) =>
       !failure.includes('/favicon.ico') &&
       !failure.includes('/.well-known/') &&
-      !failure.includes('@iwer/sem@0.2.4/captures/living_room.json') &&
+      !(
+        failure.includes('@iwer/sem@') &&
+        failure.includes('/captures/living_room.json')
+      ) &&
       !(
         failure.includes('/node_modules/.vite/deps/') &&
         failure.includes('net::ERR_ABORTED')

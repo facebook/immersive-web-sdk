@@ -26,6 +26,7 @@ export class UIKitDocument extends Group {
   private classMap = new Map<string, Component<any>[]>();
   private _rootElement: Component<any>;
   private _abortController = new AbortController();
+  private _disposed = false;
 
   /** Reactive target width in meters. Set via {@link setTargetDimensions}. */
   readonly targetWidth: Signal<number> = signal(0);
@@ -34,7 +35,7 @@ export class UIKitDocument extends Group {
 
   /**
    * Create a document backed by a UIKit root component.
-   * @param rootComponent The root `Component` produced by `@pmndrs/uikitml` `interpret()`.
+   * @param rootComponent The root `Component` produced from a UIKitML document.
    */
   constructor(rootComponent: Component<any>) {
     super();
@@ -50,8 +51,19 @@ export class UIKitDocument extends Group {
    * Return the first element with a matching `id` (UIKit property).
    * @param id The element identifier without the `#` prefix.
    */
-  getElementById(id: string): Component<any> | null {
-    return this.elementMap.get(id) || null;
+  getElementById<T extends Component<any> = Component<any>>(
+    id: string,
+  ): T | null {
+    return (this.elementMap.get(id) as T | undefined) ?? null;
+  }
+
+  /** Return a typed element or throw a source-oriented lookup error. */
+  requireElementById<T extends Component<any> = Component<any>>(id: string): T {
+    const element = this.getElementById<T>(id);
+    if (!element) {
+      throw new Error(`UIKitML element "#${id}" was not found`);
+    }
+    return element;
   }
 
   /**
@@ -233,9 +245,12 @@ export class UIKitDocument extends Group {
     const targetWorldHeight = this.targetHeight.value;
     const uiNaturalSize = this._rootElement.size?.value;
 
+    if (targetWorldWidth <= 0 || targetWorldHeight <= 0) {
+      this.scale.setScalar(1);
+      return;
+    }
+
     if (
-      targetWorldWidth > 0 &&
-      targetWorldHeight > 0 &&
       uiNaturalSize &&
       Array.isArray(uiNaturalSize) &&
       uiNaturalSize.length >= 2
@@ -272,6 +287,12 @@ export class UIKitDocument extends Group {
     this.targetHeight.value = height;
   }
 
+  /** Restore intrinsic UIKit size so the parent entity transform owns scaling. */
+  clearTargetDimensions(): void {
+    this.targetWidth.value = 0;
+    this.targetHeight.value = 0;
+  }
+
   /**
    * Current intrinsic size of the UIKit root component (in UIKit units, centimeters),
    * if available from the underlying component's `size` signal.
@@ -300,10 +321,20 @@ export class UIKitDocument extends Group {
     return this._rootElement;
   }
 
+  /** Whether this document has released its UIKit resources. */
+  get disposed(): boolean {
+    return this._disposed;
+  }
+
   /**
    * Dispose of internal resources and detach children. Safe to call multiple times.
    */
   dispose(): void {
+    if (this._disposed) {
+      return;
+    }
+    this._disposed = true;
+
     // Abort all effects to clean up signal subscriptions
     this._abortController.abort();
 

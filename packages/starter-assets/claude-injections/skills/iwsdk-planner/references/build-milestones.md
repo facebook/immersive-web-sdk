@@ -36,8 +36,8 @@ Notes:
   `locomotion: { browserControls: true }`.
 - Generated apps come with: `npm run dev` (= `iwsdk dev up --open
 --foreground`), a `dev:runtime` script (required by the CLI — never remove
-  it), vite plugins (dev/uikitml), starter src (`index.ts`, `panel.ts`,
-  `robot.ts`), `ui/welcome.uikitml`, and AI configs (CLAUDE.md, skills, MCP
+  it), the Vite dev plugin, starter src (`index.ts`, `panel.ts`, `robot.ts`),
+  `public/ui/welcome.uikitml`, and AI configs (CLAUDE.md, skills, MCP
   adapters). Delete starter content you don't use (robot etc.) at M1, not M0
   — M0 verifies the untouched baseline.
 - Existing app instead of scaffold: write an "existing-app delta" section —
@@ -79,7 +79,7 @@ src/
 index.ts # World.create + registrations + scene setup only
 components/<x>.ts # createComponent defs (group related)
 systems/<x>.ts # one system per file
-ui/<panel>.uikitml
+public/ui/<panel>.uikitml
 public/{gltf,audio,textures}/…
 
 ## Components
@@ -121,12 +121,12 @@ mechanic first (riskiest feel-work earliest); UI and audio get their own
 milestone unless trivial; every spec success criterion mapped to exactly one
 milestone's assertions.
 
-## Headless-hardening defaults (build these in from M1)
+## Runtime-hitch hardening defaults (build these in from M1)
 
-The managed dev runtime steps physics on the raw frame delta, and headless
-environments hitch (reloads, screenshots, CI stalls) — a single multi-second
-step tunnels thin colliders and pops stacked contacts. Defaults that avoid a
-day of debugging:
+The managed dev runtime steps physics on the raw frame delta. Reloads, screenshots,
+debug snapshots, backgrounded windows, and CI can all hitch; a single multi-second
+step tunnels thin colliders and pops stacked contacts. Defaults that avoid a day of
+debugging:
 
 - **Solid-block static colliders** (0.3 m+ thick), never thin plates; extend
   the floor under/behind every play area as a catch surface; add invisible

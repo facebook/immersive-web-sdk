@@ -929,17 +929,12 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'browser_screenshot',
     description:
-      'Capture a screenshot of the managed browser target. Returns the image directly.',
+      'Capture the managed application runtime. If the workspace editor is visible, switches to the runtime before capturing.',
     inputSchema: {
       type: 'object',
-      properties: {
-        target: {
-          type: 'string',
-          enum: ['runtime', 'editor', 'workspace'],
-          description:
-            'Semantic browser target to capture. runtime captures the app; editor/workspace captures the managed workspace editor.',
-        },
-      },
+      properties: {},
+      required: [],
+      additionalProperties: false,
     },
   },
 
@@ -1733,6 +1728,56 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'render (default) excludes editor-only grid, selection, transform, component-helper, and orientation overlays; editor includes them for UI diagnostics.',
         },
       },
+    },
+  },
+  {
+    name: 'ui_list_assets',
+    description:
+      'List UIKitML assets available in the project asset manifest. Use a returned asset id with ui_render_preview or a PanelUI component config.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Optional case-insensitive filter over UIKitML asset ids and names.',
+        },
+      },
+    },
+  },
+  {
+    name: 'ui_render_preview',
+    description:
+      'Render one UIKitML asset from the project asset manifest in isolation against a plain background. Use this to inspect panel layout without the surrounding scene.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        assetId: {
+          type: 'string',
+          description:
+            'Manifest id of an AssetType.UIKitML entry. Discover ids with ui_list_assets.',
+        },
+        width: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Preview width in pixels. Defaults to 512.',
+        },
+        height: {
+          type: 'number',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Preview height in pixels. Defaults to 512.',
+        },
+        background: {
+          type: 'string',
+          description:
+            'Three.js-compatible background color. Defaults to #202226.',
+        },
+      },
+      required: ['assetId'],
     },
   },
   {
@@ -2598,6 +2643,8 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_get_logs: ['scene', 'logs'],
   scene_set_camera: ['scene', 'set-camera'],
   scene_screenshot: ['scene', 'screenshot'],
+  ui_list_assets: ['ui', 'assets'],
+  ui_render_preview: ['ui', 'render-preview'],
   scene_compare_screenshots: ['scene', 'compare-screenshots'],
   scene_begin_review: ['scene', 'begin-review'],
   scene_set_review_lens: ['scene', 'set-review-lens'],
@@ -2646,6 +2693,8 @@ export const SCENE_EDITOR_MCP_TOOL_NAMES = [
   'scene_screenshot',
   'scene_set_preview_visibility',
   'scene_measure_image_regions',
+  'ui_list_assets',
+  'ui_render_preview',
 ] as const;
 
 export const SCENE_FILE_MCP_TOOL_NAMES = [
@@ -2669,12 +2718,16 @@ const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
   ...WORKSPACE_MCP_TOOL_NAMES,
 ]);
 
+const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>(['browser_screenshot']);
+
 export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
   RUNTIME_MCP_TOOLS.map((tool) => {
     const cliPath = RUNTIME_CLI_PATHS[tool.name];
     const target = EDITOR_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
       ? ({ role: 'editor' } as const)
-      : undefined;
+      : APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
+        ? ({ role: 'app' } as const)
+        : undefined;
     return {
       id: cliPath ? cliPath.join('.') : tool.name,
       domain: cliPath?.[0] ?? 'misc',
@@ -2707,33 +2760,16 @@ export function resolveRuntimeOperationRequest(
   operation: RuntimeOperationDefinition,
   params: unknown,
 ): { params: unknown; target?: RuntimePageTarget } {
-  if (operation.mcpName !== 'browser_screenshot' || !isRecord(params)) {
-    return { params, target: operation.target };
-  }
-
-  const { target: requestedTarget, ...rest } = params;
-  if (requestedTarget == null) {
-    return { params: rest, target: operation.target };
-  }
   if (
-    requestedTarget !== 'runtime' &&
-    requestedTarget !== 'editor' &&
-    requestedTarget !== 'workspace'
+    operation.mcpName === 'browser_screenshot' &&
+    isRecord(params) &&
+    Object.keys(params).length > 0
   ) {
     throw new Error(
-      'browser_screenshot.target must be runtime, editor, or workspace',
+      'browser_screenshot does not accept parameters; it always captures the application runtime',
     );
   }
-
-  return {
-    params: {
-      ...rest,
-      __iwsdkScreenshotTarget: requestedTarget,
-    },
-    target: {
-      role: requestedTarget === 'runtime' ? 'app' : 'editor',
-    },
-  };
+  return { params, target: operation.target };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

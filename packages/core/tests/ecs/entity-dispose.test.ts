@@ -11,6 +11,7 @@ import {
   BoxGeometry,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
 } from '../../src/runtime/three.js';
 
 // world.ts -> @iwsdk/xr-input -> cursor-visual.ts touches `document` at module
@@ -68,5 +69,18 @@ describe('Entity.dispose', () => {
     expect(geometryDispose).toHaveBeenCalledTimes(1);
     expect(materialDispose).toHaveBeenCalledTimes(1);
     expect(entity.object3D).toBeUndefined();
+  });
+
+  it('releases instantiated asset lifecycles when their entity is destroyed', () => {
+    const world = new World();
+    const object = new Object3D();
+    const disposeAsset = vi.fn();
+    object.userData.iwsdkDisposeAsset = disposeAsset;
+    const entity = world.createTransformEntity(object);
+
+    entity.destroy();
+
+    expect(disposeAsset).toHaveBeenCalledTimes(1);
+    expect(object.userData.iwsdkDisposeAsset).toBeNull();
   });
 });

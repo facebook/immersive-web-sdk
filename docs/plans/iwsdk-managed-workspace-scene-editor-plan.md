@@ -111,8 +111,8 @@ Auto-switching is allowed only as a convenience:
 
 - `scene_*` tools may switch the workspace view to `editor`.
 - `xr_*` and ECS tools may switch the workspace view to `runtime`.
-- `browser_screenshot({ target: "editor" })` may switch or capture editor.
-- `browser_screenshot({ target: "runtime" })` may switch or capture runtime.
+- `browser_screenshot()` switches to and captures the runtime. It never captures
+  the editor workspace.
 
 Tool routing must still be explicit by semantic target. The active view must not
 decide which session receives a command.
@@ -393,16 +393,14 @@ semantic.
   - `scene_list_files`
   - `scene_open`
   - `scene_create`
-- Update `browser_screenshot` and browser tools to accept explicit target:
-  - `target: "runtime" | "editor" | "workspace"`
-  - Default target should be deterministic and documented. Prefer requiring a
-    target once the workspace ships, with a compatibility default only during
-    migration.
+- Keep `browser_screenshot` runtime-only and parameterless. It may switch the
+  visible workspace to runtime, but it must never return editor UI pixels.
 - Route tool categories:
   - `scene_*` composition tools target editor session.
   - `xr_*` tools target runtime session.
   - ECS tools target runtime session.
-  - `browser_*` tools require or infer an explicit target.
+  - `browser_screenshot` targets runtime; other browser tools use their declared
+    runtime contract.
 - Make auto-switch view behavior internal:
   - `scene_*` can switch visible view to editor.
   - runtime tools can switch visible view to runtime.
@@ -698,14 +696,11 @@ browser_screenshot({
    `world.loadSceneDocument`, or support both?
 4. Should old `/__iwsdk/editor` stay as managed-only redirect for one release or
    be removed immediately once workspace ships?
-5. Should `browser_screenshot` require `target` immediately, or keep a
-   compatibility default during migration?
-
-Recommended defaults for the first implementation:
+   Recommended defaults for the first implementation:
 
 - Keep legacy `/__iwsdk/editor` as a managed-only redirect for one release.
-- Keep a compatibility default for `browser_screenshot`, but update all first
-  party docs/prompts/tests to pass an explicit target.
+- Keep `browser_screenshot` runtime-only; do not expose editor/workspace capture
+  targets to agents.
 - Implement split view with two live panes first; add renderer pausing only if
   perf data says it is needed.
 - Runtime verification should support reload first because it proves the saved

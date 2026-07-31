@@ -150,6 +150,11 @@ export class World extends ElicsWorld {
       originalReleaseFunc(entity);
       const obj = entity.object3D;
       if (obj) {
+        const disposeAsset = obj.userData.iwsdkDisposeAsset;
+        if (typeof disposeAsset === 'function') {
+          obj.userData.iwsdkDisposeAsset = null;
+          disposeAsset();
+        }
         // Check if entity was marked for resource disposal
         if ((entity as any)._disposeResources) {
           this.disposeObject3DResources(obj);
@@ -253,6 +258,51 @@ export class World extends ElicsWorld {
     // Tag entity with current level, unless persistent
     if (!persistent) {
       entity.addComponent(LevelTag, { id: this.activeLevelId });
+    }
+    return entity;
+  }
+
+  /** Find an authored scene object by its stable scene node id. */
+  getSceneObject<T extends Object3D = Object3D>(nodeId: string): T | undefined {
+    const root = this.activeLevel?.value?.object3D;
+    if (!root) {
+      return undefined;
+    }
+    let result: Object3D | undefined;
+    root.traverse((object) => {
+      if (!result && object.userData.iwsdkSceneNodeId === nodeId) {
+        result = object;
+      }
+    });
+    return result as T | undefined;
+  }
+
+  /** Find an authored scene object or throw a node-oriented lookup error. */
+  requireSceneObject<T extends Object3D = Object3D>(nodeId: string): T {
+    const object = this.getSceneObject<T>(nodeId);
+    if (!object) {
+      throw new Error(
+        `Scene object "${nodeId}" was not found in the active level`,
+      );
+    }
+    return object;
+  }
+
+  /** Find the ECS entity that owns an authored scene node. */
+  getSceneEntity(nodeId: string): Entity | undefined {
+    const index = this.getSceneObject(nodeId)?.entityIdx;
+    return typeof index === 'number'
+      ? (this.entityManager.getEntityByIndex(index) as Entity | undefined)
+      : undefined;
+  }
+
+  /** Find the ECS entity for an authored scene node or throw. */
+  requireSceneEntity(nodeId: string): Entity {
+    const entity = this.getSceneEntity(nodeId);
+    if (!entity) {
+      throw new Error(
+        `Scene entity "${nodeId}" was not found in the active level`,
+      );
     }
     return entity;
   }

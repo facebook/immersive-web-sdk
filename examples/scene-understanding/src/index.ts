@@ -18,22 +18,20 @@ import {
   Mesh,
   MeshStandardMaterial,
   MovementMode,
-  PanelUI,
   PokeInteractable,
   RayInteractable,
   ReferenceSpaceType,
   ScreenSpace,
   SessionMode,
   SphereGeometry,
+  UIKitMLAsset,
   Vector3,
   World,
   XRAnchor,
   XRMesh,
   XRPlane,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
-import { SettingsSystem } from './panel.js';
+import { configureWelcomePanel } from './panel.js';
 
 export class SceneShowSystem extends createSystem({
   planeEntities: { required: [XRPlane] },
@@ -109,6 +107,11 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       type: AssetType.HDRTexture,
       priority: 'critical',
     },
+    welcomePanel: {
+      name: 'Welcome panel',
+      type: AssetType.UIKitML,
+      url: './ui/welcome.uikitml',
+    },
   } as AssetManifest,
   xr: {
     sessionMode: SessionMode.ImmersiveAR,
@@ -124,9 +127,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   features: {
     grabbing: true,
     sceneUnderstanding: true,
-    spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { scene } = world;
 
   scene.background = new Color(0x808080);
@@ -135,13 +138,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   root.addComponent(IBLTexture, { src: 'veniceSunset' });
   root.addComponent(DomeTexture, { src: 'veniceSunset' });
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -150,7 +149,8 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       height: '50%',
     });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
   world.registerSystem(SceneShowSystem);
-  world.registerSystem(SettingsSystem);
+  configureWelcomePanel(world, panel);
 });

@@ -12,4 +12,4 @@ Do not run this template directly. The generator will:
 - Keep the native scene JSON files under `public/scenes/`.
 - Prune unused dev dependencies.
 
-XR welcome UI is defined in `ui/welcome.uikitml`; browser variants omit it.
+XR welcome UI is defined in `public/ui/welcome.uikitml`; browser variants omit it.

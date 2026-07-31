@@ -135,7 +135,8 @@ export async function handleRuntimeOperation(
   const isScreenshotOperation =
     operation.mcpName === 'browser_screenshot' ||
     operation.mcpName === 'scene_screenshot' ||
-    operation.mcpName === 'scene_render_file';
+    operation.mcpName === 'scene_render_file' ||
+    operation.mcpName === 'ui_render_preview';
   const hasExplicitScreenshotPath = typeof options.outputFile === 'string';
   if (options.outputFile === true) {
     throw new Error('--output-file requires a path');

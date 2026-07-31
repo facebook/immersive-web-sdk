@@ -37,6 +37,78 @@ afterEach(() => {
 });
 
 describe('managed workspace lifecycle', () => {
+  test('awaits a racing browser launch and closes it during shutdown', async () => {
+    const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
+    const httpServer = {
+      address: vi.fn(() => ({ port: 4173 })),
+      on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+    };
+    let finishBrowserClose!: () => void;
+    const managedBrowser = {
+      close: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishBrowserClose = resolve;
+          }),
+      ),
+      onClose: vi.fn(),
+    };
+    let finishBrowserLaunch!: (browser: typeof managedBrowser) => void;
+    mocks.launchManagedBrowser.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishBrowserLaunch = resolve;
+      }),
+    );
+
+    const plugin = iwsdkDev({ ai: {} });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-browser-shutdown-race',
+      server: {},
+    } as never);
+    plugin.configureServer?.({
+      config: { server: { port: 4173 } },
+      httpServer,
+      middlewares: { use: vi.fn() },
+      resolvedUrls: {
+        local: ['http://localhost:4173/'],
+        network: [],
+      },
+    } as never);
+
+    await handlers.get('listening')?.[0]?.();
+    expect(mocks.launchManagedBrowser).toHaveBeenCalledOnce();
+
+    for (const handler of handlers.get('close') ?? []) {
+      handler();
+    }
+    const closeBundle = plugin.closeBundle as {
+      handler: () => Promise<void>;
+    };
+    let shutdownFinished = false;
+    const shutdown = closeBundle.handler().then(() => {
+      shutdownFinished = true;
+    });
+
+    await Promise.resolve();
+    expect(shutdownFinished).toBe(false);
+
+    finishBrowserLaunch(managedBrowser);
+    await vi.waitFor(() => expect(managedBrowser.close).toHaveBeenCalledOnce());
+    expect(shutdownFinished).toBe(false);
+    finishBrowserClose();
+    await shutdown;
+
+    expect(managedBrowser.close).toHaveBeenCalledOnce();
+    expect(mocks.unregisterRuntimeSession).toHaveBeenCalledWith(
+      '/tmp/iwsdk-browser-shutdown-race',
+    );
+  });
+
   test('defaults AI sessions to the visible collaborate workspace', async () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {

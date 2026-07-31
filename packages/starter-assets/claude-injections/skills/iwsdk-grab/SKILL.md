@@ -117,6 +117,9 @@ Take a screenshot to confirm the result.
 browser_screenshot
 ```
 
+The screenshot command is runtime-only. If the editor is visible, the managed
+workspace switches to runtime before capture.
+
 ## Notes
 
 - **Never use `xr_set_device_state` to move controllers** — it teleports instead of animating, which can break grab state.

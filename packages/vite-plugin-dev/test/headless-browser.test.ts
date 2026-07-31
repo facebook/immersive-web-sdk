@@ -106,7 +106,7 @@ describe('launchManagedBrowser', () => {
     );
   });
 
-  test('exposes a managed workspace view switch hook for screenshot targeting', async () => {
+  test('switches the workspace to runtime before taking a browser screenshot', async () => {
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';
     const page = createMockPage();
@@ -121,9 +121,10 @@ describe('launchManagedBrowser', () => {
       false,
       { height: 800, width: 800 },
     );
-    await managedBrowser.setWorkspaceView('runtime');
+    await managedBrowser.captureRuntimeScreenshot();
 
-    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), 'runtime');
+    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function));
+    expect(page.screenshot).toHaveBeenCalledWith({ type: 'png' });
   });
 
   test('waits for workspace readiness when IWER is disabled', async () => {

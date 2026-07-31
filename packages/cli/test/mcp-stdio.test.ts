@@ -8,6 +8,7 @@
 import { mkdir, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { type RuntimeBrowserState } from '@iwsdk/cli/contract';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -18,13 +19,7 @@ import {
   unregisterRuntimeSession,
 } from '../src/runtime-state.js';
 
-const CLI_PATH = path.join(
-  '/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk',
-  'packages',
-  'cli',
-  'dist',
-  'cli.js',
-);
+const CLI_PATH = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
 const ONE_BY_ONE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0ZQAAAAASUVORK5CYII=';
@@ -277,8 +272,10 @@ describe('mcp stdio interface shaping', () => {
   });
 
   test('returns screenshots as MCP image content', async () => {
-    const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
+    let observedTarget: unknown;
+    const runtime = await startRuntimeFixture(appRoot, ({ method, target }) => {
       if (method === 'screenshot') {
+        observedTarget = target;
         return {
           result: {
             imageData: ONE_BY_ONE_PNG_BASE64,
@@ -310,6 +307,7 @@ describe('mcp stdio interface shaping', () => {
         data: ONE_BY_ONE_PNG_BASE64,
         mimeType: 'image/png',
       });
+      expect(observedTarget).toEqual({ role: 'app' });
     } finally {
       await mcp.close();
       await runtime.close();

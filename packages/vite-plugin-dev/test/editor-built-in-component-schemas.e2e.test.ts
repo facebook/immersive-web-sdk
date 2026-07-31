@@ -42,7 +42,6 @@ describe('editor built-in component schemas', () => {
           'HemisphereLight',
           'IBLGradient',
           'OneHandGrabbable',
-          'PanelUI',
           'PhysicsBody',
           'PhysicsShape',
           'PointLight',
@@ -76,25 +75,6 @@ describe('editor built-in component schemas', () => {
         loop: true,
         src: '/audio/click.mp3',
         volume: 0.5,
-      });
-
-    await addComponent(editor, 'PanelUI');
-    await componentRow(editor, 'PanelUI')
-      .locator('[data-component-field="config"]')
-      .fill('/ui/inspector-panel.json');
-    await componentRow(editor, 'PanelUI')
-      .locator('[data-component-field="maxWidth"]')
-      .fill('1.8');
-    await componentRow(editor, 'PanelUI')
-      .locator('[data-component-field="maxHeight"]')
-      .fill('0.9');
-    await focusComponentCommitTarget(editor);
-    await expect
-      .poll(() => componentValue(editor, 'PanelUI'))
-      .toMatchObject({
-        config: '/ui/inspector-panel.json',
-        maxHeight: 0.9,
-        maxWidth: 1.8,
       });
 
     await addComponent(editor, 'Visibility');
@@ -286,9 +266,6 @@ describe('editor built-in component schemas', () => {
         }),
         'com.iwsdk.components.IBLGradient': expect.objectContaining({
           ground: [102 / 255, 77 / 255, 51 / 255, 1],
-        }),
-        'com.iwsdk.components.PanelUI': expect.objectContaining({
-          config: '/ui/inspector-panel.json',
         }),
         'com.iwsdk.components.PhysicsBody': expect.objectContaining({
           state: 'STATIC',

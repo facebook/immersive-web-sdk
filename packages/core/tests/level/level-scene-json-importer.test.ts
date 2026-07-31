@@ -89,7 +89,6 @@ function makeScene(): SceneDocument {
         components: {
           PanelUI: {
             config: '/ui/panel.uikitml',
-            maxWidth: 2,
           },
           'com.iwsdk.components.RayInteractable': {},
         },
@@ -427,9 +426,7 @@ describe('SceneJSONImporter', () => {
     expect(table.componentCalls).toContainEqual({
       component: PanelUI,
       props: {
-        config: '/ui/panel.json',
-        maxHeight: 1,
-        maxWidth: 2,
+        config: '/ui/panel.uikitml',
       },
     });
     expect(lamp.componentCalls).toContainEqual({

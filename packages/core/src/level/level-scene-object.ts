@@ -185,6 +185,11 @@ export function applySceneTransform(
 export function disposeSceneObjectResources(...roots: Object3D[]): void {
   for (const root of roots) {
     root.traverse((object) => {
+      const disposeAsset = object.userData.iwsdkDisposeAsset;
+      if (typeof disposeAsset === 'function') {
+        object.userData.iwsdkDisposeAsset = null;
+        disposeAsset();
+      }
       if (object instanceof InstancedMesh) {
         object.dispose();
       }

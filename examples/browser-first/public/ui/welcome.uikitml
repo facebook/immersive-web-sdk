@@ -16,7 +16,6 @@
   .sub-heading {
     color: #272727;
     font-size: 14px;
-    font-style: normal;
     font-weight: 500;
     line-height: 18px;
     width: 100%;
@@ -50,18 +49,18 @@
 <Panel class="panel-root">
   <div class="panel-content">
     <div class="heading"> Browser-First IWSDK </div>
-    <divider></divider>
+    <Divider></Divider>
     <div class="sub-heading"> Runs with xr: false. WASD or arrow keys move the player; right-drag to look around; left-click to ray-press the cube or grab the ball.</div>
   </div>
   <Button id="reset-button" class="button" style="margin-bottom: 0">
     <ButtonIcon>
-      <RotateCcwIcon></RotateCcwIcon>
+      <RotateCcw></RotateCcw>
     </ButtonIcon>
     Reset Ball
   </Button>
   <Button id="toggle-view-button" class="button">
     <ButtonIcon>
-      <CameraIcon></CameraIcon>
+      <Camera></Camera>
     </ButtonIcon>
     Toggle View
   </Button>

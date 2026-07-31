@@ -18,18 +18,14 @@ export type ColorScheme =
 
 export interface PanelUIProps {
   config: string;
-  maxWidth?: number;
-  maxHeight?: number;
 }
 
 export const PanelUI = createComponent(
   'PanelUI',
   {
     config: { type: Types.String, default: '' },
-    maxWidth: { type: Types.Float32, default: 1 },
-    maxHeight: { type: Types.Float32, default: 1 },
   },
-  'Component for 3D panel UI elements with file-based configuration',
+  'Component for 3D panel UI elements backed by a UIKitML file',
 );
 
 export const PanelDocument = createComponent(

@@ -44,7 +44,7 @@
 		margin-top: 1.1;
 	}
 
-	.button-group>.button {
+	.button {
 		align-items: center;
 		padding: 1;
 		width: 40;
@@ -57,7 +57,7 @@
 		color: #a1a1aa;
 	}
 
-	.button-group>.button.selected {
+	.selected {
 		background-color: #09090b;
 	}
 
@@ -68,59 +68,59 @@
 	<div id="comfort-assist" class="settings-entry">
 		<div class="button-group-label"> Comfort Assist </div>
 		<div class="button-group">
-			<div id="no-assist" class="button" data-value="0"> Off </div>
-			<div id="standard-assist" class="button selected" data-value="0.5">
+			<div id="no-assist" class="button"> Off </div>
+			<div id="standard-assist" class="button selected">
 				Standard
 			</div>
-			<div id="high-assist" class="button" data-value="1"> High </div>
+			<div id="high-assist" class="button"> High </div>
 		</div>
 	</div>
 	<div id="sliding-speed" class="settings-entry">
 		<div class="button-group-label"> Sliding Speed </div>
 		<div class="button-group">
-			<div id="slow-speed" class="button" data-value="3"> Slower </div>
-			<div id="normal-speed" class="button selected" data-value="5">
+			<div id="slow-speed" class="button"> Slower </div>
+			<div id="normal-speed" class="button selected">
 				Normal
 			</div>
-			<div id="fast-speed" class="button" data-value="8"> Fast </div>
+			<div id="fast-speed" class="button"> Fast </div>
 		</div>
 	</div>
 	<div id="ray-gravity" class="settings-entry">
 		<div class="button-group-label"> Teleport Range </div>
 		<div class="button-group">
-			<div id="near-range" class="button" data-value="-0.6"> Near </div>
-			<div id="normal-range" class="button selected" data-value="-0.4">
+			<div id="near-range" class="button"> Near </div>
+			<div id="normal-range" class="button selected">
 				Normal
 			</div>
-			<div id="far-range" class="button" data-value="-0.2"> Far </div>
+			<div id="far-range" class="button"> Far </div>
 		</div>
 	</div>
 	<div id="turning-method" class="settings-entry">
 		<div class="button-group-label"> Turning Method </div>
 		<div class="button-group">
-			<div id="snap-turn" class="button selected" data-value="1">
+			<div id="snap-turn" class="button selected">
 				Snap Turn
 			</div>
-			<div id="smooth-turn" class="button" data-value="2"> Smooth Turn </div>
+			<div id="smooth-turn" class="button"> Smooth Turn </div>
 		</div>
 	</div>
 	<div id="turning-speed" class="settings-entry">
 		<div class="button-group-label"> Turning Speed </div>
 		<div class="button-group">
-			<div id="speed-90" class="button" data-value="90"> 90°/s </div>
-			<div id="speed-120" class="button selected" data-value="120">
+			<div id="speed-90" class="button"> 90°/s </div>
+			<div id="speed-120" class="button selected">
 				120°/s
 			</div>
-			<div id="speed-180" class="button" data-value="180"> 180°/s </div>
-			<div id="speed-360" class="button" data-value="360"> 360°/s </div>
+			<div id="speed-180" class="button"> 180°/s </div>
+			<div id="speed-360" class="button"> 360°/s </div>
 		</div>
 	</div>
 	<div id="turning-angle" class="settings-entry">
 		<div class="button-group-label"> Snap Turn Angle </div>
 		<div class="button-group">
-			<div id="angle-30" class="button" data-value="30"> 30° </div>
-			<div id="angle-45" class="button selected" data-value="45"> 45° </div>
-			<div id="angle-90" class="button" data-value="90"> 90° </div>
+			<div id="angle-30" class="button"> 30° </div>
+			<div id="angle-45" class="button selected"> 45° </div>
+			<div id="angle-90" class="button"> 90° </div>
 		</div>
 	</div>
 </div>

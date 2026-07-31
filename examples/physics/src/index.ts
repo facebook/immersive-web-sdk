@@ -12,7 +12,6 @@ import {
   FrontSide,
   Mesh,
   MeshStandardMaterial,
-  PanelUI,
   PhysicsBody,
   PhysicsManipulation,
   PhysicsShape,
@@ -23,12 +22,11 @@ import {
   ScreenSpace,
   SessionMode,
   SphereGeometry,
+  UIKitMLAsset,
   World,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
 import assets from './assets.js';
-import { SettingsSystem } from './panel.js';
+import { configureWelcomePanel } from './panel.js';
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,
@@ -41,9 +39,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     grabbing: true,
     locomotion: true,
     physics: true,
-    spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { scene, camera } = world;
   camera.position.set(5, 2, 5);
   camera.rotateY(Math.PI / 4);
@@ -86,13 +84,11 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   cylinderEntity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
   cylinderEntity.addComponent(DistanceGrabbable);
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>(
+    'physics-welcome-panel',
+  );
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -102,6 +98,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       width: '25vw',
     });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
-  world.registerSystem(SettingsSystem);
+  configureWelcomePanel(world, panel);
 });

@@ -71,7 +71,7 @@ Create `design/PIPELINE.md` at the start; update it at every phase boundary:
 - slide/HTML preview: artifact tool | file only
 - image generation: <tool name> | none (SVG fallback)
 - iwsdk CLI: <version> | pending scaffold · reference: ready|warmup-needed|unavailable
-- runtime verify: headless browser OK | blocked because <why>
+- runtime verify: managed headed browser ready | blocked because <why>
 
 ## Milestone Log
 

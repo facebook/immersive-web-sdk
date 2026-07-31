@@ -49,7 +49,7 @@ const INCLUDED_DEPENDENCIES = [
   '@types/webxr',
   '@pmndrs/pointer-events',
   '@pmndrs/uikit',
-  '@pmndrs/uikitml',
+  '@drawcall/uikitml',
   '@preact/signals-core',
   'elics',
   '@babylonjs/havok',

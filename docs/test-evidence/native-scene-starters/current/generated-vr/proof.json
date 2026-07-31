@@ -1105,7 +1105,7 @@
         {
           "components": {
             "PanelUI": {
-              "config": "./ui/welcome.json"
+              "config": "./ui/welcome.uikitml"
             },
             "RayInteractable": {},
             "ScreenSpace": {
@@ -1300,7 +1300,7 @@
           },
           "components": {
             "PanelUI": {
-              "config": "./ui/welcome.json"
+              "config": "./ui/welcome.uikitml"
             },
             "RayInteractable": {},
             "ScreenSpace": {

@@ -16,7 +16,6 @@
   .sub-heading {
     color: #272727;
     font-size: 14px;
-    font-style: normal;
     font-weight: 500;
     line-height: 18px;
     width: 100%;
@@ -50,20 +49,20 @@
 </style>
 <Panel class="panel-root">
   <div class="panel-content">
-    <div class="heading"> Depth Occlusion </div>
-    <divider></divider>
-    <div class="sub-heading"> Virtual objects are hidden behind real-world surfaces using depth
-      sensing with the Immersive Web SDK.</div>
+    <div class="heading"> Locomotion </div>
+    <Divider></Divider>
+    <div class="sub-heading"> Navigate virtual spaces with teleport, slide, snap turn, and jump
+      locomotion modes using the Immersive Web SDK.</div>
   </div>
   <Button id="xr-button" class="button">
     <ButtonIcon>
-      <RectangleGogglesIcon></RectangleGogglesIcon>
+      <RectangleGoggles></RectangleGoggles>
     </ButtonIcon>
     Enter XR
   </Button>
   <Button id="exit-button" class="button" style="display: none">
     <ButtonIcon>
-      <LoginIcon></LoginIcon>
+      <LogIn></LogIn>
     </ButtonIcon>
     Exit to Browser
   </Button>

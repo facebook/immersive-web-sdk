@@ -82,32 +82,33 @@ whose postinstall downloads CUDA binaries; behind restrictive proxies it
 Survey `components`/`systems` output first, then dig per domain. Common
 mappings (details in `api-reference.md`):
 
-| Spec language                    | Look at                                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| pick up, hold, wield (near)      | `OneHandGrabbable`, `TwoHandsGrabbable`, `grabbing` flag                                                           |
-| pull from afar, force-grab       | `DistanceGrabbable` + `MovementMode`                                                                               |
-| throw, bounce, stack, knock over | `physics` flag, `PhysicsBody`+`PhysicsShape`, `PhysicsManipulation` (impulses/velocity)                            |
-| point, click, hover, poke        | `Interactable` (+ `Hovered`/`Pressed` tags), built-in RayPointer                                                   |
-| buttons, menus, score display    | `spatialUI` flag, `PanelUI`+`PanelDocument`, `ui/*.uikitml`; `ScreenSpace` (browser HUD); `Follower` (head-locked) |
-| walk, teleport, turn, jump       | `locomotion` flag (+ `browserControls` for keyboard), `LocomotionEnvironment` on collision geometry                |
-| sky, mood, lighting              | `DomeGradient`/`DomeTexture` + `IBLGradient`/`IBLTexture` **on the level root**                                    |
-| sounds, music                    | `AudioSource` + `AudioUtils.play()`, `PlaybackMode`                                                                |
-| spawn/despawn, levels            | `createTransformEntity`, `LevelTag`/`LevelRoot`, `world.loadLevel()`                                               |
-| AR: real tables/walls            | `sceneUnderstanding` flag, `XRPlane`/`XRMesh`                                                                      |
-| AR: place on surfaces            | `environmentRaycast` flag, `EnvironmentRaycastTarget` + `RaycastSpace`                                             |
-| AR: hide behind real things      | `DepthOccludable` (see the iwsdk-depth-occlusion skill)                                                            |
-| camera feed, selfie, MR capture  | `camera` flag, `CameraSource`, `CameraUtils`                                                                       |
-| game state, pause, score         | signals in `world.globals`, system `config` signals                                                                |
+| Spec language                    | Look at                                                                                                                                                   |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pick up, hold, wield (near)      | `OneHandGrabbable`, `TwoHandsGrabbable`, `grabbing` flag                                                                                                  |
+| pull from afar, force-grab       | `DistanceGrabbable` + `MovementMode`                                                                                                                      |
+| throw, bounce, stack, knock over | `physics` flag, `PhysicsBody`+`PhysicsShape`, `PhysicsManipulation` (impulses/velocity)                                                                   |
+| point, click, hover, poke        | `Interactable` (+ `Hovered`/`Pressed` tags), built-in RayPointer                                                                                          |
+| buttons, menus, score display    | `spatialUI` flag, manifest `AssetType.UIKitML`, placed scene node + stable element IDs; `ScreenSpace` (intentional browser HUD); `Follower` (head-locked) |
+| walk, teleport, turn, jump       | `locomotion` flag (+ `browserControls` for keyboard), `LocomotionEnvironment` on collision geometry                                                       |
+| sky, mood, lighting              | `DomeGradient`/`DomeTexture` + `IBLGradient`/`IBLTexture` **on the level root**                                                                           |
+| sounds, music                    | `AudioSource` + `AudioUtils.play()`, `PlaybackMode`                                                                                                       |
+| spawn/despawn, levels            | `createTransformEntity`, `LevelTag`/`LevelRoot`, `world.loadLevel()`                                                                                      |
+| AR: real tables/walls            | `sceneUnderstanding` flag, `XRPlane`/`XRMesh`                                                                                                             |
+| AR: place on surfaces            | `environmentRaycast` flag, `EnvironmentRaycastTarget` + `RaycastSpace`                                                                                    |
+| AR: hide behind real things      | `DepthOccludable` (see the iwsdk-depth-occlusion skill)                                                                                                   |
+| camera feed, selfie, MR capture  | `camera` flag, `CameraSource`, `CameraUtils`                                                                                                              |
+| game state, pause, score         | signals in `world.globals`, system `config` signals                                                                                                       |
 
 ## Levels & scenes note
 
-Scenes can be **built in code** (primitives + `AssetManager.getGLTF` +
-`createTransformEntity`) or loaded from native IWSDK scene JSON with
-`World.create({ level: './scenes/main.iwsdk.scene.json' })`. Use scene JSON for
-static composition and runtime code for procedural or state-dependent entities.
-Author and inspect scene files through the native editor route
-`/__iwsdk/editor` and the scene MCP/CLI tools; do not hand-edit generated scene
-state when those tools are available.
+Scenes can be **built in code** (manifest assets + `createTransformEntity`) or loaded
+from native IWSDK scene JSON with
+`World.create({ level: './scenes/main.iwsdk.scene.json' })`. Use scene JSON for static
+composition and runtime code for procedural or state-dependent entities. Scene JSON is
+authored source, not generated editor state: agents may edit files under
+`public/scenes/` directly, while humans may use the managed workspace editor for
+hierarchy, transforms, components, and assets. Validate and render through
+`scene render-file`, then use `scene open` for live editor collaboration.
 
 ## TECH_PLAN.md template
 

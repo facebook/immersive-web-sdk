@@ -29,15 +29,15 @@ The key insight: **pause BEFORE triggering the action**, not after. If you pause
 
 ## Tool Reference
 
-| Tool                                              | Purpose                                                                             |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `ecs_pause`                                       | Freeze all ECS system updates. Render loop continues — screenshots still work.      |
-| `ecs_step({"count":N,"delta":SECONDS})`           | Advance N frames with fixed timestep (seconds). Must pause first.                   |
-| `ecs_resume`                                      | Resume normal execution. First frame uses capped delta to avoid physics explosions. |
-| `ecs_snapshot({"label":"..."})`                   | Capture full ECS state. Stores up to 2 snapshots.                                   |
-| `ecs_diff({"from":"...","to":"..."})`             | Compare two snapshots. Shows added/removed entities and field-level value changes.  |
-| `ecs_toggle_system({"name":"...","paused":true})` | Pause/resume a single system. Use `ecs_list_systems` to discover names.             |
-| `browser_screenshot`                              | Visual verification — works while paused since the render loop continues.           |
+| Tool                                              | Purpose                                                                              |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `ecs_pause`                                       | Freeze all ECS system updates. Render loop continues — screenshots still work.       |
+| `ecs_step({"count":N,"delta":SECONDS})`           | Advance N frames with fixed timestep (seconds). Must pause first.                    |
+| `ecs_resume`                                      | Resume normal execution. First frame uses capped delta to avoid physics explosions.  |
+| `ecs_snapshot({"label":"..."})`                   | Capture full ECS state. Stores up to 2 snapshots.                                    |
+| `ecs_diff({"from":"...","to":"..."})`             | Compare two snapshots. Shows added/removed entities and field-level value changes.   |
+| `ecs_toggle_system({"name":"...","paused":true})` | Pause/resume a single system. Use `ecs_list_systems` to discover names.              |
+| `browser_screenshot`                              | Runtime visual verification — works while paused and auto-switches from editor view. |
 
 ## Stepping Guidelines
 

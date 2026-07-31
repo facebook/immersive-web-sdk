@@ -7,7 +7,6 @@
 
 import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
-import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
 
@@ -44,7 +43,6 @@ export default defineConfig({
     iwsdkExampleAssets({
       assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
     }),
-    compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
   ],
   // The IWSDK plugin launches the configured managed browser. Disable Vite's
   // independent opener so it does not create a second unmanaged tab.

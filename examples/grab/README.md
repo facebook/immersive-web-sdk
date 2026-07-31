@@ -22,9 +22,7 @@ grab/
 │   ├── audio/
 │   ├── scenes/grab.iwsdk.scene.json
 │   ├── textures/
-│   └── ui/
-├── ui/
-│   └── welcome.uikitml
+│   └── ui/welcome.uikitml
 ├── vite.config.ts
 └── package.json
 ```

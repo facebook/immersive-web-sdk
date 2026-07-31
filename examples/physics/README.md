@@ -24,9 +24,7 @@ physics/
 │   ├── audio/
 │   ├── scenes/physics.iwsdk.scene.json
 │   ├── textures/
-│   └── ui/
-├── ui/
-│   └── welcome.uikitml
+│   └── ui/welcome.uikitml
 ├── vite.config.ts
 └── package.json
 ```

@@ -16,7 +16,6 @@
   .sub-heading {
     color: #272727;
     font-size: 14px;
-    font-style: normal;
     font-weight: 500;
     line-height: 18px;
     width: 100%;
@@ -50,20 +49,25 @@
 </style>
 <Panel class="panel-root">
   <div class="panel-content">
-    <div class="heading"> Spatial Audio </div>
-    <divider></divider>
-    <div class="sub-heading"> Play positional 3D audio sources that respond to user interactions
-      with the Immersive Web SDK.</div>
+    <div class="heading"> Poke Interactions </div>
+    <Divider></Divider>
+    <div class="sub-heading"> This example demonstrates near-field (poke) and far-field (ray) interactions with UI panels and 3D objects.</div>
   </div>
+  <Button id="counter-button" class="button" style="margin-bottom: 0">
+    <ButtonIcon>
+      <MousePointerClick></MousePointerClick>
+    </ButtonIcon>
+    Click - 0
+  </Button>
   <Button id="xr-button" class="button">
     <ButtonIcon>
-      <RectangleGogglesIcon></RectangleGogglesIcon>
+      <RectangleGoggles></RectangleGoggles>
     </ButtonIcon>
     Enter XR
   </Button>
   <Button id="exit-button" class="button" style="display: none">
     <ButtonIcon>
-      <LoginIcon></LoginIcon>
+      <LogIn></LogIn>
     </ButtonIcon>
     Exit to Browser
   </Button>

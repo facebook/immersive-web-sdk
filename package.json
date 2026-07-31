@@ -143,7 +143,7 @@
       "tar": "7.5.22",
       "three": "npm:super-three@0.181.0",
       "three-mesh-bvh": "^0.9.1",
-      "@pmndrs/uikit": "^1.0.62",
+      "@pmndrs/uikit": "^1.0.74",
       "tmp": "0.2.7",
       "vite": "7.3.6",
       "vitest": "4.1.10",

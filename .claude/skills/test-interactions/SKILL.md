@@ -96,7 +96,7 @@ Assert: Exactly 1 entity. Save its `entityIndex` as `<robot>`.
 **Test 1.2: Find Panel Entity**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["PanelUI"]}' 2>/dev/null
+npx iwsdk ecs find --input-json '{"withComponents":["ScreenSpace"]}' 2>/dev/null
 ```
 
 Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
@@ -135,7 +135,7 @@ Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4
 npx iwsdk ecs systems 2>/dev/null
 ```
 
-Assert these systems are present: `RobotSystem`, `PanelSystem`, `InputSystem`, `AudioSystem`, `PanelUISystem`.
+Assert these systems are present: `RobotSystem`, `InputSystem`, `AudioSystem`, `PanelUISystem`, `ScreenSpaceUISystem`.
 
 **Test 2.2: List Components**
 
@@ -146,7 +146,7 @@ npx iwsdk ecs components 2>/dev/null
 Assert these components are registered:
 
 - `Robot`
-- `PanelUI` (with fields: `config`, `maxWidth`, `maxHeight`)
+- `PanelUI` (legacy compatibility component with field: `config`)
 - `AudioSource` (with fields: `src`, `loop`, `_loaded`, `_isPlaying`, `_playRequested`)
 - `RayInteractable`
 - `PokeInteractable`
@@ -503,15 +503,15 @@ npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"
 **Test 11.1: Panel Loading**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["PanelUI","PanelDocument","ScreenSpace"]}' 2>/dev/null
+npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["ScreenSpace","RayInteractable","PokeInteractable"]}' 2>/dev/null
 ```
 
 Assert:
 
-- `PanelUI.config` contains `welcome.json`
-- `PanelUI.maxWidth` approximately `0.5`, `PanelUI.maxHeight` approximately `0.4`
-- `PanelDocument` component IS present (proves async panel loading succeeded)
 - `ScreenSpace` component IS present
+- `RayInteractable` and `PokeInteractable` are present
+- `PanelUI` and `PanelDocument` are absent because the panel is a UIKitML
+  asset object
 
 **Test 11.2: Visual Confirmation**
 

@@ -1,70 +1,99 @@
 ---
-title: Author → Compile → Interpret → Interact
+title: Author → Parse → Instantiate → Interact
 ---
 
-# End‑to‑End Flow
+# End-to-End Flow
 
-This is how spatial UI moves from source files to live, interactive 3D panels.
+IWSDK loads UIKitML source files directly. There is no generated JSON or
+UIKitML-specific build plugin between authoring and runtime.
 
-## 1) Author in UIKitML
+## 1) Author a Public UIKitML Asset
 
-- Create files under `ui/*.uikitml` using HTML/CSS‑like syntax.
-- Use IDs/classes for runtime querying, and conditional style blocks (`hover`, `active`, `focus`, `sm..2xl`).
+Create `.uikitml` files under `public/ui` so Vite serves them in development
+and copies them unchanged into production builds:
 
-## 2) Compile to JSON (Vite Plugin)
-
-- `@iwsdk/vite-plugin-uikitml` watches your source directory (default `ui`) and writes JSON to `public/ui` in dev.
-- On production builds, it compiles once at `buildStart` and prints a summary.
-- Output is the raw result of `parse(text)` from `@pmndrs/uikitml`.
-
-Minimal plugin config (defaults shown):
-
-```ts
-// vite.config.ts
-import UIKitML from '@iwsdk/vite-plugin-uikitml';
-
-export default {
-  plugins: [
-    UIKitML({
-      sourceDir: 'ui', // where .uikitml lives
-      outputDir: 'public/ui', // where .json is written
-      watch: true,
-      verbose: false,
-      include: /\.uikitml$/, // files to compile
-    }),
-  ],
-};
+```text
+public/
+└── ui/
+    └── menu.uikitml
 ```
 
-## 3) Ship JSON
+Use IDs for runtime queries and classes for reusable styles. UIKitML is
+strict: component names and properties must be supported by the selected
+component set.
 
-- The JSON files are static assets (ideal for CDNs and caching).
-- Each UI panel typically corresponds to a single JSON file, but you can compose within UIKitML as you prefer.
-
-## 4) Interpret at Runtime (SDK)
-
-- In code, point a `PanelUI` component at the JSON path and add it to an entity.
+## 2) Register and Instantiate the Asset
 
 ```ts
-entity.addComponent(PanelUI, {
-  config: '/ui/menu.json', // served from public/ui
-  maxWidth: 1.0, // meters (world‑space cap)
-  maxHeight: 0.6,
+const assets = {
+  menu: {
+    type: AssetType.UIKitML,
+    url: '/ui/menu.uikitml',
+  },
+} satisfies AssetManifest;
+
+const world = await World.create(container, {
+  assets,
+  features: { spatialUI: true },
 });
+
+const menu = await world.assets.instantiate<UIKitMLAsset>('menu');
+const entity = world.createTransformEntity(menu);
 ```
 
-- `PanelUISystem` will:
-  - `fetch(config)` → load JSON
-  - `interpret(parseResult)` → build a UIKit root component
-  - wrap it in a `UIKitDocument` and attach to your entity’s `object3D`
-  - set stable transparent sorting for readability
-  - forward pointer events (configurable) so hover/click/drag work via XR rays and hands
-  - call the UIKit root’s `update()` each frame (animation/tween support)
+The asset pipeline performs the complete runtime flow:
 
-## 5) Size and Placement
+1. Fetch the `.uikitml` file as text.
+2. Parse it with `@drawcall/uikitml`.
+3. Resolve relative `@font-face` TTF URLs against the UIKitML file URL.
+4. Install its stylesheet and instantiate a live UIKit component tree.
+5. Wrap the root in `UIKitDocument` and return a `UIKitMLAsset` object.
 
-- World‑space: system applies target dimensions based on `PanelUI.maxWidth/maxHeight` and the entity’s world scale.
-- Screen‑space: add `ScreenSpace` to place the panel relative to the camera using CSS‑like strings:
+Scene documents use the same asset entry as glTF:
+
+```json
+{
+  "id": "settings-panel",
+  "content": { "type": "asset", "asset": "menu" },
+  "transform": { "position": [0, 1.4, -1.5], "scale": 0.25 }
+}
+```
+
+The Horizon and Lucide component sets are available by default. Plain HTML
+elements such as `div`, `span`, `button`, `img`, and `input` are also
+supported.
+
+## 3) Use Runtime TTF Fonts
+
+Declare TTF assets directly in a UIKitML style block:
+
+```html
+<style>
+  @font-face {
+    font-family: 'Brand Sans';
+    src: url('./fonts/BrandSans-Regular.ttf');
+    font-weight: 400;
+  }
+
+  .title {
+    font-family: 'Brand Sans';
+    font-weight: 400;
+  }
+</style>
+
+<h1 class="title">Launch ready</h1>
+```
+
+Here the font is loaded from `public/ui/fonts/BrandSans-Regular.ttf`. Absolute
+URLs and root-relative public URLs work as well.
+
+## 4) Size and Placement
+
+In world space, UIKit dimensions are centimeters and the entity transform is
+the single scale authority. For example, a `width: 100` root is one meter wide
+at entity scale `1`; use `entity.object3D.scale` or a scene transform to resize
+the whole panel. Add `ScreenSpace` to position the same document relative to
+the camera outside XR:
 
 ```ts
 entity.addComponent(ScreenSpace, {
@@ -76,66 +105,61 @@ entity.addComponent(ScreenSpace, {
 });
 ```
 
-When XR starts, panels automatically return to world space; when XR stops, they return to screen space.
+When XR starts, screen-space panels return to world space. When XR ends, they
+return to the configured screen-space position.
 
-## 6) Interact and Query
+## 5) Interact and Query
 
-- Use `UIKitDocument` from `PanelDocument` to reach into the UI tree:
+Keep the result when creating a panel in code:
 
 ```ts
-const doc = entity.getValue(PanelDocument, 'document');
-const startBtn = doc?.getElementById('start');
+const startButton = menu.requireElementById('start');
+
+startButton.addEventListener('click', () => {
+  // Update application state.
+});
 ```
 
-- Pointer events (via IWSDK’s input stack) drive hover/active/focus conditionals in your UI, and you can wire custom behaviors to element interactions.
+For a scene-authored panel, locate the asset by stable node ID:
 
-See also: [UIKit](/concepts/spatial-ui/uikit), [UIKitML](/concepts/spatial-ui/uikitml), [UIKitDocument](/concepts/spatial-ui/uikit-document)
+```ts
+const menu = world.requireSceneObject<UIKitMLAsset>('settings-panel');
+const startButton = menu.requireElementById('start');
 
-## Dev and Build Behavior (Detailed)
+startButton.addEventListener('click', () => {
+  // Update application state.
+});
+```
 
-- Dev server:
-  - On `vite serve`, the plugin compiles all `ui/*.uikitml` to `public/ui/*.json` and starts a watcher.
-  - Edits to `.uikitml` trigger regeneration; your app can `fetch('/ui/file.json')` without manual steps.
-  - Enable `verbose: true` for detailed logs and parse diagnostics.
+Use an application-owned marker component when a system needs semantic ECS
+discovery. Do not query `PanelUI.config` or use an asset ID as application
+behavior. `PanelUI` and `PanelDocument` remain available only as a compatibility
+adapter for raw URL panels that have not moved into the asset manifest.
 
-- Production build:
-  - On `vite build`, compilation runs once at the start; a summary lists generated files and any failures.
-  - JSON assets are emitted to your `public/ui` path for static serving.
+IWSDK's pointer stack drives hover, active, focus, and pointer events for XR
+and browser input.
 
-- File mapping:
-  - `ui/menu.uikitml` → `public/ui/menu.json` (same relative structure under subfolders).
+## Dev, Build, and Caching
 
-## Caching & Delivery
-
-- JSON is static and cacheable; you can version files by path if needed.
-- Prefetch JSON for critical panels to avoid hitches on first open.
+- Edit `public/ui/*.uikitml`; Vite serves the changed source directly.
+- `vite build` copies the same files into `dist/ui`.
+- UIKitML files and referenced fonts are ordinary static assets and can use
+  normal CDN cache/versioning rules.
+- No generated `public/ui/*.json` files need to be cleaned or synchronized.
 
 ## Error Handling
 
-- If `fetch(config)` fails, `PanelUISystem` throws an error with status details.
-- Parse errors during compilation are printed by the plugin; fix authoring issues and let the watcher regenerate.
+- Fetch failures include the UIKitML URL and HTTP status.
+- Parser errors are reported at runtime with their source line and column.
+- A failed asset rejects `instantiate()` or scene loading with its asset ID and
+  source error.
 
-## Screen‑space Math (How it Works)
+## Custom Component Sets
 
-- The system evaluates CSS size/position using hidden DOM nodes to compute pixel dimensions.
-- Pixels are mapped to meters at a camera‑relative plane `zOffset` meters in front of the near plane:
-  - `worldHeightAtZ = 2 * tan(fov/2) * zOffset`
-  - `worldPerPixel = worldHeightAtZ / canvasHeight`
-  - `targetWorldWidth = pixelWidth * worldPerPixel`
-  - `targetWorldHeight = pixelHeight * worldPerPixel`
-- The `UIKitDocument` then scales uniformly to fit those target meters.
+Applications can pass additional `UIKitMLComponentSet` definitions through
+`features.spatialUI.componentSets`. The built-in collection can be selected
+with `features.spatialUI.kit` (`'horizon'` by default, or `'default'`).
 
-## Input Integration
-
-- IWSDK forwards pointer events from controllers/hands to the 3D UI.
-- UI state (`hover`, `active`, `focus`) is reflected in styles automatically.
-- Combine with your ECS input systems for gameplay logic.
-
-## Advanced Patterns
-
-- Multiple panels:
-  - Attach several `PanelUI` documents to different entities; each can be world‑ or screen‑space independently.
-- Dynamic themes:
-  - Toggle classes on root elements to switch palettes or layouts without rebuilding.
-- Custom components:
-  - Provide a “kit” to `interpret(parseResult, kit)` to map custom tags to specialized UIKit components.
+See also: [UIKit](/concepts/spatial-ui/uikit),
+[UIKitML](/concepts/spatial-ui/uikitml), and
+[UIKitDocument](/concepts/spatial-ui/uikit-document).

@@ -4,120 +4,148 @@ title: UIKitML (Authoring)
 
 # UIKitML (Authoring Language)
 
-UIKitML lets you author spatial UI with familiar HTML/CSS‑like syntax. The toolchain provides:
+UIKitML is a strict HTML/CSS-like language for spatial UI. IWSDK uses
+`@drawcall/uikitml` to parse source text and instantiate live
+`@pmndrs/uikit` components in the browser.
 
-- `parse(text)` → JSON suitable for transport
-- `interpret(parseResult)` → live UIKit components in the scene
-- `generate(...)` → optional HTML/Style output for tools/round‑trip
+## Runtime API
 
-## Language Highlights
-
-- Elements map to UIKit components:
-  - `<container>`, `<text>`, `<image>`, `<video>`, `<svg>`, and `<input>`.
-- Classes and IDs:
-  - `class="foo bar"`, `id="menu"`; selectors are available at runtime via `UIKitDocument`.
-- Conditional styles:
-  - Pseudo‑like keys: `hover`, `active`, `focus`, and responsive groups: `sm`, `md`, `lg`, `xl`, `2xl`.
-- Data attributes:
-  - `data-*` are preserved onto the component’s `userData` (e.g., `data-foo` → `userData.foo`).
-- Custom elements:
-  - Unknown tags become `custom` and can be mapped to actual components by providing a “kit” (constructor map) to `interpret`.
-
-## Parsing and JSON
-
-`parse(text, { onError })` returns an object like:
+`parse(source)` returns a discriminated result containing either a typed AST
+or structured errors. `instantiate(ast)` creates the UIKit component tree.
+IWSDK performs both operations when a UIKitML manifest asset is instantiated.
 
 ```ts
-{
-  element: /* ElementJson or string */, // the root element tree
-  classes: { [className]: { origin?: string, content: Record<string, any> } },
-  ranges:  { [uid]: { start: { line, column }, end: { line, column } } }
-}
+const settings = await world.assets.instantiate<UIKitMLAsset>('settings');
+world.createTransformEntity(settings);
 ```
 
-This JSON is compact and safe to ship as a static file. IWSDK’s Vite plugin writes it to `public/ui/*.json`.
+Store the file at `public/ui/settings.uikitml`; no compilation step or JSON
+counterpart is required.
 
-## Interpreting at Runtime
+## Elements and Component Sets
 
-`interpret(parseResult, kit?)` produces a UIKit component tree. IWSDK wraps this in a `UIKitDocument` and attaches it to your entity.
+The default IWSDK configuration includes:
 
-```ts
-import { interpret } from '@pmndrs/uikitml';
-const rootComponent = interpret(parseResult); // -> UIKit component
-```
+- HTML-like elements such as `div`, `span`, `button`, `img`, `svg`, `video`,
+  `input`, and `textarea`.
+- Horizon components such as `Panel`, `Button`, and `ButtonIcon`.
+- Lucide icons such as `LogIn`, `RectangleGoggles`, and `Settings`.
 
-## Example
+Names are case-sensitive. Unknown tags and unsupported properties are parser
+errors rather than silently falling back to generic containers.
 
 ```html
-<container id="menu" class="panel" style="padding: 12; gap: 8">
-  <text class="title" style="fontSize: 24">Settings</text>
-  <container class="row" style="flexDirection: row; gap: 6">
-    <text>Music</text>
-    <input id="music" />
-  </container>
-</container>
+<Panel class="panel-root">
+  <h1>Settings</h1>
+  <button id="save-button">
+    <ButtonIcon><Settings /></ButtonIcon>
+    Save
+  </button>
+</Panel>
 ```
 
-With a class block:
+## Styling
 
-```css
-.panel {
-  backgroundcolor: rgba(0, 0, 0, 0.6);
-  sm: {
-    padding: 8;
+Use kebab-case CSS properties in inline styles or `<style>` blocks. Supported
+selectors include `.class`, `#id`, and supported conditions such as `:hover`,
+`:active`, `:focus`, and `:dark`.
+
+```html
+<style>
+  .panel-root {
+    flex-direction: column;
+    gap: 8;
+    padding: 16;
+    background-color: #18181b;
   }
-}
-.title {
-  hover: {
-    color: #fff;
+
+  .action:hover {
+    background-color: #3f3f46;
   }
-}
+</style>
+
+<div class="panel-root">
+  <button id="save-button" class="action">Save</button>
+</div>
 ```
 
-See also: [Flow](/concepts/spatial-ui/flow), [UIKitDocument](/concepts/spatial-ui/uikit-document)
+UIKit dimensions use centimeters; `100` UIKit units equal one meter at entity
+scale `1`.
 
-## Authoring Details
+Arbitrary `data-*` attributes are not component properties. Use stable IDs
+and keep application values in TypeScript maps when an interaction needs
+associated data.
 
-- Inline `style` vs class blocks:
-  - Inline `style` is merged with class styles; conditionals under `style` (e.g., `hover`, `sm`) are supported and serialized separately.
-- `<style>` blocks in UIKitML:
-  - The parser extracts `.class` and `#id` rules from `<style>` tags and merges them into `classes` with `origin` metadata.
-- Property names are camelCase (e.g., `backgroundColor`, `fontSize`) to align with JavaScript style objects.
-- Strings vs numbers:
-  - Numeric values are in UIKit units (cm). Colors accept CSS‑like strings (e.g., `#fff`, `rgba(...)`).
+## TTF Fonts
 
-## Conditional Precedence
+Declare one or more weights with CSS `@font-face`:
 
-- Base styles apply first, then conditional groups are layered at runtime:
-  - Order of application: base → responsive group (`sm..2xl`) → interactive (`hover`, `focus`, `active`).
-- Use class composition to avoid deep inline conditionals when multiple states combine.
+```html
+<style>
+  @font-face {
+    font-family: 'Brand Sans';
+    src: url('./fonts/BrandSans-Regular.ttf');
+    font-weight: 400;
+  }
 
-## Custom Components with a Kit
+  @font-face {
+    font-family: 'Brand Sans';
+    src: url('./fonts/BrandSans-Bold.ttf') format('truetype');
+    font-weight: 700;
+  }
 
-You can map unknown tags to custom UIKit components using a kit:
+  .title {
+    font-family: 'Brand Sans';
+    font-weight: 700;
+  }
+</style>
+
+<h1 class="title">Launch ready</h1>
+```
+
+IWSDK resolves relative font URLs from the UIKitML file and UIKit loads the
+needed TTF weight at runtime.
+
+## Runtime Queries
+
+Use the typed asset returned by the loader and fail early for required controls:
 
 ```ts
-import { interpret } from '@pmndrs/uikitml';
-import { Component } from '@pmndrs/uikit';
+const settings = world.requireSceneObject<UIKitMLAsset>('settings-panel');
+const saveButton = settings.requireElementById('save-button');
 
-class Gauge extends Component {
-  /* ... */
-}
-
-const kit = { gauge: Gauge }; // tag <gauge> maps to Gauge
-const root = interpret(parseResult, kit);
+saveButton.addEventListener('click', saveSettings);
 ```
 
-Unknown tags without a kit entry fall back to `Container` and store `userData.customElement` for inspection.
+## Custom Components
 
-## Debugging & Tooling
+For application-owned elements, create a typed component set compatible with
+`@drawcall/uikitml` and pass it through:
 
-- `ranges` link elements to source lines/columns (useful for editor overlays and inspector panels).
-- The parser injects `data-uid` attributes for stable identification during authoring; the generator strips them for clean output if you round‑trip.
-- The Vite plugin will log parse errors with filenames and minimal context; turn on `verbose: true` for more detail.
+```ts
+World.create(container, {
+  features: {
+    spatialUI: {
+      kit: 'horizon',
+      componentSets: [applicationComponents],
+    },
+  },
+});
+```
+
+The same component definitions are used for parser validation and runtime
+instantiation.
 
 ## Best Practices
 
-- Prefer classes for reusable styling; use IDs for unique elements you’ll query at runtime.
-- Keep media references (`src`) relative to your public assets; the interpreter preserves them into UIKit properties.
-- Avoid overly deep nesting; flat, flex‑oriented hierarchies layout faster and are easier to animate.
+- Keep UIKitML under `public/ui` so development and production use the same
+  URL.
+- Prefer classes for reusable visual styles and IDs for runtime behavior.
+- Treat parser errors as authoring errors; do not disable validation.
+- Keep media and font URLs relative to the UIKitML asset when they belong to
+  the same panel.
+- Avoid deeply nested layouts; flat flex hierarchies are easier to maintain
+  and render.
+
+See also: [Flow](/concepts/spatial-ui/flow) and
+[UIKitDocument](/concepts/spatial-ui/uikit-document).

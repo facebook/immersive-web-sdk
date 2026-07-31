@@ -19,10 +19,8 @@ environment-raycast/
 │   ├── index.ts           # Main application entry point
 │   ├── panel.ts           # UI panel system
 │   └── raycast-plant.ts   # Plant placement system
-├── ui/
-│   └── welcome.uikitml    # Welcome panel UI definition
 ├── public/
-│   └── ui/                # Compiled UI output
+│   └── ui/welcome.uikitml # Runtime-loaded panel UI
 ├── index.html             # HTML entry point
 ├── vite.config.ts         # Vite build configuration
 └── package.json           # Dependencies

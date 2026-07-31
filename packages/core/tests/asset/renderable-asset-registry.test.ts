@@ -58,16 +58,38 @@ describe('RenderableAssetRegistry', () => {
     );
   });
 
-  it('exposes only renderable entries from a mixed asset manifest', () => {
-    const registry = new RenderableAssetRegistry({
-      ambience: { type: AssetType.Audio, url: '/ambience.mp3' },
-      room: { name: 'Room', type: AssetType.GLTF, url: '/room.glb' },
-    });
+  it('catalogs and instantiates UIKitML through its document factory', async () => {
+    const panel = new Group();
+    const instantiateUIKitML = async () => panel;
+    const registry = new RenderableAssetRegistry(
+      {
+        ambience: { type: AssetType.Audio, url: '/ambience.mp3' },
+        menu: {
+          name: 'Main menu',
+          type: AssetType.UIKitML,
+          url: '/ui/menu.uikitml',
+        },
+        room: { name: 'Room', type: AssetType.GLTF, url: '/room.glb' },
+      },
+      { instantiateUIKitML },
+    );
 
     expect(registry.has('ambience')).toBe(false);
     expect(registry.has('room')).toBe(true);
+    expect(registry.has('menu')).toBe(true);
+    expect(registry.hasRenderable('menu')).toBe(false);
     expect(registry.list()).toEqual([
       { id: 'room', kind: 'gltf', name: 'Room' },
     ]);
+    expect(registry.catalog()).toEqual([
+      { id: 'room', kind: 'gltf', name: 'Room' },
+      {
+        id: 'menu',
+        kind: 'uikitml',
+        name: 'Main menu',
+        url: '/ui/menu.uikitml',
+      },
+    ]);
+    await expect(registry.instantiate('menu')).resolves.toBe(panel);
   });
 });

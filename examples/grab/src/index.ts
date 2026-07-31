@@ -6,17 +6,15 @@
  */
 
 import {
-  PanelUI,
   PokeInteractable,
   RayInteractable,
   ScreenSpace,
   SessionMode,
+  UIKitMLAsset,
   World,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
 import assets from './assets.js';
-import { SettingsSystem } from './panel.js';
+import { configureWelcomePanel } from './panel.js';
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,
@@ -30,19 +28,16 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   features: {
     grabbing: { useHandPinchForGrab: true },
     locomotion: true,
-    spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { camera } = world;
   camera.position.set(0, 1.3, 0);
 
+  const panel =
+    await world.assets.instantiate<UIKitMLAsset>('grab-welcome-panel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -52,6 +47,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       width: '25vw',
     });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
-  world.registerSystem(SettingsSystem);
+  configureWelcomePanel(world, panel);
 });

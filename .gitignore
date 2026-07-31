@@ -62,7 +62,7 @@ temp/
 # Development tools
 .aider.conf.yml
 # Claude Code: un-ignore root .claude/ (overrides parent repo's blanket ignore)
-# Track shared config (settings.json, agents/, skills/) but not personal files.
+# Track shared config (settings.uikitml, agents/, skills/) but not personal files.
 !.claude/
 .claude/settings.local.json
 .claude/**/.DS_Store
@@ -86,11 +86,6 @@ docs/api/
 
 # Generated JavaScript starter (built from /starter)
 /starter-js/
-
-# Generated assets from Vite plugins and UIKitML
-# These are created by the Vite plugins at dev/build time
-examples/**/public/gltf/generated/
-examples/**/public/ui/
 
 # Auto generated version files
 **/version.ts

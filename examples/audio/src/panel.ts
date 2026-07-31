@@ -7,31 +7,31 @@
 
 import {
   createSystem,
-  eq,
+  findUIKitDocument,
   PanelDocument,
-  PanelUI,
   VisibilityState,
 } from '@iwsdk/core';
 
 export class SettingsSystem extends createSystem({
-  configuredPanels: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', './ui/welcome.json')],
-  },
+  loadedPanels: { required: [PanelDocument] },
 }) {
   init() {
-    this.queries.configuredPanels.subscribe('qualify', (entity) => {
-      const document = (PanelDocument as any).data.document[entity.index];
-      if (!document) {
+    const panelEntity = this.world.requireSceneEntity('welcome-panel');
+    this.queries.loadedPanels.subscribe('qualify', (entity) => {
+      if (entity !== panelEntity) {
         return;
       }
+      const document = findUIKitDocument(entity.object3D);
+      if (!document) {
+        throw new Error('Welcome panel did not produce a UIKit document');
+      }
 
-      const xrButton = document.getElementById('xr-button');
+      const xrButton = document.requireElementById('xr-button');
       xrButton.addEventListener('click', () => {
         this.world.launchXR();
       });
 
-      const exitButton = document.getElementById('exit-button');
+      const exitButton = document.requireElementById('exit-button');
       exitButton.addEventListener('click', () => {
         this.world.exitXR();
       });

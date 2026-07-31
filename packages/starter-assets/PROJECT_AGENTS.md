@@ -17,9 +17,7 @@ my-iwsdk-project/
 │   ├── scenes/               # Native IWSDK scene JSON
 │   ├── iwsdk-assets/         # Shared catalog assets served by Vite
 │   ├── audio/                # Sound files
-│   └── ui/                   # Compiled UI
-├── ui/
-│   └── *.uikitml             # UI markup source
+│   └── ui/                   # Runtime-loaded .uikitml files and fonts
 └── vite.config.ts
 ```
 

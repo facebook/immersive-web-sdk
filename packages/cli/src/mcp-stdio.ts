@@ -279,7 +279,8 @@ export async function startRuntimeMcpStdioServer({
       if (
         (name === 'browser_screenshot' ||
           name === 'scene_screenshot' ||
-          name === 'scene_render_file') &&
+          name === 'scene_render_file' ||
+          name === 'ui_render_preview') &&
         isRecord(result) &&
         typeof result.imageData === 'string' &&
         typeof result.mimeType === 'string'

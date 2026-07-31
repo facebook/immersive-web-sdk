@@ -6,8 +6,6 @@
  */
 
 import { SessionMode, World } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
 import assets from './assets.js';
 import components from './components.js';
 import { SettingsSystem } from './panel.js';
@@ -25,7 +23,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   level: './scenes/audio.iwsdk.scene.json',
   features: {
     locomotion: true,
-    spatialUI: { kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }] },
+    spatialUI: true,
   },
 }).then((world) => {
   const { camera } = world;

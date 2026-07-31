@@ -68,13 +68,12 @@ cube.addComponent(OneHandGrabbable, { rotate: true, translate: true });
 For the best development experience, use our Vite plugins:
 
 ```bash
-npm install -D @iwsdk/vite-plugin-dev @iwsdk/vite-plugin-uikitml
+npm install -D @iwsdk/vite-plugin-dev
 ```
 
-| Plugin                       | Description                                     |
-| ---------------------------- | ----------------------------------------------- |
-| `@iwsdk/vite-plugin-dev`     | XR emulation, AI agent tooling, and dev browser |
-| `@iwsdk/vite-plugin-uikitml` | Compile HTML-like UI templates to spatial UI    |
+| Plugin                   | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `@iwsdk/vite-plugin-dev` | XR emulation, AI agent tooling, and dev browser |
 
 ## Documentation
 

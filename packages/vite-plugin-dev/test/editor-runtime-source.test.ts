@@ -122,6 +122,51 @@ describe('editor runtime source', () => {
     );
   });
 
+  test('reloads UIKitML source for every editor preview render', () => {
+    const source = createRuntimeSource();
+    const panelDocument = section(
+      source,
+      'async function createEditorPanelDocument',
+      'function refreshEditorPanelClassLists',
+    );
+
+    expect(panelDocument).toContain(
+      'loadUIKitMLComponent(config, { forceReload: true })',
+    );
+
+    const detachedRender = section(
+      source,
+      'async function renderSceneFile',
+      'async function setWorkspaceView',
+    );
+    expect(detachedRender).toContain(
+      'scheduleEditorSceneLowering(temporarySession, { force: true })',
+    );
+  });
+
+  test('settles UIKitML previews from render and resource signals', () => {
+    const source = createRuntimeSource();
+    const scheduler = section(
+      source,
+      'function createEditorPanelFrameScheduler',
+      'function refreshEditorPanelClassLists',
+    );
+    const settle = section(
+      source,
+      'async function settleEditorPanelLayout',
+      'function disposeEditorPanelDocument',
+    );
+
+    expect(scheduler).toContain('rootContext.requestFrame = requestFrame');
+    expect(scheduler).toContain('rootContext.requestRender = requestRender');
+    expect(scheduler).toContain('object.fontSignal?.subscribe');
+    expect(scheduler).toContain('object.texture?.subscribe');
+    expect(settle).toContain('frameScheduler.resourcesReady()');
+    expect(settle).toContain('frameScheduler.waitForFrameRequest(remaining)');
+    expect(settle).not.toContain('minimumRenderFrames');
+    expect(settle).not.toContain('stableFrames');
+  });
+
   test('stops the automatic world loop before configuring the editor renderer', () => {
     const source = createRuntimeSource();
     const worldCreated = source.indexOf('const world = await World.create');
@@ -151,7 +196,8 @@ describe('editor runtime source', () => {
       'function renderMultiSelectInspector',
     );
 
-    expect(catalogAdd).toContain("content: { asset: assetId, type: 'asset' }");
+    expect(catalogAdd).toContain("{ asset: assetId, type: 'asset' }");
+    expect(catalogAdd).not.toContain("'com.iwsdk.components.PanelUI'");
     expect(catalogAdd).not.toContain('geometry');
     expect(catalogAdd).not.toContain('material');
     expect(inspectorRender).toContain('data-node-asset-ref');
@@ -249,7 +295,7 @@ describe('editor runtime source', () => {
     expect(source).not.toContain('data-primitive-material');
   });
 
-  test('bundles the group icon used by outliner rows', () => {
+  test('bundles group and UIKitML icons used by outliner rows', () => {
     const outliner = section(
       workspaceSource,
       'function SceneNodeRow',
@@ -257,7 +303,10 @@ describe('editor runtime source', () => {
     );
 
     expect(workspaceSource).toContain('Boxes,');
-    expect(outliner).toContain("kind === 'group' ? 'Boxes' : 'Box'");
+    expect(workspaceSource).toContain('PanelTop,');
+    expect(outliner).toContain('sceneNodeHasPanelUI(node)');
+    expect(outliner).toContain("? 'PanelTop'");
+    expect(outliner).toContain("? 'Boxes'");
   });
 
   test('renders one hidden-state icon per outliner row', () => {

@@ -125,7 +125,7 @@ Assert these components are present:
 - `Visibility` with field: `isVisible` (Boolean, default: true)
 - `LevelRoot` (no fields — marker)
 - `LevelTag` with field: `id` (String)
-- `PanelUI` with fields: `config` (String), `maxWidth` (Float32), `maxHeight` (Float32)
+- `PanelUI` with field: `config` (String); this is the legacy raw-URL adapter
 - `AudioSource` with fields: `src` (FilePath), `volume` (Float32)
 
 **Test 2.2: Transform Default Values**

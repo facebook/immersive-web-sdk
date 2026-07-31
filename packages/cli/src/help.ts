@@ -73,7 +73,8 @@ export function buildRuntimeCommandHelp(
   const writesScreenshot =
     operation.mcpName === 'browser_screenshot' ||
     operation.mcpName === 'scene_screenshot' ||
-    operation.mcpName === 'scene_render_file';
+    operation.mcpName === 'scene_render_file' ||
+    operation.mcpName === 'ui_render_preview';
 
   const lines = [
     `Usage: iwsdk ${domain} ${action} [--input-json <json>] [--timeout <ms>] [--raw]${
@@ -199,6 +200,7 @@ export function usageLines(): string[] {
     '  xr <action>',
     '  browser <action>',
     '  scene <action>',
+    '  ui <action>',
     '  ecs <action>',
   ];
 }

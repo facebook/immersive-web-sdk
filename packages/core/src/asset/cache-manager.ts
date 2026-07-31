@@ -45,9 +45,12 @@ export class CacheManager {
     this.promiseCache.set(url, promise);
   }
 
-  /** Remove in-flight promise (on resolve/reject). */
-  static deletePromise(url: string): void {
-    this.promiseCache.delete(url);
+  /** Remove an in-flight promise, optionally only when it is still current. */
+  static deletePromise(url: string, expected?: Promise<unknown>): boolean {
+    if (expected != null && this.promiseCache.get(url) !== expected) {
+      return false;
+    }
+    return this.promiseCache.delete(url);
   }
 
   /** True if an asset has been cached for URL. */
@@ -63,6 +66,11 @@ export class CacheManager {
   /** Store an asset by URL. */
   static setAsset<T>(url: string, asset: T): void {
     this.cache.set(url, asset);
+  }
+
+  /** Remove one cached asset by logical key or URL. */
+  static deleteAsset(keyOrUrl: string): boolean {
+    return this.cache.delete(this.resolveUrl(keyOrUrl));
   }
 
   /** Lookup asset by logical key or direct URL. */

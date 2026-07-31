@@ -649,6 +649,22 @@ describe('native editor route middleware', () => {
     expect(headlessConfig.server?.open).toBe(false);
   });
 
+  test('keeps the TTF generator worker out of Vite dependency optimization', () => {
+    const plugin = iwsdkDev();
+    const userConfig: { optimizeDeps?: { exclude?: string[] } } = {
+      optimizeDeps: { exclude: ['existing-dependency'] },
+    };
+
+    plugin.config?.(userConfig as never, {} as never);
+
+    expect(userConfig.optimizeDeps?.exclude).toEqual(
+      expect.arrayContaining([
+        'existing-dependency',
+        '@zappar/msdf-generator',
+      ]),
+    );
+  });
+
   test('does not launch a workspace for AI disabled with IWER', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {

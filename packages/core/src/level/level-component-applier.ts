@@ -135,9 +135,7 @@ export class LevelComponentApplier {
       world.registerComponent(PanelUI);
     }
     entity.addComponent(PanelUI, {
-      config: props.config.replace('.uikitml', '.json'),
-      maxHeight: typeof props.maxHeight === 'number' ? props.maxHeight : 1,
-      maxWidth: typeof props.maxWidth === 'number' ? props.maxWidth : 1,
+      config: props.config,
     });
   }
 }

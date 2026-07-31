@@ -390,7 +390,7 @@ DistanceModel.Exponential; // Exponential falloff
 **PhysicsBody - motion properties:**
 
 ```typescript
-import { PhysicsBody, PhysicsState } from '@iwsdk/core';
+import { PhysicsBody, PhysicsState, PhysicsSystem } from '@iwsdk/core';
 
 entity.addComponent(PhysicsBody, {
   state: PhysicsState.Dynamic, // Static, Dynamic, Kinematic
@@ -435,14 +435,21 @@ PhysicsShapeType.TriMesh; // Exact mesh geometry (expensive)
 PhysicsShapeType.Auto; // Auto-detect from Three.js geometry
 ```
 
-**Teleporting / re-posing a dynamic body:** every PhysicsBody/PhysicsShape
-field is consumed at body-creation time only, and the engine overwrites the
-entity's Transform each frame. To move a dynamic body programmatically:
-remove BOTH components → write `object3D.position/quaternion` → re-add both
-(fresh body at the new pose, zero velocity, awake; recreation spans ~2
-physics frames). Writing Transform alone is silently clobbered; switching
-`state` after creation is a no-op; `PhysicsManipulation` cannot zero a
-velocity (all-zero vectors are treated as "not set").
+**Teleporting / re-posing an existing body:** use the live physics system rather than
+removing and re-adding components. It updates Havok and the Object3D immediately and
+clears velocity by default:
+
+```typescript
+const physics = world.getSystem(PhysicsSystem);
+physics.setBodyTransform(entity, {
+  position: homePosition,
+  quaternion: homeQuaternion,
+});
+```
+
+Writing only the Transform of a dynamic body is clobbered by the next physics frame.
+`gravityFactor`, `linearDamping`, and `angularDamping` are reactive; motion `state` and
+shape construction still require deliberate body lifecycle handling.
 
 ### 12. Grabbable Components
 
@@ -489,7 +496,7 @@ entity.addComponent(DistanceGrabbable, {
   scale: true,
   movementMode: MovementMode.MoveTowardsTarget, // MoveTowardsTarget | MoveAtSource | RotateAtSource | MoveFromTarget
   returnToOrigin: false, // Snap back when released
-  moveSpeedFactor: 0.1, // MoveTowardsTarget pull lerp: alpha = factor * delta * 100, NOT clamped — keep <= 0.03 if frames can hitch (headless/CI) or the pull overshoots and diverges
+  moveSpeedFactor: 0.1, // MoveTowardsTarget pull lerp: alpha = factor * delta * 100, NOT clamped — keep <= 0.03 if frames can hitch (background tabs/CI) or the pull overshoots and diverges
 });
 
 // Force-release / hand lookup (game reset, weapon swap, recoil, etc.)
@@ -720,7 +727,7 @@ export class MyARSystem extends createSystem({
 | `grabbing`           | Objects are grabbable                 | Grabbable components on entities           | Wasted overhead                |
 | `sceneUnderstanding` | AR with real-world surfaces           | AR session mode                            | Feature won't work             |
 | `environmentRaycast` | AR object placement                   | AR session + hit-test support              | Feature won't work             |
-| `spatialUI`          | Using PanelUI components              | UI config files                            | No UI renders                  |
+| `spatialUI`          | Rendering UIKitML assets              | Manifest `AssetType.UIKitML` entries       | No UI renders                  |
 
 #### Locomotion Requires Environment Setup
 
@@ -889,29 +896,22 @@ posView[0] += delta; // direct array element write
 ### 21. Panel UI Pattern
 
 ```typescript
-export class SettingsSystem extends createSystem({
-  settingsPanel: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', './ui/settings.json')],
-  },
-}) {
-  init() {
-    this.queries.settingsPanel.subscribe('qualify', (entity) => {
-      const doc = PanelDocument.data.document[entity.index];
-      const button = doc.getElementById('my-button');
+const panel = await world.assets.instantiate<UIKitMLAsset>('settings-panel');
+const entity = world.createTransformEntity(panel);
+entity.object3D.scale.setScalar(0.25);
 
-      button.addEventListener('click', () => {
-        AudioUtils.play(entity); // Audio feedback
-      });
-    });
+const button = panel.requireElementById('my-button');
+button.addEventListener('click', () => {
+  AudioUtils.play(entity); // Audio feedback
+});
 
-    // React to XR visibility
-    this.world.visibilityState.subscribe((state) => {
-      const is2D = state === VisibilityState.NonImmersive;
-      xrButton.setProperties({ display: is2D ? 'flex' : 'none' });
-    });
-  }
-}
+// For scene-authored UI, resolve the asset by stable scene node ID.
+const authoredPanel = world.requireSceneObject<UIKitMLAsset>(
+  'settings-panel-node',
+);
+
+// Use an application semantic marker—not PanelUI.config—when a system needs
+// to discover panel entities through ECS.
 ```
 
 ### 22. Environment Raycasting (AR Hit-Test)
@@ -1065,7 +1065,10 @@ update() {
 
 ### 26. ScreenSpace Usage Notes
 
-`ScreenSpace` positions a `PanelUI` entity relative to the screen in non-XR (browser) mode.
+`ScreenSpace` positions the UIKit document under a manifest-backed UIKitML entity
+relative to the screen in non-XR (browser) mode. It is intentional application
+behavior, not a temporary preview technique; use the editor's isolated preview for
+development.
 
 **All position/size values are CSS strings**, not numbers:
 
@@ -1073,8 +1076,8 @@ update() {
 import { ScreenSpace } from '@iwsdk/core';
 
 entity.addComponent(ScreenSpace, {
-  width: '400px', // CSS size: '400px', '50vw', 'auto'
-  height: '300px', // CSS size: '300px', '40vh', 'auto'
+  width: '400px', // Explicit CSS size: '400px', '50vw', calc(...)
+  height: '300px', // Explicit CSS size: '300px', '40vh', calc(...)
   top: '20px', // CSS position or 'auto'
   left: '20px', // CSS position or 'auto'
   bottom: 'auto',
@@ -1083,7 +1086,7 @@ entity.addComponent(ScreenSpace, {
 });
 ```
 
-**How it works:** The system creates hidden DOM elements and uses `getComputedStyle()` to convert CSS values → pixels → meters. This means any valid CSS expression works (`calc()`, `vw`, `vh`, `%`, etc.).
+**How it works:** The system creates hidden DOM elements and uses `getComputedStyle()` to convert CSS values → pixels → meters. Use explicit dimensions (`calc()`, `vw`, `vh`, `%`, etc.); unconstrained `auto` dimensions fall back to a small viewport-relative size and warn.
 
 **XR behavior:** When entering XR, `ScreenSpaceUISystem` automatically moves the panel back to world space. When exiting XR, it re-positions to screen space.
 
@@ -1125,38 +1128,38 @@ world.getPersistentRoot(); // Returns the scene Object3D
 
 ## Core Components Reference (30 Total)
 
-| Component                | Purpose                        |
-| ------------------------ | ------------------------------ |
-| Transform                | Position, rotation, scale      |
-| Visibility               | Show/hide objects              |
-| LevelTag                 | Marks level membership         |
-| LevelRoot                | Level root marker              |
-| Interactable             | Marks interactive objects      |
-| Hovered                  | Currently hovered              |
-| Pressed                  | Currently pressed/grabbed      |
-| OneHandGrabbable         | Single-hand manipulation       |
-| TwoHandsGrabbable        | Two-hand manipulation          |
-| DistanceGrabbable        | Grab from distance             |
-| Handle                   | Manipulation handle            |
-| PhysicsBody              | Physics motion properties      |
-| PhysicsShape             | Collision shape + material     |
-| PhysicsManipulation      | Force/velocity application     |
-| DomeGradient             | Gradient sky                   |
-| DomeTexture              | Textured sky                   |
-| IBLGradient              | Gradient IBL lighting          |
-| IBLTexture               | Texture IBL lighting           |
-| PanelUI                  | UI panel configuration         |
-| PanelDocument            | Loaded UI document             |
-| ScreenSpace              | Screen-attached UI             |
-| Follower                 | Object following               |
-| XRPlane                  | Detected AR planes             |
-| XRMesh                   | Detected AR meshes             |
-| XRAnchor                 | Spatial anchors                |
-| AudioSource              | Audio configuration            |
-| CameraSource             | Camera device                  |
-| DepthOccludable          | Depth-based occlusion for AR   |
-| LocomotionEnvironment    | Locomotion settings            |
-| EnvironmentRaycastTarget | AR environment hit-test target |
+| Component                | Purpose                                         |
+| ------------------------ | ----------------------------------------------- |
+| Transform                | Position, rotation, scale                       |
+| Visibility               | Show/hide objects                               |
+| LevelTag                 | Marks level membership                          |
+| LevelRoot                | Level root marker                               |
+| Interactable             | Marks interactive objects                       |
+| Hovered                  | Currently hovered                               |
+| Pressed                  | Currently pressed/grabbed                       |
+| OneHandGrabbable         | Single-hand manipulation                        |
+| TwoHandsGrabbable        | Two-hand manipulation                           |
+| DistanceGrabbable        | Grab from distance                              |
+| Handle                   | Manipulation handle                             |
+| PhysicsBody              | Physics motion properties                       |
+| PhysicsShape             | Collision shape + material                      |
+| PhysicsManipulation      | Force/velocity application                      |
+| DomeGradient             | Gradient sky                                    |
+| DomeTexture              | Textured sky                                    |
+| IBLGradient              | Gradient IBL lighting                           |
+| IBLTexture               | Texture IBL lighting                            |
+| PanelUI                  | Legacy component-backed UI loader compatibility |
+| PanelDocument            | Internal loaded UI document state               |
+| ScreenSpace              | Screen-attached UI                              |
+| Follower                 | Object following                                |
+| XRPlane                  | Detected AR planes                              |
+| XRMesh                   | Detected AR meshes                              |
+| XRAnchor                 | Spatial anchors                                 |
+| AudioSource              | Audio configuration                             |
+| CameraSource             | Camera device                                   |
+| DepthOccludable          | Depth-based occlusion for AR                    |
+| LocomotionEnvironment    | Locomotion settings                             |
+| EnvironmentRaycastTarget | AR environment hit-test target                  |
 
 ## Core Systems Reference (20 Total)
 
@@ -1220,9 +1223,7 @@ my-iwsdk-project/
 │   ├── scenes/               # Native IWSDK scene JSON files
 │   ├── iwsdk-assets/         # Shared catalog assets served by Vite
 │   ├── audio/                # Audio files
-│   └── ui/                   # Compiled UI configs
-├── ui/
-│   └── *.uikitml             # UI markup source
+│   └── ui/                   # Runtime-loaded .uikitml files and fonts
 ├── vite.config.ts
 └── package.json
 ```
@@ -1392,7 +1393,7 @@ These visuals are automatically created and managed by IWSDK systems:
 4. **DON'T** create entities in update() without proper lifecycle management
 5. **DON'T** use `Types.Object` for data that could be typed (use Vec3, Float32, etc.)
 6. **DON'T** forget cleanup functions for subscriptions and resources
-7. **DON'T** mutate live query Sets while iterating: if your loop body removes AND re-adds components (e.g. the physics re-pose idiom), the re-qualified entity is revisited by the same iteration — an infinite loop. Iterate `Array.from(query.entities)` instead
+7. **DON'T** mutate live query Sets while iterating: if your loop body removes AND re-adds required components, the re-qualified entity is revisited by the same iteration — an infinite loop. Iterate `Array.from(query.entities)` instead
 8. **DON'T** enable locomotion without collision geometry - player falls through world
 9. **DON'T** enable features you don't use - adds overhead and can cause bugs
 10. **DON'T** confuse PhysicsBody (motion) with PhysicsShape (collision + material)

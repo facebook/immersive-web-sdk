@@ -284,7 +284,8 @@ async function startRuntimeFixture(
           request.method === 'get_session_status'
             ? { sessionMode: 'immersive-vr', running: true }
             : request.method === 'screenshot' ||
-                request.method === 'scene_screenshot'
+                request.method === 'scene_screenshot' ||
+                request.method === 'ui_render_preview'
               ? {
                   imageData: ONE_BY_ONE_PNG_BASE64,
                   mimeType: 'image/png',
@@ -561,6 +562,33 @@ describe('runtime commands and project resolution', () => {
       );
       expect(existsSync(requestedSceneScreenshot)).toBe(true);
       expect(parsedSceneScreenshot.imageData).toBeUndefined();
+
+      const requestedUIPreview = path.join(appA, 'ui-preview.png');
+      const uiPreview = await runCli(
+        [
+          'ui',
+          'render-preview',
+          '--input-json',
+          '{"assetId":"welcome-panel"}',
+          '--output-file',
+          requestedUIPreview,
+        ],
+        path.join(appA, 'src'),
+      );
+      expect(uiPreview.exitCode).toBe(0);
+      expect(JSON.parse(uiPreview.stdout).data.screenshotPath).toBe(
+        requestedUIPreview,
+      );
+      expect(existsSync(requestedUIPreview)).toBe(true);
+
+      const uiAssets = await runCli(
+        ['ui', 'assets', '--raw'],
+        path.join(appA, 'src'),
+      );
+      expect(uiAssets.exitCode).toBe(0);
+      expect(JSON.parse(uiAssets.stdout)).toMatchObject({
+        method: 'ui_list_assets',
+      });
     } finally {
       await runtime.close();
     }
@@ -644,6 +672,18 @@ describe('runtime introspection and raw output', () => {
     expect(sceneScreenshotHelp.exitCode).toBe(0);
     expect(sceneScreenshotHelp.stdout).toContain('--output-file <path>');
     expect(sceneScreenshotHelp.stdout).toContain('takes precedence over --raw');
+
+    const uiPreviewHelp = await runCli(
+      ['ui', 'render-preview', '--help'],
+      appA,
+    );
+    expect(uiPreviewHelp.exitCode).toBe(0);
+    expect(uiPreviewHelp.stdout).toContain('assetId (required)');
+    expect(uiPreviewHelp.stdout).toContain('--output-file <path>');
+
+    const uiAssetsHelp = await runCli(['ui', 'assets', '--help'], appA);
+    expect(uiAssetsHelp.exitCode).toBe(0);
+    expect(uiAssetsHelp.stdout).toContain('Usage: iwsdk ui assets');
   });
 
   test('returns underlying runtime payloads with --raw', async () => {

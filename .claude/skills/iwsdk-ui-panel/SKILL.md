@@ -1,246 +1,178 @@
 ---
 name: iwsdk-ui-panel
-description: Develop and iterate on IWSDK UI panels efficiently. Use when working on PanelUI components, debugging UI layout, or improving UI design in IWSDK applications.
-allowed-tools: Read, Edit, Write, Bash(npm *)
+description: Create, place, preview, debug, and connect manifest-backed IWSDK UIKitML assets. Use for spatial panels, browser HUDs, UIKitML layout, fonts, editor previews, or runtime element behavior.
+allowed-tools: Read, Edit, Write, Bash(npm *), Bash(npx *)
 ---
 
-# IWSDK UI Panel Development Workflow
+# IWSDK UIKitML Asset Workflow
 
-This skill teaches the efficient workflow for developing UI panels in IWSDK applications using temporary ScreenSpace positioning and backdrop techniques.
+Treat UIKitML as a first-class renderable asset. Use the managed editor's isolated
+renderer for layout, the scene editor for placement, and the application runtime for
+behavior. Do not change the scene, camera, or component model merely to inspect a
+panel.
 
-## Quick Iteration Workflow
+## 1. Find the three stable identities
 
-When working on a UI panel, follow these steps for rapid iteration:
+Every scene-authored panel has three different identities:
 
-### 1. Add Temporary ScreenSpace Component
+1. the manifest asset ID, which names the reusable UIKitML definition;
+2. the scene node ID, which names one placed instance;
+3. element `id` attributes, which name fields and controls inside the document.
 
-Temporarily add the `ScreenSpace` component to your PanelUI entity to make it fill the 2D screen during development:
+Find or add the manifest entry in `src/assets.ts` and keep the source under
+`public/ui/`:
 
-```typescript
-import { ScreenSpace } from '@iwsdk/core';
+```ts
+import { AssetType, type AssetManifest } from '@iwsdk/core';
 
-world
-  .createTransformEntity(panelHolder)
-  .addComponent(PanelUI, {
-    config: '/ui/your-panel.json',
-    maxWidth: 1.0,
-    maxHeight: 0.5,
-  })
-  .addComponent(ScreenSpace, {
-    width: '90vw', // Fill 90% of viewport width
-    height: '90vh', // Fill 90% of viewport height
-    top: '5vh', // Center with 5% margins
-    left: '5vw',
-  });
+const assets = {
+  'welcome-panel': {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
+  },
+} satisfies AssetManifest;
+
+export default assets;
 ```
 
-**Important:** This is temporary for development only. Remove before production.
+A file under `public/ui/` is not placeable until it is registered. The `.uikitml`
+file is the runtime source of truth; never generate an intermediate JSON file.
 
-### 2. Create a Clean Backdrop
+## 2. Reuse the managed editor
 
-Create a solid color backdrop far from your gameplay area for clean UI visibility:
+Run commands from the application directory. Reuse a command-ready session instead
+of starting a second server or browser:
 
-```typescript
-const backdrop = new Mesh(
-  new BoxGeometry(20, 20, 0.1),
-  new MeshBasicMaterial({ color: 0x1a1a2e }),
-);
-backdrop.position.set(0, 0, -50); // Far from gameplay
-scene.add(backdrop);
+```bash
+npx iwsdk dev status
+npx iwsdk dev up --timeout 60000
+npx iwsdk ui assets --raw
 ```
 
-### 3. Position Camera Close to Backdrop
+`dev up` owns the managed headed browser. Do not launch a second Playwright browser,
+enable Vite's independent opener, or implement a custom UIKit renderer.
 
-Move the camera very close to the backdrop (within 0.5m) to eliminate background distractions:
+## 3. Render the panel in isolation
 
-```typescript
-// Position camera very close to backdrop for clean UI development
-camera.position.set(0, 0, -49.5); // Just 0.5m from backdrop at z=-50
-camera.lookAt(0, 0, -50);
+Use the editor-backed isolated renderer before debugging scene placement:
+
+```bash
+npx iwsdk ui render-preview \
+  --input-json '{"assetId":"welcome-panel","width":800,"height":600}' \
+  --output-file artifacts/welcome-panel.png
 ```
 
-**Why close?** The backdrop must fill the entire field of view to block out the 3D scene. Being far away (50m) won't work - you'll still see the environment around the edges.
+This renders the real manifest entry through the real UIKitML parser, fonts, layout,
+and WebGL path on a neutral background. It waits for UIKit render and resource
+signals; do not add fixed frame delays. Re-run the command after every layout change.
+Same-URL sources are reloaded without restarting the server.
 
-### 4. Iterate with Screenshots
+## 4. Place and inspect it in the scene editor
 
-Now you can rapidly iterate on your UI:
+For a human-authored placement, open the scene and add the UIKitML asset from the
+asset drawer. For file authoring, use the same asset-only node contract:
 
-1. Make changes to your `.uikitml` file
-2. Take a screenshot to see the result against a clean backdrop
-3. The UI fills most of the screen, making it easy to see details like:
-   - Border colors and thickness
-   - Padding and spacing
-   - Text alignment and sizing
-   - Color contrast
-   - Overall layout
-
-The ScreenSpace component makes the panel "follow" the camera, so it appears as a 2D overlay on your backdrop.
-
-### 5. Test in VR
-
-When you enter VR mode:
-
-- The ScreenSpace component automatically detaches the panel from the camera
-- The panel returns to its original 3D world space position
-- Your gameplay is unaffected
-
-This dual-mode behavior is handled automatically by the `ScreenSpaceUISystem`.
-
-## Understanding UIKit Size Signals
-
-UIKit components expose size information through signals. Log these to debug layout issues:
-
-```typescript
-const document = PanelDocument.data.document[entity.index];
-
-console.log('computedSize:', document.computedSize); // Intrinsic size in cm
-console.log('targetSize:', document.targetSize); // Target size in meters
-console.log('rootElement.size.value:', document.rootElement?.size?.value);
-console.log('document.scale:', document.scale); // Applied scale
-```
-
-**Understanding the output:**
-
-- `computedSize`: UIKit's rendered size in **centimeters** (based on your CSS)
-- `targetSize`: The requested size in **meters** (from PanelUI maxWidth/maxHeight or ScreenSpace constraints)
-- `document.scale`: Uniform scale factor applied to fit target while preserving aspect ratio
-
-Example output:
-
-```
-computedSize: { width: 100, height: 50 }         // 100cm × 50cm
-targetSize: { width: 0.274, height: 0.168 }      // 0.274m × 0.168m
-document.scale: { x: 0.274, y: 0.274, z: 0.274 } // Scaled down by 0.274x
-```
-
-## ScreenSpace Component Reference
-
-The ScreenSpace component positions panels using CSS-like properties:
-
-```typescript
-.addComponent(ScreenSpace, {
-  width: '90vw',      // CSS size: px, vw, vh, %, auto
-  height: '90vh',     // CSS size: px, vw, vh, %, auto
-  top: '5vh',         // CSS position: px, %, vh, auto
-  bottom: 'auto',     // CSS position: px, %, vh, auto
-  left: '5vw',        // CSS position: px, %, vw, auto
-  right: 'auto',      // CSS position: px, %, vw, auto
-  zOffset: 0.2,       // Distance in meters from camera (default: 0.2m)
-});
-```
-
-**How it works:**
-
-- In desktop mode: Panel attaches to camera at `zOffset` distance, using CSS layout
-- In VR mode: Panel detaches from camera, returns to world space position
-- Automatic switching handled by `ScreenSpaceUISystem`
-
-## Common Workflow Tips
-
-### Centering Content
-
-Use flexbox in your UIKitML for centered layouts:
-
-```css
-.container {
-  display: flex;
-  flex-direction: column; /* Stack vertically */
-  justify-content: center; /* Center vertically */
-  align-items: center; /* Center horizontally */
+```json
+{
+  "id": "welcome-panel-instance",
+  "name": "Welcome panel",
+  "content": { "type": "asset", "asset": "welcome-panel" },
+  "transform": {
+    "position": [0, 1.4, -1.5],
+    "rotationDeg": [0, 180, 0],
+    "scale": 0.5
+  }
 }
 ```
 
-### Sharp Borders
-
-Set `border-radius: 0` for square edges that align with grid systems:
-
-```css
-.panel {
-  border-radius: 0; /* Square edges */
-  border-width: 0.15;
-  border-color: #27272a;
-}
+```bash
+npx iwsdk scene render-file \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
+  --output-file artifacts/main-editor.png
+npx iwsdk scene open \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
 ```
 
-### UIKit Units
+UIKitML surfaces are single-sided. If the isolated preview works but the placed panel
+is invisible, inspect its rotation first. Size a world-space panel with its ordinary
+entity transform scale. There is no `maxWidth`/`maxHeight` fitting layer and no
+editor-visible `PanelUI` component to configure.
 
-Remember: UIKit uses **centimeters** for sizing, world space uses **meters**:
+Use `scene screenshot` for editor/scene evidence. `browser screenshot` is intentionally
+runtime-only and switches the managed workspace to runtime before capturing.
 
-- `width: 100` in UIKitML = 100cm = 1.0m
-- `maxWidth: 1.0` in PanelUI = 1.0 meter
+## 5. Edit UIKitML
 
-## Cleanup Before Production
+UIKitML is HTML/CSS-shaped, but it is not a browser engine. Confirm supported elements
+and properties from the installed IWSDK reference before assuming browser behavior.
 
-Before committing or going to production:
+Key rules:
 
-1. **Remove ScreenSpace component** from your entity
-2. **Remove or reposition backdrop** if not needed for gameplay
-3. **Restore camera position** to gameplay view
-4. **Remove debug logging** of size signals
+- numeric UIKit sizes are centimeters (`100` = 100 cm = 1 m);
+- use stable `id` attributes for elements application code must manipulate;
+- prefer explicit supported declarations over CSS shorthand;
+- parser errors include source locations;
+- relative and remote font URLs are supported, but font completion can change layout;
+- the managed preview settles from UIKit render/font/texture signals, so inspect logs
+  instead of compensating with arbitrary waits.
 
-The panel will remain at its world space position defined by the entity's transform.
+After each edit:
 
-## Example: Complete Development Setup
+1. rerender with `ui render-preview` and inspect the image;
+2. rerender the scene when placement or scale matters;
+3. inspect `browser logs` for parser, font, texture, or runtime failures.
 
-```typescript
-// 1. Enable spatialUI feature
-World.create(container, {
-  features: { spatialUI: true },
-}).then((world) => {
-  const { scene, camera } = world;
+## 6. Connect runtime behavior
 
-  // 2. Create backdrop for UI development
-  const backdrop = new Mesh(
-    new BoxGeometry(20, 20, 0.1),
-    new MeshBasicMaterial({ color: 0x1a1a2e }),
-  );
-  backdrop.position.set(0, 0, -50);
-  scene.add(backdrop);
+For a code-owned instance, keep the `UIKitMLAsset` returned by the asset manager:
 
-  // 3. Position camera close to backdrop
-  camera.position.set(0, 0, -49.5);
-  camera.lookAt(0, 0, -50);
+```ts
+import { UIKit, UIKitMLAsset } from '@iwsdk/core';
 
-  // 4. Create your UI panel with ScreenSpace
-  const panelHolder = new Group();
-  panelHolder.position.set(0, 1.5, -1.0); // World space position for VR
-  scene.add(panelHolder);
+const panel = await world.assets.instantiate<UIKitMLAsset>('welcome-panel');
+const entity = world.createTransformEntity(panel);
+const button = panel.requireElementById<UIKit.Text>('xr-button');
+button.addEventListener('click', () => world.launchXR());
+```
 
-  world
-    .createTransformEntity(panelHolder)
-    .addComponent(PanelUI, {
-      config: '/ui/my-panel.json',
-      maxWidth: 1.0,
-      maxHeight: 0.5,
-    })
-    .addComponent(ScreenSpace, {
-      // TEMPORARY for development
-      width: '90vw',
-      height: '90vh',
-      top: '5vh',
-      left: '5vw',
-    });
+For a scene-authored instance, resolve it by stable scene node ID after the level has
+loaded:
+
+```ts
+const panel = world.requireSceneObject<UIKitMLAsset>('welcome-panel-instance');
+const button = panel.requireElementById<UIKit.Text>('xr-button');
+button.setProperties({ text: 'Enter XR' });
+```
+
+Do not locate a panel by transient ECS index, manifest URL, or a scan for an internal
+`PanelDocument`. Use the scene node ID and element IDs.
+
+## ScreenSpace is product behavior
+
+Add `ScreenSpace` only when the experience genuinely needs a browser-camera HUD:
+
+```ts
+entity.addComponent(ScreenSpace, {
+  width: '420px',
+  height: '240px',
+  top: '20px',
+  right: '20px',
+  zOffset: 0.2,
 });
 ```
 
-## Troubleshooting
+Position and size values are CSS strings. In immersive mode the document returns to
+its authored world transform. Do not add `ScreenSpace`, a backdrop, or a temporary
+camera pose merely to make a panel easier to inspect—the editor already provides the
+correct isolated and in-scene render paths.
 
-**Panel not filling screen:**
+## Completion checklist
 
-- Check ScreenSpace width/height values
-- Verify UIKitML doesn't have fixed small dimensions
-
-**Background still visible:**
-
-- Camera too far from backdrop - move closer (within 0.5m)
-- Backdrop too small - increase size to 20×20 or larger
-
-**Panel doesn't return to world space in VR:**
-
-- Verify `spatialUI: true` in World.create features
-- Check that ScreenSpaceUISystem is running
-
-**Size signals showing unexpected values:**
-
-- UIKit uses cm, world space uses meters (100cm = 1m)
-- Check if aspect ratio constraints are being applied
+- Manifest ID resolves and `ui assets` lists it.
+- Isolated preview is nonblank, correctly laid out, and uses the intended fonts.
+- Scene preview has correct facing, transform scale, and lighting-independent color.
+- Runtime behavior resolves the placed node and required element IDs.
+- Browser logs contain no UIKitML parser, resource, or font errors.
+- No generated UI JSON, temporary ScreenSpace component, backdrop, or camera hack
+  remains.

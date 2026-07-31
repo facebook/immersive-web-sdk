@@ -18,6 +18,7 @@ import {
   Lock,
   Magnet,
   Move3D,
+  PanelTop,
   Plus,
   Redo2,
   Rotate3D,
@@ -113,6 +114,7 @@ const ICONS = {
   Lock,
   Magnet,
   Move3D,
+  PanelTop,
   Plus,
   Redo2,
   Rotate3D,
@@ -491,6 +493,11 @@ function SceneNodeRow({
   const ghosted = snapshot.ghostedNodeIds.includes(node.id);
   const solo = snapshot.soloNodeId === node.id;
   const kind = sceneNodeKind(node);
+  const icon = sceneNodeHasPanelUI(node)
+    ? 'PanelTop'
+    : kind === 'group'
+      ? 'Boxes'
+      : 'Box';
   return (
     <>
       <button
@@ -579,8 +586,8 @@ function SceneNodeRow({
             <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} />
           ) : null}
         </span>
-        <span class="node-row-icon">
-          <Icon name={kind === 'group' ? 'Boxes' : 'Box'} />
+        <span class="node-row-icon" data-node-icon={icon}>
+          <Icon name={icon} />
         </span>
         <span class="node-row-main">
           <span class="node-row-id">{node.name || node.id}</span>
@@ -652,6 +659,15 @@ function sceneNodeKind(node: any): string {
   return node.content?.type || (node.children?.length ? 'group' : 'group');
 }
 
+function sceneNodeHasPanelUI(node: any): boolean {
+  const components = node.components || {};
+  return Boolean(
+    node.assetKind === 'uikitml' ||
+      components.PanelUI ||
+      components['com.iwsdk.components.PanelUI'],
+  );
+}
+
 function sceneNodeSubtitle(node: any): string {
   return (
     node.content?.asset ||
@@ -673,7 +689,7 @@ function AssetBrowser({
   const assets = snapshot.sceneAssets.filter((asset) =>
     normalizedQuery.length === 0
       ? true
-      : `${asset.id} ${asset.name || ''}`
+      : `${asset.id} ${asset.name || ''} ${asset.kind || ''}`
           .toLowerCase()
           .includes(normalizedQuery),
   );
@@ -704,7 +720,10 @@ function AssetBrowser({
                 actionLabel={`Add ${asset.id}`}
                 actionIcon="Plus"
                 actionData={{ 'data-add-asset': asset.id }}
-                rowData={{ 'data-asset-id': asset.id }}
+                rowData={{
+                  'data-asset-id': asset.id,
+                  'data-asset-kind': asset.kind || 'asset',
+                }}
                 onAction={() => controller.addAsset?.(asset.id)}
               />
             ))

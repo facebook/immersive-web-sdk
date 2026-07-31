@@ -7,6 +7,7 @@
 
 import { createHash } from 'crypto';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,6 +20,17 @@ import { iwsdkDev } from '../src/index.js';
 export const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../..',
+);
+const fixtureRequire = createRequire(import.meta.url);
+const coreRequire = createRequire(
+  fixtureRequire.resolve('@iwsdk/core/package.json'),
+);
+const uikitRequire = createRequire(
+  coreRequire.resolve('@pmndrs/uikit/package.json'),
+);
+const MSDF_GENERATOR_ENTRY = path.join(
+  path.dirname(uikitRequire.resolve('@zappar/msdf-generator/worker.js')),
+  'index.js',
 );
 export const EDITOR_SCENE_RELATIVE_PATH =
   'public/scenes/editor-smoke.iwsdk.scene.json';
@@ -85,6 +97,12 @@ export async function createEditorTestHarness(
         ...(options.managedBrowser ? { ai: { mode: 'agent' } } : {}),
       }),
     ],
+    resolve: {
+      // The fixture uses IWSDK source from outside its temporary app root,
+      // whereas a real installed app resolves this transitive dependency from
+      // its own node_modules directory.
+      alias: { '@zappar/msdf-generator': MSDF_GENERATOR_ENTRY },
+    },
     root: tempRoot,
     server: {
       fs: {
@@ -266,6 +284,7 @@ async function writeFixtureProject(tempRoot: string): Promise<void> {
   await mkdir(path.join(tempRoot, 'public', 'audio'), { recursive: true });
   await mkdir(path.join(tempRoot, 'public', 'assets'), { recursive: true });
   await mkdir(path.join(tempRoot, 'public', 'scenes'), { recursive: true });
+  await mkdir(path.join(tempRoot, 'public', 'ui'), { recursive: true });
   await mkdir(path.join(tempRoot, 'src'), { recursive: true });
   await writeFile(
     path.join(tempRoot, 'public', 'audio', 'ambient.wav'),
@@ -301,6 +320,19 @@ async function writeFixtureProject(tempRoot: string): Promise<void> {
   await writeFile(
     path.join(tempRoot, 'public', 'assets', 'garden-reference.svg'),
     EDITOR_GARDEN_REFERENCE_SVG,
+    'utf8',
+  );
+  await writeFile(
+    path.join(tempRoot, 'public', 'ui', 'welcome.uikitml'),
+    `<style>
+  .panel { flex-direction: column; padding: 18px; width: 240px; background-color: #f5f7fa; border-radius: 14px; }
+  .title { color: #18202a; font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .body { color: #425466; font-size: 14px; }
+</style>
+<div class="panel">
+  <div id="title" class="title">Welcome panel</div>
+  <div class="body">A UIKitML asset rendered by the editor.</div>
+</div>`,
     'utf8',
   );
   await writeFile(
@@ -427,6 +459,11 @@ export default {
     name: 'Vase',
     type: AssetType.GLTF,
     url: '/assets/vase.gltf',
+  },
+  'welcome-panel': {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
   },
   'procedural-plinth': proceduralPlinth,
 };
@@ -587,7 +624,7 @@ try {
       locomotion: false,
       physics: false,
       sceneUnderstanding: false,
-      spatialUI: false,
+      spatialUI: true,
     },
     input: { canvasPointerEvents: false },
     level: '/scenes/editor-smoke.iwsdk.scene.json',

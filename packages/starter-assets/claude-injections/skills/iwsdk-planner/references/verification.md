@@ -37,7 +37,9 @@ npx iwsdk ecs systems                # 3. connectivity: returns system list
 npx iwsdk browser reload --timeout 20000   # 4. fresh page state
 sleep 3
 npx iwsdk browser screenshot --output-file design/verify/base.png --timeout 20000
-                                     # 5. renders? (not black/empty) — without
+                                     # 5. runtime renders? (not black/empty).
+                                     #    Browser screenshots are runtime-only and
+                                     #    auto-switch away from editor view. Without
                                      #    --output-file the PNG lands in the system
                                      #    temp dir (path in the JSON envelope)
 npx iwsdk xr enter --timeout 20000   # 6. enter emulated XR session
@@ -56,9 +58,10 @@ repeat up to ~60 s (a shell `until` loop around the _single_ CLI call is fine
 Then per-scenario: discover → simulate → assert. Finish with
 `npx iwsdk dev down` when done for the session.
 
-The managed browser is headless Playwright Chromium with an XR emulator
-(IWER) — GPU auto-detected, SwiftShader fallback (`IWSDK_GPU=swiftshader` to
-force). It starts with the dev server; no manual browser setup.
+The dev server owns one managed headed Playwright Chromium window, with IWER enabled
+for XR starters. It starts with the dev server; do not launch a second browser or turn
+Vite's independent `server.open` back on. Use `scene screenshot` / `scene render-file`
+for editor evidence and `browser screenshot` for the application runtime.
 
 ## Discover (after every reload — entity indices are NOT stable)
 
@@ -133,24 +136,24 @@ Only the two most recent snapshot labels are retained.
 - Snap turn re-fires only after the stick returns to 0.
 - `--input-json` takes one single-quoted JSON argument; malformed JSON errors
   out — build it with a heredoc if it contains quotes.
-- `ui/*.uikitml` compiles to `public/ui/*.json` only while vite runs; code
-  references the `.json` path.
+- UIKitML files live under `public/ui`, are registered in the asset manifest with
+  `AssetType.UIKitML`, and are parsed directly at runtime. Scene JSON references the
+  manifest asset ID; application code uses the placed scene node ID and element IDs.
 - After deploying: verify the live HTML references the newly built hashed
   assets (stale-dist deploys are the classic ship failure).
 
-## Headless hardening (emulated runtime — learned the hard way)
+## Managed-runtime hardening
 
-- **`xr select` can wedge the 0.4.2 headless runtime** (bridge reports
-  connected but every command times out). Use `xr set-select-value` 1→0 for
-  grab/release and `xr set-gamepad-state` button presses for clicks. UIKit
-  buttons: app code should listen to **`pointerup` in addition to `click`**
-  — the emulated select paths do not synthesize `click` events.
+- Prefer `xr set-select-value` 1→0 when a test needs observable press and release
+  phases. Use `xr set-gamepad-state` for explicit raw gamepad buttons. Application UI
+  should use its normal `click` handlers unless the product itself needs lower-level
+  pointer phases.
 - **Physics steps on the raw frame delta.** Reloads, screenshots, and
   `ecs snapshot` (full-state serialize) stall the tab for hundreds of ms to
   seconds; a single huge step tunnels thin/falling bodies and pops stacked
   contacts. Don't run heavy CLI commands mid-interaction; snapshot between
   scenarios, not during them. Build apps defensively (see
-  build-milestones.md headless-hardening defaults).
+  build-milestones.md runtime-hitch hardening defaults).
 - **Parse the right payload path**: `browser logs` returns the entries under
   `data.result` (a LIST of {level, message}); `browser screenshot` returns
   `data.screenshotPath` directly under `data`. Shapes vary per command —

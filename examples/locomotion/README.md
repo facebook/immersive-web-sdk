@@ -10,11 +10,10 @@ locomotion/
 │   ├── index.js           # Main application entry point
 │   ├── settings.js        # Settings configuration
 │   ├── test-component.js  # Example component
-│   └── settings.uikitml   # UI markup
 ├── public/                # Static assets served at root
 │   ├── textures/          # Images and texture files
-│   └── audio/             # Audio files
-├── ui/                    # UI markup
+│   ├── audio/             # Audio files
+│   └── ui/                # Runtime-loaded UIKitML files
 ├── dist/                 # Build output (generated)
 ├── index.html           # Main HTML file
 ├── vite.config.js       # Vite configuration

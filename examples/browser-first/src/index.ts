@@ -13,6 +13,8 @@ import {
   AudioUtils,
   BoxGeometry,
   Color,
+  createComponent,
+  createSystem,
   EnvironmentType,
   Grabbed,
   Hovered,
@@ -20,8 +22,6 @@ import {
   Mesh,
   MeshStandardMaterial,
   OneHandGrabbable,
-  PanelDocument,
-  PanelUI,
   PhysicsBody,
   PhysicsShape,
   PhysicsShapeType,
@@ -29,12 +29,9 @@ import {
   Pressed,
   RayInteractable,
   SphereGeometry,
+  UIKitMLAsset,
   World,
-  createSystem,
-  eq,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { CameraIcon, RotateCcwIcon } from '@pmndrs/uikit-lucide';
 import { BrowserMouseLookSystem } from './mouselook.js';
 
 const BALL_COLOR_IDLE = 0xa78bfa;
@@ -51,7 +48,17 @@ const assets: AssetManifest = {
     type: AssetType.GLTF,
     priority: 'critical',
   },
+  welcomePanel: {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: './ui/welcome.uikitml',
+  },
 };
+
+const BrowserFirstWelcomePanel = createComponent(
+  'BrowserFirstWelcomePanel',
+  {},
+);
 
 function spawnPhysicsBall(world: World) {
   const ball = new Mesh(
@@ -74,8 +81,7 @@ class BrowserFirstFeedbackSystem extends createSystem({
   oneHandGrabTargets: { required: [OneHandGrabbable] },
   pressedAudio: { required: [AudioSource, Pressed] },
   welcomePanel: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', './ui/welcome.json')],
+    required: [BrowserFirstWelcomePanel],
   },
 }) {
   init(): void {
@@ -84,19 +90,16 @@ class BrowserFirstFeedbackSystem extends createSystem({
     });
 
     this.queries.welcomePanel.subscribe('qualify', (entity) => {
-      const document = (PanelDocument as any).data.document[entity.index];
-      if (!document) {
-        return;
-      }
-      document.getElementById('reset-button')?.addEventListener('click', () => {
+      const panel = entity.object3D as UIKitMLAsset;
+      panel.requireElementById('reset-button').addEventListener('click', () => {
         this.queries.oneHandGrabTargets.entities.forEach((ball) => {
           ball.destroy();
         });
         spawnPhysicsBall(this.world);
       });
-      document
-        .getElementById('toggle-view-button')
-        ?.addEventListener('click', () => {
+      panel
+        .requireElementById('toggle-view-button')
+        .addEventListener('click', () => {
           (
             this.world.getSystem(
               BrowserMouseLookSystem,
@@ -159,9 +162,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       browserControls: true,
     },
     physics: true,
-    spatialUI: { kits: [horizonKit, { RotateCcwIcon, CameraIcon }] },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   world.scene.background = new Color(0x0b1020);
 
   const { scene: envMesh } = AssetManager.getGLTF('environmentDesk')!;
@@ -189,15 +192,13 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
 
   spawnPhysicsBall(world);
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
+    .addComponent(BrowserFirstWelcomePanel)
     .addComponent(RayInteractable);
   panelEntity.object3D!.position.set(0, 1.4, -2.25);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
   world
     .registerSystem(BrowserFirstFeedbackSystem)

@@ -63,7 +63,7 @@ LOCKFILE_BACKUP="$BASE_DIR/pnpm-lock.yaml.build-tgz.backup"
 WORKSPACE_BACKUP="$BASE_DIR/pnpm-workspace.yaml.build-tgz.backup"
 
 # Package build order (dependencies first)
-LEAF_PACKAGES=("scene-composition" "xr-input" "locomotor" "example-assets" "cli" "vite-plugin-dev" "vite-plugin-uikitml" "create" "reference-assets" "reference")
+LEAF_PACKAGES=("scene-composition" "xr-input" "locomotor" "example-assets" "cli" "vite-plugin-dev" "create" "reference-assets" "reference")
 ROOT_PACKAGES=("core")
 
 # Function to backup package.json

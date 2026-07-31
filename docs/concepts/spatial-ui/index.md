@@ -26,15 +26,11 @@ IWSDK combines the strengths of both camps:
 
 - UIKitML (Familiar authoring)
   - An HTML/CSS‑like DSL. You write markup and classes you already know.
-  - A parser turns `.uikitml` into a compact JSON format ideal for web transport.
-  - An interpreter builds UIKit component trees from that JSON at runtime.
-
-- Vite Plugin (Zero‑friction compilation)
-  - Watches your `ui/*.uikitml` files in dev and compiles them to `public/ui/*.json`.
-  - Runs once in production builds. No manual steps.
+  - The runtime parses deployed `.uikitml` source directly and can load TTF
+    fonts declared with `@font-face`.
 
 - SDK Runtime (Seamless consumption)
-  - The core UI systems fetch JSON, interpret into live UIKit components, and attach them to your scene.
+  - The core UI systems fetch UIKitML text, instantiate live UIKit components, and attach them to your scene.
   - Pointer events are connected for ray/grab/hand input.
   - The resulting components are surfaced through `UIKitDocument`, which exposes familiar DOM‑like APIs such as `getElementById()` and `querySelector()`.
 
@@ -46,7 +42,7 @@ IWSDK combines the strengths of both camps:
 - Sorting and transparency: UI is often translucent and stacked. Correct, stable painter order is critical to avoid flicker and popping in stereo.
 - Authoring vs runtime: Web developers want HTML/CSS ergonomics; 3D engines want batched meshes and GPU‑friendly data. Bridging these worlds cleanly is non‑trivial.
 
-Our stack is designed to mitigate each of these with Yoga‑based layout (predictable), MSDF text (crisp), batching/instancing (fast), and a DSL + plugin that preserves a familiar authoring workflow.
+Our stack is designed to mitigate each of these with Yoga‑based layout (predictable), MSDF text (crisp), batching/instancing (fast), and a directly loaded DSL that preserves a familiar authoring workflow.
 
 ## When to Use Spatial UI in IWSDK
 
@@ -59,7 +55,7 @@ Our stack is designed to mitigate each of these with Yoga‑based layout (predic
 - [UIKit](/concepts/spatial-ui/uikit) — the 3D UI runtime (layout, text, performance model).
 - [UIKitML](/concepts/spatial-ui/uikitml) — the authoring language, parser, and interpreter.
 - [UIKitDocument](/concepts/spatial-ui/uikit-document) — DOM‑like access to interpreted UI.
-- [Flow](/concepts/spatial-ui/flow) — end‑to‑end: author → compile → ship JSON → interpret → interact.
+- [Flow](/concepts/spatial-ui/flow) — end‑to‑end: author → parse → instantiate → interact.
 
 ## Choosing an Approach (Quick Guidance)
 

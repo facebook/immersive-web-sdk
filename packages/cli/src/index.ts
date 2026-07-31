@@ -80,6 +80,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         (command === 'xr' ||
           command === 'browser' ||
           command === 'scene' ||
+          command === 'ui' ||
           command === 'ecs') &&
         subcommand
       ) {
@@ -156,6 +157,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       case 'xr':
       case 'browser':
       case 'scene':
+      case 'ui':
       case 'ecs':
         result = await handleRuntimeOperation(
           command,

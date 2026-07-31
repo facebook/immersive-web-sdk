@@ -65,7 +65,6 @@ describe('installDependenciesFromBundle', () => {
     devDependencies: {
       '@iwsdk/cli': '^0.1.0',
       '@iwsdk/vite-plugin-dev': '^0.1.0',
-      '@iwsdk/vite-plugin-uikitml': '^0.1.0',
       vitest: '^2.0.0',
     },
   };
@@ -93,8 +92,6 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
-      '@iwsdk/vite-plugin-uikitml':
-        'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
     });
 
     await installDependenciesFromBundle(tmpDir, source);
@@ -112,9 +109,6 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe(
       'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
     );
-    expect(pkg.devDependencies['@iwsdk/vite-plugin-uikitml']).toBe(
-      'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
-    );
   });
 
   it('leaves non-@iwsdk/* deps untouched', async () => {
@@ -125,8 +119,6 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
-      '@iwsdk/vite-plugin-uikitml':
-        'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
     });
 
     await installDependenciesFromBundle(tmpDir, source);

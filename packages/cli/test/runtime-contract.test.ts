@@ -76,27 +76,39 @@ describe('runtime contract scene tools', () => {
     });
   });
 
-  test('routes browser screenshot by semantic target parameter', () => {
+  test('routes browser screenshots exclusively to the app runtime', () => {
     const operation = getRuntimeOperationByToolName('browser_screenshot');
-    expect(operation?.inputSchema.properties?.target).toMatchObject({
-      enum: ['runtime', 'editor', 'workspace'],
-    });
-    expect(
-      resolveRuntimeOperationRequest(operation!, {
-        count: 1,
-        target: 'runtime',
-      }),
-    ).toEqual({
-      params: { __iwsdkScreenshotTarget: 'runtime', count: 1 },
+    expect(operation).toMatchObject({
       target: { role: 'app' },
     });
-    expect(
-      resolveRuntimeOperationRequest(operation!, {
-        target: 'workspace',
-      }),
-    ).toEqual({
-      params: { __iwsdkScreenshotTarget: 'workspace' },
-      target: { role: 'editor' },
+    expect(operation?.inputSchema).toMatchObject({
+      additionalProperties: false,
+      properties: {},
     });
+    expect(resolveRuntimeOperationRequest(operation!, {})).toEqual({
+      params: {},
+      target: { role: 'app' },
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(operation!, { target: 'editor' }),
+    ).toThrow(
+      'browser_screenshot does not accept parameters; it always captures the application runtime',
+    );
+  });
+
+  test('exposes isolated UIKitML rendering as an editor-targeted image tool', () => {
+    const assets = getRuntimeOperationByToolName('ui_list_assets');
+    const operation = getRuntimeOperationByToolName('ui_render_preview');
+    expect(assets).toMatchObject({
+      cliPath: ['ui', 'assets'],
+      target: { role: 'editor' },
+      wsMethod: 'ui_list_assets',
+    });
+    expect(operation).toMatchObject({
+      cliPath: ['ui', 'render-preview'],
+      target: { role: 'editor' },
+      wsMethod: 'ui_render_preview',
+    });
+    expect(operation?.inputSchema.required).toEqual(['assetId']);
   });
 });

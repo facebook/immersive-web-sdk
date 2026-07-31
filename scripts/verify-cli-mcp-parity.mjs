@@ -821,7 +821,7 @@ const SMOKE_STEPS = [
     args: () => ({}),
     expectTabMetadata: true,
   },
-  { name: 'browser_screenshot', args: () => ({ target: 'runtime' }) },
+  { name: 'browser_screenshot', args: () => ({}) },
   { name: 'browser_reload_page', args: () => ({}) },
 ];
 

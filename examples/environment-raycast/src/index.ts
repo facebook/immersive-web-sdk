@@ -5,9 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { AssetManifest, AssetType, SessionMode, World } from '@iwsdk/core';
-import { RayInteractable, PanelUI, ScreenSpace } from '@iwsdk/core';
-import { PanelSystem } from './panel.js';
+import {
+  AssetManifest,
+  AssetType,
+  RayInteractable,
+  ScreenSpace,
+  SessionMode,
+  UIKitMLAsset,
+  World,
+} from '@iwsdk/core';
+import { configureWelcomePanel } from './panel.js';
 import { RaycastPlantSystem } from './raycast-plant.js';
 
 const assets: AssetManifest = {
@@ -15,6 +22,11 @@ const assets: AssetManifest = {
     url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
+  },
+  welcomePanel: {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: './ui/welcome.uikitml',
   },
 };
 
@@ -39,18 +51,14 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     sceneUnderstanding: false,
     environmentRaycast: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { camera } = world;
 
   camera.position.set(0, 1, 0.5);
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.8,
-      maxWidth: 1.6,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(ScreenSpace, {
       top: '20px',
@@ -58,6 +66,8 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       height: '40%',
     });
   panelEntity.object3D!.position.set(0, 1.29, -1.9);
+  panelEntity.object3D!.scale.setScalar(0.465);
 
-  world.registerSystem(PanelSystem).registerSystem(RaycastPlantSystem);
+  configureWelcomePanel(world, panel);
+  world.registerSystem(RaycastPlantSystem);
 });

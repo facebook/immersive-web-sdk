@@ -23,6 +23,16 @@ const assets = {
     type: AssetType.GLTF,
     url: '/iwsdk-assets/robot/robot.gltf',
   },
+  'physics-welcome-panel': {
+    name: 'Physics Welcome Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
+  },
+  'physics-settings-panel': {
+    name: 'Physics Settings Panel',
+    type: AssetType.UIKitML,
+    url: '/ui/settings.uikitml',
+  },
 } satisfies AssetManifest;
 
 export default assets;

@@ -3,7 +3,7 @@
     {
       "components": {
         "com.iwsdk.components.PanelUI": {
-          "config": "updated-panel.json",
+          "config": "updated-panel.uikitml",
           "maxHeight": 1,
           "maxWidth": 2
         },

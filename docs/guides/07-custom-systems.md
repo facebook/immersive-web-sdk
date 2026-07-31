@@ -75,7 +75,7 @@ export class MySystem extends createSystem(
     // Query with value predicate - matches specific component values
     configQuery: {
       required: [PanelUI, PanelDocument],
-      where: [eq(PanelUI, 'config', '/ui/welcome.json')],
+      where: [eq(PanelUI, 'config', '/ui/welcome.uikitml')],
     },
   },
   {

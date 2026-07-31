@@ -17,14 +17,11 @@
   },
   "dependencies": {
     "@iwsdk/core": "file:../../packages/core/iwsdk-core.tgz",
-    "@pmndrs/uikit-horizon": "^1.0.60",
-    "@pmndrs/uikit-lucide": "^1.0.60",
     "three": "npm:super-three@0.181.0"
   },
   "devDependencies": {
     "@iwsdk/cli": "file:../../packages/cli/iwsdk-cli.tgz",
     "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
-    "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",
     "@types/three": "^0.181.0",
     "typescript": "^5.5.0",
     "vite": "^7.1.4",

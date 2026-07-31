@@ -130,7 +130,8 @@ const WORKSPACE_REVIEW_CAPTURES_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/captures`;
 const WORKSPACE_REVIEW_TRANSITIONS_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/transitions`;
 const WORKSPACE_PUBLISH_ROUTE = `${WORKSPACE_ROUTE}/publish`;
 const WORKSPACE_RUNTIME_PREFLIGHT_ROUTE = `${WORKSPACE_ROUTE}/runtime-preflight`;
-const EDITOR_OPTIMIZER_EXCLUSIONS = [
+const OPTIMIZER_EXCLUSIONS = [
+  '@zappar/msdf-generator',
   'lucide',
   'preact',
   'preact/hooks',
@@ -255,6 +256,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let mcpWss: WebSocketServer | null = null;
   let mcpClients: Set<WebSocket> | null = null;
   let managedBrowser: ManagedBrowser | null = null;
+  let closeManagedWorkspace: (() => Promise<void>) | null = null;
   const managedWorkspaceToken =
     process.env.NODE_ENV === 'test' &&
     process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN
@@ -269,11 +271,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     config(userConfig) {
       // The editor workspace is loaded from a virtual module after the app has
       // started. Keep its framework dependencies out of Vite's late discovery
-      // pass so opening the editor cannot invalidate the running page.
+      // pass so opening the editor cannot invalidate the running page. The
+      // MSDF generator must also stay unbundled so its relative worker and WASM
+      // URLs continue to resolve when UIKit loads a TTF font.
       userConfig.optimizeDeps ??= {};
       userConfig.optimizeDeps.exclude = [
         ...(userConfig.optimizeDeps.exclude ?? []),
-        ...EDITOR_OPTIMIZER_EXCLUSIONS.filter(
+        ...OPTIMIZER_EXCLUSIONS.filter(
           (dependency) =>
             !userConfig.optimizeDeps?.exclude?.includes(dependency),
         ),
@@ -645,6 +649,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
        * Stops retrying after MAX_LAUNCH_FAILURES consecutive failures.
        */
       const launchBrowser = (): Promise<void> => {
+        if (serverShuttingDown) {
+          return Promise.resolve();
+        }
         if (browserLaunchPromise) {
           return browserLaunchPromise;
         }
@@ -680,6 +687,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               },
               pluginOptions.ai ? 'iwer' : 'workspace',
             );
+            if (serverShuttingDown) {
+              await browser.close();
+              return;
+            }
             managedBrowser = browser;
             consecutiveFailures = 0;
             traceRuntime('browser_launch_success', {
@@ -692,7 +703,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   : 'waiting_for_connection',
                 {
                   connected: (browserRuntimeClients?.size ?? 0) > 0,
-                  commandReady: false,
+                  commandReady: (browserRuntimeClients?.size ?? 0) > 0,
                   lastBridgeConnectedAt:
                     (browserRuntimeClients?.size ?? 0) > 0
                       ? new Date().toISOString()
@@ -726,6 +737,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               }
             });
           } catch (error) {
+            if (serverShuttingDown) {
+              traceRuntime('browser_launch_cancelled_by_shutdown');
+              return;
+            }
             consecutiveFailures++;
             const message =
               error instanceof Error ? error.message : String(error);
@@ -767,6 +782,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         browser: ManagedBrowser | null;
         relaunched: boolean;
       }> => {
+        if (serverShuttingDown) {
+          return { browser: null, relaunched: false };
+        }
         const current = managedBrowser;
         if (current && !current.isClosed()) {
           traceRuntime('ensure_browser_reuse', {
@@ -1060,9 +1078,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 publishBrowserState(
                   createBrowserState('connected', {
                     connected: true,
-                    commandReady: false,
+                    // The hello is the transport readiness handshake. The
+                    // readiness probe below waits for this same event, so a
+                    // connected bridge is immediately command-ready.
+                    commandReady: true,
                     connectedClientCount: browserRuntimeClients!.size,
                     lastBridgeConnectedAt: new Date().toISOString(),
+                    lastCommandReadyAt: new Date().toISOString(),
                   }),
                 );
               }
@@ -1297,15 +1319,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   );
                   return;
                 }
-                const workspaceScreenshotView = getWorkspaceScreenshotView(
-                  parsed.params,
-                );
-                if (workspaceScreenshotView != null) {
-                  await readiness.browser.setWorkspaceView(
-                    workspaceScreenshotView,
-                  );
-                }
-                const buffer = await readiness.browser.screenshot();
+                const buffer =
+                  await readiness.browser.captureRuntimeScreenshot();
                 const base64 = buffer.toString('base64');
                 sendWsJson(
                   ws,
@@ -1345,15 +1360,16 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           const removedBridge = browserRuntimeClients!.delete(ws);
           if (removedBridge) {
             browserCommandReadyPromise = null;
+            const remainingBridgeCount = browserRuntimeClients!.size;
             publishBrowserState(
               createBrowserState(
-                browserRuntimeClients!.size > 0 ? 'connected' : 'disconnected',
+                remainingBridgeCount > 0 ? 'connected' : 'disconnected',
                 {
-                  connected: browserRuntimeClients!.size > 0,
-                  commandReady: false,
-                  connectedClientCount: browserRuntimeClients!.size,
+                  connected: remainingBridgeCount > 0,
+                  commandReady: remainingBridgeCount > 0,
+                  connectedClientCount: remainingBridgeCount,
                   lastError:
-                    browserRuntimeClients!.size > 0
+                    remainingBridgeCount > 0
                       ? undefined
                       : createBrowserIssue(
                           'connection_lost',
@@ -1482,30 +1498,52 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         }
       });
 
-      // Clean up WebSocket server and browser when Vite server closes.
-      server.httpServer?.on('close', () => {
+      let workspaceShutdownPromise: Promise<void> | null = null;
+      const shutdownManagedWorkspace = (): Promise<void> => {
+        if (workspaceShutdownPromise) {
+          return workspaceShutdownPromise;
+        }
         serverShuttingDown = true;
-        void unregisterRuntimeSession(config.root);
 
-        reportSessionEnd(sessionId, {
-          durationMs: Date.now() - sessionStartTime,
-          reason: 'user_closed',
-          clientVersion: iwsdkVersion,
-        });
+        workspaceShutdownPromise = (async () => {
+          // A stop can race the initial launch or a lazy relaunch. Wait for
+          // that attempt so any browser it creates is closed before Vite exits.
+          await browserLaunchPromise?.catch(() => {});
 
-        if (mcpWss) {
-          for (const client of mcpClients || []) {
-            client.close();
-          }
-          mcpClients?.clear();
-          mcpWss.close();
-          mcpWss = null;
-        }
-
-        if (managedBrowser) {
-          managedBrowser.close().catch(() => {});
+          const browser = managedBrowser;
           managedBrowser = null;
-        }
+          if (browser) {
+            await browser.close().catch(() => {});
+          }
+
+          if (mcpWss) {
+            for (const client of mcpClients || []) {
+              try {
+                client.close();
+              } catch {}
+            }
+            mcpClients?.clear();
+            mcpWss.close(() => {});
+            mcpWss = null;
+          }
+
+          await unregisterRuntimeSession(config.root).catch(() => {});
+
+          reportSessionEnd(sessionId, {
+            durationMs: Date.now() - sessionStartTime,
+            reason: 'user_closed',
+            clientVersion: iwsdkVersion,
+          });
+        })();
+
+        return workspaceShutdownPromise;
+      };
+      closeManagedWorkspace = shutdownManagedWorkspace;
+
+      // The HTTP close event cannot await cleanup, so start it here and let
+      // Vite's awaited closeBundle hook join the same idempotent promise.
+      server.httpServer?.on('close', () => {
+        void shutdownManagedWorkspace();
       });
     },
 
@@ -1680,6 +1718,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     closeBundle: {
       order: 'post',
       async handler() {
+        await closeManagedWorkspace?.();
+
         // Only show summary when the runtime/workspace bundle actually loaded.
         const shouldInject =
           (pluginOptions.iwer !== false || pluginOptions.workspace != null) &&
@@ -1882,16 +1922,6 @@ function normalizePageRole(
   role: string | undefined,
 ): 'app' | 'editor' | 'preview' {
   return role === 'editor' || role === 'preview' ? role : 'app';
-}
-
-function getWorkspaceScreenshotView(
-  params: Record<string, unknown> | undefined,
-): 'runtime' | 'editor' | null {
-  const target = params?.__iwsdkScreenshotTarget;
-  if (target === 'runtime' || target === 'editor') {
-    return target;
-  }
-  return null;
 }
 
 async function handleEditorDocumentRequest(

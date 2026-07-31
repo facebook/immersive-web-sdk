@@ -1,26 +1,26 @@
 {
-  "version": "iwsdk.scene.v1",
-  "units": "meters",
-  "resources": {},
   "nodes": [
     {
-      "id": "level",
-      "name": "Level",
-      "content": {
-        "type": "group"
-      },
       "components": {
         "DomeGradient": {},
         "IBLGradient": {}
-      }
+      },
+      "content": {
+        "type": "group"
+      },
+      "id": "level",
+      "name": "Level"
     },
     {
+      "components": {
+        "LocomotionEnvironment": {}
+      },
+      "content": {
+        "asset": "environment-desk",
+        "type": "asset"
+      },
       "id": "environment",
       "name": "Environment",
-      "content": {
-        "type": "asset",
-        "asset": "environment-desk"
-      },
       "transform": {
         "position": [
           0,
@@ -32,18 +32,25 @@
           180,
           0
         ]
-      },
-      "components": {
-        "LocomotionEnvironment": {}
       }
     },
     {
+      "components": {
+        "AudioSource": {
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5,
+          "src": "./audio/beepboop.mp3"
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      },
+      "content": {
+        "asset": "robot",
+        "type": "asset"
+      },
       "id": "robot-center",
       "name": "Robot Center",
-      "content": {
-        "type": "asset",
-        "asset": "robot"
-      },
       "transform": {
         "position": [
           0,
@@ -51,25 +58,26 @@
           -1.8
         ],
         "scale": 0.5
-      },
-      "components": {
-        "AudioSource": {
-          "src": "./audio/beepboop.mp3",
-          "coneInnerAngle": 45,
-          "coneOuterAngle": 180,
-          "maxInstances": 5
-        },
-        "RayInteractable": {},
-        "Spinner": {}
       }
     },
     {
+      "components": {
+        "AudioSource": {
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5,
+          "playbackMode": "fade-restart",
+          "src": "./audio/beepboop.mp3"
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      },
+      "content": {
+        "asset": "robot",
+        "type": "asset"
+      },
       "id": "robot-left",
       "name": "Robot Left",
-      "content": {
-        "type": "asset",
-        "asset": "robot"
-      },
       "transform": {
         "position": [
           -0.5,
@@ -77,26 +85,26 @@
           -1.8
         ],
         "scale": 0.5
-      },
-      "components": {
-        "AudioSource": {
-          "src": "./audio/beepboop.mp3",
-          "coneInnerAngle": 45,
-          "coneOuterAngle": 180,
-          "maxInstances": 5,
-          "playbackMode": "fade-restart"
-        },
-        "RayInteractable": {},
-        "Spinner": {}
       }
     },
     {
+      "components": {
+        "AudioSource": {
+          "coneInnerAngle": 45,
+          "coneOuterAngle": 180,
+          "maxInstances": 5,
+          "playbackMode": "overlap",
+          "src": "./audio/beepboop.mp3"
+        },
+        "RayInteractable": {},
+        "Spinner": {}
+      },
+      "content": {
+        "asset": "robot",
+        "type": "asset"
+      },
       "id": "robot-right",
       "name": "Robot Right",
-      "content": {
-        "type": "asset",
-        "asset": "robot"
-      },
       "transform": {
         "position": [
           0.5,
@@ -104,20 +112,21 @@
           -1.8
         ],
         "scale": 0.5
-      },
-      "components": {
-        "AudioSource": {
-          "src": "./audio/beepboop.mp3",
-          "coneInnerAngle": 45,
-          "coneOuterAngle": 180,
-          "maxInstances": 5,
-          "playbackMode": "overlap"
-        },
-        "RayInteractable": {},
-        "Spinner": {}
       }
     },
     {
+      "components": {
+        "PanelUI": {
+          "config": "./ui/welcome.uikitml"
+        },
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "height": "40%",
+          "left": "20px",
+          "top": "20px",
+          "width": "25vw"
+        }
+      },
       "id": "welcome-panel",
       "name": "Welcome Panel",
       "transform": {
@@ -126,24 +135,16 @@
           1.6,
           -2.2
         ],
-        "scale": [
-          1.8,
-          1,
-          1
-        ]
-      },
-      "components": {
-        "PanelUI": {
-          "config": "./ui/welcome.json"
-        },
-        "RayInteractable": {},
-        "ScreenSpace": {
-          "top": "20px",
-          "left": "20px",
-          "height": "40%",
-          "width": "25vw"
-        }
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1
       }
     }
-  ]
+  ],
+  "resources": {},
+  "units": "meters",
+  "version": "iwsdk.scene.v1"
 }

@@ -11,17 +11,19 @@ import {
   AssetType,
   EnvironmentType,
   LocomotionEnvironment,
-  PanelUI,
   PokeInteractable,
   RayInteractable,
   ScreenSpace,
   SessionMode,
+  UIKitMLAsset,
   World,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
 import { Elevator, ElevatorSystem } from './elevator.js';
-import { SettingsSystem } from './panel.js';
+import {
+  configureWelcomePanel,
+  LocomotionSettingsPanel,
+  SettingsSystem,
+} from './panel.js';
 
 const assets: AssetManifest = {
   switchSound: {
@@ -33,6 +35,16 @@ const assets: AssetManifest = {
     url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
     type: AssetType.GLTF,
     priority: 'critical',
+  },
+  welcomePanel: {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: './ui/welcome.uikitml',
+  },
+  settingsPanel: {
+    name: 'Locomotion settings',
+    type: AssetType.UIKitML,
+    url: './ui/settings.uikitml',
   },
 };
 
@@ -51,11 +63,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   features: {
     grabbing: true,
     locomotion: true,
-    spatialUI: {
-      kits: [horizonKit, { LogInIcon, RectangleGogglesIcon }],
-    },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { camera } = world;
   camera.position.set(-4, 1.5, -6);
   camera.rotateY(-Math.PI * 0.75);
@@ -78,13 +88,10 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     .addComponent(LocomotionEnvironment, { type: EnvironmentType.KINEMATIC });
 
   // Welcome panel (screen-space)
+  const welcomePanelAsset =
+    await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const welcomePanel = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxWidth: 1.8,
-      maxHeight: 1.0,
-    })
+    .createTransformEntity(welcomePanelAsset)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -97,15 +104,15 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
       zOffset: 0.2,
     });
   welcomePanel.object3D!.position.set(0, 1.6, -2);
+  welcomePanel.object3D!.scale.setScalar(0.523);
+  configureWelcomePanel(world, welcomePanelAsset);
 
   // Settings panel (in-world)
+  const settingsPanelAsset =
+    await world.assets.instantiate<UIKitMLAsset>('settingsPanel');
   const settingsPanel = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/settings.json',
-      maxWidth: 1.8,
-      maxHeight: 1.0,
-    })
+    .createTransformEntity(settingsPanelAsset)
+    .addComponent(LocomotionSettingsPanel)
     .addComponent(RayInteractable);
   settingsPanel.object3D!.position.set(0, 1.182, 1.856);
   settingsPanel.object3D!.rotateY(Math.PI);

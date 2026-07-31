@@ -73,7 +73,7 @@ For application code:
 2. Modify code
 3. browser_reload_page
 4. browser_get_console_logs
-5. browser_screenshot with an explicit target
+5. browser_screenshot (always captures the application runtime)
 6. Compare the visible result against the requirement
 ```
 

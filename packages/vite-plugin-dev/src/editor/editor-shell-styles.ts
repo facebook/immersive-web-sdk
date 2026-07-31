@@ -795,6 +795,10 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         width: 100%;
       }
 
+      [data-asset-kind="uikitml"] .asset-catalog-thumb img {
+        object-fit: contain;
+      }
+
       .asset-catalog-thumb .lucide-icon {
         color: #b9cfff;
         height: 14px;

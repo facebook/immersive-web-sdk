@@ -17,19 +17,13 @@ import {
   World,
   AudioSource,
   RayInteractable,
-  PanelUI,
   ScreenSpace,
   PokeInteractable,
+  UIKitMLAsset,
   EnvironmentType,
   LocomotionEnvironment,
 } from '@iwsdk/core';
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import {
-  LogInIcon,
-  RectangleGogglesIcon,
-  MousePointerClickIcon,
-} from '@pmndrs/uikit-lucide';
-import { PanelSystem } from './panel.js';
+import { configureWelcomePanel } from './panel.js';
 import { Robot } from './robot.js';
 import { RobotSystem } from './robot.js';
 
@@ -54,6 +48,11 @@ const assets: AssetManifest = {
     type: AssetType.GLTF,
     priority: 'critical',
   },
+  welcomePanel: {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: './ui/welcome.uikitml',
+  },
 };
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
@@ -69,14 +68,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     grabbing: true,
     physics: false,
     sceneUnderstanding: false,
-    spatialUI: {
-      kits: [
-        horizonKit,
-        { LogInIcon, RectangleGogglesIcon, MousePointerClickIcon },
-      ],
-    },
+    spatialUI: true,
   },
-}).then((world) => {
+}).then(async (world) => {
   const { camera } = world;
 
   camera.position.set(-4, 1.5, -6);
@@ -101,13 +95,9 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     .addComponent(Robot)
     .addComponent(AudioSource, { src: './audio/chime.mp3' });
 
+  const panel = await world.assets.instantiate<UIKitMLAsset>('welcomePanel');
   const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: './ui/welcome.json',
-      maxHeight: 0.4,
-      maxWidth: 0.5,
-    })
+    .createTransformEntity(panel)
     .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
@@ -118,6 +108,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     })
     .addComponent(AudioSource, { src: './audio/chime.mp3' });
   panelEntity.object3D!.position.set(0, 1.5, -1.4);
+  panelEntity.object3D!.scale.setScalar(0.145);
 
   const webxrLogoTexture = AssetManager.getTexture('webxr')!;
   webxrLogoTexture.colorSpace = SRGBColorSpace;
@@ -132,5 +123,6 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   logoBanner.position.set(0, 1, 1.8);
   logoBanner.rotateY(Math.PI);
 
-  world.registerSystem(PanelSystem).registerSystem(RobotSystem);
+  configureWelcomePanel(world, panel, panelEntity);
+  world.registerSystem(RobotSystem);
 });

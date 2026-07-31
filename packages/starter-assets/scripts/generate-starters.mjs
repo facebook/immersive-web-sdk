@@ -351,14 +351,14 @@ async function generateTsVariant(v) {
     await removeIfExists(path.join(dest, 'src', 'mouselook.ts'));
     await removeIfExists(path.join(dest, 'src', 'robot.ts'));
     await removeIfExists(path.join(dest, 'src', 'robot-component.ts'));
-    await removeIfExists(path.join(dest, 'ui', 'welcome.uikitml'));
+    await removeIfExists(path.join(dest, 'public', 'ui', 'welcome.uikitml'));
     await removeIfExists(path.join(dest, 'public', 'audio'));
     await removeIfExists(path.join(dest, 'public', 'textures'));
   } else {
     await removeIfExists(path.join(dest, 'src', 'mouselook.ts'));
   }
   if (mode !== 'browser') {
-    const welcomePath = path.join(dest, 'ui', 'welcome.uikitml');
+    const welcomePath = path.join(dest, 'public', 'ui', 'welcome.uikitml');
     const welcomeTemplate = await fsp.readFile(welcomePath, 'utf8');
     await fsp.writeFile(
       welcomePath,

@@ -8,7 +8,7 @@
       "id": "table-1",
       "index": 12,
       "panelUI": {
-        "config": "updated-panel.json",
+        "config": "updated-panel.uikitml",
         "maxHeight": 1,
         "maxWidth": 2
       },

@@ -28,7 +28,7 @@ Great spatial interfaces follow these principles:
 
 ## Introduction to Building Spatial User Interfaces in IWSDK
 
-The unavailability of HTML in WebXR has been a big challenge for developers, since manually placing user interface elements is very cumbersome. That's why IWSDK uses [pmndrs/uikit](https://pmndrs.github.io/uikit/docs/), a GPU-accelerated UI rendering system that provides an API aligned with HTML and CSS, allowing developers to feel right at home. To make UI authoring even more natural, IWSDK uses the [uikitml](https://github.com/pmndrs/uikitml) language, which allows developers to write user interfaces using an HTML-like syntax, including features such as CSS classes. This integration allows IWSDK developers to reuse their HTML knowledge to quickly build high-performance, GPU-accelerated user interfaces for WebXR. Furthermore, IWSDK makes use of the pre-built component collections offered by the uikit project: the Default Kit (based on shadcn) and the Horizon Kit (based on the Reality Labs Design System).
+The unavailability of HTML in WebXR has been a big challenge for developers, since manually placing user interface elements is very cumbersome. IWSDK uses [pmndrs/uikit](https://pmndrs.github.io/uikit/docs/), a GPU-accelerated UI rendering system with familiar HTML and CSS concepts, together with [`@drawcall/uikitml`](https://www.npmjs.com/package/@drawcall/uikitml) for strict declarative authoring. IWSDK fetches and parses `.uikitml` source directly at runtime, so the file you edit is the file the application loads.
 
 ### Key Features
 
@@ -44,37 +44,22 @@ UIKitML uses HTML-style markup with CSS properties for styling and layouting:
 
 ```html
 <!-- Basic panel with text -->
-<div class="panel" style="width: 400; height:300; background-color: #2a2a2a">
-  <text style="fontSize:24px; color: white">Hello WebXR!</text>
+<div class="panel" style="width: 400; height: 300; background-color: #2a2a2a">
+  <h1 style="font-size: 24px; color: white">Hello WebXR!</h1>
   <button>Click Me</button>
-</panel>
+</div>
 ```
 
 ## Setting Up UIKitML with IWSDK
 
-### Vite Plugin Configuration
+### Direct Runtime Assets
 
-IWSDK includes a Vite plugin that compiles UIKitML files:
-
-```typescript
-// vite.config.js
-import { defineConfig } from 'vite';
-import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
-
-export default defineConfig({
-  plugins: [
-    compileUIKit({
-      sourceDir: 'ui', // Directory containing .uikitml files
-      outputDir: 'public/ui', // Where compiled .json files are written
-      verbose: true, // Enable build logging
-    }),
-  ],
-});
-```
+Put UIKitML files under `public/ui`. Vite serves and ships these files like
+other public assets; no UIKitML Vite plugin or generated JSON is required.
 
 ### Creating Your First UIKitML File
 
-Create `src/ui/main-menu.uikitml` and insert the following content, which uses the Panel, Button, ButtonIcon, and LoginIcon components from the Horizon Kit to design a panel with a button:
+Create `public/ui/main-menu.uikitml` and insert the following content, which uses Horizon and Lucide components included by IWSDK:
 
 ```html
 <style>
@@ -87,7 +72,7 @@ Create `src/ui/main-menu.uikitml` and insert the following content, which uses t
 <Panel class="panel-root">
   <button id="xr-button">
     <ButtonIcon>
-      <LoginIcon></LoginIcon>
+      <LogIn />
     </ButtonIcon>
     Enter XR
   </button>
@@ -102,79 +87,71 @@ We can add our `panelWithButton` uikitml user interface to our IWSDK scene using
 export class PanelSystem extends createSystem({
   panelWithButton: {
     required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', '/ui/main-menu.json')],
+    where: [eq(PanelUI, 'config', '/ui/main-menu.uikitml')],
   },
 }) {}
 ```
 
+### Loading a TTF Font
+
+Declare runtime fonts inside the UIKitML file. Relative URLs are resolved from
+that file's location:
+
+```html
+<style>
+  @font-face {
+    font-family: 'Brand Sans';
+    src: url('./fonts/BrandSans-Regular.ttf');
+    font-weight: 400;
+  }
+
+  .title {
+    font-family: 'Brand Sans';
+    font-weight: 400;
+  }
+</style>
+
+<h1 class="title">Spatial UI</h1>
+```
+
+For `public/ui/main-menu.uikitml`, this example loads
+`public/ui/fonts/BrandSans-Regular.ttf`.
+
 ### Component Kits
 
-Component kits provide pre-built UI components like buttons, panels, inputs, and icons. IWSDK supports multiple kits that can be combined in your application.
+Component sets provide pre-built UI components like buttons, panels, inputs, and icons. IWSDK's default `horizon` kit includes Horizon components and Lucide icons; applications do not import those packages individually.
 
 #### Available Component Kits
 
-- **`@pmndrs/uikit-horizon`** - Reality Labs design system (buttons, panels, inputs)
-- **`@pmndrs/uikit-lucide`** - Icon library with 1000+ icons
-- **`@pmndrs/uikit-default`** - Default kit based on shadcn design system
+- **`horizon`** - HTML-like elements, Lucide icons, and Horizon components such as `Panel` and `Button` (default)
+- **`default`** - HTML-like elements and Lucide icons
 
 #### Basic Kit Configuration
 
-Configure kits in the `spatialUI` feature when creating your world:
+Enable spatial UI with the default Horizon collection:
 
 ```typescript
-import * as horizonKit from '@pmndrs/uikit-horizon';
-
 World.create(document.getElementById('scene-container'), {
   features: {
-    spatialUI: {
-      kits: [horizonKit],
-    },
+    spatialUI: true,
   },
 });
 ```
 
-#### Combining Multiple Kits
+#### Custom Component Sets
 
-You can use components from multiple kits by passing them as an array:
+Pass typed custom component definitions when an application needs its own tags:
 
 ```typescript
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import * as defaultKit from '@pmndrs/uikit-default';
-
 World.create(document.getElementById('scene-container'), {
   features: {
     spatialUI: {
-      kits: [horizonKit, defaultKit],
+      kit: 'horizon',
+      componentSets: [applicationComponents],
     },
   },
 });
 ```
-
-#### Optimizing Bundle Size with Selective Imports
-
-For large icon libraries like `@pmndrs/uikit-lucide` (which contains over 1000 icons), importing the entire package can significantly increase your bundle size. Instead, import only the icons you need:
-
-```typescript
-import * as horizonKit from '@pmndrs/uikit-horizon';
-import {
-  LogInIcon,
-  RectangleGogglesIcon,
-  SettingsIcon,
-} from '@pmndrs/uikit-lucide';
-
-World.create(document.getElementById('scene-container'), {
-  features: {
-    spatialUI: {
-      kits: [
-        horizonKit,
-        { LogInIcon, RectangleGogglesIcon, SettingsIcon }, // Only these icons
-      ],
-    },
-  },
-});
-```
-
-This technique works with any kit component - just import what you need and pass it as an object in the kits array.
 
 ## Color Scheme & Theming
 
@@ -330,7 +307,7 @@ In addition to these elements, developers can also use the installed kits.
 ```html
 <button id="xr-button">
   <ButtonIcon>
-    <LoginIcon></LoginIcon>
+    <LogIn />
   </ButtonIcon>
   Enter XR
 </button>
@@ -423,7 +400,7 @@ UIKitML provides an event system for handling user interactions:
 export class PanelSystem extends createSystem({
   welcomePanel: {
     required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', '/ui/main-menu.json')],
+    where: [eq(PanelUI, 'config', '/ui/main-menu.uikitml')],
   },
 }) {
   init() {

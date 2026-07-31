@@ -5,41 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  createSystem,
-  eq,
-  PanelDocument,
-  PanelUI,
-  VisibilityState,
-} from '@iwsdk/core';
+import { UIKitMLAsset, VisibilityState, World } from '@iwsdk/core';
 
-export class SettingsSystem extends createSystem({
-  configuredPanels: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', './ui/welcome.json')],
-  },
-}) {
-  init() {
-    this.queries.configuredPanels.subscribe('qualify', (entity) => {
-      const document = (PanelDocument as any).data.document[entity.index];
-      if (!document) {
-        return;
-      }
+export function configureWelcomePanel(world: World, panel: UIKitMLAsset): void {
+  const xrButton = panel.requireElementById('xr-button');
+  xrButton.addEventListener('click', () => world.launchXR());
 
-      const xrButton = document.getElementById('xr-button');
-      xrButton.addEventListener('click', () => {
-        this.world.launchXR();
-      });
+  const exitButton = panel.requireElementById('exit-button');
+  exitButton.addEventListener('click', () => world.exitXR());
 
-      const exitButton = document.getElementById('exit-button');
-      exitButton.addEventListener('click', () => {
-        this.world.exitXR();
-      });
-      this.world.visibilityState.subscribe((visibilityState) => {
-        const is2D = visibilityState === VisibilityState.NonImmersive;
-        xrButton.setProperties({ display: is2D ? 'flex' : 'none' });
-        exitButton.setProperties({ display: is2D ? 'none' : 'flex' });
-      });
-    });
-  }
+  world.visibilityState.subscribe((visibilityState) => {
+    const is2D = visibilityState === VisibilityState.NonImmersive;
+    xrButton.setProperties({ display: is2D ? 'flex' : 'none' });
+    exitButton.setProperties({ display: is2D ? 'none' : 'flex' });
+  });
 }

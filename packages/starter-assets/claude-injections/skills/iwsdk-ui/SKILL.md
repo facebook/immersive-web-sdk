@@ -1,100 +1,181 @@
 ---
 name: iwsdk-ui
-description: Develop and iterate on IWSDK PanelUI components. Use when the user wants to create, modify, debug, or improve UI panels in their IWSDK application. Covers UIKITML editing, full-screen preview with ScreenSpace, and visual verification.
+description: Create, place, preview, debug, and connect manifest-backed IWSDK UIKitML assets. Use for spatial panels, browser HUDs, UIKitML layout, fonts, editor previews, or runtime element behavior.
 argument-hint: [panel-name or description of changes]
 ---
 
-# UI Panel Development
+# UIKitML Asset Workflow
 
-Efficiently develop and iterate on IWSDK PanelUI panels using ScreenSpace for full-screen 2D preview. The workflow has a **required core** (setup for iteration) and **optional extensions** (the actual UI work, driven by user intent).
+Treat UIKitML as a first-class renderable asset. Use the managed editor's isolated
+renderer for layout, the scene editor for placement, and the application runtime for
+behavior. Do not change the scene, camera, or component model merely to inspect a
+panel.
 
 User request is in `$ARGUMENTS`.
 
-## Required Core
+## 1. Find the three stable identities
 
-### Step 1: Identify the panel
+Every scene-authored panel has three different identities:
 
-Find the panel entity and its UIKITML source file.
+1. the manifest asset ID, which names the reusable UIKitML definition;
+2. the scene node ID, which names one placed instance;
+3. element `id` attributes, which name fields and controls inside the document.
 
-- Panel entities have the `PanelUI` component. Use `ecs_find_entities` with `withComponents: ["PanelUI"]` to find them.
-- Read the `PanelUI` component's `config` field with `ecs_query_entity` to find the JSON path (e.g., `./ui/welcome.json`).
-- The UIKITML source lives in `ui/` with the same name but `.uikitml` extension (e.g., `ui/welcome.uikitml`).
+Find or add the manifest entry in `src/assets.ts` and keep the source under
+`public/ui/`:
 
-### Step 2: Set up full-screen preview
+```ts
+import { AssetType, type AssetManifest } from '@iwsdk/core';
 
-The ScreenSpace component positions a panel in front of the camera so it appears as a 2D UI — ideal for fast iteration.
+const assets = {
+  'welcome-panel': {
+    name: 'Welcome panel',
+    type: AssetType.UIKitML,
+    url: '/ui/welcome.uikitml',
+  },
+} satisfies AssetManifest;
 
-**If the entity already has ScreenSpace:** Note the current settings so they can be restored later.
-
+export default assets;
 ```
-ecs_query_entity(entityIndex, components: ["ScreenSpace"]) → save the values
+
+A file under `public/ui/` is not placeable until it is registered. The `.uikitml`
+file is the runtime source of truth; never generate an intermediate JSON file.
+
+## 2. Reuse the managed editor
+
+Run commands from the application directory. Reuse a command-ready session instead
+of starting a second server or browser:
+
+```bash
+npx iwsdk dev status
+npx iwsdk dev up --timeout 60000
+npx iwsdk ui assets --raw
 ```
 
-**If the entity does not have ScreenSpace:** You will need to add it in code.
+`dev up` owns the managed headed browser. Do not launch a second Playwright browser,
+enable Vite's independent opener, or implement a custom UIKit renderer.
 
-Either way, set ScreenSpace to fill the entire viewport in code:
+## 3. Render the panel in isolation
 
-```typescript
-.addComponent(ScreenSpace, {
-  top: "0px",
-  left: "0px",
-  width: "100vw",
-  height: "100vh",
+Use the editor-backed isolated renderer before debugging scene placement:
+
+```bash
+npx iwsdk ui render-preview \
+  --input-json '{"assetId":"welcome-panel","width":800,"height":600}' \
+  --output-file artifacts/welcome-panel.png
+```
+
+This renders the real manifest entry through the real UIKitML parser, fonts, layout,
+and WebGL path on a neutral background. It waits for UIKit render and resource
+signals; do not add fixed frame delays. Re-run the command after every layout change.
+Same-URL sources are reloaded without restarting the server.
+
+## 4. Place and inspect it in the scene editor
+
+For a human-authored placement, open the scene and add the UIKitML asset from the
+asset drawer. For file authoring, use the same asset-only node contract:
+
+```json
+{
+  "id": "welcome-panel-instance",
+  "name": "Welcome panel",
+  "content": { "type": "asset", "asset": "welcome-panel" },
+  "transform": {
+    "position": [0, 1.4, -1.5],
+    "rotationDeg": [0, 180, 0],
+    "scale": 0.5
+  }
+}
+```
+
+```bash
+npx iwsdk scene render-file \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
+  --output-file artifacts/main-editor.png
+npx iwsdk scene open \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
+```
+
+UIKitML surfaces are single-sided. If the isolated preview works but the placed panel
+is invisible, inspect its rotation first. Size a world-space panel with its ordinary
+entity transform scale. There is no `maxWidth`/`maxHeight` fitting layer and no
+editor-visible `PanelUI` component to configure.
+
+Use `scene screenshot` for editor/scene evidence. `browser screenshot` is intentionally
+runtime-only and switches the managed workspace to runtime before capturing.
+
+## 5. Edit UIKitML
+
+UIKitML is HTML/CSS-shaped, but it is not a browser engine. Before assuming browser
+behavior, use `npx iwsdk reference search` or the connected IWSDK reference tools to
+confirm supported elements and properties.
+
+Key rules:
+
+- numeric UIKit sizes are centimeters (`100` = 100 cm = 1 m);
+- use stable `id` attributes for elements application code must manipulate;
+- prefer explicit supported declarations over CSS shorthand;
+- parser errors include source locations;
+- relative and remote font URLs are supported, but font completion can change layout;
+- the managed preview settles from UIKit render/font/texture signals, so inspect logs
+  instead of compensating with arbitrary waits.
+
+After each edit:
+
+1. rerender with `ui render-preview` and inspect the image;
+2. rerender the scene when placement or scale matters;
+3. inspect `browser logs` for parser, font, texture, or runtime failures.
+
+## 6. Connect runtime behavior
+
+For a code-owned instance, keep the `UIKitMLAsset` returned by the asset manager:
+
+```ts
+import { UIKit, UIKitMLAsset } from '@iwsdk/core';
+
+const panel = await world.assets.instantiate<UIKitMLAsset>('welcome-panel');
+const entity = world.createTransformEntity(panel);
+const button = panel.requireElementById<UIKit.Text>('xr-button');
+button.addEventListener('click', () => world.launchXR());
+```
+
+For a scene-authored instance, resolve it by stable scene node ID after the level has
+loaded:
+
+```ts
+const panel = world.requireSceneObject<UIKitMLAsset>('welcome-panel-instance');
+const button = panel.requireElementById<UIKit.Text>('xr-button');
+button.setProperties({ text: 'Enter XR' });
+```
+
+Do not locate a panel by transient ECS index, manifest URL, or a scan for an internal
+`PanelDocument`. Use the scene node ID and element IDs.
+
+## ScreenSpace is product behavior
+
+Add `ScreenSpace` only when the experience genuinely needs a browser-camera HUD:
+
+```ts
+entity.addComponent(ScreenSpace, {
+  width: '420px',
+  height: '240px',
+  top: '20px',
+  right: '20px',
+  zOffset: 0.2,
 });
 ```
 
-Setting this in code (not via `ecs_set_component`) ensures it persists across hot reloads.
+Position and size values are CSS strings. In immersive mode the document returns to
+its authored world transform. Do not add `ScreenSpace`, a backdrop, or a temporary
+camera pose merely to make a panel easier to inspect—the editor already provides the
+correct isolated and in-scene render paths.
 
-### Step 3: Verify setup
+## Completion checklist
 
-Take a `browser_screenshot` to confirm the panel fills the screen and is ready for iteration.
-
-## UI Editing
-
-This is where the user's request drives the work. Edit the `.uikitml` file in `ui/`.
-
-### Key facts about UIKITML
-
-- UIKITML is a **subset of HTML**, not all syntax is supported.
-- **Before writing markup**, use `mcp__iwsdk-reference__search_code` to query for supported UIKITML element types and CSS properties. Search for things like "uikitml interpret container text" or specific element types you need.
-- Supported selectors: `#id` and `.class` (via PanelDocument's `querySelector`).
-- Units are in **centimeters** (e.g., `width: 50` = 50cm). World space uses meters. `100cm = 1m`.
-- The source of truth is the `.uikitml` file. Changes are auto-compiled by the vite plugin and hot-reloaded.
-- The compiled `.json` file in `public/ui/` should **never be modified directly**, but can be read for quick debugging to inspect the compiled element tree, class definitions, and properties.
-
-### Verify changes
-
-After each edit to the `.uikitml` file:
-
-1. Wait a moment for the vite plugin to compile and hot-reload.
-2. Take a `browser_screenshot` to visually verify the change.
-3. If needed, read the compiled JSON (`public/ui/<name>.json`) to debug layout issues or inspect computed properties.
-
-Repeat the edit-screenshot cycle as needed.
-
-## Cleanup (Required)
-
-When done with UI work, **always** restore the ScreenSpace component to its original state.
-
-**If it had ScreenSpace before:** Restore the original values that were noted in Step 2.
-
-```typescript
-// Restore original settings
-.addComponent(ScreenSpace, {
-  top: "20px",
-  left: "20px",
-  height: "40%",
-  // ... whatever was noted
-});
-```
-
-**If it did not have ScreenSpace before:** Remove the ScreenSpace component addition from code.
-
-Take a final `browser_screenshot` to confirm the panel is back to its normal state.
-
-## Notes
-
-- **Always edit `.uikitml`, never the compiled `.json`** — the JSON is auto-generated and will be overwritten.
-- **ScreenSpace behavior in VR:** When entering VR, ScreenSpace automatically detaches the panel from the camera and it returns to world-space positioning. This is handled by the ScreenSpaceUISystem.
-- **PanelDocument for element access:** Use `getElementById(id)` or `querySelector(selector)` on the PanelDocument to access UI elements programmatically in systems. Elements can be named with `.name = "id"` to make them discoverable in the scene hierarchy.
-- **ScreenSpace uses CSS strings, not numbers** — always pass string values like `"400px"`, `"100vw"`, `"20px"`.
+- Manifest ID resolves and `ui assets` lists it.
+- Isolated preview is nonblank, correctly laid out, and uses the intended fonts.
+- Scene preview has correct facing, transform scale, and lighting-independent color.
+- Runtime behavior resolves the placed node and required element IDs.
+- Browser logs contain no UIKitML parser, resource, or font errors.
+- No generated UI JSON, temporary ScreenSpace component, backdrop, or camera hack
+  remains.

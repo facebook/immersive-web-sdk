@@ -93,6 +93,9 @@ import {
   PanelUI,
   PanelUISystem,
   ColorScheme,
+  UIKitMLComponentSet,
+  UIKitMLKit,
+  loadUIKitMLAsset,
 } from '../ui/index.js';
 import { Visibility, VisibilitySystem } from '../visibility/index.js';
 import { attachBrowserCameraRestore } from './browser-camera.js';
@@ -193,7 +196,10 @@ export type WorldOptions = {
       | {
           /** @deprecated Use `input.canvasPointerEvents` instead. */
           forwardHtmlEvents?: boolean;
-          kits?: Array<Record<string, unknown>> | Record<string, unknown>;
+          /** Built-in UIKitML component collection. @defaultValue 'horizon' */
+          kit?: UIKitMLKit;
+          /** Additional application-defined UIKitML component definitions. */
+          componentSets?: UIKitMLComponentSet[];
           preferredColorScheme?: ColorScheme;
         };
   };
@@ -284,20 +290,22 @@ export async function initializeWorld(
   }
 
   // Return promise that resolves after asset preloading
-  return finalizeInitialization(world, options.assets).then(async (w) => {
-    // Load initial level or create empty level
-    const levelUrl =
-      typeof options.level === 'string' ? options.level : options.level?.url;
-    if (levelUrl) {
-      await w.loadLevel(levelUrl);
-    } else {
-      await w.loadLevel();
-    }
-    if (config.xr.offer && config.xr.offer !== 'none') {
-      manageOfferFlow(w, config.xr.offer);
-    }
-    return w;
-  });
+  return finalizeInitialization(world, options.assets, config).then(
+    async (w) => {
+      // Load initial level or create empty level
+      const levelUrl =
+        typeof options.level === 'string' ? options.level : options.level?.url;
+      if (levelUrl) {
+        await w.loadLevel(levelUrl);
+      } else {
+        await w.loadLevel();
+      }
+      if (config.xr.offer && config.xr.offer !== 'none') {
+        manageOfferFlow(w, config.xr.offer);
+      }
+      return w;
+    },
+  );
 }
 
 /**
@@ -682,7 +690,8 @@ async function registerFeatureSystems(
     | boolean
     | {
         forwardHtmlEvents?: boolean;
-        kits?: any;
+        kit?: UIKitMLKit;
+        componentSets?: UIKitMLComponentSet[];
         preferredColorScheme?: ColorScheme;
       };
   const spatialUIEnabled = !!spatialUI;
@@ -788,11 +797,12 @@ async function registerFeatureSystems(
 
   // Spatial UI systems (Panel, ScreenSpace, Follow)
   if (spatialUIEnabled) {
-    const kitsVal =
-      typeof spatialUI === 'object' && spatialUI ? spatialUI.kits : undefined;
-    const kitsObj = Array.isArray(kitsVal)
-      ? Object.assign({}, ...(kitsVal as Array<Record<string, unknown>>))
-      : kitsVal;
+    const kit =
+      typeof spatialUI === 'object' && spatialUI ? spatialUI.kit : undefined;
+    const componentSets =
+      typeof spatialUI === 'object' && spatialUI
+        ? spatialUI.componentSets
+        : undefined;
     const preferredColorScheme =
       typeof spatialUI === 'object' && spatialUI
         ? spatialUI.preferredColorScheme
@@ -806,7 +816,8 @@ async function registerFeatureSystems(
         // Keep UIKit document updates ahead of screen-space layout publishing.
         priority: -3.8,
         configData: {
-          ...(kitsObj ? { kits: kitsObj } : {}),
+          ...(kit ? { kit } : {}),
+          ...(componentSets ? { componentSets } : {}),
           ...(preferredColorScheme !== undefined
             ? { preferredColorScheme }
             : {}),
@@ -881,8 +892,29 @@ function setupResizeHandling(
 function finalizeInitialization(
   world: World,
   assets?: AssetManifest,
+  config?: ReturnType<typeof extractConfiguration>,
 ): Promise<World> {
-  world.assets = new RenderableAssetRegistry(assets);
+  const spatialUI = config?.features.spatialUI;
+  world.assets = new RenderableAssetRegistry(assets, {
+    ...(spatialUI
+      ? {
+          instantiateUIKitML: async (assetId: string) => {
+            const options = typeof spatialUI === 'object' ? spatialUI : {};
+            const asset = await loadUIKitMLAsset(assetId, {
+              ...(options.kit ? { kit: options.kit } : {}),
+              ...(options.componentSets
+                ? { componentSets: options.componentSets }
+                : {}),
+              ...(options.preferredColorScheme !== undefined
+                ? { preferredColorScheme: options.preferredColorScheme }
+                : {}),
+            });
+            asset.userData.iwsdkDisposeAsset = () => asset.dispose();
+            return asset;
+          },
+        }
+      : {}),
+  });
   return world.assets.preload().then(() => world);
 }
 

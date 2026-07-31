@@ -428,9 +428,11 @@ let applyScenePatch;
 let Box3;
 let Box3Helper;
 let BoxGeometry;
+let CanvasTexture;
 let Color;
 let ComponentRegistry;
 let componentCatalogFromComponents;
+let configureUIKitRenderer;
 let disposeLoweredSceneNodes;
 let ConeGeometry;
 let CylinderGeometry;
@@ -452,12 +454,16 @@ let MeshBasicMaterial;
 let MeshStandardMaterial;
 let OrthographicCamera;
 let PerspectiveCamera;
+let PlaneGeometry;
 let Raycaster;
 let restoreSceneEnvironment;
 let Scene;
 let SphereGeometry;
+let SRGBColorSpace;
 let Types;
+let UIKitDocument;
 let IWSDK_BUILTIN_COMPONENTS;
+let loadUIKitMLComponent;
 let validateSceneReviewAgainstDocument;
 let Vector2;
 let Vector3;
@@ -467,6 +473,9 @@ let World;
 let workspaceUi = null;
 let editorAssetManifest = {};
 let editorComponentManifest = [];
+let editorPanelPreviewRendererState = null;
+let editorPanelPreviewRenderQueue = Promise.resolve();
+const editorPanelFrameSchedulers = new WeakMap();
 
 async function loadEditorRuntimeDependencies() {
   const [
@@ -509,9 +518,11 @@ async function loadEditorRuntimeDependencies() {
     Box3,
     Box3Helper,
     BoxGeometry,
+    CanvasTexture,
     Color,
     ComponentRegistry,
     componentCatalogFromComponents,
+    configureUIKitRenderer,
     disposeLoweredSceneNodes,
     ConeGeometry,
     CylinderGeometry,
@@ -530,12 +541,16 @@ async function loadEditorRuntimeDependencies() {
     MeshStandardMaterial,
     OrthographicCamera,
     PerspectiveCamera,
+    PlaneGeometry,
     Raycaster,
     restoreSceneEnvironment,
     Scene,
     SphereGeometry,
+    SRGBColorSpace,
     Types,
+    UIKitDocument,
     IWSDK_BUILTIN_COMPONENTS,
+    loadUIKitMLComponent,
     Vector2,
     Vector3,
     WebGLRenderer,
@@ -589,6 +604,7 @@ let sceneFileReloadState = {
 let workspaceScenePath = initialWorkspaceRoute.scenePath;
 const assetThumbnailCache = new Map();
 const assetThumbnailFailures = new Set();
+const assetPanelNaturalSizeCache = new Map();
 let assetThumbnailGeneration = null;
 let runtimeDispatch = async () => {
   throw new Error('Scene editor runtime is still loading');
@@ -1056,7 +1072,10 @@ async function renderSceneFile(session, params = {}) {
   const temporarySession = new SceneEditorSession({
     componentCatalog: runtimeComponentCatalog(),
     document: loaded.document,
-    listAssets: () => editorWorldState?.world?.assets?.list?.() || [],
+    listAssets: () =>
+      editorWorldState?.world?.assets?.catalog?.() ||
+      editorWorldState?.world?.assets?.list?.() ||
+      [],
     resolveAssetBounds: (assetId) =>
       editorWorldState?.world?.assets?.bounds?.(assetId),
   });
@@ -1086,7 +1105,10 @@ async function renderSceneFile(session, params = {}) {
     }
     restoreCaptureState = beginRenderOnlyCapture();
     editorWorldState.currentSession = temporarySession;
-    await scheduleEditorSceneLowering(temporarySession);
+    // A detached render is also an explicit request to re-evaluate external
+    // assets. The scene JSON may be unchanged while a same-URL UIKitML source
+    // (or another manifest-backed resource) changed on disk.
+    await scheduleEditorSceneLowering(temporarySession, { force: true });
     renderCanvas(temporarySession, camera, { height, width });
     await waitForAssetLoads();
     renderCanvas(temporarySession, camera, { height, width });
@@ -2704,7 +2726,11 @@ function sceneResources(documentValue) {
 }
 
 function sceneAssets(documentValue) {
-  return editorWorldState?.world?.assets?.list?.() || [];
+  return (
+    editorWorldState?.world?.assets?.catalog?.() ||
+    editorWorldState?.world?.assets?.list?.() ||
+    []
+  );
 }
 
 function catalogSceneAssets(documentValue) {
@@ -2750,6 +2776,7 @@ async function generateAssetThumbnails(assets, documentValue) {
   });
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
+  renderer.localClippingEnabled = true;
 
   const thumbnailScene = new Scene();
   thumbnailScene.background = new Color('#202226');
@@ -2764,37 +2791,52 @@ async function generateAssetThumbnails(assets, documentValue) {
       const asset = assets[index];
       let frame = null;
       try {
-        const object = await editorWorldState.world.assets.instantiate(asset.id);
-        frame = new Group();
-        frame.add(object);
-        thumbnailScene.add(frame);
-        object.updateMatrixWorld(true);
-        const bounds = new Box3().setFromObject(object);
-        if (bounds.isEmpty()) {
-          throw new Error(
-            'Renderable asset "' + asset.id + '" has empty bounds',
+        if (asset.kind === 'uikitml') {
+          const preview = await renderEditorPanelCanvas(asset.id, {
+            background: '#202226',
+            height,
+            width,
+          });
+          assetPanelNaturalSizeCache.set(asset.id, {
+            height: preview.worldHeight,
+            width: preview.worldWidth,
+          });
+          assetThumbnailCache.set(asset.id, preview.dataURL);
+        } else {
+          const object = await editorWorldState.world.assets.instantiate(
+            asset.id,
           );
-        }
-        const center = new Vector3();
-        const size = new Vector3();
-        bounds.getCenter(center);
-        bounds.getSize(size);
-        frame.position.copy(center).multiplyScalar(-1);
-        frame.updateMatrixWorld(true);
+          frame = new Group();
+          frame.add(object);
+          thumbnailScene.add(frame);
+          object.updateMatrixWorld(true);
+          const bounds = new Box3().setFromObject(object);
+          if (bounds.isEmpty()) {
+            throw new Error(
+              'Renderable asset "' + asset.id + '" has empty bounds',
+            );
+          }
+          const center = new Vector3();
+          const size = new Vector3();
+          bounds.getCenter(center);
+          bounds.getSize(size);
+          frame.position.copy(center).multiplyScalar(-1);
+          frame.updateMatrixWorld(true);
 
-        const radius = Math.max(size.length() * 0.5, 0.01);
-        const distance =
-          (radius / Math.tan(MathUtils.degToRad(camera.fov * 0.5))) * 1.22;
-        const viewDirection = new Vector3(1.15, 0.82, 1.35).normalize();
-        camera.position.copy(viewDirection).multiplyScalar(distance);
-        camera.near = Math.max(0.001, distance - radius * 2.2);
-        camera.far = distance + radius * 3.5;
-        camera.lookAt(0, 0, 0);
-        camera.updateProjectionMatrix();
-        key.position.set(distance, distance * 1.35, distance * 1.2);
-        fill.position.set(-distance, distance * 0.45, -distance * 0.8);
-        renderer.render(thumbnailScene, camera);
-        assetThumbnailCache.set(asset.id, canvas.toDataURL('image/png'));
+          const radius = Math.max(size.length() * 0.5, 0.01);
+          const distance =
+            (radius / Math.tan(MathUtils.degToRad(camera.fov * 0.5))) * 1.22;
+          const viewDirection = new Vector3(1.15, 0.82, 1.35).normalize();
+          camera.position.copy(viewDirection).multiplyScalar(distance);
+          camera.near = Math.max(0.001, distance - radius * 2.2);
+          camera.far = distance + radius * 3.5;
+          camera.lookAt(0, 0, 0);
+          camera.updateProjectionMatrix();
+          key.position.set(distance, distance * 1.35, distance * 1.2);
+          fill.position.set(-distance, distance * 0.45, -distance * 0.8);
+          renderer.render(thumbnailScene, camera);
+          assetThumbnailCache.set(asset.id, canvas.toDataURL('image/png'));
+        }
       } catch (error) {
         assetThumbnailFailures.add(asset.id);
         console.warn(
@@ -2820,6 +2862,511 @@ async function generateAssetThumbnails(assets, documentValue) {
   }
 }
 
+function sceneComponentScalar(value) {
+  return value && typeof value === 'object' && 'value' in value
+    ? value.value
+    : value;
+}
+
+function panelPropsForNode(node) {
+  const contentAssetId =
+    node?.content?.type === 'asset' ? node.content.asset : null;
+  if (
+    contentAssetId &&
+    sceneAssets(editorWorldState?.currentSession?.document).some(
+      (asset) => asset.id === contentAssetId && asset.kind === 'uikitml',
+    )
+  ) {
+    return { config: contentAssetId };
+  }
+  const components = node?.components || {};
+  const component =
+    components['com.iwsdk.components.PanelUI'] || components.PanelUI;
+  if (!component || typeof component !== 'object') {
+    return null;
+  }
+  const config = sceneComponentScalar(component.config);
+  if (typeof config !== 'string' || config.trim().length === 0) {
+    return null;
+  }
+  return { config };
+}
+
+function resolveEditorPanelConfig(config) {
+  const assets = sceneAssets(editorWorldState?.currentSession?.document);
+  const direct = assets.find(
+    (asset) => asset.kind === 'uikitml' && asset.id === config,
+  );
+  if (direct) {
+    return direct.id;
+  }
+  const appURL = new URL(config, window.location.origin + '/');
+  const manifestAsset = assets.find((asset) => {
+    if (asset.kind !== 'uikitml' || typeof asset.url !== 'string') {
+      return false;
+    }
+    return new URL(asset.url, window.location.origin + '/').href === appURL.href;
+  });
+  return manifestAsset?.id || appURL.href;
+}
+
+async function createEditorPanelDocument(config) {
+  // Authoring previews must reflect the current source file after HMR. Runtime
+  // panels keep the normal asset cache, while the editor deliberately reloads.
+  const rootElement = await loadUIKitMLComponent(config, { forceReload: true });
+  const frameScheduler = createEditorPanelFrameScheduler(rootElement);
+  const document = new UIKitDocument(rootElement);
+  editorPanelFrameSchedulers.set(document, frameScheduler);
+  document.updateMatrixWorld(true);
+  return document;
+}
+
+function createEditorPanelFrameScheduler(rootElement) {
+  const rootContext = rootElement.root?.peek?.() || rootElement.root?.value;
+  if (!rootContext) {
+    throw new Error('UIKitML preview root did not expose a render context');
+  }
+
+  const previousRequestFrame = rootContext.requestFrame;
+  const previousRequestRender = rootContext.requestRender;
+  let frameRequested = true;
+  let wakeRequest = null;
+
+  const markFrameRequested = () => {
+    frameRequested = true;
+    const wake = wakeRequest;
+    wakeRequest = null;
+    wake?.();
+  };
+  const requestFrame = () => {
+    markFrameRequested();
+    previousRequestFrame?.();
+  };
+  const requestRender = () => {
+    // A render requested during update is satisfied by the render immediately
+    // following that update. Requests outside update need another frame.
+    if (!rootContext.isUpdateRunning) {
+      markFrameRequested();
+    }
+    previousRequestRender?.();
+  };
+  rootContext.requestFrame = requestFrame;
+  rootContext.requestRender = requestRender;
+
+  const readinessSignals = [];
+  rootElement.traverse((object) => {
+    if (object.fontSignal?.subscribe) {
+      readinessSignals.push(object.fontSignal);
+    }
+    if (
+      object.texture?.subscribe &&
+      object.properties?.value?.src != null
+    ) {
+      readinessSignals.push(object.texture);
+    }
+  });
+  const unsubscribe = readinessSignals.map((signal) =>
+    signal.subscribe(markFrameRequested),
+  );
+
+  return {
+    consumeFrameRequest: () => {
+      frameRequested = false;
+    },
+    dispose: () => {
+      for (const stop of unsubscribe) {
+        stop();
+      }
+      if (rootContext.requestFrame === requestFrame) {
+        rootContext.requestFrame = previousRequestFrame;
+      }
+      if (rootContext.requestRender === requestRender) {
+        rootContext.requestRender = previousRequestRender;
+      }
+      const wake = wakeRequest;
+      wakeRequest = null;
+      wake?.();
+    },
+    hasFrameRequest: () => frameRequested,
+    resourcesReady: () =>
+      readinessSignals.every((signal) => signal.value != null),
+    waitForFrameRequest: (timeoutMs) => {
+      if (frameRequested) {
+        return Promise.resolve(true);
+      }
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          if (wakeRequest === wake) {
+            wakeRequest = null;
+          }
+          resolve(false);
+        }, timeoutMs);
+        const wake = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        wakeRequest = wake;
+      });
+    },
+  };
+}
+
+function refreshEditorPanelClassLists(document) {
+  document.rootElement.traverse((object) => {
+    if (!object.classList || object.parentContainer?.value == null) {
+      return;
+    }
+    const classes = [...(object.classList.list || [])];
+    if (classes.length > 0) {
+      object.classList.set(...classes);
+    }
+  });
+}
+
+async function settleEditorPanelLayout(document, renderer, scene, camera) {
+  const frameScheduler = editorPanelFrameSchedulers.get(document);
+  const deadline = performance.now() + 5000;
+  while (performance.now() < deadline) {
+    frameScheduler.consumeFrameRequest();
+    document.rootElement.update?.(1 / 60);
+    document.updateMatrixWorld(true);
+    renderer.render(scene, camera);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const size = document.computedSize;
+    if (
+      size?.width > 0 &&
+      size?.height > 0 &&
+      frameScheduler.resourcesReady() &&
+      !frameScheduler.hasFrameRequest()
+    ) {
+      return;
+    }
+
+    if (!frameScheduler.hasFrameRequest()) {
+      const remaining = Math.max(0, deadline - performance.now());
+      if (!(await frameScheduler.waitForFrameRequest(remaining))) {
+        break;
+      }
+    }
+  }
+  throw new Error('UIKitML preview did not reach a render-ready state');
+}
+
+function disposeEditorPanelDocument(document) {
+  editorPanelFrameSchedulers.get(document)?.dispose();
+  editorPanelFrameSchedulers.delete(document);
+  document.removeFromParent();
+  document.dispose?.();
+}
+
+function positivePreviewDimension(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.max(1, Math.min(4096, Math.round(value)))
+    : fallback;
+}
+
+function getEditorPanelPreviewRenderer() {
+  if (editorPanelPreviewRendererState) {
+    return editorPanelPreviewRendererState;
+  }
+  const canvas = document.createElement('canvas');
+  const renderer = new WebGLRenderer({
+    alpha: true,
+    antialias: true,
+    canvas,
+    preserveDrawingBuffer: true,
+  });
+  renderer.setPixelRatio(1);
+  configureUIKitRenderer(renderer);
+  const state = {
+    canvas,
+    contextLossCount: 0,
+    contextLost: false,
+    createdCount: 1,
+    renderCount: 0,
+    renderer,
+  };
+  canvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    state.contextLost = true;
+    state.contextLossCount += 1;
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    state.contextLost = false;
+  });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      renderer.dispose();
+      if (editorPanelPreviewRendererState === state) {
+        editorPanelPreviewRendererState = null;
+      }
+    },
+    { once: true },
+  );
+  editorPanelPreviewRendererState = state;
+  return state;
+}
+
+async function waitForEditorPanelPreviewContext(state) {
+  if (!state.contextLost && !state.renderer.getContext().isContextLost()) {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      state.canvas.removeEventListener('webglcontextrestored', restored);
+      reject(new Error('UIKitML preview WebGL context did not recover'));
+    }, 2000);
+    const restored = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    state.canvas.addEventListener('webglcontextrestored', restored, {
+      once: true,
+    });
+  });
+}
+
+function editorPanelCanvasHasVisibleContent(context, width, height) {
+  const pixels = context.getImageData(0, 0, width, height).data;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] !== 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function renderEditorPanelCanvasExclusive(config, options = {}) {
+  let panelDocument = null;
+  try {
+    let width = positivePreviewDimension(options.width, 512);
+    let height = positivePreviewDimension(options.height, 512);
+    const previewRenderer = getEditorPanelPreviewRenderer();
+    await waitForEditorPanelPreviewContext(previewRenderer);
+    const { canvas: renderCanvas, renderer } = previewRenderer;
+    previewRenderer.renderCount += 1;
+    const transparent = options.transparent === true;
+    renderer.setSize(width, height, false);
+    if (transparent) {
+      renderer.setClearColor(0x000000, 0);
+    }
+
+    const previewScene = new Scene();
+    const background = options.background || '#202226';
+    previewScene.background = transparent ? null : new Color(background);
+    panelDocument = await createEditorPanelDocument(config);
+    previewScene.add(panelDocument);
+    refreshEditorPanelClassLists(panelDocument);
+
+    let camera = new OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1000, 1000);
+    camera.position.set(0, 0, 100);
+    camera.updateProjectionMatrix();
+    await settleEditorPanelLayout(
+      panelDocument,
+      renderer,
+      previewScene,
+      camera,
+    );
+
+    const computedSize = panelDocument.computedSize;
+    if (!computedSize || computedSize.width <= 0 || computedSize.height <= 0) {
+      throw new Error('UIKitML asset "' + config + '" has no computed size');
+    }
+
+    const naturalWidth = computedSize.width / 100;
+    const naturalHeight = computedSize.height / 100;
+    const worldWidth = naturalWidth;
+    const worldHeight = naturalHeight;
+    const contentAspect = worldWidth / worldHeight;
+    if (options.fitContent === true) {
+      if (contentAspect >= 1) {
+        width = 512;
+        height = Math.max(32, Math.round(width / contentAspect));
+      } else {
+        height = 512;
+        width = Math.max(32, Math.round(height * contentAspect));
+      }
+      renderer.setSize(width, height, false);
+    }
+
+    const padding = 1.12;
+    let viewWidth = worldWidth * padding;
+    let viewHeight = worldHeight * padding;
+    const canvasAspect = width / height;
+    if (viewWidth / viewHeight < canvasAspect) {
+      viewWidth = viewHeight * canvasAspect;
+    } else {
+      viewHeight = viewWidth / canvasAspect;
+    }
+    camera = new OrthographicCamera(
+      -viewWidth / 2,
+      viewWidth / 2,
+      viewHeight / 2,
+      -viewHeight / 2,
+      -1000,
+      1000,
+    );
+    camera.position.set(0, 0, 100);
+    camera.updateProjectionMatrix();
+
+    await settleEditorPanelLayout(
+      panelDocument,
+      renderer,
+      previewScene,
+      camera,
+    );
+    renderer.render(previewScene, camera);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not create UIKitML preview canvas');
+    }
+    context.drawImage(renderCanvas, 0, 0);
+    if (
+      previewRenderer.contextLost ||
+      renderer.getContext().isContextLost() ||
+      !editorPanelCanvasHasVisibleContent(context, width, height)
+    ) {
+      throw new Error(
+        'UIKitML preview capture was transparent after a WebGL context interruption',
+      );
+    }
+    return {
+      canvas,
+      computedSize,
+      dataURL: canvas.toDataURL('image/png'),
+      height,
+      viewHeight,
+      viewWidth,
+      width,
+      worldHeight,
+      worldWidth,
+    };
+  } finally {
+    if (panelDocument) {
+      disposeEditorPanelDocument(panelDocument);
+    }
+  }
+}
+
+function renderEditorPanelCanvas(config, options = {}) {
+  const render = () => renderEditorPanelCanvasExclusive(config, options);
+  const result = editorPanelPreviewRenderQueue.then(render, render);
+  editorPanelPreviewRenderQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+function createEditorPanelTexturePreview(preview) {
+  const texture = new CanvasTexture(preview.canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  const material = new MeshBasicMaterial({
+    depthWrite: false,
+    map: texture,
+    toneMapped: false,
+    transparent: true,
+  });
+  const object = new Mesh(
+    new PlaneGeometry(preview.viewWidth, preview.viewHeight),
+    material,
+  );
+  object.name = 'IWSDK PanelUI Preview';
+  object.userData.iwsdkEditorPanelComputedSize = preview.computedSize;
+  object.userData.iwsdkEditorPanelPreview = true;
+  object.userData.iwsdkEditorPanelPreviewKind = 'texture';
+  return object;
+}
+
+function disposeEditorPanelTexturePreview(object) {
+  object.removeFromParent();
+  object.geometry?.dispose?.();
+  const materials = Array.isArray(object.material)
+    ? object.material
+    : [object.material];
+  for (const material of materials) {
+    material?.map?.dispose?.();
+    material?.dispose?.();
+  }
+}
+
+async function materializeEditorPanelPreviews(loweredNodes) {
+  const visit = async (lowered) => {
+    const props = panelPropsForNode(lowered.node);
+    if (props) {
+      try {
+        const preview = await renderEditorPanelCanvas(
+          resolveEditorPanelConfig(props.config),
+          {
+            fitContent: true,
+            transparent: true,
+          },
+        );
+        lowered.object.add(createEditorPanelTexturePreview(preview));
+        delete lowered.object.userData.iwsdkEditorPanelPreviewError;
+      } catch (error) {
+        lowered.object.userData.iwsdkEditorPanelPreviewError = String(
+          error?.message || error,
+        );
+        console.warn(
+          '[IWSDK editor] Could not render PanelUI preview for "' +
+            lowered.id +
+            '"',
+          error,
+        );
+      }
+    }
+    await Promise.all((lowered.children || []).map(visit));
+  };
+  await Promise.all((loweredNodes || []).map(visit));
+}
+
+function disposeEditorPanelPreviews(...loweredNodes) {
+  for (const lowered of loweredNodes) {
+    const previews = [];
+    lowered.object.traverse((object) => {
+      if (object.userData?.iwsdkEditorPanelPreview === true) {
+        previews.push(object);
+      }
+    });
+    previews.forEach(disposeEditorPanelTexturePreview);
+  }
+}
+
+async function renderUIKitMLAssetPreview(assetId, options = {}) {
+  const asset = sceneAssets(editorWorldState?.currentSession?.document).find(
+    (entry) => entry.id === assetId,
+  );
+  if (!asset) {
+    throw new Error('Unknown asset "' + assetId + '"');
+  }
+  if (asset.kind !== 'uikitml') {
+    throw new Error('Asset "' + assetId + '" is not a UIKitML asset');
+  }
+
+  const background = options.background || '#202226';
+  const preview = await renderEditorPanelCanvas(asset.id, {
+    background,
+    height: positivePreviewDimension(options.height, 512),
+    width: positivePreviewDimension(options.width, 512),
+  });
+  return {
+    assetId,
+    background,
+    height: preview.height,
+    imageData: preview.dataURL.split(',')[1] || '',
+    mimeType: 'image/png',
+    width: preview.width,
+  };
+}
+
 function scenePrefabs(documentValue) {
   return sceneResources(documentValue).prefabs || [];
 }
@@ -2843,6 +3390,18 @@ function referencedSceneAssetIds(documentValue) {
   return [...ids];
 }
 
+function editorSceneAssetKind(assetId) {
+  return sceneAssets(editorWorldState?.currentSession?.document).find(
+    (asset) => asset.id === assetId,
+  )?.kind;
+}
+
+function instantiateEditorSceneAsset(assetId) {
+  return editorSceneAssetKind(assetId) === 'uikitml'
+    ? Promise.resolve(new Group())
+    : editorWorldState.world.assets.instantiate(assetId);
+}
+
 function nodeContentKind(node) {
   if (node?.content?.type) {
     return node.content.type;
@@ -2857,6 +3416,33 @@ function nodeAssetId(node) {
   return node?.content?.type === 'asset'
     ? node.content.asset
     : node?.asset || null;
+}
+
+function legacyPanelAssetId(node, assets) {
+  const props = panelPropsForNode(node);
+  if (!props) {
+    return null;
+  }
+  const direct = assets.find(
+    (asset) => asset.kind === 'uikitml' && asset.id === props.config,
+  );
+  if (direct) {
+    return direct.id;
+  }
+  let configURL;
+  try {
+    configURL = new URL(props.config, window.location.origin + '/').href;
+  } catch {
+    return null;
+  }
+  return (
+    assets.find(
+      (asset) =>
+        asset.kind === 'uikitml' &&
+        typeof asset.url === 'string' &&
+        new URL(asset.url, window.location.origin + '/').href === configURL,
+    )?.id || null
+  );
 }
 
 function getAssetBounds(documentValue, assetId) {
@@ -3753,6 +4339,7 @@ function installLoweredEditorScene(documentValue, lowered, key, session) {
     renderEditorWorld();
   } catch (error) {
     detachEditorSceneForSwap();
+    disposeEditorPanelPreviews(...lowered);
     disposeLoweredSceneNodes(...lowered);
     if (replacedEnvironmentState) {
       restoreSceneEnvironment(
@@ -3785,6 +4372,7 @@ function installLoweredEditorScene(documentValue, lowered, key, session) {
     throw error;
   }
   if (previousLowered.length > 0) {
+    disposeEditorPanelPreviews(...previousLowered);
     disposeLoweredSceneNodes(...previousLowered);
   }
 }
@@ -3801,6 +4389,7 @@ function consumeMaterializationFailure(phase) {
 function discardStagedEditorPreview() {
   const staged = editorWorldState?.stagedPreview;
   if (staged?.lowered) {
+    disposeEditorPanelPreviews(...staged.lowered);
     disposeLoweredSceneNodes(...staged.lowered);
   }
   if (editorWorldState) {
@@ -3821,10 +4410,14 @@ async function preloadEditorDocumentResources(documentValue) {
   };
   editorWorldState.stagedPreview = staged;
   for (const assetId of referencedSceneAssetIds(documentValue)) {
-    if (!editorWorldState.world.assets.has(assetId)) {
+    if (!editorWorldState.world.assets.hasAuthoringAsset(assetId)) {
       throw new Error('Scene references unknown manifest asset "' + assetId + '"');
     }
-    await editorWorldState.world.assets.instantiate(assetId);
+    // UIKitML is materialized as an isolated texture preview in editor mode;
+    // the editor world intentionally leaves spatialUI disabled. Conventional
+    // assets still instantiate through the world registry here.
+    const proof = await instantiateEditorSceneAsset(assetId);
+    proof.userData.iwsdkDisposeAsset?.();
     staged.assetProof.set(assetId, {
       assetId,
       loadedAt: Date.now(),
@@ -3846,11 +4439,18 @@ async function instantiateEditorDocumentPreview(documentValue) {
   }
   consumeMaterializationFailure('detached');
   const lowered = await lowerSceneDocumentObjects(documentValue, {
-    loadAsset: (assetId) => editorWorldState.world.assets.instantiate(assetId),
+    loadAsset: instantiateEditorSceneAsset,
     resolveAssetBounds: (assetId) => editorWorldState.world.assets.bounds(assetId),
     useInstancing: true,
   });
-  staged.lowered = lowered;
+  try {
+    await materializeEditorPanelPreviews(lowered);
+    staged.lowered = lowered;
+  } catch (error) {
+    disposeEditorPanelPreviews(...lowered);
+    disposeLoweredSceneNodes(...lowered);
+    throw error;
+  }
 }
 
 function commitEditorDocument(documentValue) {
@@ -3882,17 +4482,21 @@ function rollbackEditorDocument() {
   discardStagedEditorPreview();
 }
 
-function scheduleEditorSceneLowering(session) {
+function scheduleEditorSceneLowering(session, { force = false } = {}) {
   if (!editorWorldState) {
     return Promise.resolve();
   }
   const documentValue = session.document;
   const key = JSON.stringify(documentValue);
-  if (editorWorldState.loweredDocumentKey === key) {
+  if (!force && editorWorldState.loweredDocumentKey === key) {
     applyEditorReviewLens(documentValue);
     return editorWorldState.lowerPromise || Promise.resolve();
   }
-  if (editorWorldState.pendingDocumentKey === key && editorWorldState.lowerPromise) {
+  if (
+    !force &&
+    editorWorldState.pendingDocumentKey === key &&
+    editorWorldState.lowerPromise
+  ) {
     return editorWorldState.lowerPromise;
   }
   const generation = (editorWorldState.lowerGeneration || 0) + 1;
@@ -3901,12 +4505,20 @@ function scheduleEditorSceneLowering(session) {
   const promise = (async () => {
     const documentResult = await session.dispatch('scene_get_document', {});
     const lowered = await lowerSceneDocumentObjects(documentValue, {
-      loadAsset: (assetId) => editorWorldState.world.assets.instantiate(assetId),
+      loadAsset: instantiateEditorSceneAsset,
       resolveAssetBounds: (assetId) => editorWorldState.world.assets.bounds(assetId),
       runtimeHash: documentResult?.runtimeHash,
       useInstancing: true,
     });
+    try {
+      await materializeEditorPanelPreviews(lowered);
+    } catch (error) {
+      disposeEditorPanelPreviews(...lowered);
+      disposeLoweredSceneNodes(...lowered);
+      throw error;
+    }
     if (!editorWorldState || editorWorldState.lowerGeneration !== generation) {
+      disposeEditorPanelPreviews(...lowered);
       disposeLoweredSceneNodes(...lowered);
       return;
     }
@@ -6252,6 +6864,22 @@ function defaultTransformForAsset(documentValue, assetId) {
   };
 }
 
+async function initialScaleForPanelAsset(assetId) {
+  let size = assetPanelNaturalSizeCache.get(assetId);
+  if (!size) {
+    const preview = await renderEditorPanelCanvas(assetId, {
+      fitContent: true,
+      transparent: true,
+    });
+    size = { height: preview.worldHeight, width: preview.worldWidth };
+    assetPanelNaturalSizeCache.set(assetId, size);
+  }
+  const largestDimension = Math.max(size.width, size.height);
+  return largestDimension > 0
+    ? Number((1 / largestDimension).toFixed(6))
+    : 1;
+}
+
 function addAssetFromCatalog(session, camera, assetId) {
   return runEditorMutation(async () => {
     const asset = sceneAssets(session.document).find(
@@ -6261,12 +6889,18 @@ function addAssetFromCatalog(session, camera, assetId) {
       throw new Error(\`Unknown asset "\${assetId}"\`);
     }
     const nodeId = createNodeIdForAsset(session.document, assetId);
+    const isUIKitML = asset.kind === 'uikitml';
+    const transform = defaultTransformForAsset(session.document, assetId);
+    if (isUIKitML) {
+      transform.position[1] = 1.25;
+      transform.scale = await initialScaleForPanelAsset(assetId);
+    }
     let result = await dispatchEditorTransaction(session, [{
       node: {
         content: { asset: assetId, type: 'asset' },
         id: nodeId,
         name: asset.name || nodeId,
-        transform: defaultTransformForAsset(session.document, assetId),
+        transform,
       },
       op: 'addNode',
     }]);
@@ -6930,7 +7564,9 @@ function componentNameForSchema(schema) {
 }
 
 function componentSchemasForDocument(_documentValue) {
-  return runtimeComponentSchemas();
+  return runtimeComponentSchemas().filter(
+    (schema) => schema.id !== 'PanelUI' && schema.id !== 'PanelDocument',
+  );
 }
 
 function runtimeComponentSchemas() {
@@ -7813,7 +8449,7 @@ function inspectorSectionSummary(label, meta = '') {
 }
 
 function renderAssetInspector(node, assets) {
-  const assetId = nodeAssetId(node);
+  const assetId = nodeAssetId(node) || legacyPanelAssetId(node, assets);
   const selectedAssetExists = (assets || []).some(
     (asset) => asset.id === assetId,
   );
@@ -7992,7 +8628,9 @@ function renderComponentEditor(
   componentSchemaMap,
   excludedIds = new Set(),
 ) {
-  const componentEntries = Object.entries(components || {});
+  const componentEntries = Object.entries(components || {}).filter(
+    ([name]) => !['PanelUI', 'PanelDocument'].includes(stripComponentPrefix(name)),
+  );
   const componentRows = renderComponentRows(
     componentEntries,
     componentSchemaMap,
@@ -8352,12 +8990,22 @@ function renderInspector(inspector, session, camera, node) {
         throw new Error('Missing asset reference field');
       }
       const asset = select.value;
-      const patch = {
+      const patches = [{
         nodeId: node.id,
         op: 'updateContent',
         ...(asset ? { content: { asset, type: 'asset' } } : {}),
-      };
-      const result = await dispatchEditorTransaction(session, [patch]);
+      }];
+      for (const component of [
+        'PanelUI',
+        'com.iwsdk.components.PanelUI',
+        'PanelDocument',
+        'com.iwsdk.components.PanelDocument',
+      ]) {
+        if (node.components?.[component] != null) {
+          patches.push({ component, nodeId: node.id, op: 'updateComponent' });
+        }
+      }
+      const result = await dispatchEditorTransaction(session, patches);
       syncSelectionFromResult(result);
       clearValidationResult();
       renderUi(session, camera);
@@ -8461,11 +9109,14 @@ function renderCanvas(session, camera, size = {}) {
   syncEditorWorld(session, camera, size);
 }
 
-function editorWorkspaceSceneNodes(nodes) {
+function editorWorkspaceSceneNodes(nodes, assets) {
   return (nodes || []).map((node) => ({
     ...node,
+    assetKind:
+      assets.find((asset) => asset.id === nodeAssetId(node))?.kind ||
+      (legacyPanelAssetId(node, assets) ? 'uikitml' : null),
     expanded: !collapsedOutlinerNodeIds.has(node.id),
-    children: editorWorkspaceSceneNodes(node.children || []),
+    children: editorWorkspaceSceneNodes(node.children || [], assets),
   }));
 }
 
@@ -8514,7 +9165,7 @@ function renderUi(session, camera) {
     hiddenNodeIds: [...hiddenOutlinerNodeIds],
     lockedNodeIds: [...lockedOutlinerNodeIds],
     nodeCount: nodes.length,
-    nodes: editorWorkspaceSceneNodes(documentValue.nodes || []),
+    nodes: editorWorkspaceSceneNodes(documentValue.nodes || [], assets),
     rootSelected: window.__IWSDK_EDITOR_ROOT_SELECTED === true,
     sceneAssets: catalogSceneAssets(documentValue),
     scenePath: currentScenePath(),
@@ -8813,7 +9464,10 @@ async function init() {
     componentCatalog: runtimeComponentCatalog(),
     commitDocument: commitEditorDocument,
     document: documentValue,
-    listAssets: () => editorWorldState?.world?.assets?.list?.() || [],
+    listAssets: () =>
+      editorWorldState?.world?.assets?.catalog?.() ||
+      editorWorldState?.world?.assets?.list?.() ||
+      [],
     instantiateDocumentPreview: instantiateEditorDocumentPreview,
     preloadDocumentResources: preloadEditorDocumentResources,
     resolveAssetBounds: (assetId) =>
@@ -8836,6 +9490,7 @@ async function init() {
       }
       return stats;
     },
+    renderUIPreview: renderUIKitMLAssetPreview,
     rollbackDocument: rollbackEditorDocument,
     saveDocument: async (serializedDocument) => {
       if (sceneSourceHasImports) {
@@ -9051,6 +9706,61 @@ async function init() {
       ids: editorWorldState ? [...editorWorldState.objectMap.keys()] : [],
       objectCount: editorWorldState?.objectMap.size ?? 0,
     }),
+    getPanelPreviewState: (nodeId) => {
+      const object = editorWorldState?.objectMap.get(nodeId);
+      const preview = object?.children.find(
+        (child) => child.userData?.iwsdkEditorPanelPreview === true,
+      );
+      const image = preview?.material?.map?.image;
+      const context =
+        image instanceof HTMLCanvasElement ? image.getContext('2d') : null;
+      const cornerAlpha = context
+        ? [
+            [0, 0],
+            [image.width - 1, 0],
+            [0, image.height - 1],
+            [image.width - 1, image.height - 1],
+          ].map(([x, y]) => context.getImageData(x, y, 1, 1).data[3])
+        : null;
+      const roundedCornerAlpha = context
+        ? [
+            [0.06, 0.06],
+            [0.94, 0.06],
+            [0.06, 0.94],
+            [0.94, 0.94],
+          ].map(([x, y]) =>
+            context.getImageData(
+              Math.round((image.width - 1) * x),
+              Math.round((image.height - 1) * y),
+              1,
+              1,
+            ).data[3],
+          )
+        : null;
+      return preview
+        ? {
+            cornerAlpha,
+            computedSize:
+              preview.userData?.iwsdkEditorPanelComputedSize || null,
+            materialType: preview.material?.type || null,
+            roundedCornerAlpha,
+            textureColorSpace: preview.material?.map?.colorSpace || null,
+            toneMapped: preview.material?.toneMapped ?? null,
+            transparent: preview.material?.transparent ?? null,
+            scale: preview.scale.toArray(),
+          }
+        : null;
+    },
+    getPanelPreviewRendererState: () =>
+      editorPanelPreviewRendererState
+        ? {
+            contextLossCount:
+              editorPanelPreviewRendererState.contextLossCount,
+            contextLost: editorPanelPreviewRendererState.contextLost,
+            createdCount: editorPanelPreviewRendererState.createdCount,
+            renderCount: editorPanelPreviewRendererState.renderCount,
+          }
+        : null,
     getPreviewVisibilityState: () => ({
       ...currentPreviewVisibilityState(),
       raycastCount: editorWorldState?.raycastCount ?? 0,

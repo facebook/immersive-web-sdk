@@ -4,7 +4,7 @@
       "content": { "asset": "table", "type": "model" },
       "components": {
         "com.iwsdk.components.PanelUI": {
-          "config": "panel.json",
+          "config": "panel.uikitml",
           "maxWidth": 1
         }
       },

@@ -4,8 +4,7 @@
     "packages/core/src/index.ts",
     "packages/xr-input/src/index.ts",
     "packages/locomotor/src/index.ts",
-    "packages/vite-plugin-iwer/src/index.ts",
-    "packages/vite-plugin-uikitml/src/index.ts"
+    "packages/vite-plugin-iwer/src/index.ts"
   ],
   "exclude": [
     "**/node_modules/**",
