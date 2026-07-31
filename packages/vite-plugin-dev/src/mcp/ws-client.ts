@@ -54,6 +54,45 @@ interface MCPResponse {
   error?: {
     code: number;
     message: string;
+    cause?: string;
+    data?: Record<string, unknown>;
+  };
+}
+
+const STRUCTURED_ERROR_FIELDS = [
+  'code',
+  'details',
+  'issues',
+  'lifecycle',
+  'recoverable',
+  'retryAction',
+] as const;
+
+function serializeMCPError(error: unknown): NonNullable<MCPResponse['error']> {
+  const source =
+    typeof error === 'object' && error !== null
+      ? (error as Record<string, unknown>)
+      : null;
+  const data: Record<string, unknown> = {};
+  for (const field of STRUCTURED_ERROR_FIELDS) {
+    if (source != null && source[field] !== undefined) {
+      data[field] = source[field];
+    }
+  }
+  const cause =
+    source != null && typeof source.cause === 'string'
+      ? source.cause
+      : undefined;
+  return {
+    code:
+      source != null &&
+      typeof source.code === 'number' &&
+      Number.isInteger(source.code)
+        ? source.code
+        : -32000,
+    message: error instanceof Error ? error.message : String(error),
+    ...(cause == null ? {} : { cause }),
+    ...(Object.keys(data).length === 0 ? {} : { data }),
   };
 }
 
@@ -64,7 +103,7 @@ interface MCPResponse {
  */
 export class MCPWebSocketClient {
   private ws: WebSocket | null = null;
-  private device: XRDevice;
+  private device: XRDevice | null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -79,7 +118,7 @@ export class MCPWebSocketClient {
   readonly pageRole: MCPPageRole;
   readonly sceneSessionId: string | undefined;
 
-  constructor(device: XRDevice, options: { verbose?: boolean } = {}) {
+  constructor(device: XRDevice | null, options: { verbose?: boolean } = {}) {
     this.device = device;
     this.verbose = options.verbose ?? false;
     this.pageRole = this.detectPageRole();
@@ -116,6 +155,27 @@ export class MCPWebSocketClient {
       window.__IWSDK_MCP_PAGE_ROLE = this.pageRole;
       window.__IWSDK_MCP_TAB_GENERATION = this.tabGeneration;
     }
+  }
+
+  get connected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  get connectionState():
+    | 'connected'
+    | 'connecting'
+    | 'closing'
+    | 'disconnected' {
+    if (this.ws == null || this.ws.readyState === WebSocket.CLOSED) {
+      return 'disconnected';
+    }
+    if (this.ws.readyState === WebSocket.OPEN) {
+      return 'connected';
+    }
+    if (this.ws.readyState === WebSocket.CLOSING) {
+      return 'closing';
+    }
+    return 'connecting';
   }
 
   private isTraceEnabled(): boolean {
@@ -313,10 +373,7 @@ export class MCPWebSocketClient {
         request.params ?? {},
       );
     } catch (error) {
-      response.error = {
-        code: -32000,
-        message: error instanceof Error ? error.message : String(error),
-      };
+      response.error = serializeMCPError(error);
     }
 
     if (this.verbose) {
@@ -353,7 +410,14 @@ export class MCPWebSocketClient {
       return window.FRAMEWORK_MCP_RUNTIME.dispatch(method, params);
     }
 
-    // 3. All other methods go to IWER's RemoteControlInterface
+    // 3. All other methods go to IWER's RemoteControlInterface when this page
+    // owns an emulated device. Workspace-only editor pages deliberately use a
+    // device-less bridge so browser-first apps keep native non-XR behavior.
+    if (this.device == null) {
+      throw new Error(
+        `Method "${method}" requires IWER device emulation and is unavailable in this workspace-only page`,
+      );
+    }
     return this.device.remote.dispatch(method, params);
   }
 
@@ -409,6 +473,19 @@ export function initMCPClient(
   options: { port?: number; verbose?: boolean } = {},
 ): MCPWebSocketClient {
   const client = new MCPWebSocketClient(device, { verbose: options.verbose });
+  client.connect(options.port);
+  return client;
+}
+
+/**
+ * Connect a managed workspace/editor page without installing or requiring IWER.
+ * Framework-provided scene/workspace methods and page reload remain available;
+ * XR device methods return an explicit unsupported error.
+ */
+export function initMCPBridge(
+  options: { port?: number; verbose?: boolean } = {},
+): MCPWebSocketClient {
+  const client = new MCPWebSocketClient(null, { verbose: options.verbose });
   client.connect(options.port);
   return client;
 }

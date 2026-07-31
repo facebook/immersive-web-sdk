@@ -6,7 +6,32 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { describeChildExit, isAbnormalChildExit } from '../src/commands/dev.js';
+import {
+  describeChildExit,
+  isAbnormalChildExit,
+  shouldOpenExternalBrowser,
+} from '../src/commands/dev.js';
+
+describe('shouldOpenExternalBrowser', () => {
+  it('never opens an OS browser when Playwright manages the workspace', () => {
+    expect(
+      shouldOpenExternalBrowser(true, {
+        browser: {
+          commandReady: true,
+          connected: true,
+          connectedClientCount: 1,
+          lastTransitionAt: new Date(0).toISOString(),
+          status: 'connected',
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('opens externally only when requested and no managed browser exists', () => {
+    expect(shouldOpenExternalBrowser(true, {})).toBe(true);
+    expect(shouldOpenExternalBrowser(false, {})).toBe(false);
+  });
+});
 
 describe('isAbnormalChildExit', () => {
   it('treats a clean exit (code 0, no signal) as normal', () => {

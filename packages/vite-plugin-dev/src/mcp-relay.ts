@@ -35,6 +35,17 @@ export interface RelayClientMetadata {
 
 export interface RelayOptions {
   verbose?: boolean;
+  /** Grace period for a role-only target to reconnect during page navigation. */
+  targetReconnectGraceMs?: number;
+}
+
+interface PendingRelayRequest {
+  sourceWs: RelayWebSocket;
+  targetClients?: Set<RelayWebSocket>;
+  timestamp: number;
+  requestData?: string;
+  reconnectTarget?: RelayPageTarget;
+  reconnectTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface RelayHandler {
@@ -75,16 +86,10 @@ export interface RelayHandler {
  */
 export function createRelayHandler(options?: RelayOptions): RelayHandler {
   const verbose = options?.verbose ?? false;
+  const targetReconnectGraceMs = options?.targetReconnectGraceMs ?? 3_000;
 
   // Track pending request IDs for first-response-wins deduplication.
-  const pendingRelayRequests = new Map<
-    string,
-    {
-      sourceWs: RelayWebSocket;
-      targetClients?: Set<RelayWebSocket>;
-      timestamp: number;
-    }
-  >();
+  const pendingRelayRequests = new Map<string, PendingRelayRequest>();
   const browserClients = new Map<RelayWebSocket, RelayClientMetadata>();
 
   function onMessage(
@@ -115,12 +120,37 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       if (isRequest) {
         const targetClients = resolveRequestTargets(senderWs, parsed, clients);
         if (targetClients.length === 0) {
+          const reconnectTarget = reconnectableTarget(parsed.target);
+          if (reconnectTarget != null) {
+            const entry: PendingRelayRequest = {
+              reconnectTarget,
+              requestData: data,
+              sourceWs: senderWs,
+              targetClients: new Set<RelayWebSocket>(),
+              timestamp: Date.now(),
+            };
+            pendingRelayRequests.set(parsed.id, entry);
+            entry.reconnectTimer = setTimeout(() => {
+              if (pendingRelayRequests.get(parsed!.id!) !== entry) {
+                return;
+              }
+              pendingRelayRequests.delete(parsed!.id!);
+              sendNoTargetError(senderWs, parsed!.id!, parsed!);
+            }, targetReconnectGraceMs);
+            return;
+          }
           sendNoTargetError(senderWs, parsed.id, parsed);
           return;
         }
 
         // Track this request for deduplication
         pendingRelayRequests.set(parsed.id, {
+          ...(reconnectableTarget(parsed.target) == null
+            ? {}
+            : {
+                reconnectTarget: parsed.target,
+                requestData: data,
+              }),
           targetClients: new Set(targetClients),
           timestamp: Date.now(),
           sourceWs: senderWs,
@@ -148,6 +178,9 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
           }
           // First response wins — forward to the original requester
           pendingRelayRequests.delete(parsed.id);
+          if (pending.reconnectTimer != null) {
+            clearTimeout(pending.reconnectTimer);
+          }
           if (pending.sourceWs.readyState === WS_OPEN) {
             pending.sourceWs.send(data);
           }
@@ -176,20 +209,51 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     metadata: RelayClientMetadata,
   ): void {
     browserClients.set(ws, metadata);
+    for (const pending of pendingRelayRequests.values()) {
+      if (
+        pending.reconnectTarget == null ||
+        pending.requestData == null ||
+        pending.targetClients == null ||
+        pending.targetClients.size !== 0 ||
+        !matchesTarget(metadata, pending.reconnectTarget)
+      ) {
+        continue;
+      }
+      if (pending.reconnectTimer != null) {
+        clearTimeout(pending.reconnectTimer);
+        pending.reconnectTimer = undefined;
+      }
+      pending.targetClients.add(ws);
+      ws.send(pending.requestData);
+    }
   }
 
   function unregisterClient(ws: RelayWebSocket): void {
     browserClients.delete(ws);
     for (const [id, pending] of pendingRelayRequests) {
       if (pending.sourceWs === ws) {
+        if (pending.reconnectTimer != null) {
+          clearTimeout(pending.reconnectTimer);
+        }
         pendingRelayRequests.delete(id);
         continue;
       }
 
       if (pending.targetClients?.delete(ws) === true) {
         if (pending.targetClients.size === 0) {
-          pendingRelayRequests.delete(id);
-          sendTargetDisconnectedError(pending.sourceWs, id);
+          if (pending.reconnectTarget != null && pending.requestData != null) {
+            pending.timestamp = Date.now();
+            pending.reconnectTimer = setTimeout(() => {
+              if (pendingRelayRequests.get(id) !== pending) {
+                return;
+              }
+              pendingRelayRequests.delete(id);
+              sendTargetDisconnectedError(pending.sourceWs, id);
+            }, targetReconnectGraceMs);
+          } else {
+            pendingRelayRequests.delete(id);
+            sendTargetDisconnectedError(pending.sourceWs, id);
+          }
         }
       }
     }
@@ -203,6 +267,9 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     const now = Date.now();
     for (const [id, entry] of pendingRelayRequests) {
       if (now - entry.timestamp > maxAgeMs) {
+        if (entry.reconnectTimer != null) {
+          clearTimeout(entry.reconnectTimer);
+        }
         pendingRelayRequests.delete(id);
       }
     }
@@ -327,6 +394,20 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     registerBrowserClient,
     unregisterClient,
   };
+}
+
+function reconnectableTarget(
+  target: RelayPageTarget | undefined,
+): RelayPageTarget | undefined {
+  if (
+    target?.role == null ||
+    target.pageId != null ||
+    target.tabGeneration != null ||
+    target.sceneSessionId != null
+  ) {
+    return undefined;
+  }
+  return { role: target.role };
 }
 
 function isRelayPageTarget(value: unknown): value is RelayPageTarget {

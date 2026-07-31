@@ -40,6 +40,7 @@ export async function buildInjectionBundle(
       verbose: options.verbose,
       sem: options.sem || null,
       ai: options.ai || null,
+      workspace: options.workspace || null,
       userAgentException:
         options.userAgentException instanceof RegExp
           ? `/${options.userAgentException.source}/`

@@ -44,16 +44,6 @@ export class LevelComponentApplier {
 
       const componentKey = stripComponentPrefix(componentName);
       const targetId = normalizeComponentId(componentKey);
-      const resolvedComponentData = unwrapTypedComponentData(
-        componentKey,
-        targetId,
-        componentData,
-        {
-          componentName,
-          nodeId: options.nodeId,
-          strict: options.strict,
-        },
-      );
       if (targetId === 'PanelUI') {
         return;
       }
@@ -62,7 +52,7 @@ export class LevelComponentApplier {
       if (component) {
         const componentProps = this.mapComponentDataToProps(
           component,
-          resolvedComponentData,
+          componentData,
         );
         if (!component.bitmask) {
           world.registerComponent(component);
@@ -130,16 +120,7 @@ export class LevelComponentApplier {
       panelComponentName === 'PanelUI'
         ? components.PanelUI
         : components[`${LEVEL_COMPONENT_PREFIX}PanelUI`];
-    const resolvedPanelComponent = unwrapTypedComponentData(
-      'PanelUI',
-      'PanelUI',
-      panelComponent,
-      {
-        componentName: panelComponentName,
-        nodeId: options.nodeId,
-        strict: options.strict,
-      },
-    );
+    const resolvedPanelComponent = panelComponent;
 
     if (!isRecord(resolvedPanelComponent)) {
       return;
@@ -177,39 +158,6 @@ function normalizeComponentId(componentId: string): string {
   return LEVEL_COMPONENT_ALIASES[componentId] ?? componentId;
 }
 
-function unwrapTypedComponentData(
-  componentKey: string,
-  resolvedType: string,
-  componentData: unknown,
-  context: {
-    componentName: string;
-    nodeId?: string;
-    strict?: boolean;
-  },
-): unknown {
-  if (!isTypedComponentData(componentData)) {
-    return componentData;
-  }
-
-  if (
-    componentData.type !== componentKey &&
-    componentData.type !== resolvedType
-  ) {
-    const message = `Typed component payload type "${componentData.type}" does not match component key "${componentKey}".`;
-    if (context.strict) {
-      throw new Error(
-        withSceneComponentContext(
-          message,
-          context.nodeId,
-          context.componentName,
-        ),
-      );
-    }
-    console.warn(message);
-  }
-  return componentData.props ?? {};
-}
-
 function withSceneComponentContext(
   message: string,
   nodeId: string | undefined,
@@ -218,21 +166,6 @@ function withSceneComponentContext(
   return nodeId == null
     ? `Component "${componentName}": ${message}`
     : `Scene node "${nodeId}" component "${componentName}": ${message}`;
-}
-
-function isTypedComponentData(
-  value: unknown,
-): value is { type: string; props?: unknown } {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const keys = Object.keys(value);
-  return (
-    keys.every((key) => key === 'type' || key === 'props') &&
-    typeof value.type === 'string' &&
-    value.type.length > 0
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

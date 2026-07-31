@@ -42,6 +42,7 @@ function createWorld() {
         setSession: async () => {},
       },
     },
+    scene: { userData: {} },
     session: undefined,
     xrDefaults: undefined,
   } as any;

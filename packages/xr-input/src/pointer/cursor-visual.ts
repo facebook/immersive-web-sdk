@@ -18,23 +18,31 @@ import {
 import { lerp } from 'three/src/math/MathUtils.js';
 import type { XROrigin } from '../rig/xr-origin.js';
 
-// Create shared cursor texture
 const cursorRes = 512;
-const canvas = document.createElement('canvas');
-canvas.width = cursorRes;
-canvas.height = cursorRes;
-const ctx = canvas.getContext('2d')!;
-ctx.clearRect(0, 0, canvas.width, canvas.height);
-ctx.fillStyle = 'white';
-ctx.beginPath();
-ctx.arc(cursorRes / 2, cursorRes / 2, (cursorRes / 16) * 7, 0, Math.PI * 2);
-ctx.fill();
-ctx.strokeStyle = 'gray';
-ctx.lineWidth = 3;
-ctx.beginPath();
-ctx.arc(cursorRes / 2, cursorRes / 2, (cursorRes / 16) * 7, 0, Math.PI * 2);
-ctx.stroke();
-const cursorTexture = new CanvasTexture(canvas);
+let cursorTexture: CanvasTexture | undefined;
+
+function getCursorTexture(): CanvasTexture {
+  if (cursorTexture) {
+    return cursorTexture;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cursorRes;
+  canvas.height = cursorRes;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(cursorRes / 2, cursorRes / 2, (cursorRes / 16) * 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'gray';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cursorRes / 2, cursorRes / 2, (cursorRes / 16) * 7, 0, Math.PI * 2);
+  ctx.stroke();
+  cursorTexture = new CanvasTexture(canvas);
+  return cursorTexture;
+}
 
 const ZAxis = new Vector3(0, 0, 1);
 const offsetHelper = new Vector3();
@@ -63,7 +71,7 @@ export class CursorVisual {
     this.cursor = new Mesh(
       new CircleGeometry(0.008),
       new MeshBasicMaterial({
-        map: cursorTexture,
+        map: getCursorTexture(),
         transparent: true,
       }),
     );

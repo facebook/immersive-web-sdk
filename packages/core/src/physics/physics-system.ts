@@ -64,6 +64,31 @@ export interface PhysicsBodyTransformOptions {
 
 const ZERO_VECTOR = [0, 0, 0] as const;
 
+export function getCapsuleAxisEndpoints(
+  radius: number,
+  totalHeight: number,
+): [[number, number, number], [number, number, number]] | null {
+  if (
+    !Number.isFinite(radius) ||
+    !Number.isFinite(totalHeight) ||
+    radius <= 0 ||
+    totalHeight < radius * 2
+  ) {
+    return null;
+  }
+  const halfSegment = totalHeight / 2 - radius;
+  if (halfSegment === 0) {
+    return [
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+  }
+  return [
+    [0, -halfSegment, 0],
+    [0, halfSegment, 0],
+  ];
+}
+
 function vector3ToArray(value: Vector3Input): [number, number, number] {
   return 'x' in value
     ? [value.x, value.y, value.z]
@@ -688,6 +713,24 @@ export class PhysicsSystem extends createSystem(
         }
         break;
       }
+      case PhysicsShapeType.Capsules: {
+        const capsuleShape = this.createCapsuleShape(
+          dimensionsView[0], // radius
+          dimensionsView[1], // total end-to-end height
+          entity.getValue(PhysicsShape, 'density') ?? 1.0,
+          entity.getValue(PhysicsShape, 'restitution') ?? 0,
+          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
+        );
+        if (capsuleShape) {
+          PhysicsShape.data._engineShape[entity.index] = Number(capsuleShape);
+        } else {
+          console.warn(
+            'PhysicsSystem: Failed to create capsule shape for entity',
+            entity.index,
+          );
+        }
+        break;
+      }
       case PhysicsShapeType.ConvexHull: {
         const convexHullShape = this.createConvexHullShape(
           entity.object3D,
@@ -808,6 +851,44 @@ export class PhysicsSystem extends createSystem(
       this.havok.MaterialCombine.MAXIMUM,
     ]);
     return cylinderShape;
+  }
+
+  private createCapsuleShape(
+    radius: number,
+    totalHeight: number,
+    density: number,
+    restitution: number,
+    friction: number,
+  ) {
+    if (!this.havok) {
+      console.warn(
+        'PhysicsSystem: Cannot create capsule shape - Havok physics engine not initialized',
+      );
+      return;
+    }
+
+    const endpoints = getCapsuleAxisEndpoints(radius, totalHeight);
+    if (!endpoints) {
+      console.warn(
+        'PhysicsSystem: Capsule dimensions require a positive radius and a total height greater than or equal to twice the radius',
+      );
+      return;
+    }
+    const [pointA, pointB] = endpoints;
+    const capsuleShape = this.havok.HP_Shape_CreateCapsule(
+      pointA,
+      pointB,
+      radius,
+    )[1];
+    this.havok.HP_Shape_SetDensity(capsuleShape, density);
+    this.havok.HP_Shape_SetMaterial(capsuleShape, [
+      friction,
+      friction,
+      restitution,
+      this.havok.MaterialCombine.MINIMUM,
+      this.havok.MaterialCombine.MAXIMUM,
+    ]);
+    return capsuleShape;
   }
 
   private createConvexHullShape(

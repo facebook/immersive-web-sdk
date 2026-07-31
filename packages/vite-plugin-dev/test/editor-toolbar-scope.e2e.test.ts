@@ -41,12 +41,11 @@ describe('editor toolbar scope', () => {
     await expect
       .poll(() => editor.page.locator('#transform-toolbar button').count())
       .toBe(3);
+    await expect.poll(() => editor.page.locator('#save').count()).toBe(0);
+    await expect.poll(() => editor.page.locator('#revert').count()).toBe(0);
     await expect
-      .poll(() => editor.page.locator('#save').isVisible())
-      .toBe(true);
-    await expect
-      .poll(() => editor.page.locator('#revert').isVisible())
-      .toBe(true);
+      .poll(() => editor.page.locator('[data-surface-placement]').count())
+      .toBe(0);
     await expect
       .poll(() => editor.page.locator('#editor-status-strip').textContent())
       .not.toMatch(/\b(play|pause|preview|playing|paused)\b/i);

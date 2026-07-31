@@ -30,7 +30,7 @@ describe('editor multi-select inspector', () => {
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-1',
         transform: { position: [1, 0, 0] },
       },

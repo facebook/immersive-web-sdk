@@ -9,10 +9,17 @@ import { resolveReparentTransform } from './helpers.js';
 import type {
   JsonObject,
   PatchResult,
+  SceneAuthoring,
+  SceneAuthoringView,
   SceneComponentValue,
   SceneDocument,
+  SceneEnvironment,
   SceneNode,
+  SceneNodeConstraints,
+  SceneNodeContent,
+  SceneNodeFramingRole,
   ScenePatch,
+  ScenePrefab,
   SceneTransform,
 } from './types.js';
 import {
@@ -22,35 +29,61 @@ import {
   isJsonValue,
   isPlainObject,
 } from './utils.js';
-import { assertValidSceneDocument } from './validation.js';
+import {
+  assertValidSceneDocument,
+  type SceneDocumentValidationOptions,
+} from './validation.js';
 
 export function applyScenePatch(
   document: SceneDocument,
   patch: ScenePatch,
+  validationOptions: SceneDocumentValidationOptions = {},
 ): PatchResult {
-  assertValidScenePatch(patch);
-
-  const nextDocument = deepClone(document);
-  const inverse = applyPatchInPlace(nextDocument, patch);
-  assertValidSceneDocument(nextDocument);
+  const safePatch = deepClone(patch);
+  assertValidScenePatch(safePatch);
+  const previousDocument = deepClone(document);
+  const nextDocument = applyPatchToClone(deepClone(document), safePatch);
+  assertValidSceneDocument(nextDocument, validationOptions);
 
   return {
     document: nextDocument,
-    inverse,
+    inverse: { document: previousDocument, op: 'replaceDocument' },
   };
+}
+
+function applyPatchToClone(
+  document: SceneDocument,
+  patch: ScenePatch,
+): SceneDocument {
+  if (patch.op === 'replaceDocument') {
+    return deepClone(patch.document);
+  }
+  if (patch.op === 'transaction') {
+    return patch.patches.reduce<SceneDocument>(
+      (current, entry) => applyPatchToClone(current, entry),
+      document,
+    );
+  }
+  applyPatchInPlace(document, patch);
+  return document;
 }
 
 export class SceneCommandHistory {
   private sceneDocument: SceneDocument;
   private past: { patch: ScenePatch; inverse: ScenePatch }[] = [];
   private future: { patch: ScenePatch; inverse: ScenePatch }[] = [];
+  private readonly validationOptions: SceneDocumentValidationOptions;
 
   constructor(
     document: SceneDocument,
-    options: { validateInitialDocument?: boolean } = {},
+    options: {
+      validateInitialDocument?: boolean;
+      validationOptions?: SceneDocumentValidationOptions;
+    } = {},
   ) {
+    this.validationOptions = options.validationOptions ?? {};
     if (options.validateInitialDocument !== false) {
-      assertValidSceneDocument(document);
+      assertValidSceneDocument(document, this.validationOptions);
     }
     this.sceneDocument = deepClone(document);
   }
@@ -60,11 +93,24 @@ export class SceneCommandHistory {
   }
 
   apply(patch: ScenePatch) {
-    const result = applyScenePatch(this.sceneDocument, patch);
-    this.past.push({ inverse: result.inverse, patch });
+    const safePatch = deepClone(patch);
+    const result = applyScenePatch(
+      this.sceneDocument,
+      safePatch,
+      this.validationOptions,
+    );
+    this.past.push({ inverse: deepClone(result.inverse), patch: safePatch });
     this.future = [];
     this.sceneDocument = result.document;
     return this.document;
+  }
+
+  applyTransaction(patches: ScenePatch[]) {
+    return this.apply({ op: 'transaction', patches });
+  }
+
+  replace(document: SceneDocument) {
+    return this.apply({ document, op: 'replaceDocument' });
   }
 
   undo() {
@@ -73,7 +119,11 @@ export class SceneCommandHistory {
       return this.document;
     }
 
-    const result = applyScenePatch(this.sceneDocument, entry.inverse);
+    const result = applyScenePatch(
+      this.sceneDocument,
+      entry.inverse,
+      this.validationOptions,
+    );
     this.future.push(entry);
     this.sceneDocument = result.document;
     return this.document;
@@ -85,7 +135,11 @@ export class SceneCommandHistory {
       return this.document;
     }
 
-    const result = applyScenePatch(this.sceneDocument, entry.patch);
+    const result = applyScenePatch(
+      this.sceneDocument,
+      entry.patch,
+      this.validationOptions,
+    );
     this.past.push({ inverse: result.inverse, patch: entry.patch });
     this.sceneDocument = result.document;
     return this.document;
@@ -94,7 +148,7 @@ export class SceneCommandHistory {
 
 function applyPatchInPlace(
   document: SceneDocument,
-  patch: ScenePatch,
+  patch: Exclude<ScenePatch, { op: 'replaceDocument' | 'transaction' }>,
 ): ScenePatch {
   switch (patch.op) {
     case 'addNode':
@@ -113,6 +167,8 @@ function applyPatchInPlace(
       return renameNode(document, patch.nodeId, patch.newNodeId);
     case 'updateTransform':
       return updateTransform(document, patch.nodeId, patch.transform);
+    case 'updateFramingRole':
+      return updateFramingRole(document, patch.nodeId, patch.framingRole);
     case 'updateComponent':
       return updateComponent(
         document,
@@ -120,14 +176,32 @@ function applyPatchInPlace(
         patch.component,
         patch.value,
       );
+    case 'updateRootComponent':
+      return updateRootComponent(document, patch.component, patch.value);
     case 'reorderChildren':
       return reorderChildren(document, patch.parentId ?? null, patch.childIds);
-    case 'updateAssetRef':
-      return updateAssetRef(document, patch.nodeId, patch.asset);
-    case 'setEditorMetadata':
-      return setEditorMetadata(document, patch.value, patch.nodeId);
+    case 'updateContent':
+      return updateContent(document, patch.nodeId, patch.content);
+    case 'updateConstraints':
+      return updateConstraints(document, patch.nodeId, patch.constraints);
     case 'setNodeMetadata':
       return setNodeMetadata(document, patch.nodeId, patch.value);
+    case 'setAuthoring':
+      return setAuthoring(document, patch.authoring);
+    case 'setEnvironment':
+      return setEnvironment(document, patch.environment);
+    case 'addPrefab':
+      return addPrefab(document, patch.prefab, patch.index);
+    case 'updatePrefab':
+      return updatePrefab(document, patch.prefabId, patch.prefab);
+    case 'removePrefab':
+      return removePrefab(document, patch.prefabId);
+    case 'addAuthoringView':
+      return addAuthoringView(document, patch.view, patch.index);
+    case 'updateAuthoringView':
+      return updateAuthoringView(document, patch.viewId, patch.view);
+    case 'removeAuthoringView':
+      return removeAuthoringView(document, patch.viewId);
   }
 }
 
@@ -138,6 +212,15 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
 
   const op = value.op;
   switch (op) {
+    case 'replaceDocument':
+      assertPlainObjectField(value.document, 'document');
+      return;
+    case 'transaction':
+      if (!Array.isArray(value.patches)) {
+        throw new Error('patches must be an array');
+      }
+      value.patches.forEach(assertValidScenePatch);
+      return;
     case 'addNode':
       assertPlainObjectField(value.node, 'node');
       assertOptionalParentId(value.parentId);
@@ -165,8 +248,24 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
         assertPlainObjectField(value.transform, 'transform');
       }
       return;
+    case 'updateFramingRole':
+      assertNonEmptyStringField(value.nodeId, 'nodeId');
+      if (
+        value.framingRole !== undefined &&
+        value.framingRole !== 'content' &&
+        value.framingRole !== 'support'
+      ) {
+        throw new Error('framingRole must be "content" or "support"');
+      }
+      return;
     case 'updateComponent':
       assertNonEmptyStringField(value.nodeId, 'nodeId');
+      assertNonEmptyStringField(value.component, 'component');
+      if (value.value !== undefined && !isJsonValue(value.value)) {
+        throw new Error('value must be JSON serializable');
+      }
+      return;
+    case 'updateRootComponent':
       assertNonEmptyStringField(value.component, 'component');
       if (value.value !== undefined && !isJsonValue(value.value)) {
         throw new Error('value must be JSON serializable');
@@ -181,21 +280,16 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
       }
       assertOptionalParentId(value.parentId);
       return;
-    case 'updateAssetRef':
+    case 'updateContent':
       assertNonEmptyStringField(value.nodeId, 'nodeId');
-      if (value.asset !== undefined) {
-        assertNonEmptyStringField(value.asset, 'asset');
+      if (value.content !== undefined) {
+        assertPlainObjectField(value.content, 'content');
       }
       return;
-    case 'setEditorMetadata':
-      if (
-        value.value !== undefined &&
-        (!isPlainObject(value.value) || !isJsonValue(value.value))
-      ) {
-        throw new Error('value must be a JSON object');
-      }
-      if (value.nodeId !== undefined) {
-        assertNonEmptyStringField(value.nodeId, 'nodeId');
+    case 'updateConstraints':
+      assertNonEmptyStringField(value.nodeId, 'nodeId');
+      if (value.constraints !== undefined) {
+        assertPlainObjectField(value.constraints, 'constraints');
       }
       return;
     case 'setNodeMetadata':
@@ -206,6 +300,38 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
       ) {
         throw new Error('value must be a JSON object');
       }
+      return;
+    case 'setAuthoring':
+      if (value.authoring !== undefined) {
+        assertPlainObjectField(value.authoring, 'authoring');
+      }
+      return;
+    case 'setEnvironment':
+      if (value.environment !== undefined) {
+        assertPlainObjectField(value.environment, 'environment');
+      }
+      return;
+    case 'addPrefab':
+      assertPlainObjectField(value.prefab, 'prefab');
+      assertOptionalIndex(value.index);
+      return;
+    case 'updatePrefab':
+      assertNonEmptyStringField(value.prefabId, 'prefabId');
+      assertPlainObjectField(value.prefab, 'prefab');
+      return;
+    case 'removePrefab':
+      assertNonEmptyStringField(value.prefabId, 'prefabId');
+      return;
+    case 'addAuthoringView':
+      assertPlainObjectField(value.view, 'view');
+      assertOptionalIndex(value.index);
+      return;
+    case 'updateAuthoringView':
+      assertNonEmptyStringField(value.viewId, 'viewId');
+      assertPlainObjectField(value.view, 'view');
+      return;
+    case 'removeAuthoringView':
+      assertNonEmptyStringField(value.viewId, 'viewId');
       return;
     default:
       throw new Error(`Unsupported scene patch op "${String(op)}"`);
@@ -362,12 +488,73 @@ function renameNode(
   }
 
   node.id = newNodeId;
+  rewriteNodeReferences(document, nodeId, newNodeId);
 
   return {
     newNodeId: nodeId,
     nodeId: newNodeId,
     op: 'renameNode',
   };
+}
+
+function rewriteNodeReferences(
+  document: SceneDocument,
+  previousId: string,
+  nextId: string,
+) {
+  const visit = (nodes: SceneNode[]) => {
+    for (const entry of nodes) {
+      visit(entry.children ?? []);
+    }
+  };
+  visit(document.nodes);
+
+  const composition = document.authoring?.composition;
+  composition?.features.forEach((feature) => {
+    feature.nodeRefs = replaceIds(feature.nodeRefs, previousId, nextId);
+    feature.acceptance.forEach((criterion) => {
+      if ('nodeRefs' in criterion && criterion.nodeRefs != null) {
+        criterion.nodeRefs = replaceIds(criterion.nodeRefs, previousId, nextId);
+      }
+      if (criterion.kind === 'count' && criterion.pattern === previousId) {
+        criterion.pattern = nextId;
+      }
+      if (
+        criterion.kind === 'spatial-relation' &&
+        criterion.target === previousId
+      ) {
+        criterion.target = nextId;
+      }
+    });
+    const inspection = feature.objectInspection;
+    inspection?.parts.forEach((part) => {
+      part.nodeRefs = replaceIds(part.nodeRefs, previousId, nextId);
+    });
+    inspection?.contacts.forEach((contact) => {
+      contact.nodeRefs = replaceIds(contact.nodeRefs, previousId, nextId);
+      contact.targetNodeRefs = replaceIds(
+        contact.targetNodeRefs,
+        previousId,
+        nextId,
+      );
+    });
+    if (inspection?.context.includeNodeRefs != null) {
+      inspection.context.includeNodeRefs = replaceIds(
+        inspection.context.includeNodeRefs,
+        previousId,
+        nextId,
+      );
+    }
+  });
+  document.authoring?.nodeAnnotations?.forEach((annotation) => {
+    if (annotation.node === previousId) {
+      annotation.node = nextId;
+    }
+  });
+}
+
+function replaceIds(ids: string[], previousId: string, nextId: string) {
+  return ids.map((id) => (id === previousId ? nextId : id));
 }
 
 function updateTransform(
@@ -388,6 +575,26 @@ function updateTransform(
     nodeId,
     op: 'updateTransform',
     transform: previous,
+  };
+}
+
+function updateFramingRole(
+  document: SceneDocument,
+  nodeId: string,
+  framingRole: SceneNodeFramingRole | undefined,
+): ScenePatch {
+  const node = getRequiredNode(document, nodeId);
+  const previous = node.framingRole;
+  if (framingRole === undefined) {
+    delete node.framingRole;
+  } else {
+    node.framingRole = framingRole;
+  }
+
+  return {
+    framingRole: previous,
+    nodeId,
+    op: 'updateFramingRole',
   };
 }
 
@@ -416,6 +623,27 @@ function updateComponent(
     component,
     nodeId,
     op: 'updateComponent',
+    value: previous === undefined ? undefined : deepClone(previous),
+  };
+}
+
+function updateRootComponent(
+  document: SceneDocument,
+  component: string,
+  value: SceneComponentValue | undefined,
+): ScenePatch {
+  const previous = document.components?.[component];
+  document.components ??= {};
+
+  if (value === undefined) {
+    delete document.components[component];
+  } else {
+    document.components[component] = deepClone(value);
+  }
+
+  return {
+    component,
+    op: 'updateRootComponent',
     value: previous === undefined ? undefined : deepClone(previous),
   };
 }
@@ -450,59 +678,45 @@ function reorderChildren(
   };
 }
 
-function updateAssetRef(
+function updateContent(
   document: SceneDocument,
   nodeId: string,
-  asset: string | undefined,
+  content: SceneNodeContent | undefined,
 ): ScenePatch {
   const node = getRequiredNode(document, nodeId);
-  const previous = node.asset;
+  const previous = node.content;
 
-  if (asset == null) {
-    delete node.asset;
+  if (content == null) {
+    delete node.content;
   } else {
-    node.asset = asset;
+    node.content = deepClone(content);
   }
 
   return {
-    asset: previous,
+    content: previous === undefined ? undefined : deepClone(previous),
     nodeId,
-    op: 'updateAssetRef',
+    op: 'updateContent',
   };
 }
 
-function setEditorMetadata(
+function updateConstraints(
   document: SceneDocument,
-  value: JsonObject | undefined,
-  nodeId?: string,
+  nodeId: string,
+  constraints: SceneNodeConstraints | undefined,
 ): ScenePatch {
-  if (nodeId == null) {
-    const previous =
-      document.editor === undefined ? undefined : deepClone(document.editor);
-    if (value === undefined) {
-      delete document.editor;
-    } else {
-      document.editor = deepClone(value);
-    }
-    return {
-      op: 'setEditorMetadata',
-      ...(previous === undefined ? {} : { value: previous }),
-    };
-  }
-
   const node = getRequiredNode(document, nodeId);
-  const previous =
-    node.editor === undefined ? undefined : deepClone(node.editor);
-  if (value === undefined) {
-    delete node.editor;
+  const previous = node.constraints;
+
+  if (constraints == null) {
+    delete node.constraints;
   } else {
-    node.editor = deepClone(value);
+    node.constraints = deepClone(constraints);
   }
 
   return {
+    constraints: previous === undefined ? undefined : deepClone(previous),
     nodeId,
-    op: 'setEditorMetadata',
-    ...(previous === undefined ? {} : { value: previous }),
+    op: 'updateConstraints',
   };
 }
 
@@ -525,6 +739,118 @@ function setNodeMetadata(
     op: 'setNodeMetadata',
     ...(previous === undefined ? {} : { value: previous }),
   };
+}
+
+function setAuthoring(
+  document: SceneDocument,
+  authoring: SceneAuthoring | undefined,
+): ScenePatch {
+  const previous =
+    document.authoring == null ? undefined : deepClone(document.authoring);
+  if (authoring == null) {
+    delete document.authoring;
+  } else {
+    document.authoring = deepClone(authoring);
+  }
+  return { op: 'setAuthoring', authoring: previous };
+}
+
+function setEnvironment(
+  document: SceneDocument,
+  environment: SceneEnvironment | undefined,
+): ScenePatch {
+  const previous =
+    document.environment == null ? undefined : deepClone(document.environment);
+  if (environment == null) {
+    delete document.environment;
+  } else {
+    document.environment = deepClone(environment);
+  }
+  return { op: 'setEnvironment', environment: previous };
+}
+
+function addPrefab(
+  document: SceneDocument,
+  prefab: ScenePrefab,
+  index?: number,
+): ScenePatch {
+  const prefabs = (document.resources.prefabs ??= []);
+  insertAt(prefabs, deepClone(prefab), index);
+  return { op: 'removePrefab', prefabId: prefab.id };
+}
+
+function updatePrefab(
+  document: SceneDocument,
+  prefabId: string,
+  prefab: ScenePrefab,
+): ScenePatch {
+  if (prefab.id !== prefabId) {
+    throw new Error('updatePrefab cannot rename a resource id');
+  }
+  const prefabs = document.resources.prefabs ?? [];
+  const index = findResourceIndex(prefabs, prefabId, 'prefab');
+  const previous = prefabs[index];
+  prefabs[index] = deepClone(prefab);
+  return { op: 'updatePrefab', prefabId, prefab: previous };
+}
+
+function removePrefab(document: SceneDocument, prefabId: string): ScenePatch {
+  const prefabs = document.resources.prefabs ?? [];
+  const index = findResourceIndex(prefabs, prefabId, 'prefab');
+  const [prefab] = prefabs.splice(index, 1);
+  return { op: 'addPrefab', prefab, index };
+}
+
+function addAuthoringView(
+  document: SceneDocument,
+  view: SceneAuthoringView,
+  index?: number,
+): ScenePatch {
+  document.authoring ??= {};
+  const views = (document.authoring.views ??= []);
+  insertAt(views, deepClone(view), index);
+  return { op: 'removeAuthoringView', viewId: view.id };
+}
+
+function updateAuthoringView(
+  document: SceneDocument,
+  viewId: string,
+  view: SceneAuthoringView,
+): ScenePatch {
+  if (view.id !== viewId) {
+    throw new Error('updateAuthoringView cannot rename a view id');
+  }
+  const views = document.authoring?.views ?? [];
+  const index = findResourceIndex(views, viewId, 'authoring view');
+  const previous = views[index];
+  views[index] = deepClone(view);
+  return { op: 'updateAuthoringView', viewId, view: previous };
+}
+
+function removeAuthoringView(
+  document: SceneDocument,
+  viewId: string,
+): ScenePatch {
+  const views = document.authoring?.views ?? [];
+  const index = findResourceIndex(views, viewId, 'authoring view');
+  const [view] = views.splice(index, 1);
+  return { op: 'addAuthoringView', view, index };
+}
+
+function insertAt<T>(entries: T[], value: T, index?: number) {
+  entries.splice(Math.min(index ?? entries.length, entries.length), 0, value);
+}
+
+function findResourceIndex(
+  entries: Array<{ id: string }>,
+  id: string,
+  kind: string,
+) {
+  const index = entries.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    throw new Error(`Unknown ${kind} "${id}"`);
+  }
+  return index;
 }
 
 function getRequiredNode(document: SceneDocument, nodeId: string) {

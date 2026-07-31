@@ -6,7 +6,11 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MCPWebSocketClient, initMCPClient } from '../src/mcp/ws-client.js';
+import {
+  MCPWebSocketClient,
+  initMCPBridge,
+  initMCPClient,
+} from '../src/mcp/ws-client.js';
 
 // Mock WebSocket
 class MockWebSocket {
@@ -161,6 +165,26 @@ describe('MCPWebSocketClient', () => {
   });
 
   describe('connect', () => {
+    test('reports the actual bridge connection state', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      expect(client.connected).toBe(false);
+      expect(client.connectionState).toBe('disconnected');
+
+      client.connect();
+      expect(client.connected).toBe(false);
+      expect(client.connectionState).toBe('connecting');
+
+      await vi.waitFor(() => {
+        expect(client?.connected).toBe(true);
+      });
+      expect(client.connectionState).toBe('connected');
+
+      client.disconnect();
+      expect(client.connected).toBe(false);
+      expect(client.connectionState).toBe('disconnected');
+      client = null;
+    });
+
     test('should connect to WebSocket with correct URL', async () => {
       client = new MCPWebSocketClient(mockDevice as any);
       client.connect();
@@ -446,6 +470,41 @@ describe('MCPWebSocketClient', () => {
       delete (globalThis as any).window.FRAMEWORK_MCP_RUNTIME;
     });
 
+    test('routes framework methods without an IWER device and rejects XR methods clearly', async () => {
+      const mockFrameworkRuntime = {
+        handles: vi.fn((method: string) => method === 'workspace_get_state'),
+        dispatch: vi.fn().mockResolvedValue({ view: 'editor' }),
+      };
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = mockFrameworkRuntime;
+
+      client = new MCPWebSocketClient(null);
+      client.connect();
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance?.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: 'workspace-bridge',
+        method: 'workspace_get_state',
+        params: {},
+      });
+      await vi.waitFor(
+        () => mockFrameworkRuntime.dispatch.mock.calls.length > 0,
+      );
+      expect(mockFrameworkRuntime.dispatch).toHaveBeenCalledWith(
+        'workspace_get_state',
+        {},
+      );
+
+      await expect(
+        (client as any).dispatch('get_transform', { device: 'headset' }),
+      ).rejects.toThrow(
+        'requires IWER device emulation and is unavailable in this workspace-only page',
+      );
+
+      delete (globalThis as any).window.FRAMEWORK_MCP_RUNTIME;
+    });
+
     test('should fall back to device.remote.dispatch when FRAMEWORK_MCP_RUNTIME does not handle method', async () => {
       const mockFrameworkRuntime = {
         handles: vi.fn().mockReturnValue(false),
@@ -537,6 +596,53 @@ describe('MCPWebSocketClient', () => {
       expect(response.id).toBe('4');
       expect(response.error).toBeDefined();
       expect(response.error.message).toBe('Test error');
+    });
+
+    test('preserves structured framework error details in the WebSocket response', async () => {
+      const structuredError = Object.assign(new Error('Scene is invalid'), {
+        code: 'invalid_scene',
+        details: { documentHash: 'sha256:stale' },
+        issues: [{ code: 'below-floor', nodeId: 'chair' }],
+        lifecycle: { schemaValid: 'failed' },
+        recoverable: true,
+        retryAction: 'scene_validate',
+      });
+      const mockFrameworkRuntime = {
+        handles: vi.fn().mockReturnValue(true),
+        dispatch: vi.fn().mockRejectedValue(structuredError),
+      };
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = mockFrameworkRuntime;
+      client = new MCPWebSocketClient(null);
+      client.connect();
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance?.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: 'structured-error',
+        method: 'scene_validate',
+        params: {},
+      });
+      await vi.waitFor(() => {
+        expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(1);
+      });
+
+      expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+        error: {
+          code: -32000,
+          data: {
+            code: 'invalid_scene',
+            details: { documentHash: 'sha256:stale' },
+            issues: [{ code: 'below-floor', nodeId: 'chair' }],
+            lifecycle: { schemaValid: 'failed' },
+            recoverable: true,
+            retryAction: 'scene_validate',
+          },
+          message: 'Scene is invalid',
+        },
+        id: 'structured-error',
+      });
+      delete (globalThis as any).window.FRAMEWORK_MCP_RUNTIME;
     });
 
     test('should ignore invalid JSON messages', async () => {
@@ -980,6 +1086,12 @@ describe('initMCPClient', () => {
 
   test('should create and connect client', () => {
     const client = initMCPClient(mockDevice as any);
+    expect(client).toBeInstanceOf(MCPWebSocketClient);
+    client.disconnect();
+  });
+
+  test('should create a device-less managed workspace bridge', () => {
+    const client = initMCPBridge();
     expect(client).toBeInstanceOf(MCPWebSocketClient);
     client.disconnect();
   });

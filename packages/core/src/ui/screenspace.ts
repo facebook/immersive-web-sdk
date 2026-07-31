@@ -5,61 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '../ecs/component.js';
 import type { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import type { Object3D } from '../runtime/index.js';
 import type { ScenePointerDescendants } from '../runtime/scene-pointer-descendants.js';
 import { MathUtils } from '../runtime/three.js';
 import { UIKitDocument } from './document.js';
+import { ScreenSpace } from './screenspace-component.js';
 import { PanelUI, PanelDocument } from './ui.js';
 
-/**
- * CSS‑like screen‑space layout for a {@link PanelUI}.
- *
- * @remarks
- * When XR is not presenting, the panel is re‑parented under the active camera and positioned
- * in pixels using CSS‑like expressions for `top`/`left`/`bottom`/`right`, with `width`/`height`
- * specified in any CSS units supported by the browser (e.g. `px`, `vw`, `vh`, `%`, `em`).
- *
- * On XR session start, the panel is automatically returned to world space.
- *
- * All size inputs are ultimately converted to meters using the camera frustum at `zOffset`.
- *
- * @example Place a panel at bottom‑right, 40% width, auto height
- * ```ts
- * entity.addComponent(PanelUI, { config: '/ui/menu.json' })
- * entity.addComponent(ScreenSpace, {
- *   width: '40vw',
- *   height: 'auto',
- *   bottom: '24px',
- *   right: '24px',
- *   zOffset: 0.25,
- * })
- * ```
- *
- * @category UI
- */
-export const ScreenSpace = createComponent(
-  'ScreenSpace',
-  {
-    /** CSS size expression for height (e.g., `240px`, `40vh`, `auto`). */
-    height: { type: Types.String, default: 'auto' },
-    /** CSS size expression for width (e.g., `480px`, `40vw`, `auto`). */
-    width: { type: Types.String, default: 'auto' },
-    /** CSS absolute `top` position (pixels/percent/vh) or `auto`. */
-    top: { type: Types.String, default: 'auto' },
-    /** CSS absolute `bottom` position (pixels/percent/vh) or `auto`. */
-    bottom: { type: Types.String, default: 'auto' },
-    /** CSS absolute `left` position (pixels/percent/vw) or `auto`. */
-    left: { type: Types.String, default: 'auto' },
-    /** CSS absolute `right` position (pixels/percent/vw) or `auto`. */
-    right: { type: Types.String, default: 'auto' },
-    /** Distance in meters in front of the camera’s near plane. */
-    zOffset: { type: Types.Float32, default: 0.2 },
-  },
-  'Component for screen-space UI positioning',
-);
+export { ScreenSpace } from './screenspace-component.js';
+
 /**
  * Positions {@link PanelUI} documents relative to the camera with CSS‑like semantics.
  *

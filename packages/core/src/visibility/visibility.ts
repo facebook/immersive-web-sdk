@@ -5,18 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '../ecs/component.js';
 import { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
-export const Visibility = createComponent(
-  'Visibility',
-  {
-    isVisible: { type: Types.Boolean, default: true },
-  },
-  'Component to control if an entity object is visible',
-  // @ts-ignore - 4th argument is editor metadata consumed by tooling.
-  { hideInEditor: true },
-);
+import { Visibility } from './visibility-component.js';
+
+export { Visibility } from './visibility-component.js';
 
 function attachToEntity(entity: Entity): void {
   const object3D = entity.object3D;

@@ -21,6 +21,7 @@ import {
   hasRuntimeBrowserCommandReadyContract,
   INTERNAL_BROWSER_PROBE_METHOD,
   isRuntimeBrowserCommandReady,
+  type RuntimeBrowserState,
   type RuntimeBrowserProbeResult,
   type RuntimeIssueInfo,
   type RuntimeSession,
@@ -84,6 +85,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function wasWorkspaceStoppedExternally(
+  workspaceRoot: string,
+  timeoutMs = 1000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const state = await getWorkspaceRuntimeState(workspaceRoot);
+    if (!state.session && !state.launch) {
+      return true;
+    }
+    await sleep(50);
+  } while (Date.now() < deadline);
+  return false;
+}
+
 function isTraceEnabled(): boolean {
   return process.env.IWSDK_RUNTIME_TRACE === '1';
 }
@@ -112,21 +128,14 @@ function isBrowserProbeResult(
   );
 }
 
-function isWorkspaceBrowserReady(session: RuntimeSession): boolean {
-  if (session.aiMode || !session.browser) {
-    return false;
-  }
-
-  return (
-    session.browser.status === 'waiting_for_connection' ||
-    session.browser.status === 'connected'
-  );
-}
-
 async function probeBrowserCommandReady(
   session: RuntimeSession,
   timeoutMs: number,
-): Promise<{ ready: boolean; browserIssue?: RuntimeIssueInfo }> {
+): Promise<{
+  ready: boolean;
+  browser?: RuntimeBrowserState;
+  browserIssue?: RuntimeIssueInfo;
+}> {
   if (!session.browser) {
     return { ready: true };
   }
@@ -154,15 +163,16 @@ async function probeBrowserCommandReady(
       timeoutMs,
       runtimeSession: session,
     });
-    const ready = isBrowserProbeResult(response.result)
-      ? response.result.commandReady
-      : false;
+    const result = isBrowserProbeResult(response.result)
+      ? response.result
+      : undefined;
+    const ready = result?.commandReady ?? false;
     traceDev('probe_result', {
       port: session.port,
       ready,
-      result: isBrowserProbeResult(response.result) ? response.result : null,
+      result: result ?? null,
     });
-    return { ready };
+    return { ready, ...(result == null ? {} : { browser: result.browser }) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const cause =
@@ -232,6 +242,13 @@ function isOpenRequested(options: CliOptions): boolean {
   return options.open === true;
 }
 
+export function shouldOpenExternalBrowser(
+  openRequested: boolean,
+  session: Pick<RuntimeSession, 'browser'>,
+): boolean {
+  return openRequested && session.browser == null;
+}
+
 function isForegroundLaunch(options: CliOptions): boolean {
   return options.foreground === true;
 }
@@ -270,11 +287,7 @@ async function waitForRuntimeSession(
     const session = await getRuntimeSession(workspaceRoot);
     if (session) {
       lastSession = session;
-      if (
-        !session.browser ||
-        isWorkspaceBrowserReady(session) ||
-        isRuntimeBrowserCommandReady(session)
-      ) {
+      if (!session.browser || isRuntimeBrowserCommandReady(session)) {
         return { session, exit: null, browserReady: true };
       }
       if (session.browser.status === 'launch_failed') {
@@ -290,7 +303,7 @@ async function waitForRuntimeSession(
         };
       }
 
-      if (session.aiMode) {
+      if (session.browser) {
         const remainingMs = Math.max(deadline - Date.now(), 1);
         const probe = await probeBrowserCommandReady(
           session,
@@ -298,8 +311,16 @@ async function waitForRuntimeSession(
         );
         if (probe.ready) {
           const refreshedSession = await getRuntimeSession(workspaceRoot);
+          const resolvedSession = refreshedSession ?? session;
           return {
-            session: refreshedSession ?? session,
+            session:
+              isRuntimeBrowserCommandReady(resolvedSession) || !probe.browser
+                ? resolvedSession
+                : {
+                    ...resolvedSession,
+                    browser: probe.browser,
+                    updatedAt: new Date().toISOString(),
+                  },
             exit: null,
             browserReady: true,
           };
@@ -326,9 +347,7 @@ async function waitForRuntimeSession(
     session: lastSession,
     exit: null,
     browserReady: Boolean(
-      lastSession &&
-        (isWorkspaceBrowserReady(lastSession) ||
-          isRuntimeBrowserCommandReady(lastSession)),
+      lastSession && isRuntimeBrowserCommandReady(lastSession),
     ),
     browserIssue:
       lastBrowserIssue ??
@@ -488,7 +507,7 @@ export async function handleDevUp(
         },
       );
     }
-    if (openBrowser) {
+    if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
       await openUrl(waitResult.session.localUrl);
     }
     const adapters = await readAdapterStatus(workspaceRoot);
@@ -610,7 +629,7 @@ export async function handleDevUp(
   const launch = await getLaunchMetadata(workspaceRoot);
   const adapters = await readAdapterStatus(workspaceRoot);
 
-  if (openBrowser) {
+  if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
     await openUrl(waitResult.session.localUrl);
   }
 
@@ -619,7 +638,10 @@ export async function handleDevUp(
       `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
     );
     const exit = await childExitPromise;
-    if (isAbnormalChildExit(exit)) {
+    if (
+      isAbnormalChildExit(exit) &&
+      !(await wasWorkspaceStoppedExternally(workspaceRoot))
+    ) {
       return createFailure(describeChildExit(exit), 'dev_up_exit', {
         workspaceRoot,
         session: waitResult.session,
@@ -714,11 +736,15 @@ export async function handleDevOpen(
     throw new Error(formatMissingRuntimeMessage(workspaceRoot));
   }
 
-  await openUrl(session.localUrl);
+  const openedExternally = shouldOpenExternalBrowser(true, session);
+  if (openedExternally) {
+    await openUrl(session.localUrl);
+  }
 
   return createSuccess({
     workspaceRoot,
-    opened: session.localUrl,
+    opened: openedExternally ? session.localUrl : null,
+    managedBrowser: session.browser != null,
     browserConnected: Boolean(session.browser?.connected),
     browserCommandReady: isRuntimeBrowserCommandReady(session),
     browser: session.browser ?? null,

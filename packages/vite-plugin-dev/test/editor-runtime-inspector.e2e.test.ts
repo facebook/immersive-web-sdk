@@ -9,6 +9,7 @@ import { mkdir } from 'fs/promises';
 import path from 'path';
 import { afterEach, describe, expect, test } from 'vitest';
 import {
+  addComponentViaPicker,
   createEditorTestHarness,
   expectRealWebGLViewport,
   getEditorProof,
@@ -33,7 +34,13 @@ describe('editor right inspector runtime boundary', () => {
 
     await expect
       .poll(() => rightInspectorSections(editor))
-      .toEqual(['Asset', 'Transform', 'Components', 'Metadata']);
+      .toEqual(['Asset', 'Transform', 'Components']);
+    await expect
+      .poll(() => editor.page.locator('.metadata-editor').count())
+      .toBe(0);
+    await expect
+      .poll(() => editor.page.locator('[data-node-framing-role]').count())
+      .toBe(0);
     await expect
       .poll(() => editor.page.locator('.runtime-inspector').count())
       .toBe(0);
@@ -49,12 +56,62 @@ describe('editor right inspector runtime boundary', () => {
     await expect
       .poll(() => editor.page.locator('[data-node-title-edit]').inputValue())
       .toBe('table-1');
+    await expect
+      .poll(() => editor.page.locator('#apply-transform').count())
+      .toBe(0);
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('#transform-editor-message')
+          .evaluate((element) => getComputedStyle(element).display),
+      )
+      .toBe('none');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-transform-field="position.0"]')
+          .evaluate((element) => ({
+            appearance: getComputedStyle(element).appearance,
+            stepperRule: [...document.styleSheets].some((sheet) =>
+              [...sheet.cssRules].some(
+                (rule) =>
+                  rule instanceof CSSStyleRule &&
+                  rule.selectorText.includes('::-webkit-inner-spin-button') &&
+                  rule.style.getPropertyValue('-webkit-appearance') === 'none',
+              ),
+            ),
+          })),
+      )
+      .toEqual({ appearance: 'textfield', stepperRule: true });
+    await expect
+      .poll(() =>
+        editor.page.locator('.asset-editor .inspector-section-meta').count(),
+      )
+      .toBe(0);
+    const components = editor.page.locator('.component-editor');
+    await expect
+      .poll(() =>
+        components
+          .locator('#component-editor-message')
+          .evaluate((element) => getComputedStyle(element).display),
+      )
+      .toBe('none');
+    await components.locator('summary').click();
+    await expect.poll(() => components.getAttribute('open')).toBeNull();
+    await expect
+      .poll(() =>
+        components.evaluate(
+          (element) => getComputedStyle(element).paddingBottom,
+        ),
+      )
+      .toBe('0px');
+    await components.locator('summary').click();
     await writeInspectorEvidence(editor);
 
     await expect
       .poll(() => selectedRuntime(editor))
       .toMatchObject({
-        assetStatus: 'loaded',
+        assetStatus: 'registered',
         bounds: {
           size: expect.arrayContaining([
             expect.any(Number),
@@ -96,10 +153,7 @@ describe('editor right inspector runtime boundary', () => {
         selection: ['table-renamed'],
       });
 
-    await editor.page
-      .locator('#new-component-type')
-      .selectOption('TestInspectable');
-    await editor.page.locator('#add-component').click();
+    await addComponentViaPicker(editor.page, 'TestInspectable');
 
     await expect
       .poll(() => selectedRuntime(editor))

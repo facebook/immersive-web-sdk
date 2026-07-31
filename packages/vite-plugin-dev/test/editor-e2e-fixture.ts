@@ -6,12 +6,12 @@
  */
 
 import { createHash } from 'crypto';
-import { existsSync } from 'fs';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium, type Browser, type Page } from 'playwright';
+import sharp from 'sharp';
 import { createServer } from 'vite';
 import { expect } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
@@ -22,6 +22,21 @@ export const REPO_ROOT = path.resolve(
 );
 export const EDITOR_SCENE_RELATIVE_PATH =
   'public/scenes/editor-smoke.iwsdk.scene.json';
+export const EDITOR_REFERENCE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#dbeafe"/><circle cx="32" cy="32" r="18" fill="#c96d52"/></svg>';
+export const EDITOR_GARDEN_REFERENCE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384" viewBox="0 0 512 384">
+  <rect width="512" height="384" fill="#d9e4d2"/>
+  <rect x="0" y="0" width="512" height="185" fill="#5d7a45"/>
+  <path d="M72 384 128 190 395 190 456 384Z" fill="#8b8173"/>
+  <path d="M231 384 247 198 286 198 310 384Z" fill="#a39a8b"/>
+  <g fill="#355d31"><circle cx="45" cy="138" r="52"/><circle cx="465" cy="142" r="60"/><circle cx="345" cy="95" r="54"/><circle cx="170" cy="105" r="45"/></g>
+  <g fill="#486f3b"><circle cx="80" cy="210" r="35"/><circle cx="430" cy="218" r="38"/><circle cx="350" cy="172" r="31"/></g>
+  <g fill="#8b5d3e" stroke="#4b3527" stroke-width="6"><path d="M142 248h78l-8 56h-62z"/><path d="m146 246 7-58h64l2 58"/><path d="M316 248h78l-8 56h-62z"/><path d="m320 246 7-58h64l2 58"/></g>
+  <g fill="#7c5439" stroke="#4b3527" stroke-width="5"><ellipse cx="268" cy="263" rx="42" ry="16"/><rect x="260" y="264" width="16" height="42"/></g>
+  <g fill="#b9783f" stroke="#6a472d" stroke-width="4"><ellipse cx="252" cy="322" rx="42" ry="22"/><circle cx="291" cy="307" r="19"/><path d="M215 320q-30-28-36-2" fill="none" stroke-width="9"/><rect x="228" y="333" width="9" height="31"/><rect x="270" y="333" width="9" height="31"/></g>
+  <g fill="#d9849d"><circle cx="36" cy="265" r="7"/><circle cx="65" cy="294" r="7"/><circle cx="105" cy="252" r="7"/><circle cx="419" cy="274" r="7"/><circle cx="456" cy="303" r="7"/><circle cx="482" cy="255" r="7"/></g>
+  <rect x="458" y="15" width="18" height="120" fill="#6b4930"/><circle cx="467" cy="28" r="70" fill="#48703b"/>
+</svg>`;
 export const TEST_MANAGED_WORKSPACE_TOKEN =
   'editor-e2e-managed-workspace-token';
 export const MANAGED_WORKSPACE_HEADERS = {
@@ -46,8 +61,13 @@ export interface EditorTestHarness {
   tempRoot: string;
 }
 
+export interface EditorTestHarnessOptions {
+  managedBrowser?: boolean;
+}
+
 export async function createEditorTestHarness(
   prefix: string,
+  options: EditorTestHarnessOptions = {},
 ): Promise<EditorTestHarness> {
   const tempRoot = path.join(
     os.tmpdir(),
@@ -56,8 +76,15 @@ export async function createEditorTestHarness(
   process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN = TEST_MANAGED_WORKSPACE_TOKEN;
   await writeFixtureProject(tempRoot);
   const server = await createServer({
+    cacheDir: path.join(tempRoot, '.vite'),
     logLevel: 'silent',
-    plugins: [iwsdkDev()],
+    plugins: [
+      iwsdkDev({
+        assetManifest: './src/assets.js',
+        componentManifest: './src/components.js',
+        ...(options.managedBrowser ? { ai: { mode: 'agent' } } : {}),
+      }),
+    ],
     root: tempRoot,
     server: {
       fs: {
@@ -103,6 +130,12 @@ export async function createEditorTestHarness(
         { waitUntil: 'domcontentloaded' },
       );
       await waitForEditorReady(context.page, context.errors);
+      await context.page
+        .locator('[data-workspace-view-button="editor"]')
+        .click();
+      await context.page.waitForFunction(
+        () => document.documentElement.dataset.iwsdkWorkspaceView === 'editor',
+      );
       return context;
     },
     async readScene() {
@@ -147,6 +180,20 @@ export async function selectNode(page: Page, nodeId: string): Promise<void> {
     .toBe(nodeId);
 }
 
+export async function addComponentViaPicker(
+  page: Page,
+  componentId: string,
+): Promise<void> {
+  await page.locator('#add-component').click();
+  const dialog = page.locator('#component-picker-dialog');
+  await expect.poll(() => dialog.getAttribute('open')).not.toBeNull();
+  await dialog.locator('#component-picker-search').fill(componentId);
+  await dialog
+    .locator(`[data-component-picker-option="${componentId}"]`)
+    .click();
+  await expect.poll(() => dialog.getAttribute('open')).toBeNull();
+}
+
 export async function expectRealWebGLViewport(
   context: EditorPageContext,
 ): Promise<any> {
@@ -178,9 +225,13 @@ export async function expectRealWebGLViewport(
         canvas.getContext('webgl2') ||
         canvas.getContext('webgl') ||
         canvas.getContext('experimental-webgl');
+      const debugInfo = webgl?.getExtension('WEBGL_debug_renderer_info');
       return {
         height: canvas.height,
         isCanvas: true,
+        renderer: debugInfo
+          ? webgl?.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          : null,
         twoD: Boolean(canvas.getContext('2d')),
         webgl: Boolean(webgl),
         width: canvas.width,
@@ -193,6 +244,9 @@ export async function expectRealWebGLViewport(
   });
   expect(canvasProof.width).toBeGreaterThan(100);
   expect(canvasProof.height).toBeGreaterThan(100);
+  expect(String(canvasProof.renderer).toLowerCase()).not.toContain(
+    'swiftshader',
+  );
   expect(await hasNonBlankCanvas(context.page, '#scene-canvas')).toBe(true);
   expect(context.errors()).toEqual([]);
   expect(
@@ -240,40 +294,41 @@ async function writeFixtureProject(tempRoot: string): Promise<void> {
     'utf8',
   );
   await writeFile(
+    path.join(tempRoot, 'public', 'assets', 'reference.svg'),
+    EDITOR_REFERENCE_SVG,
+    'utf8',
+  );
+  await writeFile(
+    path.join(tempRoot, 'public', 'assets', 'garden-reference.svg'),
+    EDITOR_GARDEN_REFERENCE_SVG,
+    'utf8',
+  );
+  await writeFile(
     path.join(tempRoot, EDITOR_SCENE_RELATIVE_PATH),
     JSON.stringify(
       {
-        assets: [
-          {
-            bounds: { max: [1, 0.5, 1], min: [-1, 0, -1] },
-            id: 'table',
-            uri: '/assets/table.gltf',
+        components: {
+          'com.iwsdk.components.DomeGradient': {
+            equator: [0.6584, 0.7084, 0.7913, 1],
+            ground: [0.807, 0.7758, 0.7454, 1],
+            intensity: 1,
+            sky: [0.2423, 0.6172, 0.8308, 1],
           },
-          {
-            bounds: { max: [0.1, 0.4, 0.1], min: [-0.1, 0, -0.1] },
-            id: 'vase',
-            uri: '/assets/vase.gltf',
+          'com.iwsdk.components.IBLGradient': {
+            equator: [0.6584, 0.7084, 0.7913, 1],
+            ground: [0.807, 0.7758, 0.7454, 1],
+            intensity: 1,
+            sky: [0.6902, 0.749, 0.7843, 1],
           },
-        ],
-        componentSchemas: [
-          {
-            fields: {
-              enabled: { default: true, type: 'Boolean' },
-              label: { default: 'Inspectable', type: 'String' },
-              offset: { default: [0, 0, 0], type: 'Vec3' },
-              strength: { default: 0.5, max: 1, min: 0, type: 'Float32' },
-            },
-            id: 'TestInspectable',
-            source: 'scene',
-          },
-        ],
+        },
         nodes: [
           {
-            asset: 'table',
+            content: { asset: 'table', type: 'asset' },
             id: 'table-1',
             transform: { position: [0, 0, 0] },
           },
         ],
+        resources: {},
         units: 'meters',
         version: 'iwsdk.scene.v1',
       },
@@ -310,10 +365,72 @@ async function writeFixtureProject(tempRoot: string): Promise<void> {
     'utf8',
   );
   await writeFile(
+    path.join(tempRoot, 'src', 'assets.js'),
+    assetManifestFixtureSource(),
+    'utf8',
+  );
+  await writeFile(
+    path.join(tempRoot, 'src', 'components.js'),
+    componentManifestFixtureSource(),
+    'utf8',
+  );
+  await writeFile(
     path.join(tempRoot, 'src', 'main.js'),
     appFixtureSource(),
     'utf8',
   );
+}
+
+function componentManifestFixtureSource(): string {
+  const coreImportUrl = `/@fs/${path
+    .join(REPO_ROOT, 'packages/core/src/index.ts')
+    .replace(/\\/g, '/')}`;
+  return `
+import { createComponent, defineComponents, Types } from ${JSON.stringify(coreImportUrl)};
+
+export const TestInspectable = createComponent('TestInspectable', {
+  enabled: { default: true, type: Types.Boolean },
+  label: { default: 'Inspectable', type: Types.String },
+  offset: { default: [0, 0, 0], type: Types.Vec3 },
+  strength: { default: 0.5, max: 1, min: 0, type: Types.Float32 },
+});
+
+export default defineComponents([TestInspectable]);
+`;
+}
+
+function assetManifestFixtureSource(): string {
+  const coreImportUrl = `/@fs/${path
+    .join(REPO_ROOT, 'packages/core/src/index.ts')
+    .replace(/\\/g, '/')}`;
+  return `
+import {
+  AssetType,
+  BoxGeometry,
+  Mesh,
+  MeshStandardMaterial,
+} from ${JSON.stringify(coreImportUrl)};
+
+const proceduralPlinth = new Mesh(
+  new BoxGeometry(0.6, 0.2, 0.6),
+  new MeshStandardMaterial({ color: 0x2f7d69, roughness: 0.7 }),
+);
+proceduralPlinth.name = 'Procedural plinth';
+
+export default {
+  table: {
+    name: 'Table',
+    type: AssetType.GLTF,
+    url: '/assets/table.gltf',
+  },
+  vase: {
+    name: 'Vase',
+    type: AssetType.GLTF,
+    url: '/assets/vase.gltf',
+  },
+  'procedural-plinth': proceduralPlinth,
+};
+`;
 }
 
 function createSilentWav(): Buffer {
@@ -349,6 +466,8 @@ function appFixtureSource(): string {
     .replace(/\\/g, '/')}`;
   return `
 import { LevelTag, Transform, World } from ${JSON.stringify(coreImportUrl)};
+import assets from './assets.js';
+import components from './components.js';
 
 const host = document.getElementById('app-root');
 const status = document.getElementById('app-status');
@@ -357,18 +476,68 @@ function roundVec3(values) {
   return Array.from(values).map((value) => Number(value.toFixed(4)));
 }
 
+function primitiveGeometryProof(object) {
+  if (object.isMesh !== true || !object.geometry) {
+    return null;
+  }
+  const parameters = object.geometry.parameters || {};
+  return {
+    depth: parameters.depth ?? null,
+    height: parameters.height ?? null,
+    radius: parameters.radius ?? null,
+    radiusBottom: parameters.radiusBottom ?? null,
+    radiusTop: parameters.radiusTop ?? null,
+    type: object.geometry.type,
+    width: parameters.width ?? null,
+  };
+}
+
+function primitiveMaterialProof(object) {
+  if (object.isMesh !== true || !object.material) {
+    return null;
+  }
+  const material = Array.isArray(object.material)
+    ? object.material[0]
+    : object.material;
+  return {
+    color: material?.color ? '#' + material.color.getHexString() : null,
+    metalness: material?.metalness ?? null,
+    opacity: material?.opacity ?? null,
+    roughness: material?.roughness ?? null,
+    transparent: material?.transparent ?? null,
+    type: material?.type ?? null,
+  };
+}
+
 function sceneNodeObjects(world) {
   const nodes = [];
   world.getActiveRoot().traverse((object) => {
     const nodeId = object.userData?.iwsdkSceneNodeId;
-    if (typeof nodeId !== 'string' || object.name !== nodeId) {
+    if (
+      typeof nodeId !== 'string' ||
+      object.parent?.userData?.iwsdkSceneNodeId === nodeId
+    ) {
       return;
     }
     nodes.push({
       assetId: object.userData.iwsdkSceneAssetId,
+      castShadow: object.castShadow,
+      geometry: primitiveGeometryProof(object),
       id: nodeId,
+      isMesh: object.isMesh === true,
+      material: primitiveMaterialProof(object),
       name: object.name,
       position: roundVec3(object.position.toArray()),
+      primitive: object.userData.iwsdkScenePrimitive ?? null,
+      primitiveType:
+        object.userData.iwsdkScenePrimitive?.geometry?.type ??
+        object.userData.iwsdkScenePrimitive?.type ??
+        null,
+      receiveShadow: object.receiveShadow,
+      rotationDeg: roundVec3(
+        object.rotation.toArray().slice(0, 3).map((value) => value * 180 / Math.PI),
+      ),
+      runtimeHash: object.userData.iwsdkSceneRuntimeHash ?? null,
       scale: roundVec3(object.scale.toArray()),
     });
   });
@@ -409,6 +578,8 @@ function collectProof(world) {
 
 try {
   const world = await World.create(host, {
+    assets,
+    components,
     features: {
       camera: false,
       environmentRaycast: false,
@@ -515,49 +686,63 @@ async function waitForEditorReady(
   }
 }
 
-async function hasNonBlankCanvas(
+export async function hasNonBlankCanvas(
   page: Page,
   selector: string,
 ): Promise<boolean> {
-  const imageDataLength = await page.locator(selector).evaluate((canvas) => {
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      return 0;
-    }
-    return canvas.toDataURL('image/png').length;
-  });
-  return imageDataLength > 1000;
+  const imageData =
+    selector === '#scene-canvas'
+      ? await page.evaluate(async () => {
+          const runtime = (window as any).IWSDK_SCENE_EDITOR?.runtime;
+          if (runtime == null) {
+            return '';
+          }
+          const result = await runtime.dispatch('scene_screenshot', {
+            view: 'current',
+          });
+          return result?.imageData ?? '';
+        })
+      : await page.locator(selector).evaluate((canvas) => {
+          if (!(canvas instanceof HTMLCanvasElement)) {
+            return '';
+          }
+          const appWorld = (window as any).__APP_WORLD;
+          if (canvas.id === 'app-canvas' && appWorld?.renderer?.render) {
+            appWorld.renderer.render(appWorld.scene, appWorld.camera);
+          }
+          return canvas.toDataURL('image/png');
+        });
+  const encoded = imageData.includes(',')
+    ? imageData.split(',', 2)[1]
+    : imageData;
+  if (encoded == null || encoded.length < 1000) {
+    return false;
+  }
+
+  const { data, info } = await sharp(Buffer.from(encoded, 'base64'))
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const channels = info.channels;
+  let minLuminance = 255;
+  let maxLuminance = 0;
+  for (let offset = 0; offset < data.length; offset += channels) {
+    const red = data[offset] ?? 0;
+    const green = data[offset + Math.min(1, channels - 1)] ?? red;
+    const blue = data[offset + Math.min(2, channels - 1)] ?? red;
+    const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+    minLuminance = Math.min(minLuminance, luminance);
+    maxLuminance = Math.max(maxLuminance, luminance);
+  }
+  return maxLuminance - minLuminance > 8;
 }
 
 async function launchChromium(): Promise<Browser> {
-  try {
-    return await chromium.launch({ headless: true });
-  } catch (error) {
-    const executablePath = findSystemChromium();
-    if (executablePath == null) {
-      throw error;
-    }
-    return chromium.launch({
-      args: ['--no-sandbox'],
-      executablePath,
-      headless: true,
-    });
-  }
-}
-
-function findSystemChromium(): string | undefined {
-  const candidates =
-    process.platform === 'darwin'
-      ? [
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        ]
-      : [
-          '/usr/bin/google-chrome',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium',
-          '/usr/bin/chromium-browser',
-        ];
-  return candidates.find((candidate) => existsSync(candidate));
+  return chromium.launch({
+    args: ['--enable-webgl', '--use-angle=metal'],
+    channel: 'chromium',
+    headless: true,
+  });
 }
 
 function createBoxGltf({

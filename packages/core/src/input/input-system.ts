@@ -310,6 +310,12 @@ export class InputSystem extends createSystem(
       object3D.removeEventListener('pointerup', fns.up);
       this.listeners.delete(object3D);
     }
-    entity.removeComponent(Hovered).removeComponent(Pressed);
+    // A query also disqualifies an entity when it is destroyed. At that point
+    // Elics has already cleared its components and rejects further mutations.
+    // The listeners still need to be detached from the retained Object3D, but
+    // there are no transient input tags left to remove from an inactive entity.
+    if (entity.active) {
+      entity.removeComponent(Hovered).removeComponent(Pressed);
+    }
   }
 }

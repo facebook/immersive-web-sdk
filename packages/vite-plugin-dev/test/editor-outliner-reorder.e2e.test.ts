@@ -29,14 +29,14 @@ describe('editor outliner reorder', () => {
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-1',
         transform: { position: [1, 0, 0] },
       },
     });
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-2',
         transform: { position: [2, 0, 0] },
       },
@@ -68,6 +68,16 @@ describe('editor outliner reorder', () => {
         editor.page.locator('[data-scene-graph-action="move-up"]').isDisabled(),
       )
       .toBe(true);
+    await expect
+      .poll(() =>
+        editor.page.evaluate(() => ({
+          conflict: Boolean(
+            document.querySelector('#scene-save-conflict-dialog'),
+          ),
+          dirty: (window as any).IWSDK_SCENE_EDITOR.session.isDirty,
+        })),
+      )
+      .toEqual({ conflict: false, dirty: false });
 
     await expect(
       dispatchSceneTool(editor.page, 'scene_save'),

@@ -12,6 +12,7 @@ import {
   expectRealWebGLViewport,
   getEditorProof,
   selectNode,
+  type EditorPageContext,
   type EditorTestHarness,
 } from './editor-e2e-fixture.js';
 
@@ -42,15 +43,9 @@ describe('editor transform gizmo', () => {
         ),
       )
       .toEqual([0.25, 0, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0.25, 0, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0.25, 0, 0] });
 
     await editor.page
       .locator('[data-transform-field="rotationDeg.1"]')
@@ -67,15 +62,9 @@ describe('editor transform gizmo', () => {
         ),
       )
       .toEqual([0, 30, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      rotationDeg: [0, 30, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ rotationDeg: [0, 30, 0] });
   }, 45000);
 
   test('commits one document/runtime transform patch and preserves undo/redo parity', async () => {
@@ -108,16 +97,9 @@ describe('editor transform gizmo', () => {
       rotationDeg: [0, 0, 0],
       scale: 1,
     });
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0.5, 0, 0],
-      scale: [1, 1, 1],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0.5, 0, 0], scale: [1, 1, 1] });
     expect((await getEditorProof(editor.page)).transformControls).toMatchObject(
       {
         attachedNodeId: 'table-1',
@@ -146,15 +128,9 @@ describe('editor transform gizmo', () => {
             .position,
       ),
     ).resolves.toEqual([0, 0, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0, 0, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0, 0, 0] });
 
     await dispatchSceneTool(editor.page, 'scene_redo');
     await expect(
@@ -164,15 +140,9 @@ describe('editor transform gizmo', () => {
             .position,
       ),
     ).resolves.toEqual([0.5, 0, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0.5, 0, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0.5, 0, 0] });
 
     await expect
       .poll(() => editor.page.locator('[data-reset-transform]').count())
@@ -187,15 +157,10 @@ describe('editor transform gizmo', () => {
         ),
       )
       .toEqual([0, 0, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0, 0, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0, 0, 0] });
+    await expectEditorSettled(editor);
 
     await editor.page.evaluate(() =>
       (
@@ -216,16 +181,12 @@ describe('editor transform gizmo', () => {
         ),
       )
       .toEqual([0, 0, 0]);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      rotationDeg: [0, 0, 0],
-      scale: [1.2, 1.1, 0.8],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({
+        rotationDeg: [0, 0, 0],
+        scale: [1.2, 1.1, 0.8],
+      });
 
     await editor.page.locator('[data-reset-transform="scale"]').click();
     await expect
@@ -237,16 +198,9 @@ describe('editor transform gizmo', () => {
         ),
       )
       .toBe(1);
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      rotationDeg: [0, 0, 0],
-      scale: [1, 1, 1],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ rotationDeg: [0, 0, 0], scale: [1, 1, 1] });
   }, 45000);
 
   test('quantizes completed transform commits by the active snap mode', async () => {
@@ -280,15 +234,9 @@ describe('editor transform gizmo', () => {
       rotationDeg: [0, 22, 0],
       scale: [1.04, 1.16, 0.96],
     });
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      position: [0.5, 0, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ position: [0.5, 0, 0] });
 
     await editor.page.evaluate(() => {
       (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode('rotate');
@@ -307,15 +255,9 @@ describe('editor transform gizmo', () => {
       rotationDeg: [0, 30, 0],
       scale: [1.04, 1.16, 0.96],
     });
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      rotationDeg: [0, 30, 0],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ rotationDeg: [0, 30, 0] });
 
     await editor.page.evaluate(() => {
       (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode('scale');
@@ -334,15 +276,9 @@ describe('editor transform gizmo', () => {
       rotationDeg: [0, 30, 0],
       scale: [1, 1.2, 1],
     });
-    await expect(
-      editor.page.evaluate(() =>
-        (
-          window as any
-        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-      ),
-    ).resolves.toMatchObject({
-      scale: [1, 1.2, 1],
-    });
+    await expect
+      .poll(() => runtimeTransform(editor))
+      .toMatchObject({ scale: [1, 1.2, 1] });
   }, 45000);
 
   test('exposes X/Y/Z translate handles and preserves untouched axes on commits', async () => {
@@ -391,15 +327,9 @@ describe('editor transform gizmo', () => {
       expect(committed.documentTransform).toMatchObject({
         position: transform.position,
       });
-      await expect(
-        editor.page.evaluate(() =>
-          (
-            window as any
-          ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
-        ),
-      ).resolves.toMatchObject({
-        position: transform.position,
-      });
+      await expect
+        .poll(() => runtimeTransform(editor))
+        .toMatchObject({ position: transform.position });
     }
   }, 45000);
 
@@ -513,21 +443,44 @@ describe('editor transform gizmo', () => {
       });
 
     await editor.page.keyboard.press('Delete');
-    await expect(
-      dispatchSceneTool(editor.page, 'scene_get_hierarchy'),
-    ).resolves.toMatchObject({ hierarchy: [] });
+    await expect
+      .poll(() => dispatchSceneTool(editor.page, 'scene_get_hierarchy'))
+      .toMatchObject({ hierarchy: [] });
+    await expectEditorSettled(editor);
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-shortcut',
         transform: { position: [0, 0, 0] },
       },
     });
     await selectNode(editor.page, 'vase-shortcut');
     await editor.page.keyboard.press('Backspace');
-    await expect(
-      dispatchSceneTool(editor.page, 'scene_get_hierarchy'),
-    ).resolves.toMatchObject({ hierarchy: [] });
+    await expect
+      .poll(() => dispatchSceneTool(editor.page, 'scene_get_hierarchy'))
+      .toMatchObject({ hierarchy: [] });
+    await expectEditorSettled(editor);
   }, 45000);
 });
+
+async function runtimeTransform(editor: EditorPageContext): Promise<any> {
+  return editor.page.evaluate(() =>
+    (
+      window as any
+    ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlObjectTransform(),
+  );
+}
+
+async function expectEditorSettled(editor: EditorPageContext): Promise<void> {
+  await expect
+    .poll(() =>
+      editor.page.evaluate(() => ({
+        conflict: Boolean(
+          document.querySelector('#scene-save-conflict-dialog'),
+        ),
+        dirty: (window as any).IWSDK_SCENE_EDITOR.session.isDirty,
+      })),
+    )
+    .toEqual({ conflict: false, dirty: false });
+}

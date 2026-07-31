@@ -8,8 +8,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   getObjectTransform,
+  getRenderStats,
   getSceneHierarchy,
 } from '../../src/mcp/scene-tools.js';
+import {
+  ACESFilmicToneMapping,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Fog,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  Scene,
+  Texture,
+} from '../../src/runtime/index.js';
 
 // ---------------------------------------------------------------------------
 // Minimal Object3D mock (only the properties scene-tools uses)
@@ -164,6 +177,95 @@ describe('getSceneHierarchy', () => {
 
       expect(result.children![0].sceneNodeId).toBe('lamp-node');
     });
+
+    it('should expose content, resources, runtime hash, and stable derived ids', () => {
+      const runtimeHash = `sha256:${'a'.repeat(64)}`;
+      const obj = createMockObject3D('primitive-node');
+      obj.type = 'Mesh';
+      obj.userData = {
+        iwsdkSceneAssetId: 'wall-asset',
+        iwsdkSceneContent: { asset: 'wall-asset', type: 'asset' },
+        iwsdkSceneMetadata: { 'test.role': 'facade' },
+        iwsdkSceneFramingRole: 'support',
+        iwsdkSceneNodeId: 'building/0000/wall',
+        iwsdkSceneRuntimeHash: runtimeHash,
+        iwsdkSceneSourceNodeId: 'wall',
+      };
+      const asset = createMockObject3D('asset-node');
+      asset.userData = {
+        iwsdkSceneContent: { asset: 'catalog-building', type: 'asset' },
+        iwsdkSceneAssetId: 'catalog-building',
+        iwsdkSceneNodeId: 'catalog-building-node',
+        iwsdkSceneRuntimeHash: runtimeHash,
+      };
+      const instances = createMockObject3D('flower-instances');
+      instances.userData = {
+        iwsdkSceneInstanceIds: [
+          'flowers/0000/flower-root',
+          'flowers/0001/flower-root',
+          'flowers/0002/flower-root',
+        ],
+        iwsdkSceneNodeId: 'flowers',
+        iwsdkSceneRuntimeHash: runtimeHash,
+      };
+      const levelRoot = createMockObject3D('LevelRoot', [
+        obj,
+        asset,
+        instances,
+      ]);
+      levelRoot.userData = {
+        iwsdkSceneDocumentMetadata: { 'test.owner': 'core' },
+        iwsdkSceneEnvironment: {
+          exposure: 1.25,
+        },
+        iwsdkSceneResources: {
+          prefabs: [{ id: 'building', root: { id: 'root' } }],
+        },
+        iwsdkSceneRuntimeHash: runtimeHash,
+      };
+      const world = createMockWorld([levelRoot]);
+
+      const result = getSceneHierarchy(world, {});
+      const root = result.children![0];
+      const node = root.children![0];
+
+      expect(node).toMatchObject({
+        assetId: 'wall-asset',
+        content: { asset: 'wall-asset', type: 'asset' },
+        contentType: 'asset',
+        framingRole: 'support',
+        metadata: { 'test.role': 'facade' },
+        objectType: 'Mesh',
+        resourceRefs: { assetId: 'wall-asset' },
+        runtimeHash,
+        sceneNodeId: 'building/0000/wall',
+        sourceNodeId: 'wall',
+      });
+      expect(root.children![1]).toMatchObject({
+        assetId: 'catalog-building',
+        content: { asset: 'catalog-building', type: 'asset' },
+        resourceRefs: { assetId: 'catalog-building' },
+        sceneNodeId: 'catalog-building-node',
+      });
+      expect(root.children![2]).toMatchObject({
+        instanceIds: [
+          'flowers/0000/flower-root',
+          'flowers/0001/flower-root',
+          'flowers/0002/flower-root',
+        ],
+        runtimeHash,
+        sceneNodeId: 'flowers',
+      });
+      expect(root).toMatchObject({
+        documentMetadata: { 'test.owner': 'core' },
+        environment: { exposure: 1.25 },
+        resources: {
+          prefabs: [{ id: 'building' }],
+        },
+        runtimeHash,
+      });
+      expect(root.resources).not.toBe(levelRoot.userData.iwsdkSceneResources);
+    });
   });
 
   describe('parentId', () => {
@@ -185,6 +287,267 @@ describe('getSceneHierarchy', () => {
       expect(result.name).toBe('target');
       expect(result.children).toHaveLength(1);
       expect(result.children![0].name).toBe('target-child');
+    });
+  });
+});
+
+describe('getRenderStats', () => {
+  it('keeps raw world bounds while excluding support geometry from framing bounds', () => {
+    const scene = new Scene();
+    const root = new Group();
+    const subject = new Mesh(
+      new BoxGeometry(2, 4, 6),
+      new MeshStandardMaterial(),
+    );
+    subject.position.set(3, 2, -1);
+    const support = new Mesh(
+      new BoxGeometry(100, 0.1, 100),
+      new MeshStandardMaterial(),
+    );
+    support.position.y = -0.05;
+    support.userData.iwsdkSceneFramingRole = 'support';
+    root.add(subject, support);
+    scene.add(root);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 600, width: 800 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 2, textures: 0 },
+        programs: [],
+        render: { calls: 2, lines: 0, points: 0, triangles: 24 },
+      },
+      shadowMap: { enabled: false },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+
+    const stats = getRenderStats({
+      getActiveRoot: () => root,
+      renderer,
+      scene,
+    } as any);
+    expect(stats.worldBounds?.max).toEqual([50, 4, 50]);
+    expect(stats.worldBounds?.min[0]).toBe(-50);
+    expect(stats.worldBounds?.min[1]).toBeCloseTo(-0.1);
+    expect(stats.worldBounds?.min[2]).toBe(-50);
+    expect(stats.worldBounds?.size[0]).toBe(100);
+    expect(stats.worldBounds?.size[1]).toBeCloseTo(4.1);
+    expect(stats.worldBounds?.size[2]).toBe(100);
+    expect(stats.framingBounds).toEqual({
+      max: [4, 4, 2],
+      min: [2, 0, -4],
+      size: [2, 4, 6],
+    });
+    expect(stats.meshCount).toBe(2);
+  });
+
+  it('excludes hidden geometry and invisible subtrees only from framing bounds', () => {
+    const scene = new Scene();
+    const root = new Group();
+    const subject = new Mesh(
+      new BoxGeometry(2, 2, 2),
+      new MeshStandardMaterial(),
+    );
+    const hidden = new Mesh(
+      new BoxGeometry(100, 100, 100),
+      new MeshStandardMaterial(),
+    );
+    hidden.position.x = 200;
+    hidden.visible = false;
+    const hiddenParent = new Group();
+    hiddenParent.visible = false;
+    const hiddenDescendant = new Mesh(
+      new BoxGeometry(50, 50, 50),
+      new MeshStandardMaterial(),
+    );
+    hiddenDescendant.position.x = -200;
+    hiddenParent.add(hiddenDescendant);
+    root.add(subject, hidden, hiddenParent);
+    scene.add(root);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 600, width: 800 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 3, textures: 0 },
+        programs: [],
+        render: { calls: 1, lines: 0, points: 0, triangles: 12 },
+      },
+      shadowMap: { enabled: false },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+
+    const stats = getRenderStats({
+      getActiveRoot: () => root,
+      renderer,
+      scene,
+    } as any);
+
+    expect(stats.worldBounds).toMatchObject({
+      min: [-225, -50, -50],
+      max: [250, 50, 50],
+    });
+    expect(stats.framingBounds).toEqual({
+      min: [-1, -1, -1],
+      max: [1, 1, 1],
+      size: [2, 2, 2],
+    });
+  });
+
+  it('reports raw renderer counters, scene resources, and world bounds', () => {
+    const scene = new Scene();
+    scene.background = new Color('#112233');
+    scene.fog = new Fog('#334455', 2, 20);
+    const root = new Group();
+    const asset = new Group();
+    asset.userData.iwsdkSceneAssetId = 'garden-model';
+    asset.userData.iwsdkSceneAssetSourceUri = './models/garden.glb';
+    asset.userData.iwsdkSceneAssetUri = '/models/garden.glb';
+    const material = new MeshStandardMaterial({
+      color: '#123456',
+      emissive: '#010203',
+      emissiveIntensity: 0.5,
+      metalness: 0.2,
+      opacity: 0.9,
+      roughness: 0.4,
+    });
+    material.userData.iwsdkSceneMaterialId = 'paint';
+    const mesh = new Mesh(new BoxGeometry(2, 4, 6), material);
+    mesh.position.set(3, 2, -1);
+    mesh.castShadow = true;
+    asset.add(mesh);
+    root.add(asset);
+    const light = new DirectionalLight('#fedcba', 2.5);
+    light.castShadow = true;
+    light.target.position.set(0, -1, 0);
+    light.userData.iwsdkSceneNodeId = 'sun';
+    root.add(light);
+    scene.add(root);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 600, width: 800 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 2,
+      info: {
+        memory: { geometries: 1, textures: 2 },
+        programs: [{}, {}],
+        render: { calls: 3, lines: 4, points: 5, triangles: 12 },
+      },
+      shadowMap: { enabled: true },
+      toneMapping: ACESFilmicToneMapping,
+      toneMappingExposure: 1.25,
+    };
+
+    expect(
+      getRenderStats({
+        getActiveRoot: () => root,
+        renderer,
+        scene,
+      } as any),
+    ).toMatchObject({
+      available: true,
+      calls: 3,
+      geometries: 1,
+      lines: 4,
+      materialCount: 1,
+      meshCount: 1,
+      points: 5,
+      programs: 2,
+      shadowCasters: 1,
+      sceneAssets: [
+        {
+          id: 'garden-model',
+          meshCount: 1,
+        },
+      ],
+      sceneEnvironment: {
+        background: { color: '#112233', type: 'color' },
+        clearAlpha: 1,
+        exposure: 1.25,
+        fog: {
+          color: '#334455',
+          far: 20,
+          near: 2,
+          type: 'linear',
+        },
+        shadows: true,
+        toneMapping: 'aces',
+      },
+      sceneLights: [
+        {
+          castShadow: true,
+          color: '#fedcba',
+          intensity: 2.5,
+          nodeId: 'sun',
+          type: 'directional',
+        },
+      ],
+      sceneMaterials: [
+        {
+          baseColor: '#123456',
+          emissive: '#010203',
+          emissiveIntensity: 0.5,
+          flatShading: false,
+          id: 'paint',
+          metalness: 0.2,
+          model: 'standard',
+          opacity: 0.9,
+          roughness: 0.4,
+          side: 'front',
+        },
+      ],
+      textures: 2,
+      triangles: 12,
+      worldBounds: {
+        max: [4, 4, 2],
+        min: [2, 0, -4],
+        size: [2, 4, 6],
+      },
+    });
+  });
+
+  it('normalizes authored gradient metadata colors for parity', () => {
+    const scene = new Scene();
+    const background = new Texture();
+    background.userData.iwsdkSceneGradientBackground = {
+      bottomColor: '#AABBCC',
+      exponent: 1.5,
+      topColor: '#DDEEFF',
+      type: 'gradient',
+    };
+    scene.background = background;
+    const root = new Group();
+    scene.add(root);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 1, width: 1 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 0, textures: 1 },
+        programs: [],
+        render: { calls: 0, lines: 0, points: 0, triangles: 0 },
+      },
+      shadowMap: { enabled: false, type: 1 },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+
+    expect(
+      getRenderStats({
+        getActiveRoot: () => root,
+        renderer,
+        scene,
+      } as any).sceneEnvironment.background,
+    ).toEqual({
+      bottomColor: '#aabbcc',
+      exponent: 1.5,
+      topColor: '#ddeeff',
+      type: 'gradient',
     });
   });
 });

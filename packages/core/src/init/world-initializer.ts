@@ -5,11 +5,22 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { mergeSceneComponentCatalogs } from '@iwsdk/scene-composition';
 import { XRInputManager } from '@iwsdk/xr-input';
 import { signal } from '@preact/signals-core';
-import { AssetManager, AssetManifest } from '../asset/index.js';
+import {
+  AssetManager,
+  AssetManifest,
+  RenderableAssetRegistry,
+} from '../asset/index.js';
 import { AudioSource, AudioSystem } from '../audio/index.js';
 import { CameraSource, CameraSystem } from '../camera/index.js';
+import {
+  ComponentRegistry,
+  IWSDK_BUILTIN_COMPONENTS,
+  componentCatalogFromComponents,
+  type ComponentManifest,
+} from '../ecs/index.js';
 import { World, VisibilityState } from '../ecs/world.js';
 import {
   DomeTexture,
@@ -41,6 +52,15 @@ import {
 } from '../layers/index.js';
 import { LevelTag, LevelRoot } from '../level/index.js';
 import { LevelSystem } from '../level/index.js';
+import {
+  AmbientLightComponent,
+  DirectionalLightComponent,
+  HemisphereLightComponent,
+  LightSystem,
+  PointLightComponent,
+  RectAreaLightComponent,
+  SpotLightComponent,
+} from '../lighting/index.js';
 import {
   type BrowserLocomotionControls,
   LocomotionSystem,
@@ -84,7 +104,7 @@ import {
   normalizeReferenceSpec,
   resolveReferenceSpaceType,
   buildSessionInit,
-} from './index.js';
+} from './xr.js';
 
 /** Options for {@link initializeWorld} / {@link World.create}.
  *
@@ -95,6 +115,9 @@ import {
 export type WorldOptions = {
   /** Asset manifest to preload before the first frame. */
   assets?: AssetManifest;
+
+  /** Application components registered before the initial level is loaded. */
+  components?: ComponentManifest;
 
   /** Level to load after initialization. Accepts a GLXF URL string or an object with a `url` field. */
   level?: { url?: string } | string;
@@ -204,6 +227,15 @@ export async function initializeWorld(
 ): Promise<World> {
   // Create and configure world instance
   const world = createWorldInstance();
+  registerApplicationComponents(world, options.components);
+  world.componentCatalog = componentCatalogFromComponents(
+    IWSDK_BUILTIN_COMPONENTS,
+    { source: 'iwsdk' },
+  );
+  world.componentCatalog = mergeSceneComponentCatalogs(
+    world.componentCatalog,
+    componentCatalogFromComponents(options.components ?? [], { source: 'app' }),
+  );
 
   // Extract configuration options
   const config = extractConfiguration(options);
@@ -243,11 +275,6 @@ export async function initializeWorld(
   // Setup resize handling
   setupResizeHandling(world, camera, renderer);
 
-  // Manage XR offer flow if configured
-  if (config.xr.offer && config.xr.offer !== 'none') {
-    manageOfferFlow(world, config.xr.offer);
-  }
-
   // Setup MCP runtime for framework-specific tools (dev only).
   // In production Vite builds, import.meta.env.DEV is false and this entire
   // code path is tree-shaken. In Node.js/tests, import.meta.env is undefined
@@ -266,6 +293,9 @@ export async function initializeWorld(
     } else {
       await w.loadLevel();
     }
+    if (config.xr.offer && config.xr.offer !== 'none') {
+      manageOfferFlow(w, config.xr.offer);
+    }
     return w;
   });
 }
@@ -282,6 +312,23 @@ function createWorldInstance(): World {
     .registerSystem(TransformSystem)
     .registerSystem(VisibilitySystem);
   return world;
+}
+
+function registerApplicationComponents(
+  world: World,
+  components: ComponentManifest | undefined,
+) {
+  if (components == null) {
+    return;
+  }
+  if (components.componentRegistry !== ComponentRegistry) {
+    throw new Error(
+      'The component manifest was created by a different Elics module instance. Ensure @iwsdk/core and elics resolve to one copy.',
+    );
+  }
+  for (const component of components) {
+    world.registerComponent(component);
+  }
 }
 
 /**
@@ -498,7 +545,9 @@ function manageOfferFlow(world: World, mode: 'once' | 'always') {
     }
     offering = true;
     try {
-      const opts = world.xrDefaults ?? { sessionMode: SessionMode.ImmersiveVR };
+      const opts = world.xrDefaults ?? {
+        sessionMode: SessionMode.ImmersiveVR,
+      };
       const sessionInit = buildSessionInit(opts as XROptions);
 
       const session = await navigator.xr?.offerSession?.(
@@ -572,8 +621,15 @@ function registerCoreSystems(
     .registerComponent(DomeGradient)
     .registerComponent(IBLTexture)
     .registerComponent(IBLGradient)
+    .registerComponent(AmbientLightComponent)
+    .registerComponent(HemisphereLightComponent)
+    .registerComponent(DirectionalLightComponent)
+    .registerComponent(PointLightComponent)
+    .registerComponent(SpotLightComponent)
+    .registerComponent(RectAreaLightComponent)
     // Unified environment system (background + IBL)
     .registerSystem(EnvironmentSystem)
+    .registerSystem(LightSystem)
     .registerSystem(LevelSystem, {
       configData: { defaultLighting: config.defaultLighting },
     });
@@ -584,6 +640,7 @@ function registerCoreSystems(
  */
 function initializeAssetManager(renderer: WebGLRenderer, world: World) {
   AssetManager.init(renderer, world);
+  world.assetManager = AssetManager;
 }
 
 /**
@@ -825,14 +882,8 @@ function finalizeInitialization(
   world: World,
   assets?: AssetManifest,
 ): Promise<World> {
-  return new Promise<World>((resolve, reject) => {
-    if (!assets || Object.keys(assets).length === 0) {
-      return resolve(world);
-    }
-    AssetManager.preloadAssets(assets)
-      .then(() => resolve(world))
-      .catch(reject);
-  });
+  world.assets = new RenderableAssetRegistry(assets);
+  return world.assets.preload().then(() => world);
 }
 
 /**

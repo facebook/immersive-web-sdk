@@ -77,6 +77,25 @@ describe('editor camera and orientation gizmo', () => {
       view: 'quarter',
       width: 320,
     });
+    const quarterWithEditorOverlays = await dispatchSceneTool(
+      editor.page,
+      'scene_screenshot',
+      {
+        captureMode: 'editor',
+        height: 240,
+        view: 'quarter',
+        width: 320,
+      },
+    );
+    const quarterAfterEditorOverlayCapture = await dispatchSceneTool(
+      editor.page,
+      'scene_screenshot',
+      {
+        height: 240,
+        view: 'quarter',
+        width: 320,
+      },
+    );
 
     expect(top).toMatchObject({
       camera: { view: 'top' },
@@ -88,7 +107,24 @@ describe('editor camera and orientation gizmo', () => {
     });
     expect(quarter).toMatchObject({
       camera: { view: 'quarter' },
+      captureMode: 'render',
       mimeType: 'image/png',
+    });
+    expect(quarterWithEditorOverlays).toMatchObject({
+      camera: { view: 'quarter' },
+      captureMode: 'editor',
+      mimeType: 'image/png',
+    });
+    expect(hashImageData(quarterWithEditorOverlays.imageData)).not.toBe(
+      hashImageData(quarter.imageData),
+    );
+    expect(hashImageData(quarterAfterEditorOverlayCapture.imageData)).toBe(
+      hashImageData(quarter.imageData),
+    );
+    const restoredProof = await getEditorProof(editor.page);
+    expect(restoredProof.orientationGizmo).toMatchObject({
+      axisCount: 6,
+      webgl: true,
     });
     expect(
       new Set([top, front, quarter].map((entry) => entry.imageData)).size,

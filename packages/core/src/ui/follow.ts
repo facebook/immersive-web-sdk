@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '../ecs/component.js';
 import { createSystem } from '../ecs/system.js';
 import {
   Euler,
@@ -14,6 +13,9 @@ import {
   Quaternion,
   Vector3,
 } from '../runtime/index.js';
+import { FollowBehavior, Follower } from './follow-component.js';
+
+export { FollowBehavior, Follower } from './follow-component.js';
 
 /**
  * Angle in degrees from the dot product of two unit vectors, robust to
@@ -24,59 +26,6 @@ import {
 export function clampedAcosDeg(dot: number): number {
   return MathUtils.radToDeg(Math.acos(MathUtils.clamp(dot, -1, 1)));
 }
-
-/** Behavior modes for {@link Follower}. @category UI */
-export const FollowBehavior = {
-  FaceTarget: 'face-target',
-  PivotY: 'pivot-y',
-  NoRotation: 'no-rotation',
-};
-
-/**
- * Makes an entity follow a target `Object3D` with optional rotation behavior.
- *
- * @remarks
- * - `PivotY` keeps the follower level while rotating around the Y axis to face the target.
- * - `FaceTarget` fully rotates to look at the target.
- * - `NoRotation` only moves position.
- *
- * @example Attach to an entity to follow the HMD at shoulder‑height
- * ```ts
- * entity.addComponent(Follower, {
- *   target: xrRig.head,
- *   offsetPosition: [0.25, -0.2, -0.35],
- *   behavior: FollowBehavior.PivotY,
- *   speed: 5,
- *   tolerance: 0.3,
- * })
- * ```
- * @category UI
- */
-export const Follower = createComponent(
-  'Follower',
-  {
-    /** Object to follow (e.g., `world.player.head`). */
-    target: { type: Types.Object, default: undefined },
-    /** Offset from the target in the target's local space. */
-    offsetPosition: { type: Types.Vec3, default: [0, 0, 0] },
-    behavior: {
-      type: Types.Enum,
-      enum: FollowBehavior,
-      default: FollowBehavior.PivotY,
-    },
-    /** Degrees of allowable angular deviation before target snaps forward. */
-    maxAngle: { type: Types.Float32, default: 30 },
-    /** Meters of allowable positional slack before catching up. */
-    tolerance: { type: Types.Float32, default: 0.4 },
-    /** Lerp speed towards the target position. */
-    speed: { type: Types.Float32, default: 1 },
-    /** Internal: one‑time sync to jump to the target position. */
-    needsPositionSync: { type: Types.Boolean, default: true },
-    /** Internal: smoothed follow target in world space. */
-    _followTarget: { type: Types.Vec3, default: [0, 0, 0] },
-  },
-  'Component for following another object',
-);
 
 /**
  * Updates entities with {@link Follower} to chase a target using smoothed motion,

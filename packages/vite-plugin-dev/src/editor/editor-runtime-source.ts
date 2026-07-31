@@ -27,6 +27,23 @@ export function getEditorSessionModuleImport(): string {
   )}`;
 }
 
+export function getEditorWorkspaceModuleImport(): string {
+  const candidates = [
+    './editor-workspace.js',
+    './editor/editor-workspace.js',
+    './editor-workspace.tsx',
+    './editor/editor-workspace.tsx',
+  ];
+  for (const candidate of candidates) {
+    const modulePath = fileURLToPath(new URL(candidate, import.meta.url));
+    if (existsSync(modulePath)) {
+      return `/@fs/${modulePath}`;
+    }
+  }
+
+  return '@iwsdk/vite-plugin-dev/editor/workspace';
+}
+
 export function getCoreModuleImport(): string {
   const candidates = ['../../../core/src/index.ts', '../../core/src/index.ts'];
   for (const candidate of candidates) {
@@ -37,6 +54,21 @@ export function getCoreModuleImport(): string {
   }
 
   return '@iwsdk/core';
+}
+
+export function getSceneCompositionModuleImport(): string {
+  const candidates = [
+    '../../../scene-composition/src/index.ts',
+    '../../scene-composition/src/index.ts',
+  ];
+  for (const candidate of candidates) {
+    const sourceModulePath = fileURLToPath(new URL(candidate, import.meta.url));
+    if (existsSync(sourceModulePath)) {
+      return `/@fs/${sourceModulePath}`;
+    }
+  }
+
+  return '@iwsdk/scene-composition';
 }
 
 export function getOrbitControlsModuleImport(): string {
@@ -97,15 +129,6 @@ const LUCIDE_DEFAULT_ATTRIBUTES = {
 };
 
 const LUCIDE_ICON_NODES = {
-  ArrowDownToLine: [
-    'svg',
-    LUCIDE_DEFAULT_ATTRIBUTES,
-    [
-      ['path', { d: 'M12 17V3' }],
-      ['path', { d: 'm6 11 6 6 6-6' }],
-      ['path', { d: 'M19 21H5' }],
-    ],
-  ],
   Box: [
     'svg',
     LUCIDE_DEFAULT_ATTRIBUTES,
@@ -176,6 +199,59 @@ const LUCIDE_ICON_NODES = {
         },
       ],
       ['circle', { cx: '12', cy: '12', r: '3' }],
+    ],
+  ],
+  EyeOff: [
+    'svg',
+    LUCIDE_DEFAULT_ATTRIBUTES,
+    [
+      ['path', { d: 'm2 2 20 20' }],
+      [
+        'path',
+        {
+          d: 'M6.7 6.7C4.9 7.9 3.4 9.6 2.1 11.7a1 1 0 0 0 0 .6C4.2 15.8 7.7 18 12 18c1.1 0 2.2-.2 3.2-.5',
+        },
+      ],
+      [
+        'path',
+        {
+          d: 'M10.7 5.1A10.8 10.8 0 0 1 12 5c4.3 0 7.8 2.2 9.9 5.7a1 1 0 0 1 0 .6 14.3 14.3 0 0 1-2.4 3.1',
+        },
+      ],
+      ['path', { d: 'M14.1 14.1A3 3 0 0 1 9.9 9.9' }],
+    ],
+  ],
+  Focus: [
+    'svg',
+    LUCIDE_DEFAULT_ATTRIBUTES,
+    [
+      ['circle', { cx: '12', cy: '12', r: '3' }],
+      ['path', { d: 'M3 7V5a2 2 0 0 1 2-2h2' }],
+      ['path', { d: 'M17 3h2a2 2 0 0 1 2 2v2' }],
+      ['path', { d: 'M21 17v2a2 2 0 0 1-2 2h-2' }],
+      ['path', { d: 'M7 21H5a2 2 0 0 1-2-2v-2' }],
+    ],
+  ],
+  Lock: [
+    'svg',
+    LUCIDE_DEFAULT_ATTRIBUTES,
+    [
+      [
+        'rect',
+        { width: '18', height: '11', x: '3', y: '11', rx: '2', ry: '2' },
+      ],
+      ['path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }],
+    ],
+  ],
+  Unlock: [
+    'svg',
+    LUCIDE_DEFAULT_ATTRIBUTES,
+    [
+      [
+        'rect',
+        { width: '18', height: '11', x: '3', y: '11', rx: '2', ry: '2' },
+      ],
+      ['path', { d: 'M7 11V7a5 5 0 0 1 9.3-2.5' }],
     ],
   ],
   Globe2: [
@@ -329,42 +405,68 @@ const LUCIDE_ICON_NODES = {
 export function createEditorRuntimeModuleSource(
   editorSessionImport: string,
   coreImport: string,
+  assetManifestImport = '/@iwsdk-asset-manifest',
+  componentManifestImport = '/@iwsdk-component-manifest',
   orbitControlsImport = getOrbitControlsModuleImport(),
   transformControlsImport = getTransformControlsModuleImport(),
   viewportGizmoImport = getViewportGizmoModuleImport(),
   lucideIconNodes = LUCIDE_ICON_NODES,
+  sceneCompositionImport = getSceneCompositionModuleImport(),
+  editorWorkspaceImport = getEditorWorkspaceModuleImport(),
 ): string {
   return `
 window.__IWSDK_SCENE_EDITOR_READY = false;
 let SceneEditorSession;
+let mountEditorWorkspace;
 let OrbitControls;
 let TransformControls;
 let ViewportGizmo;
 const LucideIcons = ${JSON.stringify(lucideIconNodes)};
 let AmbientLight;
-let AssetManager;
+let applySceneEnvironment;
+let applyScenePatch;
 let Box3;
+let Box3Helper;
 let BoxGeometry;
-let BoxHelper;
 let Color;
 let ComponentRegistry;
+let componentCatalogFromComponents;
+let disposeLoweredSceneNodes;
 let ConeGeometry;
 let CylinderGeometry;
 let DirectionalLight;
+let Frustum;
+let finalizeSceneReviewDraft;
 let GridHelper;
 let Group;
+let hashSceneDocument;
+let hashRuntimeSceneDocument;
+let LevelComponentApplier;
+let LightBinding;
+let lightSpecFromComponentValue;
+let lowerSceneDocumentObjects;
 let MathUtils;
+let Matrix4;
 let Mesh;
 let MeshBasicMaterial;
 let MeshStandardMaterial;
+let OrthographicCamera;
 let PerspectiveCamera;
 let Raycaster;
+let restoreSceneEnvironment;
 let Scene;
+let SphereGeometry;
 let Types;
+let IWSDK_BUILTIN_COMPONENTS;
+let validateSceneReviewAgainstDocument;
 let Vector2;
 let Vector3;
 let WebGLRenderer;
+let WebGLRenderTarget;
 let World;
+let workspaceUi = null;
+let editorAssetManifest = {};
+let editorComponentManifest = [];
 
 async function loadEditorRuntimeDependencies() {
   const [
@@ -373,66 +475,153 @@ async function loadEditorRuntimeDependencies() {
     orbitControlsModule,
     transformControlsModule,
     viewportGizmoModule,
+    sceneCompositionModule,
+    editorWorkspaceModule,
+    assetManifestModule,
+    componentManifestModule,
   ] = await Promise.all([
     import(${JSON.stringify(editorSessionImport)}),
     import(${JSON.stringify(coreImport)}),
     import(${JSON.stringify(orbitControlsImport)}),
     import(${JSON.stringify(transformControlsImport)}),
     import(${JSON.stringify(viewportGizmoImport)}),
+    import(${JSON.stringify(sceneCompositionImport)}),
+    import(${JSON.stringify(editorWorkspaceImport)}),
+    import(${JSON.stringify(assetManifestImport)}),
+    import(${JSON.stringify(componentManifestImport)}),
   ]);
+  editorAssetManifest = assetManifestModule.default || {};
   ({ SceneEditorSession } = editorSessionModule);
+  ({ mountEditorWorkspace } = editorWorkspaceModule);
   ({ OrbitControls } = orbitControlsModule);
   ({ TransformControls } = transformControlsModule);
   ({ ViewportGizmo } = viewportGizmoModule);
   ({
+    applyScenePatch,
+    finalizeSceneReviewDraft,
+    hashRuntimeSceneDocument,
+    hashSceneDocument,
+    validateSceneReviewAgainstDocument,
+  } = sceneCompositionModule);
+  ({
     AmbientLight,
-    AssetManager,
+    applySceneEnvironment,
     Box3,
+    Box3Helper,
     BoxGeometry,
-    BoxHelper,
     Color,
     ComponentRegistry,
+    componentCatalogFromComponents,
+    disposeLoweredSceneNodes,
     ConeGeometry,
     CylinderGeometry,
     DirectionalLight,
+    Frustum,
     GridHelper,
     Group,
+    LevelComponentApplier,
+    LightBinding,
+    lightSpecFromComponentValue,
+    lowerSceneDocumentObjects,
     MathUtils,
+    Matrix4,
     Mesh,
     MeshBasicMaterial,
     MeshStandardMaterial,
+    OrthographicCamera,
     PerspectiveCamera,
     Raycaster,
+    restoreSceneEnvironment,
     Scene,
+    SphereGeometry,
     Types,
+    IWSDK_BUILTIN_COMPONENTS,
     Vector2,
     Vector3,
     WebGLRenderer,
+    WebGLRenderTarget,
     World,
   } = coreModule);
+  editorComponentManifest = componentManifestModule.default || [];
+  if (!Array.isArray(editorComponentManifest)) {
+    throw new Error('The IWSDK component manifest must default-export defineComponents([...])');
+  }
+  if (
+    editorComponentManifest.componentRegistry &&
+    editorComponentManifest.componentRegistry !== ComponentRegistry
+  ) {
+    throw new Error(
+      'The component manifest and editor loaded different Elics registries. Ensure @iwsdk/core and elics resolve to one copy.',
+    );
+  }
 }
 
 const config = window.__IWSDK_EDITOR_CONFIG || {};
 const documentUrl = config.documentUrl || '/__iwsdk/editor/document';
 const sceneFilesUrl = config.sceneFilesUrl || '/__iwsdk/workspace/scenes';
-const workspaceRoute = config.workspaceRoute || '/__iwsdk/workspace';
+const reviewCapturesUrl =
+  config.reviewCapturesUrl || '/__iwsdk/workspace/reviews/captures';
+const reviewsUrl = config.reviewsUrl || '/__iwsdk/workspace/reviews';
+const publishUrl = config.publishUrl || '/__iwsdk/workspace/publish';
+const runtimePreflightUrl =
+  config.runtimePreflightUrl || '/__iwsdk/workspace/runtime-preflight';
 const root = document.getElementById('root');
 const EDITOR_OPTIMIZE_RELOAD_KEY = 'iwsdk-editor-optimize-dep-reload';
+const WORKSPACE_SCENE_PATH_KEY = 'iwsdk-workspace-scene-path';
+const WORKSPACE_EDITOR_HASH_PREFIX = '#editor';
+const initialWorkspaceRoute = importWorkspaceRoute();
 let editorWorldState = null;
+let editorMutationQueue = Promise.resolve();
+let sceneDocumentPath = null;
 let sceneDocumentRevision = null;
+let sceneSourceDocumentHash = null;
+let sceneComposedDocumentHash = null;
+let sceneRuntimeHash = null;
+let sceneSourceHasImports = false;
+let sceneDependencyPaths = new Set();
+let sceneFileReloadTimer = null;
+let sceneFileReloadState = {
+  conflict: false,
+  diagnostics: [],
+  lastReloadedAt: null,
+  status: 'idle',
+};
+let workspaceScenePath = initialWorkspaceRoute.scenePath;
+const assetThumbnailCache = new Map();
+const assetThumbnailFailures = new Set();
+let assetThumbnailGeneration = null;
 let runtimeDispatch = async () => {
   throw new Error('Scene editor runtime is still loading');
 };
 let runtimeHandles = (method) =>
   String(method).startsWith('scene_') ||
   String(method).startsWith('workspace_');
-window.__IWSDK_WORKSPACE_VIEW = window.__IWSDK_WORKSPACE_VIEW || 'editor';
+const collapsedOutlinerNodeIds = new Set();
+const hiddenOutlinerNodeIds = new Set();
+const ghostedOutlinerNodeIds = new Set();
+const lockedOutlinerNodeIds = new Set();
+const previewContextNodeIds = new Set();
+let soloOutlinerNodeId = null;
+let visibilityArrangementScenePath = null;
+let visibilityArrangements = new Map();
+let reviewStatusRequest = 0;
+let reviewStatusState = {
+  documentHash: null,
+  reviews: [],
+  status: 'idle',
+};
+window.__IWSDK_WORKSPACE_VIEW = initialWorkspaceRoute.view;
 window.__IWSDK_WORKSPACE_PAGE_ID =
   window.__IWSDK_WORKSPACE_PAGE_ID ||
   \`workspace-\${Date.now().toString(36)}-\${Math.random().toString(36).slice(2, 8)}\`;
 window.__IWSDK_WORKSPACE_TAB_GENERATION =
   window.__IWSDK_WORKSPACE_TAB_GENERATION || 1;
-window.__IWSDK_EDITOR_BOTTOM_TAB = 'console';
+window.__IWSDK_EDITOR_BOTTOM_TAB = 'assets';
+window.__IWSDK_EDITOR_REVIEW_LENS = 'final';
+window.__IWSDK_EDITOR_REFERENCE_MODE = 'hidden';
+window.__IWSDK_EDITOR_REFERENCE_ID = null;
+window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
+window.__IWSDK_EDITOR_ROOT_SELECTED = false;
 window.__IWSDK_EDITOR_EVENTS = [];
 document.documentElement.dataset.iwsdkWorkspaceView = window.__IWSDK_WORKSPACE_VIEW;
 
@@ -473,22 +662,132 @@ function recordEditorEvent(method, result) {
 
 function handlesWorkspaceMethod(method) {
   return [
-    'workspace_get_state',
-    'workspace_set_view',
-    'workspace_open_scene',
-    'scene_list_files',
+    'scene_get_state',
+    'scene_render_file',
+    'scene_measure_image_regions',
+    'scene_set_preview_visibility',
     'scene_open',
-    'scene_create',
   ].includes(method);
 }
 
+function readStoredWorkspaceScenePath() {
+  try {
+    const value = sessionStorage.getItem(WORKSPACE_SCENE_PATH_KEY);
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeWorkspaceScenePath(scenePath) {
+  workspaceScenePath = scenePath;
+  try {
+    sessionStorage.setItem(WORKSPACE_SCENE_PATH_KEY, scenePath);
+  } catch {}
+}
+
+function parseWorkspaceEditorHash(hash = window.location.hash) {
+  if (hash === WORKSPACE_EDITOR_HASH_PREFIX) {
+    return { matched: true, scenePath: null };
+  }
+  if (!hash.startsWith(WORKSPACE_EDITOR_HASH_PREFIX + '/')) {
+    return { matched: false, scenePath: null };
+  }
+  const encodedPath = hash.slice(WORKSPACE_EDITOR_HASH_PREFIX.length + 1);
+  try {
+    const segments = encodedPath.split('/').map(decodeURIComponent);
+    if (
+      segments.length === 0 ||
+      segments.some(
+        (segment) =>
+          !segment || segment === '.' || segment === '..' || segment.includes('/'),
+      )
+    ) {
+      return { matched: true, scenePath: null };
+    }
+    const relativePath = segments.join('/');
+    if (!relativePath.endsWith('.iwsdk.scene.json')) {
+      return { matched: true, scenePath: null };
+    }
+    return {
+      matched: true,
+      scenePath: relativePath.startsWith('public/scenes/')
+        ? relativePath
+        : 'public/scenes/' + relativePath,
+    };
+  } catch {
+    return { matched: true, scenePath: null };
+  }
+}
+
+function editorHashForScene(scenePath) {
+  if (!scenePath) {
+    return WORKSPACE_EDITOR_HASH_PREFIX;
+  }
+  const relativePath = scenePath.startsWith('public/scenes/')
+    ? scenePath.slice('public/scenes/'.length)
+    : scenePath;
+  return (
+    WORKSPACE_EDITOR_HASH_PREFIX +
+    '/' +
+    relativePath.split('/').map(encodeURIComponent).join('/')
+  );
+}
+
+function workspaceLocationFor(view, scenePath = null) {
+  return view === 'editor' ? '/' + editorHashForScene(scenePath) : '/';
+}
+
+function syncWorkspaceLocation(view, scenePath, { replace = false } = {}) {
+  const target = workspaceLocationFor(view, scenePath);
+  const current =
+    window.location.pathname + window.location.search + window.location.hash;
+  if (current === target) {
+    return;
+  }
+  history[replace ? 'replaceState' : 'pushState'](history.state, '', target);
+}
+
+function importWorkspaceRoute() {
+  const pageUrl = new URL(window.location.href);
+  const configuredDocumentUrl = new URL(documentUrl, pageUrl);
+  const editorRoute = parseWorkspaceEditorHash(pageUrl.hash);
+  const importedScenePath =
+    pageUrl.searchParams.get('scene') ||
+    configuredDocumentUrl.searchParams.get('scene');
+  const legacyScenePath =
+    typeof importedScenePath === 'string' && importedScenePath.trim().length > 0
+      ? importedScenePath.trim()
+      : null;
+  const view = editorRoute.matched || legacyScenePath ? 'editor' : 'runtime';
+  const scenePath = editorRoute.matched
+    ? editorRoute.scenePath
+    : legacyScenePath || readStoredWorkspaceScenePath();
+  if (scenePath) {
+    try {
+      sessionStorage.setItem(WORKSPACE_SCENE_PATH_KEY, scenePath);
+    } catch {}
+  }
+  syncWorkspaceLocation(view, scenePath, { replace: true });
+  return { scenePath, view };
+}
+
 function currentScenePath() {
-  const url = new URL(documentUrl, window.location.href);
-  return url.searchParams.get('scene');
+  return workspaceScenePath;
 }
 
 function hasConfiguredScenePath() {
   return currentScenePath() != null;
+}
+
+function requireOpenScenePath() {
+  const scenePath = currentScenePath();
+  if (!scenePath) {
+    throw new Error('Open a scene before using review evidence tools');
+  }
+  return scenePath;
 }
 
 function workspaceState(session) {
@@ -508,42 +807,404 @@ function workspaceState(session) {
     ? rawGeneration
     : null;
   const sceneSessionId = window.__IWSDK_SCENE_SESSION_ID;
+  const bridge = window.IWER_MCP;
+  const runtimeFrame = document.getElementById('workspace-runtime-frame');
+  const iwerDevice = window.IWER_DEVICE;
+  const emulationProfile = window.__IWSDK_EMULATION_PROFILE;
+  const iwerAvailable = iwerDevice != null;
   return {
-    view: window.__IWSDK_WORKSPACE_VIEW || 'editor',
+    view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
     managed: window.__IWER_MCP_MANAGED === true,
+    bridge: {
+      available: bridge != null,
+      connected: bridge?.connected === true,
+      connectionState:
+        typeof bridge?.connectionState === 'string'
+          ? bridge.connectionState
+          : 'unavailable',
+      pageId,
+      pageRole: window.__IWSDK_MCP_PAGE_ROLE || 'editor',
+      tabGeneration,
+    },
     workspace: {
       pageId,
       tabGeneration,
     },
     runtime: {
+      present: runtimeFrame instanceof HTMLIFrameElement,
       ready: window.__IWSDK_WORKSPACE_RUNTIME_READY === true,
       pageId: pageId ? \`\${pageId}:runtime\` : null,
     },
     editor: {
+      present: true,
       ready: Boolean(session),
+      commandReady: Boolean(session),
+      viewportReady: Boolean(editorWorldState?.world),
       scenePath: currentScenePath(),
       pageId: pageId ? \`\${pageId}:editor\` : null,
       sceneSessionId: session ? sceneSessionId : null,
       dirty: Boolean(session?.isDirty),
     },
+    iwer: {
+      available: iwerAvailable,
+      active:
+        iwerAvailable && emulationProfile?.active === true,
+      deviceName:
+        iwerAvailable && typeof iwerDevice.name === 'string'
+          ? iwerDevice.name
+          : null,
+    },
+    xr: {
+      apiAvailable: navigator.xr != null,
+      sessionObservable: iwerAvailable,
+      sessionActive: iwerAvailable
+        ? Boolean(iwerDevice.activeSession)
+        : null,
+      sessionOffered: iwerAvailable
+        ? Boolean(iwerDevice.sessionOffered)
+        : null,
+    },
   };
 }
 
-function setWorkspaceView(view) {
-  if (!['runtime', 'editor', 'split'].includes(view)) {
-    throw new Error('workspace_set_view.view must be runtime, editor, or split');
+async function sceneState(session) {
+  const workspace = workspaceState(session);
+  if (!session) {
+    return {
+      activeFile: currentScenePath(),
+      conflict: false,
+      diagnostics: [],
+      dirty: false,
+      editor: workspace.editor,
+      renderStats: null,
+      runtime: workspace.runtime,
+      selection: { nodeIds: [] },
+      validation: { issues: [], valid: false },
+    };
+  }
+  const [selection, validation, hashes] = await Promise.all([
+    session.dispatch('scene_get_selection', {}),
+    session.dispatch('scene_validate', {}),
+    session.dispatch('scene_get_document', {}),
+  ]);
+  const runtimeFrame = document.getElementById('workspace-runtime-frame');
+  return {
+    activeFile: currentScenePath(),
+    composedDocumentHash: sceneComposedDocumentHash || hashes.documentHash,
+    conflict: sceneFileReloadState.conflict,
+    dependencies: [...sceneDependencyPaths].filter(
+      (path) => path !== currentScenePath(),
+    ),
+    diagnostics: sceneFileReloadState.diagnostics,
+    dirty: session.isDirty,
+    editor: {
+      ...workspace.editor,
+      fileStatus: sceneFileReloadState.status,
+      lastReloadedAt: sceneFileReloadState.lastReloadedAt,
+    },
+    renderStats: currentEditorRenderStats(),
+    runtime: {
+      ...workspace.runtime,
+      error: window.__IWSDK_WORKSPACE_RUNTIME_ERROR || null,
+      expectedRuntimeHash: sceneRuntimeHash || hashes.runtimeHash,
+      frameConnected:
+        runtimeFrame instanceof HTMLIFrameElement &&
+        runtimeFrame.contentWindow != null,
+    },
+    runtimeHash: sceneRuntimeHash || hashes.runtimeHash,
+    selection: {
+      ...selection,
+      rootSelected: window.__IWSDK_EDITOR_ROOT_SELECTED === true,
+    },
+    sourceDocumentHash: sceneSourceDocumentHash,
+    validation:
+      sceneFileReloadState.status === 'invalid'
+        ? { issues: sceneFileReloadState.diagnostics, valid: false }
+        : validation,
+  };
+}
+
+function updateComposedSceneIdentity(loaded) {
+  sceneDocumentPath = loaded.path || currentScenePath();
+  sceneDocumentRevision = loaded.revision || sceneDocumentRevision;
+  sceneSourceDocumentHash = loaded.sourceDocumentHash || null;
+  sceneComposedDocumentHash = loaded.documentHash || null;
+  sceneRuntimeHash = loaded.runtimeHash || null;
+  sceneSourceHasImports = Array.isArray(loaded.sourceDocument?.imports) &&
+    loaded.sourceDocument.imports.length > 0;
+  sceneDependencyPaths = new Set([
+    currentScenePath(),
+    ...(loaded.dependencies || []).map((dependency) => dependency.path),
+  ].filter((value) => typeof value === 'string' && value.length > 0));
+}
+
+function fileReloadDiagnostics(error) {
+  if (Array.isArray(error?.diagnostics) && error.diagnostics.length > 0) {
+    return error.diagnostics;
+  }
+  if (Array.isArray(error?.issues) && error.issues.length > 0) {
+    return error.issues;
+  }
+  return [{
+    code: error?.code || 'scene_file_reload_failed',
+    message: String(error?.message || error),
+    path: '$',
+  }];
+}
+
+async function reloadComposedSceneFromDisk(session, getCamera) {
+  if (!session || !currentScenePath()) {
+    return;
+  }
+  if (session.isDirty) {
+    sceneFileReloadState = {
+      conflict: true,
+      diagnostics: [{
+        code: 'scene_file_editor_conflict',
+        message:
+          'The scene changed on disk while the editor has unsaved changes.',
+        path: '$',
+      }],
+      lastReloadedAt: sceneFileReloadState.lastReloadedAt,
+      status: 'conflict',
+    };
+    renderUi(session, getCamera());
+    return;
+  }
+  sceneFileReloadState = {
+    ...sceneFileReloadState,
+    conflict: false,
+    diagnostics: [],
+    status: 'loading',
+  };
+  try {
+    const loaded = await fetchComposedSceneDocument(currentScenePath());
+    if (
+      loaded.sourceDocumentHash === sceneSourceDocumentHash &&
+      loaded.documentHash === sceneComposedDocumentHash
+    ) {
+      sceneDocumentRevision = loaded.revision || sceneDocumentRevision;
+      sceneFileReloadState = {
+        conflict: false,
+        diagnostics: [],
+        lastReloadedAt: sceneFileReloadState.lastReloadedAt,
+        status: 'ready',
+      };
+      return;
+    }
+    await session.replaceFromDisk(loaded.document);
+    updateComposedSceneIdentity(loaded);
+    sceneFileReloadState = {
+      conflict: false,
+      diagnostics: [],
+      lastReloadedAt: new Date().toISOString(),
+      status: 'ready',
+    };
+    setEditorSelection(
+      (await session.dispatch('scene_get_selection', {})).nodeIds || [],
+    );
+    clearValidationResult();
+    renderCanvas(session, getCamera());
+    renderUi(session, getCamera());
+    reloadWorkspaceRuntimeFrame();
+  } catch (error) {
+    const diagnostics = fileReloadDiagnostics(error);
+    sceneFileReloadState = {
+      conflict: false,
+      diagnostics,
+      lastReloadedAt: sceneFileReloadState.lastReloadedAt,
+      status: 'invalid',
+    };
+    setValidationResult({ issues: diagnostics, valid: false });
+    renderUi(session, getCamera());
+  }
+}
+
+function installSceneFileWatcher(session, getCamera) {
+  if (!import.meta.hot) {
+    return;
+  }
+  import.meta.hot.on('iwsdk:scene-file-change', (event) => {
+    const changedPath = String(event?.path || '');
+    if (!sceneDependencyPaths.has(changedPath)) {
+      return;
+    }
+    if (sceneFileReloadTimer != null) {
+      clearTimeout(sceneFileReloadTimer);
+    }
+    sceneFileReloadTimer = setTimeout(() => {
+      sceneFileReloadTimer = null;
+      void reloadComposedSceneFromDisk(session, getCamera);
+    }, 80);
+  });
+}
+
+async function renderSceneFile(session, params = {}) {
+  const scenePath = requireScenePath(params);
+  let loaded;
+  try {
+    loaded = await fetchComposedSceneDocument(scenePath);
+  } catch (error) {
+    return {
+      diagnostics: fileReloadDiagnostics(error),
+      error: String(error?.message || error),
+      path: scenePath,
+      valid: false,
+    };
+  }
+
+  const temporarySession = new SceneEditorSession({
+    componentCatalog: runtimeComponentCatalog(),
+    document: loaded.document,
+    listAssets: () => editorWorldState?.world?.assets?.list?.() || [],
+    resolveAssetBounds: (assetId) =>
+      editorWorldState?.world?.assets?.bounds?.(assetId),
+  });
+  const cameraParams =
+    params.camera && typeof params.camera === 'object'
+      ? params.camera
+      : params;
+  const cameraResult = await temporarySession.dispatch(
+    'scene_set_camera',
+    cameraParams,
+  );
+  const camera = cameraResult.camera;
+  const width = Number.isFinite(params.width)
+    ? Math.max(1, Math.floor(params.width))
+    : undefined;
+  const height = Number.isFinite(params.height)
+    ? Math.max(1, Math.floor(params.height))
+    : undefined;
+  const previousSession = editorWorldState?.currentSession || session || null;
+  const previousCamera = editorWorldState?.currentCamera || null;
+  const previousSceneDocumentPath = sceneDocumentPath;
+  let restoreCaptureState = () => {};
+  try {
+    sceneDocumentPath = loaded.path || scenePath;
+    if (!editorWorldState) {
+      await createEditorWorld(temporarySession, camera);
+    }
+    restoreCaptureState = beginRenderOnlyCapture();
+    editorWorldState.currentSession = temporarySession;
+    await scheduleEditorSceneLowering(temporarySession);
+    renderCanvas(temporarySession, camera, { height, width });
+    await waitForAssetLoads();
+    renderCanvas(temporarySession, camera, { height, width });
+    const canvas = getCanvas();
+    const imageData = canvas.toDataURL('image/png').split(',')[1] || '';
+    return {
+      camera,
+      composedDocumentHash: loaded.documentHash,
+      dependencies: loaded.dependencies || [],
+      diagnostics: [],
+      height: canvas.height,
+      imageData,
+      mimeType: 'image/png',
+      path: loaded.path || scenePath,
+      renderStats: currentEditorRenderStats(),
+      runtimeHash: loaded.runtimeHash,
+      screenshotSha256: await sha256Base64Bytes(imageData),
+      sourceDocumentHash: loaded.sourceDocumentHash,
+      valid: true,
+      width: canvas.width,
+    };
+  } catch (error) {
+    return {
+      diagnostics: fileReloadDiagnostics(error),
+      error: String(error?.message || error),
+      path: loaded.path || scenePath,
+      valid: false,
+    };
+  } finally {
+    restoreCaptureState();
+    sceneDocumentPath = previousSceneDocumentPath;
+    if (previousSession && editorWorldState) {
+      editorWorldState.currentSession = previousSession;
+      await scheduleEditorSceneLowering(previousSession).catch(() => {});
+      renderCanvas(
+        previousSession,
+        previousCamera || editorWorldState.currentCamera,
+      );
+    }
+  }
+}
+
+async function setWorkspaceView(
+  view,
+  { replaceRoute = false, syncRoute = true } = {},
+) {
+  if (!['runtime', 'editor'].includes(view)) {
+    throw new Error('workspace_set_view.view must be runtime or editor');
+  }
+  if (syncRoute) {
+    syncWorkspaceLocation(view, currentScenePath(), { replace: replaceRoute });
   }
   window.__IWSDK_WORKSPACE_VIEW = view;
   document.documentElement.dataset.iwsdkWorkspaceView = view;
+  workspaceUi?.update({ view });
+  updateWorkspaceDocumentTitle(view);
   for (const button of document.querySelectorAll('[data-workspace-view-button]')) {
     button.toggleAttribute('data-active', button.dataset.workspaceViewButton === view);
   }
   if (view !== 'editor') {
-    loadWorkspaceRuntimeFrame();
+    const reload = window.__IWSDK_WORKSPACE_RUNTIME_STALE === true;
+    loadWorkspaceRuntimeFrame({ reload });
+    window.__IWSDK_WORKSPACE_RUNTIME_STALE = false;
+    await waitForWorkspaceRuntimeFrame();
   }
   if (view !== 'runtime') {
     scheduleEditorViewportRender();
   }
+}
+
+function sceneEditorDocumentTitle() {
+  const scenePath = currentScenePath();
+  if (!scenePath) {
+    return 'IWSDK Scene Editor';
+  }
+  const fileName = scenePath.split('/').pop() || scenePath;
+  const sceneName = fileName.replace(/\.iwsdk\.scene\.json$/i, '');
+  return sceneName + ' - IWSDK Scene Editor';
+}
+
+function runtimeDocumentTitle() {
+  const runtimeFrame = document.getElementById('workspace-runtime-frame');
+  try {
+    const title = runtimeFrame?.contentDocument?.title?.trim();
+    if (title) {
+      return title;
+    }
+  } catch {}
+  return 'IWSDK Runtime';
+}
+
+function updateWorkspaceDocumentTitle(
+  view = window.__IWSDK_WORKSPACE_VIEW || 'runtime',
+) {
+  document.title =
+    view === 'runtime' ? runtimeDocumentTitle() : sceneEditorDocumentTitle();
+}
+
+let workspaceNavigationReloading = false;
+
+function applyWorkspaceLocation() {
+  if (workspaceNavigationReloading) {
+    return;
+  }
+  const route = parseWorkspaceEditorHash();
+  if (!route.matched) {
+    void setWorkspaceView('runtime', { syncRoute: false });
+    return;
+  }
+  if (route.scenePath === currentScenePath()) {
+    void setWorkspaceView('editor', { syncRoute: false });
+    return;
+  }
+  workspaceNavigationReloading = true;
+  if (route.scenePath) {
+    storeWorkspaceScenePath(route.scenePath);
+  }
+  window.location.reload();
 }
 
 function forceEditorViewportRender() {
@@ -555,7 +1216,6 @@ function forceEditorViewportRender() {
   if (editorWorldState.currentSession) {
     updateProjectedHitTargets(editorWorldState.currentSession);
   }
-  editorWorldState.lastProof = createViewportProof();
 }
 
 function scheduleEditorViewportRender() {
@@ -574,14 +1234,26 @@ function attachWorkspaceViewControls() {
   if (runtimeFrame) {
     runtimeFrame.addEventListener('load', () => {
       window.__IWSDK_WORKSPACE_RUNTIME_READY = true;
+      if ((window.__IWSDK_WORKSPACE_VIEW || 'runtime') === 'runtime') {
+        updateWorkspaceDocumentTitle('runtime');
+      }
     });
   }
-  for (const button of document.querySelectorAll('[data-workspace-view-button]')) {
-    button.addEventListener('click', () => {
-      setWorkspaceView(button.dataset.workspaceViewButton);
-    });
+  window.addEventListener('hashchange', applyWorkspaceLocation);
+  window.addEventListener('popstate', applyWorkspaceLocation);
+  void setWorkspaceView(window.__IWSDK_WORKSPACE_VIEW || 'runtime', {
+    syncRoute: false,
+  });
+}
+
+async function waitForWorkspaceRuntimeFrame(timeoutMs = 10000) {
+  const startedAt = performance.now();
+  while (window.__IWSDK_WORKSPACE_RUNTIME_READY !== true) {
+    if (performance.now() - startedAt >= timeoutMs) {
+      throw new Error('Workspace runtime frame did not become ready');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  setWorkspaceView(window.__IWSDK_WORKSPACE_VIEW || 'editor');
 }
 
 function loadWorkspaceRuntimeFrame({ reload = false } = {}) {
@@ -613,6 +1285,11 @@ function reloadWorkspaceRuntimeFrame() {
   if (!runtimeFrame.getAttribute('src')) {
     return false;
   }
+  if ((window.__IWSDK_WORKSPACE_VIEW || 'editor') === 'editor') {
+    window.__IWSDK_WORKSPACE_RUNTIME_STALE = true;
+    window.__IWSDK_WORKSPACE_RUNTIME_READY = false;
+    return true;
+  }
   return loadWorkspaceRuntimeFrame({ reload: true });
 }
 
@@ -622,15 +1299,22 @@ function documentUrlForScene(scenePath) {
   return url.pathname + url.search;
 }
 
-function workspaceUrlForScene(scenePath) {
-  const url = new URL(workspaceRoute, window.location.href);
-  url.searchParams.set('scene', scenePath);
+function activeDocumentUrl() {
+  const scenePath = currentScenePath();
+  return scenePath ? documentUrlForScene(scenePath) : documentUrl;
+}
+
+function composedDocumentUrlForScene(scenePath) {
+  const url = new URL(documentUrlForScene(scenePath), window.location.href);
+  url.searchParams.set('mode', 'composed');
   return url.pathname + url.search;
 }
 
 function scheduleSceneOpen(scenePath) {
+  storeWorkspaceScenePath(scenePath);
   setTimeout(() => {
-    window.location.href = workspaceUrlForScene(scenePath);
+    syncWorkspaceLocation('editor', scenePath);
+    window.location.reload();
   }, 25);
 }
 
@@ -658,6 +1342,25 @@ async function fetchSceneDocumentWithRevision(url) {
   };
 }
 
+async function fetchComposedSceneDocument(scenePath) {
+  const response = await fetch(composedDocumentUrlForScene(scenePath));
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const error = sceneFetchError(json, text || response.statusText);
+    Object.assign(error, {
+      diagnostics: Array.isArray(json?.diagnostics) ? json.diagnostics : [],
+      path: scenePath,
+      status: response.status,
+    });
+    throw error;
+  }
+  if (!json?.document || !json?.sourceDocument) {
+    throw new Error('Composed scene response is missing document data');
+  }
+  return json;
+}
+
 function sceneFetchError(json, fallback) {
   const error = new Error(json?.error || fallback);
   if (json && typeof json === 'object') {
@@ -674,13 +1377,682 @@ function requireScenePath(params) {
   return scenePath.trim();
 }
 
+function subtreeNodeIds(documentValue, nodeId) {
+  const node = findNodeById(documentValue, nodeId);
+  if (!node) {
+    throw new Error('Scene node does not exist: ' + nodeId);
+  }
+  const ids = [];
+  const visit = (entry) => {
+    ids.push(entry.id);
+    for (const child of entry.children || []) {
+      visit(child);
+    }
+  };
+  visit(node);
+  return ids;
+}
+
+async function sha256Utf8(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
+async function setPreviewVisibilityFromCommand(session, params) {
+  const mode = typeof params.mode === 'string' ? params.mode : null;
+  const supportedModes = [
+    'apply-arrangement',
+    'context',
+    'ghost',
+    'hide',
+    'lock',
+    'reset',
+    'save-arrangement',
+    'show',
+    'solo',
+    'uncontext',
+    'unghost',
+    'unlock',
+  ];
+  if (!supportedModes.includes(mode)) {
+    throw new Error(
+      'scene_set_preview_visibility.mode must be ' + supportedModes.join(', '),
+    );
+  }
+  const nodeIds = Array.isArray(params.nodeIds) ? params.nodeIds : [];
+  if (nodeIds.some((nodeId) => typeof nodeId !== 'string')) {
+    throw new Error('scene_set_preview_visibility.nodeIds must contain node ids');
+  }
+  for (const nodeId of nodeIds) {
+    findNodeHierarchyInfo(session.document, nodeId) ||
+      (() => {
+        throw new Error('Scene node does not exist: ' + nodeId);
+      })();
+  }
+  if (mode === 'reset') {
+    resetPreviewVisibilityState();
+  } else if (mode === 'solo') {
+    if (nodeIds.length > 1) {
+      throw new Error('Solo accepts at most one node id');
+    }
+    soloOutlinerNodeId = nodeIds[0] || null;
+  } else if (mode === 'save-arrangement' || mode === 'apply-arrangement') {
+    const name = typeof params.name === 'string' ? params.name.trim() : '';
+    if (!name) {
+      throw new Error(mode + ' requires a non-empty name');
+    }
+    loadVisibilityArrangements();
+    if (mode === 'save-arrangement') {
+      visibilityArrangements.set(name, currentPreviewVisibilityState());
+      persistVisibilityArrangements();
+    } else {
+      const state = visibilityArrangements.get(name);
+      if (!state) {
+        throw new Error('Visibility arrangement does not exist: ' + name);
+      }
+      restorePreviewVisibilityArrangement(state);
+    }
+  } else {
+    const target =
+      mode === 'hide' || mode === 'show'
+        ? hiddenOutlinerNodeIds
+        : mode === 'ghost' || mode === 'unghost'
+          ? ghostedOutlinerNodeIds
+          : mode === 'lock' || mode === 'unlock'
+            ? lockedOutlinerNodeIds
+            : previewContextNodeIds;
+    const remove = ['show', 'unghost', 'unlock', 'uncontext'].includes(mode);
+    for (const nodeId of nodeIds) {
+      const affectedIds =
+        remove && params.recursive !== false
+          ? subtreeNodeIds(session.document, nodeId)
+          : [nodeId];
+      for (const affectedId of affectedIds) {
+        if (remove) {
+          target.delete(affectedId);
+        } else {
+          target.add(affectedId);
+        }
+      }
+    }
+  }
+  applyEditorReviewLens(session.document);
+  syncTransformControlsToSelection(session);
+  renderEditorWorld();
+  const state = currentPreviewVisibilityState();
+  const hashes = await session.dispatch('scene_get_document', {});
+  const visibleNodeIds = nodesInDocument(session.document)
+    .filter((node) => editorWorldState?.objectMap.get(node.id)?.visible === true)
+    .map((node) => node.id);
+  return {
+    action: 'previewVisibilityUpdated',
+    documentHash: hashes.documentHash,
+    previewState: state,
+    previewStateHash: await sha256Utf8(JSON.stringify(state)),
+    runtimeHash: hashes.runtimeHash,
+    visibleNodeIds,
+  };
+}
+
+function normalizedImageRegion(value, label) {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    value.some((entry) => typeof entry !== 'number' || !Number.isFinite(entry))
+  ) {
+    throw new Error(label + ' must be [x, y, width, height]');
+  }
+  const [x, y, width, height] = value;
+  if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) {
+    throw new Error(label + ' must be a positive normalized region inside the image');
+  }
+  return [x, y, width, height];
+}
+
+async function sha256ArrayBuffer(value) {
+  const digest = await crypto.subtle.digest('SHA-256', value);
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
+async function imageBitmapFromBytes(bytes, mimeType) {
+  const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  const image = new Image();
+  image.src = objectUrl;
+  try {
+    await image.decode();
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+  return {
+    close: () => URL.revokeObjectURL(objectUrl),
+    height: image.naturalHeight,
+    source: image,
+    width: image.naturalWidth,
+  };
+}
+
+function base64ImageBytes(imageData) {
+  const binary = atob(imageData);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function imageRegionPixels(bitmap, region) {
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) {
+    throw new Error('2D image measurement canvas is unavailable');
+  }
+  context.drawImage(bitmap.source, 0, 0);
+  const x = Math.max(0, Math.floor(region[0] * bitmap.width));
+  const y = Math.max(0, Math.floor(region[1] * bitmap.height));
+  const width = Math.max(1, Math.ceil(region[2] * bitmap.width));
+  const height = Math.max(1, Math.ceil(region[3] * bitmap.height));
+  return context.getImageData(
+    x,
+    y,
+    Math.min(width, bitmap.width - x),
+    Math.min(height, bitmap.height - y),
+  );
+}
+
+function srgbChannelToLinear(value) {
+  const normalized = value / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : Math.pow((normalized + 0.055) / 1.055, 2.4);
+}
+
+function linearRgbToOklab(red, green, blue) {
+  const l = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue;
+  const m = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue;
+  const s = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue;
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+  return [
+    0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
+    1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
+    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
+  ];
+}
+
+function percentile(sorted, fraction) {
+  if (sorted.length === 0) {
+    return 0;
+  }
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * fraction)));
+  return sorted[index];
+}
+
+function summarizeImageRegion(imageData) {
+  const luma = [];
+  const oklab = [0, 0, 0];
+  let highlightCount = 0;
+  let shadowCount = 0;
+  let count = 0;
+  for (let index = 0; index < imageData.data.length; index += 4) {
+    const alpha = imageData.data[index + 3] / 255;
+    if (alpha <= 0.001) {
+      continue;
+    }
+    const red = srgbChannelToLinear(imageData.data[index]);
+    const green = srgbChannelToLinear(imageData.data[index + 1]);
+    const blue = srgbChannelToLinear(imageData.data[index + 2]);
+    const value = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    const lab = linearRgbToOklab(red, green, blue);
+    luma.push(value);
+    oklab[0] += lab[0];
+    oklab[1] += lab[1];
+    oklab[2] += lab[2];
+    highlightCount += value >= 0.8 ? 1 : 0;
+    shadowCount += value <= 0.2 ? 1 : 0;
+    count += 1;
+  }
+  luma.sort((left, right) => left - right);
+  const divisor = Math.max(1, count);
+  return {
+    highlightFootprint: Number((highlightCount / divisor).toFixed(6)),
+    lumaPercentiles: {
+      p10: Number(percentile(luma, 0.1).toFixed(6)),
+      p50: Number(percentile(luma, 0.5).toFixed(6)),
+      p90: Number(percentile(luma, 0.9).toFixed(6)),
+    },
+    meanOklab: oklab.map((value) => Number((value / divisor).toFixed(6))),
+    pixelCount: count,
+    shadowFootprint: Number((shadowCount / divisor).toFixed(6)),
+  };
+}
+
+function imageMetricDelta(reference, render) {
+  return {
+    highlightFootprint: Number((render.highlightFootprint - reference.highlightFootprint).toFixed(6)),
+    lumaPercentiles: {
+      p10: Number((render.lumaPercentiles.p10 - reference.lumaPercentiles.p10).toFixed(6)),
+      p50: Number((render.lumaPercentiles.p50 - reference.lumaPercentiles.p50).toFixed(6)),
+      p90: Number((render.lumaPercentiles.p90 - reference.lumaPercentiles.p90).toFixed(6)),
+    },
+    meanOklab: render.meanOklab.map((value, index) =>
+      Number((value - reference.meanOklab[index]).toFixed(6)),
+    ),
+    shadowFootprint: Number((render.shadowFootprint - reference.shadowFootprint).toFixed(6)),
+  };
+}
+
+async function measureImageRegions(session, params) {
+  const captureToken = typeof params.captureToken === 'string' ? params.captureToken : '';
+  const referenceId = typeof params.referenceId === 'string' ? params.referenceId : '';
+  const capture = session.getPendingReviewCapture(captureToken);
+  const reference = session.document.authoring?.composition?.input?.references?.find(
+    (entry) => entry.id === referenceId,
+  );
+  if (!reference) {
+    throw new Error('referenceId must name a declared composition input reference');
+  }
+  if (!Array.isArray(params.regions) || params.regions.length === 0 || params.regions.length > 64) {
+    throw new Error('scene_measure_image_regions.regions must contain 1 to 64 regions');
+  }
+  const referenceResponse = await fetch(reference.uri);
+  if (!referenceResponse.ok) {
+    throw new Error('Could not load declared reference ' + reference.uri);
+  }
+  const referenceBytes = await referenceResponse.arrayBuffer();
+  const referenceSha256 = await sha256ArrayBuffer(referenceBytes);
+  if (
+    referenceSha256.slice('sha256:'.length).toLowerCase() !==
+    reference.sha256.toLowerCase()
+  ) {
+    throw new Error('Declared reference SHA-256 does not match loaded bytes');
+  }
+  const captureBytes = base64ImageBytes(capture.imageData);
+  const [referenceBitmap, renderBitmap] = await Promise.all([
+    imageBitmapFromBytes(referenceBytes, referenceResponse.headers.get('content-type') || 'image/png'),
+    imageBitmapFromBytes(captureBytes, capture.mimeType || 'image/png'),
+  ]);
+  try {
+    const regions = params.regions.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new Error('regions[' + index + '] must be an object');
+      }
+      const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : 'region-' + index;
+      const referenceRegion = normalizedImageRegion(entry.referenceRegion, 'regions[' + index + '].referenceRegion');
+      const renderRegion = entry.renderRegion == null
+        ? referenceRegion
+        : normalizedImageRegion(entry.renderRegion, 'regions[' + index + '].renderRegion');
+      const referenceSummary = summarizeImageRegion(imageRegionPixels(referenceBitmap, referenceRegion));
+      const renderSummary = summarizeImageRegion(imageRegionPixels(renderBitmap, renderRegion));
+      return {
+        delta: imageMetricDelta(referenceSummary, renderSummary),
+        id,
+        reference: { metrics: referenceSummary, region: referenceRegion },
+        render: { metrics: renderSummary, region: renderRegion },
+      };
+    });
+    return {
+      applicability: 'aligned-declared-regions-only',
+      captureToken,
+      interpretation: 'diagnostic-deltas-not-a-universal-pass-gate',
+      policy: {
+        alpha: 'ignore-fully-transparent',
+        colorSpace: 'linear-srgb-to-oklab',
+        highlightLumaThreshold: 0.8,
+        shadowLumaThreshold: 0.2,
+      },
+      reference: {
+        height: reference.height,
+        id: reference.id,
+        sha256: referenceSha256,
+        uri: reference.uri,
+        width: reference.width,
+      },
+      regions,
+      render: {
+        height: capture.height,
+        screenshotSha256: capture.screenshotSha256,
+        width: capture.width,
+      },
+    };
+  } finally {
+    referenceBitmap.close();
+    renderBitmap.close();
+  }
+}
+
+function reviewValidationError(message, issues) {
+  const safeIssues = Array.isArray(issues) ? issues : [];
+  const details = safeIssues
+    .slice(0, 12)
+    .map((issue) =>
+      String(issue?.path || '$') + ': ' + String(issue?.message || issue),
+    );
+  if (safeIssues.length > details.length) {
+    details.push('... ' + (safeIssues.length - details.length) + ' more issue(s)');
+  }
+  const error = new Error(
+    details.length === 0 ? message : message + ': ' + details.join('; '),
+  );
+  error.code = 'invalid_scene_review';
+  error.issues = safeIssues;
+  return error;
+}
+
+async function persistPendingReviewCapture(session, captureId, captureToken) {
+  const scene = requireOpenScenePath();
+  const capture = session.getPendingReviewCapture(captureToken);
+  return fetchJsonOrThrow(reviewCapturesUrl, {
+    body: JSON.stringify({
+      action: 'persist',
+      captureId,
+      captureToken: capture.captureToken,
+      scene,
+      sessionId: window.__IWSDK_SCENE_SESSION_ID,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+}
+
+function reviewCaptureFromBatchResult(id, view, capture, persisted) {
+  if (
+    capture?.reviewCamera == null ||
+    capture?.rendererEnvironment == null ||
+    !Array.isArray(capture?.visibleNodeIds)
+  ) {
+    throw new Error(
+      'Review capture metadata is incomplete; renderer, camera, and visibility facts are required',
+    );
+  }
+  return {
+    camera: capture.reviewCamera,
+    height: persisted.height,
+    id,
+    path: persisted.path,
+    rendererEnvironment: capture.rendererEnvironment,
+    screenshotSha256: persisted.screenshotSha256,
+    view,
+    visibleNodeIds: capture.visibleNodeIds,
+    width: persisted.width,
+    ...(capture.nodeMaskRegions == null
+      ? {}
+      : { nodeMaskRegions: capture.nodeMaskRegions }),
+  };
+}
+
+async function captureReviewSet(session, params) {
+  if (session.isDirty) {
+    throw new Error(
+      'Scene has unsaved editor changes; save before capturing immutable review evidence',
+    );
+  }
+  const requests = Array.isArray(params.captures) ? params.captures : [];
+  if (requests.length === 0 || requests.length > 32) {
+    throw new Error('scene_capture_review_set.captures must contain 1 to 32 requests');
+  }
+  const ids = new Set();
+  for (const request of requests) {
+    if (!request || typeof request !== 'object') {
+      throw new Error('Each review capture request must be an object');
+    }
+    if (
+      typeof request.id !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(request.id)
+    ) {
+      throw new Error('Each review capture request requires a safe, stable id');
+    }
+    if (ids.has(request.id)) {
+      throw new Error('Duplicate review capture id: ' + request.id);
+    }
+    ids.add(request.id);
+    if (!['layout', 'geometry', 'final'].includes(request.lens)) {
+      throw new Error(
+        'Review capture "' + request.id + '" lens must be layout, geometry, or final',
+      );
+    }
+    if (typeof request.viewId !== 'string' || request.viewId.length === 0) {
+      throw new Error(
+        'Review capture "' + request.id + '" requires an exact saved authoring viewId',
+      );
+    }
+  }
+
+  const defaultWidth = params.width;
+  const defaultHeight = params.height;
+  const captures = [];
+  let activeLens = null;
+  try {
+    for (const request of requests) {
+      const width = request.width ?? defaultWidth;
+      const height = request.height ?? defaultHeight;
+      if (
+        !Number.isInteger(width) ||
+        width < 1 ||
+        width > 4096 ||
+        !Number.isInteger(height) ||
+        height < 1 ||
+        height > 4096
+      ) {
+        throw new Error(
+          'Review capture "' + request.id + '" requires integer width/height from 1 to 4096',
+        );
+      }
+      if (activeLens !== request.lens) {
+        await session.dispatch('scene_set_review_lens', { lens: request.lens });
+        activeLens = request.lens;
+      }
+      const capture = await session.dispatch('scene_capture_review', {
+        featureState: request.featureState,
+        height,
+        includeImageData: false,
+        viewId: request.viewId,
+        width,
+      });
+      const persisted = await persistPendingReviewCapture(
+        session,
+        request.id,
+        capture.captureToken,
+      );
+      captures.push({
+        lens: request.lens,
+        ...reviewCaptureFromBatchResult(
+          request.id,
+          request.viewId,
+          capture,
+          persisted,
+        ),
+      });
+    }
+  } catch (error) {
+    if (error && typeof error === 'object') {
+      error.completedCaptures = captures;
+    }
+    throw error;
+  }
+  const hashes = await session.dispatch('scene_get_document', {});
+  const capabilities = await session.dispatch('scene_get_capabilities', {});
+  return {
+    action: 'reviewSetCaptured',
+    capabilityHash: capabilities.capabilityHash,
+    captureCount: captures.length,
+    captures,
+    documentHash: hashes.documentHash,
+    runtimeHash: hashes.runtimeHash,
+    status: 'persisted',
+  };
+}
+
+async function finalizeAndSaveReview(session, params) {
+  if (session.isDirty) {
+    throw new Error(
+      'Scene has unsaved editor changes; save before finalizing a review',
+    );
+  }
+  const captureEntries = Array.isArray(params.captures) ? params.captures : [];
+  const lensResults = Array.isArray(params.lensResults)
+    ? params.lensResults
+    : [];
+  if (captureEntries.length === 0) {
+    throw new Error(
+      'scene_finalize_review.captures must include persisted evidence from scene_capture_review_set',
+    );
+  }
+  if (lensResults.length === 0) {
+    throw new Error(
+      'scene_finalize_review.lensResults must include a human status for every configured lens',
+    );
+  }
+  const statusByLens = new Map();
+  for (const result of lensResults) {
+    if (
+      !result ||
+      !['layout', 'geometry', 'final'].includes(result.lens) ||
+      !['pass', 'partial', 'fail', 'not-applicable'].includes(result.status)
+    ) {
+      throw new Error(
+        'scene_finalize_review.lensResults entries require a canonical lens and review status',
+      );
+    }
+    if (statusByLens.has(result.lens)) {
+      throw new Error(
+        'scene_finalize_review.lensResults contains duplicate lens: ' +
+          result.lens,
+      );
+    }
+    statusByLens.set(result.lens, result.status);
+  }
+  const capturesByLens = new Map();
+  for (const entry of captureEntries) {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      !['layout', 'geometry', 'final'].includes(entry.lens)
+    ) {
+      throw new Error(
+        'scene_finalize_review.captures must be entries returned by scene_capture_review_set',
+      );
+    }
+    const { lens, ...capture } = entry;
+    const lensCaptures = capturesByLens.get(lens) || [];
+    lensCaptures.push(capture);
+    capturesByLens.set(lens, lensCaptures);
+  }
+  const configuredLenses =
+    session.document.authoring?.composition?.review?.lenses ||
+    [...capturesByLens.keys()];
+  for (const lens of configuredLenses) {
+    if (!statusByLens.has(lens)) {
+      throw new Error(
+        'scene_finalize_review.lensResults is missing configured lens: ' + lens,
+      );
+    }
+  }
+  for (const lens of new Set([
+    ...statusByLens.keys(),
+    ...capturesByLens.keys(),
+  ])) {
+    if (!configuredLenses.includes(lens)) {
+      throw new Error(
+        'scene_finalize_review includes unconfigured review lens: ' + lens,
+      );
+    }
+  }
+  const lenses = configuredLenses.map((lens) => ({
+    captures: capturesByLens.get(lens) || [],
+    id: lens,
+    status: statusByLens.get(lens),
+  }));
+  const capabilities = await session.dispatch('scene_get_capabilities', {});
+  const finalized = finalizeSceneReviewDraft(
+    session.document,
+    capabilities.capabilityHash,
+    {
+      correction: params.correction,
+      lenses,
+      openDefectTags: params.openDefectTags,
+      previousReview: params.previousReview,
+      round: params.round,
+      stopReason: params.stopReason,
+      visualResults: params.visualResults,
+    },
+  );
+  const validation = validateSceneReviewAgainstDocument(
+    finalized.review,
+    session.document,
+    capabilities.capabilityHash,
+  );
+  if (!validation.valid) {
+    throw reviewValidationError(
+      'Assisted review finalization failed validation',
+      validation.issues,
+    );
+  }
+  const result = await fetchJsonOrThrow(reviewsUrl, {
+    body: JSON.stringify({
+      capabilityHash: capabilities.capabilityHash,
+      review: finalized.review,
+      scene: requireOpenScenePath(),
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+  reviewStatusState = { documentHash: null, reviews: [], status: 'idle' };
+  return {
+    ...result,
+    deterministicResults: finalized.deterministicEvaluations.map(
+      ({ criterion, feature, reason, status }) => ({
+        criterion,
+        feature,
+        reason,
+        status,
+      }),
+    ),
+    result: finalized.review.result,
+    routing:
+      finalized.review.result === 'pass'
+        ? { next: 'scene_publish', status: 'ready-to-publish' }
+        : { next: 'scene_apply_transaction', status: 'continue-refining' },
+    stop: finalized.review.stop,
+  };
+}
+
 async function dispatchWorkspaceCommand(session, method, params = {}) {
   switch (method) {
+    case 'scene_get_state':
+      return sceneState(session);
+    case 'scene_render_file':
+      return renderSceneFile(session, params);
     case 'workspace_get_state':
       return workspaceState(session);
     case 'workspace_set_view':
-      setWorkspaceView(params.view);
+      await setWorkspaceView(params.view);
       return workspaceState(session);
+    case 'scene_set_preview_visibility':
+      if (!session) {
+        throw new Error('Open a scene before changing preview visibility');
+      }
+      return setPreviewVisibilityFromCommand(session, params);
+    case 'scene_measure_image_regions':
+      if (!session) {
+        throw new Error('Open a scene before measuring image regions');
+      }
+      return measureImageRegions(session, params);
+    case 'scene_capture_review_set':
+      if (!session) {
+        throw new Error('Open a scene before capturing review evidence');
+      }
+      return captureReviewSet(session, params);
     case 'scene_list_files': {
       const result = await fetchJsonOrThrow(sceneFilesUrl);
       const query =
@@ -693,38 +2065,170 @@ async function dispatchWorkspaceCommand(session, method, params = {}) {
           }
         : result;
     }
-    case 'scene_create': {
-      const scenePath = requireScenePath(params);
-      const result = await fetchJsonOrThrow(sceneFilesUrl, {
+    case 'scene_persist_review_capture': {
+      if (!session) {
+        throw new Error('Open a scene before persisting review evidence');
+      }
+      return persistPendingReviewCapture(
+        session,
+        params.captureId,
+        params.captureToken,
+      );
+    }
+    case 'scene_finalize_review':
+      if (!session) {
+        throw new Error('Open a scene before finalizing a review');
+      }
+      return finalizeAndSaveReview(session, params);
+    case 'scene_save_review': {
+      if (!session) {
+        throw new Error('Open a scene before saving a review record');
+      }
+      const scene = requireOpenScenePath();
+      const capabilities = await session.dispatch('scene_get_capabilities', {});
+      const validation = validateSceneReviewAgainstDocument(
+        params.review,
+        session.document,
+        capabilities.capabilityHash,
+      );
+      if (!validation.valid) {
+        throw reviewValidationError(
+          'Review record does not match the active editor scene and capabilities',
+          validation.issues,
+        );
+      }
+      const result = await fetchJsonOrThrow(reviewsUrl, {
         body: JSON.stringify({
-          overwrite: params.overwrite === true,
-          path: scenePath,
+          capabilityHash: capabilities.capabilityHash,
+          review: params.review,
+          scene,
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
       });
-      const shouldOpen = params.open !== false;
-      if (shouldOpen) {
-        scheduleSceneOpen(result.path || scenePath);
-      }
-      return {
-        ...result,
-        opened: shouldOpen,
-        reloading: shouldOpen,
-      };
+      reviewStatusState = { documentHash: null, reviews: [], status: 'idle' };
+      return result;
     }
-    case 'scene_open':
-    case 'workspace_open_scene': {
+    case 'scene_list_reviews': {
+      if (!session) {
+        throw new Error('Open a scene before listing review records');
+      }
+      const capabilities = await session.dispatch('scene_get_capabilities', {});
+      const url = new URL(reviewsUrl, window.location.href);
+      url.searchParams.set('scene', requireOpenScenePath());
+      url.searchParams.set('capabilityHash', capabilities.capabilityHash);
+      return fetchJsonOrThrow(url.pathname + url.search);
+    }
+    case 'scene_get_review': {
+      if (!session) {
+        throw new Error('Open a scene before reading a review record');
+      }
+      const reviewPath =
+        typeof params.path === 'string' && params.path.trim().length > 0
+          ? params.path.trim()
+          : null;
+      if (!reviewPath) {
+        throw new Error('scene_get_review.path is required');
+      }
+      const capabilities = await session.dispatch('scene_get_capabilities', {});
+      const url = new URL(reviewsUrl, window.location.href);
+      url.searchParams.set('scene', requireOpenScenePath());
+      url.searchParams.set('capabilityHash', capabilities.capabilityHash);
+      url.searchParams.set('path', reviewPath);
+      return fetchJsonOrThrow(url.pathname + url.search);
+    }
+    case 'scene_publish': {
+      if (!session) {
+        throw new Error('Open a scene before publishing');
+      }
+      if (session.isDirty) {
+        throw new Error('Scene has unsaved editor changes; save before publishing');
+      }
+      const reviewPath =
+        typeof params.reviewPath === 'string' &&
+        params.reviewPath.trim().length > 0
+          ? params.reviewPath.trim()
+          : null;
+      if (!reviewPath) {
+        throw new Error('scene_publish.reviewPath is required');
+      }
+      const representativeNodeIds = Array.isArray(params.representativeNodeIds)
+        ? params.representativeNodeIds
+        : undefined;
+      if (
+        representativeNodeIds?.some(
+          (nodeId) => typeof nodeId !== 'string' || nodeId.trim().length === 0,
+        )
+      ) {
+        throw new Error(
+          'scene_publish.representativeNodeIds must contain non-empty node ids',
+        );
+      }
+      const capabilities = await session.dispatch('scene_get_capabilities', {});
+      try {
+        return await fetchJsonOrThrow(publishUrl, {
+          body: JSON.stringify({
+            capabilityHash: capabilities.capabilityHash,
+            detail: params.detail === 'full' ? 'full' : 'compact',
+            representativeNodeIds,
+            reviewPath,
+            scene: requireOpenScenePath(),
+          }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        });
+      } catch (error) {
+        if (
+          error?.code === 'runtime_publish_proof_failed' &&
+          error?.report?.runtimeProven === 'failed'
+        ) {
+          return {
+            code: error.code,
+            error: error.message,
+            failedChecks:
+              error.failedChecks || error.report?.failedChecks || [],
+            proofPath: error.proofPath,
+            proofSha256: error.proofSha256,
+            report: error.report,
+            runtimeProven:
+              error.runtimeProven || error.report?.runtimeProven || 'failed',
+            warnings: error.warnings || error.report?.warnings || [],
+          };
+        }
+        throw error;
+      }
+    }
+    case 'scene_runtime_preflight': {
+      if (!session) {
+        throw new Error('Open a scene before checking runtime preflight');
+      }
+      if (session.isDirty) {
+        throw new Error('Save the scene before checking runtime preflight');
+      }
+      return fetchJsonOrThrow(runtimePreflightUrl, {
+        body: JSON.stringify({
+          detail: params.detail,
+          sampleFrames: params.sampleFrames,
+          scene: requireOpenScenePath(),
+          warmupFrames: params.warmupFrames,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+    }
+    case 'scene_open': {
       const scenePath = requireScenePath(params);
-      const nextDocumentUrl = documentUrlForScene(scenePath);
-      const opened = await fetchSceneDocumentWithRevision(nextDocumentUrl);
+      const opened = await fetchComposedSceneDocument(scenePath);
       scheduleSceneOpen(scenePath);
       return {
-        document: opened.document,
+        composedDocumentHash: opened.documentHash,
+        dependencies: opened.dependencies || [],
         path: scenePath,
         revision: opened.revision,
         reloading: true,
+        runtimeHash: opened.runtimeHash,
         sceneSessionId: window.__IWSDK_SCENE_SESSION_ID,
+        sourceDocumentHash: opened.sourceDocumentHash,
       };
     }
     default:
@@ -735,7 +2239,7 @@ async function dispatchWorkspaceCommand(session, method, params = {}) {
 async function renderScenePicker() {
   const status = document.getElementById('editor-status-strip');
   if (status) {
-    status.textContent = 'Choose or create a scene file';
+    status.textContent = 'Choose a scene file';
   }
   const host = document.querySelector('[data-workspace-editor-pane]');
   if (!host) {
@@ -751,10 +2255,6 @@ async function renderScenePicker() {
     '<p>Scene files live under <code>public/scenes/</code>.</p>' +
     '</div>' +
     '<div id="scene-picker-list" class="scene-picker-list">Loading scenes...</div>' +
-    '<form id="scene-picker-create" class="scene-picker-create">' +
-    '<input name="path" value="public/scenes/new-scene.iwsdk.scene.json" aria-label="New scene path" />' +
-    '<button type="submit">Create</button>' +
-    '</form>' +
     '</div>';
   host.appendChild(dialog);
 
@@ -787,18 +2287,6 @@ async function renderScenePicker() {
       });
     }
   };
-
-  dialog
-    .querySelector('#scene-picker-create')
-    ?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const formData = new FormData(event.currentTarget);
-      dispatchWorkspaceCommand(null, 'scene_create', {
-        path: String(formData.get('path') || ''),
-      }).catch((error) => {
-        list.textContent = String(error?.message || error);
-      });
-    });
 
   await renderFiles();
 }
@@ -841,15 +2329,6 @@ function renderLucideNode(node) {
     ? children.map((child) => renderLucideNode(child)).join('')
     : '';
   return \`<\${tagName} class="lucide-icon" \${attrs} aria-hidden="true">\${childMarkup}</\${tagName}>\`;
-}
-
-function iconButton(label, iconName, attributes) {
-  return \`
-    <button class="icon-button" \${attributes} title="\${escapeHtml(label)}" aria-label="\${escapeHtml(label)}">
-      \${renderLucideIcon(iconName)}
-      <span class="sr-only">\${escapeHtml(label)}</span>
-    </button>
-  \`;
 }
 
 const EDITOR_CONTRIBUTION_SLOTS = [
@@ -1078,108 +2557,130 @@ function rerenderEditorContributions() {
   if (diagnosticsPanel) {
     renderDiagnosticsPanel(diagnosticsPanel, session, camera);
   }
-  editorWorldState.lastProof = createViewportProof();
 }
 
 function currentEditorCamera(fallback) {
   return editorWorldState?.currentCamera || fallback;
 }
 
+function activeEditorSession() {
+  return editorWorldState?.currentSession || null;
+}
+
+function refreshActiveEditor() {
+  const session = activeEditorSession();
+  const camera = editorWorldState?.currentCamera;
+  if (session && camera) {
+    renderUi(session, camera);
+  }
+}
+
+function editorWorkspaceController() {
+  return {
+    addAsset(assetId) {
+      const session = activeEditorSession();
+      const camera = editorWorldState?.currentCamera;
+      if (session && camera) {
+        addAssetFromCatalog(session, camera, assetId);
+      }
+    },
+    moveNode(nodeId, parentId) {
+      const session = activeEditorSession();
+      const camera = editorWorldState?.currentCamera;
+      if (
+        session &&
+        camera &&
+        isValidOutlinerDrop(session.document, nodeId, parentId)
+      ) {
+        applyOutlinerReparent(session, camera, nodeId, parentId);
+      }
+    },
+    openNodeContextMenu(nodeId, point) {
+      const session = activeEditorSession();
+      const camera = editorWorldState?.currentCamera;
+      if (session && camera) {
+        showSceneGraphContextMenu(session, camera, nodeId, point);
+      }
+    },
+    redo() {
+      const session = activeEditorSession();
+      if (session) {
+        void session.dispatch('scene_redo', {}).then(() => {
+          clearValidationResult();
+          refreshActiveEditor();
+        });
+      }
+    },
+    selectNode(nodeId, modifiers) {
+      const session = activeEditorSession();
+      if (!session) {
+        return;
+      }
+      const nodeIds = selectionForNodeClick(nodeId, modifiers);
+      window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
+      setEditorSelection(nodeIds);
+      void session.dispatch('scene_select', { nodeIds }).then(refreshActiveEditor);
+    },
+    selectRoot() {
+      const session = activeEditorSession();
+      if (!session) {
+        return;
+      }
+      window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
+      setEditorSelection([]);
+      void session
+        .dispatch('scene_select', { nodeIds: [] })
+        .then(refreshActiveEditor);
+    },
+    setTransformMode,
+    setTransformSpace,
+    setView(view) {
+      void setWorkspaceView(view);
+    },
+    toggleNodeExpanded(nodeId) {
+      if (collapsedOutlinerNodeIds.has(nodeId)) {
+        collapsedOutlinerNodeIds.delete(nodeId);
+      } else {
+        collapsedOutlinerNodeIds.add(nodeId);
+      }
+      refreshActiveEditor();
+    },
+    toggleNodeVisibility(nodeId) {
+      if (hiddenOutlinerNodeIds.has(nodeId)) {
+        hiddenOutlinerNodeIds.delete(nodeId);
+      } else {
+        hiddenOutlinerNodeIds.add(nodeId);
+      }
+      const session = activeEditorSession();
+      if (session) {
+        applyEditorReviewLens(session.document);
+      }
+      refreshActiveEditor();
+    },
+    toggleTransformSnap() {
+      setTransformSnapEnabled(!editorWorldState?.transformSnapEnabled);
+      refreshActiveEditor();
+    },
+    undo() {
+      const session = activeEditorSession();
+      if (session) {
+        void session.dispatch('scene_undo', {}).then(() => {
+          clearValidationResult();
+          refreshActiveEditor();
+        });
+      }
+    },
+  };
+}
+
 function createEditorFrame() {
-  setRoot(\`
-    <main class="workspace-shell" data-workspace-shell>
-      <div class="workspace-view-switcher" aria-label="Workspace view">
-        <button data-workspace-view-button="runtime">Runtime</button>
-        <button data-workspace-view-button="editor">Editor</button>
-        <button data-workspace-view-button="split">Split</button>
-      </div>
-      <iframe id="workspace-runtime-frame" class="workspace-runtime-frame" data-workspace-runtime-src="/" title="IWSDK runtime app"></iframe>
-      <section class="workspace-editor-pane" data-workspace-editor-pane>
-        <main class="editor-shell">
-          <div class="editor-state-readouts" aria-hidden="true">
-            <span id="scene-status">Loading scene...</span>
-            <span id="dirty-status">Saved</span>
-          </div>
-          <section class="editor-viewport">
-            <div class="editor-toolbar" aria-label="Scene editor tools">
-              <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.left"></div>
-              <div id="transform-toolbar" class="toolbar-group" aria-label="Transform controls">
-                \${iconButton('Move', 'Move3D', 'data-transform-mode="translate"')}
-                \${iconButton('Rotate', 'Rotate3D', 'data-transform-mode="rotate"')}
-                \${iconButton('Scale', 'Scale3D', 'data-transform-mode="scale"')}
-              </div>
-              <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.center"></div>
-              <div class="toolbar-group" aria-label="Transform settings">
-                \${iconButton('Local space', 'Box', 'data-transform-space="local"')}
-                \${iconButton('World space', 'Globe2', 'data-transform-space="world"')}
-                \${iconButton('Snap', 'Magnet', 'data-transform-snap')}
-                \${iconButton('Surface placement', 'ArrowDownToLine', 'data-surface-placement')}
-              </div>
-              <div class="toolbar-group" aria-label="Document actions">
-                \${iconButton('Undo', 'Undo2', 'id="undo"')}
-                \${iconButton('Redo', 'Redo2', 'id="redo"')}
-                \${iconButton('Save', 'Save', 'id="save"')}
-                \${iconButton('Revert', 'RefreshCcw', 'id="revert"')}
-              </div>
-              <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.right"></div>
-            </div>
-            <div id="scene-viewport">
-              <div id="orientation-gizmo" aria-label="Interactive orientation gizmo"></div>
-              <div class="editor-slot viewport-overlay-slot" data-editor-slot="viewport.overlay"></div>
-            </div>
-            <section id="editor-bottom-panel" class="editor-bottom-panel" aria-label="Scene diagnostics">
-              <div class="bottom-panel-tabs" role="tablist">
-                <button data-bottom-tab="console" data-active>Console</button>
-                <button data-bottom-tab="events">Events</button>
-                <button data-bottom-tab="validation">Validation</button>
-              </div>
-              <div id="bottom-panel-content" class="bottom-panel-content"></div>
-            </section>
-            <div id="editor-status-strip" aria-live="polite">Scene loading...</div>
-          </section>
-          <section class="editor-panel editor-panel-left" data-editor-panel="composition">
-            <div class="editor-slot sidebar-slot" data-editor-slot="sidebar.top"></div>
-            <div class="panel-section scene-graph-section">
-              <div class="panel-section-header">
-                <h2>Scene Graph</h2>
-              </div>
-              <div class="panel-control-row">
-                <input id="scene-graph-filter" type="search" placeholder="Filter nodes" aria-label="Filter scene graph nodes" />
-              </div>
-              <div id="scene-root-drop-target" class="scene-root-drop-target node-row" data-scene-root-drop style="--depth: 0">
-                <span class="node-row-caret">\${renderLucideIcon('ChevronDown')}</span>
-                <span class="node-row-icon">\${renderLucideIcon('Boxes')}</span>
-                <span class="node-row-main">
-                  <span class="node-row-id">Root</span>
-                  <span class="node-row-subtitle">Scene Root</span>
-                </span>
-              </div>
-              <div id="outliner"></div>
-            </div>
-            <div class="panel-section asset-catalog-section">
-              <div class="panel-section-header">
-                <h2>Assets</h2>
-              </div>
-              <div class="panel-control-row">
-                <input id="asset-catalog-filter" type="search" placeholder="Filter assets" aria-label="Filter scene assets" />
-              </div>
-              <div id="asset-catalog"></div>
-            </div>
-            <div class="editor-slot sidebar-slot" data-editor-slot="sidebar.bottom"></div>
-            <div id="scene-graph-context-menu" class="scene-graph-context-menu" hidden></div>
-          </section>
-          <section class="editor-panel editor-panel-right" data-editor-panel="inspector">
-            <div class="panel-section">
-              <div class="panel-section-header">
-                <h2>Inspector</h2>
-              </div>
-              <div id="inspector"></div>
-            </div>
-          </section>
-        </main>
-      </section>
-    </main>
-  \`);
+  if (typeof mountEditorWorkspace !== 'function') {
+    throw new Error('Preact editor workspace module is unavailable');
+  }
+  workspaceUi?.unmount?.();
+  workspaceUi = mountEditorWorkspace(root, editorWorkspaceController(), {
+    view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
+  });
 }
 
 function getViewportHost() {
@@ -1198,8 +2699,168 @@ function getCanvas() {
   return canvas;
 }
 
+function sceneResources(documentValue) {
+  return documentValue?.resources || {};
+}
+
+function sceneAssets(documentValue) {
+  return editorWorldState?.world?.assets?.list?.() || [];
+}
+
+function catalogSceneAssets(documentValue) {
+  return sceneAssets(documentValue).map((asset) => ({
+    ...asset,
+    thumbnailUrl: assetThumbnailCache.get(asset.id) || null,
+  }));
+}
+
+async function ensureAssetThumbnails(documentValue) {
+  if (assetThumbnailGeneration) {
+    return assetThumbnailGeneration;
+  }
+  const assets = sceneAssets(documentValue).filter(
+    (asset) =>
+      !assetThumbnailCache.has(asset.id) &&
+      !assetThumbnailFailures.has(asset.id),
+  );
+  if (assets.length === 0 || !editorWorldState?.world?.assets) {
+    return;
+  }
+  assetThumbnailGeneration = generateAssetThumbnails(assets, documentValue)
+    .catch((error) => {
+      console.warn('[IWSDK editor] Asset thumbnail generation failed', error);
+    })
+    .finally(() => {
+      assetThumbnailGeneration = null;
+    });
+  return assetThumbnailGeneration;
+}
+
+async function generateAssetThumbnails(assets, documentValue) {
+  const canvas = document.createElement('canvas');
+  const width = 180;
+  const height = 112;
+  canvas.width = width;
+  canvas.height = height;
+  const renderer = new WebGLRenderer({
+    alpha: false,
+    antialias: true,
+    canvas,
+    preserveDrawingBuffer: true,
+  });
+  renderer.setPixelRatio(1);
+  renderer.setSize(width, height, false);
+
+  const thumbnailScene = new Scene();
+  thumbnailScene.background = new Color('#202226');
+  const camera = new PerspectiveCamera(34, width / height, 0.001, 1000);
+  const ambient = new AmbientLight('#ffffff', 1.15);
+  const key = new DirectionalLight('#fff4df', 2.4);
+  const fill = new DirectionalLight('#b9d4ff', 0.9);
+  thumbnailScene.add(ambient, key, fill);
+
+  try {
+    for (let index = 0; index < assets.length; index += 1) {
+      const asset = assets[index];
+      let frame = null;
+      try {
+        const object = await editorWorldState.world.assets.instantiate(asset.id);
+        frame = new Group();
+        frame.add(object);
+        thumbnailScene.add(frame);
+        object.updateMatrixWorld(true);
+        const bounds = new Box3().setFromObject(object);
+        if (bounds.isEmpty()) {
+          throw new Error(
+            'Renderable asset "' + asset.id + '" has empty bounds',
+          );
+        }
+        const center = new Vector3();
+        const size = new Vector3();
+        bounds.getCenter(center);
+        bounds.getSize(size);
+        frame.position.copy(center).multiplyScalar(-1);
+        frame.updateMatrixWorld(true);
+
+        const radius = Math.max(size.length() * 0.5, 0.01);
+        const distance =
+          (radius / Math.tan(MathUtils.degToRad(camera.fov * 0.5))) * 1.22;
+        const viewDirection = new Vector3(1.15, 0.82, 1.35).normalize();
+        camera.position.copy(viewDirection).multiplyScalar(distance);
+        camera.near = Math.max(0.001, distance - radius * 2.2);
+        camera.far = distance + radius * 3.5;
+        camera.lookAt(0, 0, 0);
+        camera.updateProjectionMatrix();
+        key.position.set(distance, distance * 1.35, distance * 1.2);
+        fill.position.set(-distance, distance * 0.45, -distance * 0.8);
+        renderer.render(thumbnailScene, camera);
+        assetThumbnailCache.set(asset.id, canvas.toDataURL('image/png'));
+      } catch (error) {
+        assetThumbnailFailures.add(asset.id);
+        console.warn(
+          '[IWSDK editor] Could not render thumbnail for "' + asset.id + '"',
+          error,
+        );
+      } finally {
+        if (frame) {
+          thumbnailScene.remove(frame);
+        }
+      }
+
+      if ((index + 1) % 6 === 0 || index === assets.length - 1) {
+        workspaceUi?.update({
+          sceneAssets: catalogSceneAssets(documentValue),
+        });
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    }
+  } finally {
+    renderer.dispose();
+    renderer.forceContextLoss?.();
+  }
+}
+
+function scenePrefabs(documentValue) {
+  return sceneResources(documentValue).prefabs || [];
+}
+
+function referencedSceneAssetIds(documentValue) {
+  const ids = new Set();
+  const visit = (node) => {
+    if (node?.content?.type === 'asset') {
+      ids.add(node.content.asset);
+    }
+    for (const child of node?.children || []) {
+      visit(child);
+    }
+  };
+  for (const node of documentValue?.nodes || []) {
+    visit(node);
+  }
+  for (const prefab of scenePrefabs(documentValue)) {
+    visit(prefab.root);
+  }
+  return [...ids];
+}
+
+function nodeContentKind(node) {
+  if (node?.content?.type) {
+    return node.content.type;
+  }
+  if (node?.asset) {
+    return 'asset';
+  }
+  return 'group';
+}
+
+function nodeAssetId(node) {
+  return node?.content?.type === 'asset'
+    ? node.content.asset
+    : node?.asset || null;
+}
+
 function getAssetBounds(documentValue, assetId) {
-  const asset = (documentValue.assets || []).find((entry) => entry.id === assetId);
+  const asset = sceneAssets(documentValue).find((entry) => entry.id === assetId);
   const bounds = asset?.bounds;
   const min =
     Array.isArray(bounds?.min) && bounds.min.length === 3
@@ -1212,15 +2873,6 @@ function getAssetBounds(documentValue, assetId) {
   return { asset, max, min };
 }
 
-function colorForNode(nodeId) {
-  let hash = 0;
-  for (let index = 0; index < nodeId.length; index += 1) {
-    hash = (hash * 31 + nodeId.charCodeAt(index)) >>> 0;
-  }
-  const hue = hash % 360;
-  return new Color().setHSL(hue / 360, 0.58, 0.56);
-}
-
 function disposeObjectTree(object) {
   object.traverse((child) => {
     child.geometry?.dispose?.();
@@ -1231,22 +2883,6 @@ function disposeObjectTree(object) {
       material?.dispose?.();
     }
   });
-}
-
-function clearProxyRoot() {
-  if (!editorWorldState) {
-    return;
-  }
-  editorWorldState.transformControls?.detach();
-  editorWorldState.hoverHelper = null;
-  editorWorldState.hoveredNodeId = null;
-  for (const child of [...editorWorldState.proxyRoot.children]) {
-    editorWorldState.proxyRoot.remove(child);
-    if (!child.userData.iwsdkEditorAssetId) {
-      disposeObjectTree(child);
-    }
-  }
-  editorWorldState.objectMap.clear();
 }
 
 function applyNodeTransform(object, transform = {}) {
@@ -1386,8 +3022,10 @@ function runtimeSummaryForNode(node) {
   const componentLabels = Object.entries(node?.components || {}).map(
     ([name, value]) => componentPayloadType(name, value),
   );
+  const contentKind = nodeContentKind(node);
+  const assetId = nodeAssetId(node);
   const summary = {
-    assetStatus: node?.asset ? 'not-requested' : 'none',
+    assetStatus: assetId ? 'registered' : 'none',
     assetUrl: null,
     bounds: null,
     componentCount: componentLabels.length,
@@ -1403,8 +3041,8 @@ function runtimeSummaryForNode(node) {
   if (!editorWorldState || !node) {
     return summary;
   }
-  const assetProof = node.asset
-    ? editorWorldState.assetProof.get(node.asset)
+  const assetProof = assetId
+    ? editorWorldState.assetProof.get(assetId)
     : null;
   if (assetProof) {
     summary.assetStatus = assetProof.status || summary.assetStatus;
@@ -1433,8 +3071,8 @@ function runtimeSummaryForNode(node) {
           : 0;
     }
   });
-  const bounds = new Box3().setFromObject(object);
-  if (!bounds.isEmpty()) {
+  const bounds = boundsForObjectWithoutEditorHelpers(object);
+  if (bounds) {
     const center = new Vector3();
     const size = new Vector3();
     bounds.getCenter(center);
@@ -1496,13 +3134,20 @@ function selectionBoundsProof() {
   if (!helper) {
     return { nodeId, helper: null };
   }
+  const objectBounds = boundsForObjectWithoutEditorHelpers(object);
+  if (!objectBounds) {
+    return { nodeId, helper: null };
+  }
+  const helperBounds = new Box3().setFromObject(helper);
   const objectCenter = new Vector3();
   const helperCenter = new Vector3();
-  new Box3().setFromObject(object).getCenter(objectCenter);
-  new Box3().setFromObject(helper).getCenter(helperCenter);
+  objectBounds.getCenter(objectCenter);
+  helperBounds.getCenter(helperCenter);
   return {
     centerDistance: Number(objectCenter.distanceTo(helperCenter).toFixed(4)),
     helperCenter: roundVec3(helperCenter.toArray()),
+    maxDistance: Number(objectBounds.max.distanceTo(helperBounds.max).toFixed(4)),
+    minDistance: Number(objectBounds.min.distanceTo(helperBounds.min).toFixed(4)),
     nodeId,
     objectCenter: roundVec3(objectCenter.toArray()),
   };
@@ -1518,7 +3163,11 @@ function hoverBoundsProof() {
   }
   const objectCenter = new Vector3();
   const helperCenter = new Vector3();
-  new Box3().setFromObject(object).getCenter(objectCenter);
+  const objectBounds = boundsForObjectWithoutEditorHelpers(object);
+  if (!objectBounds) {
+    return null;
+  }
+  objectBounds.getCenter(objectCenter);
   new Box3().setFromObject(editorWorldState.hoverHelper).getCenter(helperCenter);
   return {
     centerDistance: Number(objectCenter.distanceTo(helperCenter).toFixed(4)),
@@ -1546,8 +3195,10 @@ function objectHierarchyProof() {
     const worldPosition = new Vector3();
     object.updateMatrixWorld(true);
     object.getWorldPosition(worldPosition);
+    const content = object.userData?.iwsdkSceneContent;
     return {
-      assetId: object.userData?.iwsdkEditorAssetId ?? null,
+      assetId: content?.type === 'asset' ? content.asset : null,
+      contentType: object.userData?.iwsdkSceneContentType ?? null,
       fallback: object.userData?.iwsdkEditorFallback ?? null,
       helperType: object.userData?.iwsdkEditorHelperType ?? null,
       localPosition: roundVec3([
@@ -1557,6 +3208,8 @@ function objectHierarchyProof() {
       ]),
       nodeId,
       parentNodeId,
+      runtimeHash: object.userData?.iwsdkSceneRuntimeHash ?? null,
+      sourceNodeId: object.userData?.iwsdkSceneSourceNodeId ?? null,
       worldPosition: roundVec3(worldPosition.toArray()),
     };
   });
@@ -1589,54 +3242,16 @@ function updateHoverHelper(session, nodeId) {
   if (!object) {
     return;
   }
-  object.updateMatrixWorld(true);
-  const helper = new BoxHelper(object, 0x2d7ff9);
+  const helper = createEditorBoundsHelper(object, 0x2d7ff9);
+  if (!helper) {
+    return;
+  }
   helper.name = \`\${nextNodeId}-hover-outline\`;
   helper.userData.iwsdkEditorHelper = true;
   helper.userData.iwsdkEditorHoverHelper = true;
   helper.userData.iwsdkSceneNodeId = nextNodeId;
   editorWorldState.proxyRoot.add(helper);
   editorWorldState.hoverHelper = helper;
-}
-
-function markObjectForNode(object, nodeId) {
-  object.userData.iwsdkSceneNodeId = nodeId;
-  object.userData.iwsdkEditorObject = true;
-  object.traverse?.((child) => {
-    child.userData.iwsdkSceneNodeId = nodeId;
-    child.userData.iwsdkEditorObject = true;
-  });
-}
-
-function createBoundsProxyObject(documentValue, node, reason = 'fallback') {
-  const { max, min } = getAssetBounds(documentValue, node.asset);
-  const size = [
-    Math.max(0.05, max[0] - min[0]),
-    Math.max(0.05, max[1] - min[1]),
-    Math.max(0.05, max[2] - min[2]),
-  ];
-  const center = [
-    (min[0] + max[0]) / 2,
-    (min[1] + max[1]) / 2,
-    (min[2] + max[2]) / 2,
-  ];
-  const group = new Group();
-  group.name = node.name || node.id;
-  group.userData.iwsdkEditorFallback = reason;
-  applyNodeTransform(group, node.transform);
-
-  const geometry = new BoxGeometry(size[0], size[1], size[2]);
-  geometry.translate(center[0], center[1], center[2]);
-  const material = new MeshStandardMaterial({
-    color: colorForNode(node.id),
-    metalness: 0.08,
-    roughness: 0.58,
-  });
-  const mesh = new Mesh(geometry, material);
-  mesh.name = \`\${node.id}-proxy-mesh\`;
-  group.add(mesh);
-  markObjectForNode(group, node.id);
-  return group;
 }
 
 function componentHelperType(node) {
@@ -1649,7 +3264,21 @@ function componentHelperType(node) {
   if (componentTypes.includes('CameraSource')) {
     return 'camera-source';
   }
+  if (componentTypes.includes('DirectionalLight')) {
+    return 'directional-light';
+  }
+  if (componentTypes.includes('PointLight')) {
+    return 'point-light';
+  }
+  if (componentTypes.includes('SpotLight')) {
+    return 'spot-light';
+  }
+  if (componentTypes.includes('RectAreaLight')) {
+    return 'rect-area-light';
+  }
   if (
+    componentTypes.includes('AmbientLight') ||
+    componentTypes.includes('HemisphereLight') ||
     componentTypes.includes('DomeGradient') ||
     componentTypes.includes('DomeTexture') ||
     componentTypes.includes('IBLGradient') ||
@@ -1660,220 +3289,641 @@ function componentHelperType(node) {
   return null;
 }
 
-function createComponentHelperObject(node, helperType) {
+function markOwnedEditorHelper(mesh, nodeId, helperType) {
+  mesh.userData.iwsdkEditorHelper = true;
+  mesh.userData.iwsdkEditorHelperType = helperType;
+  mesh.userData.iwsdkOwnsPrimitiveResources = true;
+  mesh.userData.iwsdkSceneNodeId = nodeId;
+  return mesh;
+}
+
+function createComponentHelperDecoration(node, helperType) {
   const group = new Group();
-  group.name = node.name || node.id;
-  group.userData.iwsdkEditorFallback = helperType + '-helper';
+  group.name = node.id + '-' + helperType + '-helper';
+  group.userData.iwsdkEditorHelper = true;
   group.userData.iwsdkEditorHelperType = helperType;
-  applyNodeTransform(group, node.transform);
+  group.userData.iwsdkSceneNodeId = node.id;
+
+  const lightSpec = Object.entries(node.components || {})
+    .map(([componentName, value]) =>
+      lightSpecFromComponentValue(componentName, value),
+    )
+    .find(Boolean);
+  const lightColor = new Color(0xffd86b);
+  const authoredColor = lightSpec?.color || lightSpec?.skyColor;
+  if (authoredColor) {
+    lightColor.setRGB(authoredColor[0], authoredColor[1], authoredColor[2]);
+  }
 
   if (helperType === 'audio-source') {
-    const bodyMaterial = new MeshBasicMaterial({
-      color: 0x5ce1e6,
-      opacity: 0.9,
-      transparent: true,
-    });
-    const waveMaterial = new MeshBasicMaterial({
-      color: 0xb8f7ff,
-      opacity: 0.55,
-      transparent: true,
-      wireframe: true,
-    });
-    const body = new Mesh(new BoxGeometry(0.16, 0.18, 0.1), bodyMaterial);
-    body.name = node.id + '-audio-body';
-    const cone = new Mesh(new ConeGeometry(0.16, 0.22, 32, 1, true), waveMaterial);
-    cone.name = node.id + '-audio-wave';
-    cone.rotation.z = -Math.PI / 2;
-    cone.position.x = 0.18;
-    group.add(body, cone);
-  } else if (helperType === 'camera-source') {
-    const bodyMaterial = new MeshBasicMaterial({
-      color: 0xffd166,
-      opacity: 0.9,
-      transparent: true,
-    });
-    const frustumMaterial = new MeshBasicMaterial({
-      color: 0xfff0a8,
-      opacity: 0.5,
-      transparent: true,
-      wireframe: true,
-    });
-    const body = new Mesh(new BoxGeometry(0.22, 0.14, 0.12), bodyMaterial);
-    body.name = node.id + '-camera-body';
-    const frustum = new Mesh(
-      new ConeGeometry(0.2, 0.34, 4, 1, true),
-      frustumMaterial,
+    const body = markOwnedEditorHelper(
+      new Mesh(
+        new BoxGeometry(0.16, 0.18, 0.1),
+        new MeshBasicMaterial({ color: 0x5ce1e6, opacity: 0.9, transparent: true }),
+      ),
+      node.id,
+      helperType,
     );
-    frustum.name = node.id + '-camera-frustum';
+    const wave = markOwnedEditorHelper(
+      new Mesh(
+        new ConeGeometry(0.16, 0.22, 24, 1, true),
+        new MeshBasicMaterial({
+          color: 0xb8f7ff,
+          opacity: 0.55,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
+    wave.rotation.z = -Math.PI / 2;
+    wave.position.x = 0.18;
+    group.add(body, wave);
+  } else if (helperType === 'camera-source') {
+    const body = markOwnedEditorHelper(
+      new Mesh(
+        new BoxGeometry(0.22, 0.14, 0.12),
+        new MeshBasicMaterial({ color: 0xffd166, opacity: 0.9, transparent: true }),
+      ),
+      node.id,
+      helperType,
+    );
+    const frustum = markOwnedEditorHelper(
+      new Mesh(
+        new ConeGeometry(0.2, 0.34, 4, 1, true),
+        new MeshBasicMaterial({
+          color: 0xfff0a8,
+          opacity: 0.5,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
     frustum.rotation.x = Math.PI / 2;
     frustum.position.z = -0.24;
     group.add(body, frustum);
+  } else if (helperType === 'point-light') {
+    const distance = lightSpec?.kind === 'point' ? lightSpec.distance : 0;
+    const radius = distance > 0 ? distance : 0.18;
+    const range = markOwnedEditorHelper(
+      new Mesh(
+        new SphereGeometry(radius, 20, 14),
+        new MeshBasicMaterial({
+          color: lightColor,
+          opacity: distance > 0 ? 0.22 : 0.68,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
+    group.add(range);
+  } else if (helperType === 'spot-light') {
+    const distance =
+      lightSpec?.kind === 'spot' && lightSpec.distance > 0
+        ? lightSpec.distance
+        : 0.5;
+    const angleDeg = lightSpec?.kind === 'spot' ? lightSpec.angleDeg : 60;
+    const radius = Math.max(
+      0.02,
+      Math.tan(MathUtils.degToRad(angleDeg)) * distance,
+    );
+    const cone = markOwnedEditorHelper(
+      new Mesh(
+        new ConeGeometry(radius, distance, 24, 1, true),
+        new MeshBasicMaterial({
+          color: lightColor,
+          opacity: 0.62,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
+    cone.rotation.x = Math.PI / 2;
+    cone.position.z = -distance / 2;
+    group.add(cone);
+  } else if (helperType === 'directional-light') {
+    const shaft = markOwnedEditorHelper(
+      new Mesh(
+        new CylinderGeometry(0.035, 0.035, 0.36, 12),
+        new MeshBasicMaterial({ color: lightColor }),
+      ),
+      node.id,
+      helperType,
+    );
+    shaft.rotation.x = -Math.PI / 2;
+    shaft.position.z = -0.18;
+    const head = markOwnedEditorHelper(
+      new Mesh(
+        new ConeGeometry(0.1, 0.2, 16),
+        new MeshBasicMaterial({ color: lightColor }),
+      ),
+      node.id,
+      helperType,
+    );
+    head.rotation.x = -Math.PI / 2;
+    head.position.z = -0.44;
+    group.add(shaft, head);
+  } else if (helperType === 'rect-area-light') {
+    const width = lightSpec?.kind === 'rect-area' ? lightSpec.width : 0.48;
+    const height = lightSpec?.kind === 'rect-area' ? lightSpec.height : 0.32;
+    const panel = markOwnedEditorHelper(
+      new Mesh(
+        new BoxGeometry(width, height, 0.025),
+        new MeshBasicMaterial({
+          color: lightColor,
+          opacity: 0.55,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
+    group.add(panel);
   } else {
-    const coreMaterial = new MeshBasicMaterial({
-      color: 0xa8ff78,
-      opacity: 0.85,
-      transparent: true,
-    });
-    const haloMaterial = new MeshBasicMaterial({
-      color: 0xf7ff9e,
-      opacity: 0.45,
-      transparent: true,
-      wireframe: true,
-    });
-    const core = new Mesh(new CylinderGeometry(0.14, 0.14, 0.06, 32), coreMaterial);
-    core.name = node.id + '-environment-core';
-    const halo = new Mesh(new ConeGeometry(0.28, 0.12, 32, 1, true), haloMaterial);
-    halo.name = node.id + '-environment-halo';
+    const core = markOwnedEditorHelper(
+      new Mesh(
+        new CylinderGeometry(0.14, 0.14, 0.06, 24),
+        new MeshBasicMaterial({ color: 0xa8ff78, opacity: 0.85, transparent: true }),
+      ),
+      node.id,
+      helperType,
+    );
+    const halo = markOwnedEditorHelper(
+      new Mesh(
+        new ConeGeometry(0.28, 0.12, 24, 1, true),
+        new MeshBasicMaterial({
+          color: 0xf7ff9e,
+          opacity: 0.45,
+          transparent: true,
+          wireframe: true,
+        }),
+      ),
+      node.id,
+      helperType,
+    );
     halo.position.y = 0.04;
     group.add(core, halo);
   }
-
-  markObjectForNode(group, node.id);
   return group;
-}
-
-function resolveAssetUrl(asset) {
-  if (/^[a-z]+:/i.test(asset.uri) || asset.uri.startsWith('/')) {
-    return asset.uri;
-  }
-
-  return new URL(asset.uri, new URL(documentUrl, window.location.href)).href;
-}
-
-function getAssetLoadEntry(asset) {
-  if (!asset || (asset.type != null && asset.type !== 'gltf')) {
-    return null;
-  }
-  const assetUrl = resolveAssetUrl(asset);
-  const existing = editorWorldState.assetCache.get(asset.id);
-  if (existing && existing.url === assetUrl) {
-    return existing;
-  }
-
-  const entry = {
-    assetId: asset.id,
-    error: null,
-    loadedAt: null,
-    promise: null,
-    scene: null,
-    status: 'loading',
-    url: assetUrl,
-  };
-  editorWorldState.assetCache.set(asset.id, entry);
-  editorWorldState.assetProof.set(asset.id, {
-    assetId: asset.id,
-    status: 'loading',
-    url: assetUrl,
-  });
-  entry.promise = AssetManager.loadGLTF(assetUrl, asset.id)
-    .then((loaded) => {
-      const cached = AssetManager.getGLTF(asset.id);
-      entry.scene = cached?.scene ?? loaded.scene.clone(true);
-      entry.status = 'loaded';
-      entry.loadedAt = Date.now();
-      editorWorldState.assetProof.set(asset.id, {
-        assetId: asset.id,
-        loadedAt: entry.loadedAt,
-        status: 'loaded',
-        url: assetUrl,
-      });
-      editorWorldState.requestRender?.();
-      requestEditorUiRefresh();
-      return entry;
-    })
-    .catch((error) => {
-      entry.error = String(error?.message || error);
-      entry.status = 'failed';
-      editorWorldState.assetProof.set(asset.id, {
-        assetId: asset.id,
-        error: entry.error,
-        status: 'failed',
-        url: assetUrl,
-      });
-      console.warn(
-        \`[IWSDK Scene Editor] Failed to load asset "\${asset.id}" from \${assetUrl}\`,
-        error,
-      );
-      editorWorldState.requestRender?.();
-      requestEditorUiRefresh();
-      return entry;
-    });
-  return entry;
-}
-
-function requestEditorUiRefresh() {
-  if (!editorWorldState?.currentSession || editorWorldState.uiRefreshFrame != null) {
-    return;
-  }
-  editorWorldState.uiRefreshFrame = requestAnimationFrame(() => {
-    if (editorWorldState) {
-      editorWorldState.uiRefreshFrame = null;
-    }
-    if (!editorWorldState?.currentSession) {
-      return;
-    }
-    editorWorldState.lastProof = createViewportProof();
-  });
 }
 
 async function waitForAssetLoads() {
   if (!editorWorldState) {
     return;
   }
-  const pending = [...editorWorldState.assetCache.values()]
-    .filter((entry) => entry.status === 'loading' && entry.promise)
-    .map((entry) => entry.promise);
-  if (pending.length > 0) {
-    await Promise.allSettled(pending);
+  if (editorWorldState.lowerPromise) {
+    await editorWorldState.lowerPromise;
   }
 }
 
-function createRenderableObject(documentValue, node) {
-  const asset = (documentValue.assets || []).find(
-    (entry) => entry.id === node.asset,
-  );
-  const assetEntry = getAssetLoadEntry(asset);
-  if (assetEntry?.status === 'loaded' && assetEntry.scene) {
-    const group = new Group();
-    group.name = node.name || node.id;
-    group.userData.iwsdkEditorAssetId = asset.id;
-    group.add(assetEntry.scene.clone(true));
-    markObjectForNode(group, node.id);
-    applyNodeTransform(group, node.transform);
-    return group;
+function restoreEditorReviewLens() {
+  if (!editorWorldState) {
+    return;
   }
+  for (const [object, layerMask] of editorWorldState.lensLayerMasks || []) {
+    object.layers.mask = layerMask;
+  }
+  for (const [object, visible] of editorWorldState.lensVisibility || []) {
+    object.visible = visible;
+  }
+  for (const [mesh, material] of editorWorldState.lensMaterials || []) {
+    mesh.material = material;
+  }
+  editorWorldState.lensLayerMasks = new Map();
+  editorWorldState.lensVisibility = new Map();
+  editorWorldState.lensMaterials = new Map();
+  editorWorldState.neutralMaterial?.dispose?.();
+  editorWorldState.neutralMaterial = null;
+}
 
-  if (!node.asset) {
-    const helperType = componentHelperType(node);
-    if (helperType) {
-      return createComponentHelperObject(node, helperType);
+function nearestReviewAnnotation(object, annotationByNode) {
+  for (let current = object; current; current = current.parent) {
+    const nodeId = current.userData?.iwsdkSceneNodeId;
+    if (typeof nodeId === 'string') {
+      const annotation = annotationByNode.get(nodeId);
+      if (annotation) {
+        return annotation;
+      }
     }
   }
-
-  const reason =
-    assetEntry?.status === 'failed'
-      ? 'asset-load-failed'
-      : assetEntry?.status === 'loading'
-        ? 'asset-loading'
-        : 'no-gltf-asset';
-  return createBoundsProxyObject(documentValue, node, reason);
+  return null;
 }
 
-function syncRenderableNode(documentValue, node, parent, selected) {
-  const object = createRenderableObject(documentValue, node);
-  parent.add(object);
-  editorWorldState.objectMap.set(node.id, object);
-  for (const child of node.children || []) {
-    syncRenderableNode(documentValue, child, object, selected);
+function isDirectReviewRenderable(object) {
+  return (
+    object.isMesh === true ||
+    object.isLine === true ||
+    object.isPoints === true ||
+    object.isSprite === true
+  );
+}
+
+function maskObjectFromReviewLens(object) {
+  if (!editorWorldState.lensLayerMasks.has(object)) {
+    editorWorldState.lensLayerMasks.set(object, object.layers.mask);
   }
-  if (selected.has(node.id)) {
-    const helper = new BoxHelper(object, 0x9ff3c7);
-    helper.name = \`\${node.id}-selection-outline\`;
-    helper.userData.iwsdkEditorHelper = true;
-    helper.userData.iwsdkEditorSelectionHelper = true;
-    helper.userData.iwsdkSceneNodeId = node.id;
-    parent.add(helper);
+  object.layers.mask = 0;
+}
+
+function applyEditorReviewLens(documentValue) {
+  if (!editorWorldState) {
+    return;
   }
+  restoreEditorPreviewVisibility();
+  restoreEditorReviewLens();
+  const lens = window.__IWSDK_EDITOR_REVIEW_LENS || 'final';
+  const hasAuthoredLights =
+    (editorWorldState.lightBindings?.size || 0) > 0 ||
+    nodeHasLightComponent({ components: documentValue.components });
+  if (editorWorldState.editorAmbient) {
+    editorWorldState.editorAmbient.visible = lens !== 'final' || !hasAuthoredLights;
+  }
+  if (editorWorldState.editorDirectional) {
+    editorWorldState.editorDirectional.visible =
+      lens !== 'final' || !hasAuthoredLights;
+  }
+  if (lens === 'final') {
+    applyEditorPreviewVisibility(documentValue);
+    return;
+  }
+  const annotationByNode = new Map(
+    (documentValue.authoring?.nodeAnnotations || []).map((entry) => [
+      entry.node,
+      entry,
+    ]),
+  );
+  if (lens === 'layout') {
+    editorWorldState.proxyRoot.traverse((object) => {
+      if (object.userData?.iwsdkEditorHelper === true) {
+        return;
+      }
+      if (object.isLight === true) {
+        maskObjectFromReviewLens(object);
+        return;
+      }
+      if (!isDirectReviewRenderable(object)) {
+        return;
+      }
+      const annotation = nearestReviewAnnotation(object, annotationByNode);
+      if (annotation && annotation.reviewLayer !== 'layout') {
+        maskObjectFromReviewLens(object);
+      }
+    });
+    applyEditorPreviewVisibility(documentValue);
+    return;
+  }
+  const neutral = new MeshStandardMaterial({
+    color: 0xb8bdc4,
+    metalness: 0,
+    roughness: 0.82,
+  });
+  editorWorldState.neutralMaterial = neutral;
+  const visited = new Set();
+  editorWorldState.proxyRoot.traverse((child) => {
+    if (visited.has(child)) {
+      return;
+    }
+    visited.add(child);
+    if (child.isLight) {
+      maskObjectFromReviewLens(child);
+    }
+    if (child.isMesh) {
+      editorWorldState.lensMaterials.set(child, child.material);
+      child.material = neutral;
+    }
+  });
+  applyEditorPreviewVisibility(documentValue);
+}
+
+function indexLoweredNode(lowered) {
+  const helperType = componentHelperType(lowered.node);
+  if (
+    helperType &&
+    !lowered.object.children.some(
+      (child) =>
+        child.userData?.iwsdkEditorHelper === true &&
+        child.userData?.iwsdkEditorHelperType === helperType,
+    )
+  ) {
+    lowered.object.userData.iwsdkEditorFallback = helperType + '-helper';
+    lowered.object.userData.iwsdkEditorHelperType = helperType;
+    lowered.object.add(createComponentHelperDecoration(lowered.node, helperType));
+  }
+  editorWorldState.objectMap.set(lowered.id, lowered.object);
+  attachEditorLightBindings(lowered);
+  for (const virtual of lowered.virtualNodes || []) {
+    editorWorldState.objectMap.set(virtual.id, virtual.object);
+  }
+  for (const child of lowered.children || []) {
+    indexLoweredNode(child);
+  }
+}
+
+function detachEditorSceneForSwap() {
+  restoreEditorPreviewVisibility();
+  restoreEditorReviewLens();
+  editorWorldState.transformControls?.detach();
+  editorWorldState.hoverHelper = null;
+  editorWorldState.hoveredNodeId = null;
+  disposeEditorLightBindings();
+  for (const child of [...editorWorldState.proxyRoot.children]) {
+    editorWorldState.proxyRoot.remove(child);
+    if (child.userData.iwsdkEditorHelper === true) {
+      disposeObjectTree(child);
+    }
+  }
+  editorWorldState.objectMap.clear();
+}
+
+function attachEditorLightBindings(lowered) {
+  const bindings = [];
+  for (const [componentName, value] of Object.entries(
+    lowered.node?.components || {},
+  )) {
+    const spec = lightSpecFromComponentValue(componentName, value);
+    if (!spec) continue;
+    const binding = new LightBinding(
+      lowered.object,
+      editorWorldState.world.scene,
+      spec,
+    );
+    binding.light.userData.iwsdkEditorAuthoredLight = true;
+    bindings.push(binding);
+  }
+  if (bindings.length > 0) {
+    editorWorldState.lightBindings.set(lowered.id, bindings);
+  }
+}
+
+function disposeEditorLightBindings() {
+  if (!editorWorldState?.lightBindings) return;
+  for (const bindings of editorWorldState.lightBindings.values()) {
+    for (const binding of bindings) binding.dispose();
+  }
+  editorWorldState.lightBindings.clear();
+}
+
+function syncEditorLightBindings() {
+  if (!editorWorldState?.lightBindings) return;
+  for (const bindings of editorWorldState.lightBindings.values()) {
+    for (const binding of bindings) binding.syncTransform();
+  }
+}
+
+function runtimeComponentForSceneName(componentName) {
+  const componentId = stripComponentPrefix(componentName);
+  const targetId = componentId === 'Interactable' ? 'RayInteractable' : componentId;
+  return ComponentRegistry.getAllComponents().find(
+    (component) => component.id === targetId,
+  );
+}
+
+function reconcileEditorRootComponents(components) {
+  const rootEntity = editorWorldState.world.activeLevel?.value;
+  if (!rootEntity) {
+    throw new Error('Editor level root is unavailable');
+  }
+  const previousNames = [...editorWorldState.appliedRootComponentNames];
+  const nextComponents = components || {};
+  const nextNames = Object.keys(nextComponents);
+  for (const componentName of previousNames) {
+    const component = runtimeComponentForSceneName(componentName);
+    if (component && rootEntity.hasComponent(component)) {
+      rootEntity.removeComponent(component);
+    }
+  }
+  editorWorldState.appliedRootComponentNames = new Set([
+    ...previousNames,
+    ...nextNames,
+  ]);
+  LevelComponentApplier.applyComponents(
+    rootEntity,
+    nextComponents,
+    editorWorldState.world,
+    { nodeId: '$root', strict: true },
+  );
+  editorWorldState.appliedRootComponentNames = new Set(nextNames);
+  // The editor renders on demand, so explicitly run component systems once.
+  editorWorldState.world.update(0, performance.now() / 1000);
+}
+
+function installLoweredEditorScene(documentValue, lowered, key, session) {
+  const previousDocument = editorWorldState.currentDocumentValue;
+  const previousKey = editorWorldState.loweredDocumentKey;
+  const previousPendingKey = editorWorldState.pendingDocumentKey;
+  const previousHoveredNodeId = editorWorldState.hoveredNodeId;
+  const previousLowered = editorWorldState.loweredNodes || [];
+  const previousEnvironmentBase = editorWorldState.environmentPreviousState;
+  detachEditorSceneForSwap();
+  let replacedEnvironmentState;
+  try {
+    replacedEnvironmentState = applySceneEnvironment(
+      editorWorldState.world.scene,
+      editorWorldState.world.renderer,
+      documentValue.environment,
+      previousEnvironmentBase || undefined,
+    );
+    editorWorldState.environmentPreviousState =
+      previousEnvironmentBase || replacedEnvironmentState;
+    reconcileEditorRootComponents(documentValue.components);
+    editorWorldState.currentDocumentValue = documentValue;
+    editorWorldState.loweredNodes = lowered;
+    for (const root of lowered) {
+      editorWorldState.proxyRoot.add(root.object);
+      indexLoweredNode(root);
+    }
+    consumeMaterializationFailure('install');
+    editorWorldState.loweredDocumentKey = key;
+    editorWorldState.pendingDocumentKey = null;
+    applyEditorReviewLens(documentValue);
+    rebuildSelectionHelpers();
+    if (session) {
+      syncTransformControlsToSelection(session);
+      updateHoverHelper(session, editorWorldState.hoveredNodeId);
+      updateProjectedHitTargets(session);
+    }
+    renderEditorWorld();
+  } catch (error) {
+    detachEditorSceneForSwap();
+    disposeLoweredSceneNodes(...lowered);
+    if (replacedEnvironmentState) {
+      restoreSceneEnvironment(
+        editorWorldState.world.scene,
+        editorWorldState.world.renderer,
+        replacedEnvironmentState,
+      );
+    }
+    editorWorldState.environmentPreviousState = previousEnvironmentBase;
+    editorWorldState.currentDocumentValue = previousDocument;
+    reconcileEditorRootComponents(previousDocument?.components);
+    editorWorldState.loweredNodes = previousLowered;
+    editorWorldState.loweredDocumentKey = previousKey;
+    editorWorldState.pendingDocumentKey = previousPendingKey;
+    editorWorldState.hoveredNodeId = previousHoveredNodeId;
+    for (const root of previousLowered) {
+      editorWorldState.proxyRoot.add(root.object);
+      indexLoweredNode(root);
+    }
+    if (previousDocument) {
+      applyEditorReviewLens(previousDocument);
+    }
+    rebuildSelectionHelpers();
+    if (session) {
+      syncTransformControlsToSelection(session);
+      updateHoverHelper(session, previousHoveredNodeId);
+      updateProjectedHitTargets(session);
+    }
+    renderEditorWorld();
+    throw error;
+  }
+  if (previousLowered.length > 0) {
+    disposeLoweredSceneNodes(...previousLowered);
+  }
+}
+
+function consumeMaterializationFailure(phase) {
+  const failure = editorWorldState?.nextMaterializationFailure;
+  if (!failure || failure.phase !== phase) {
+    return;
+  }
+  editorWorldState.nextMaterializationFailure = null;
+  throw new Error(failure.message || 'Injected ' + phase + ' failure');
+}
+
+function discardStagedEditorPreview() {
+  const staged = editorWorldState?.stagedPreview;
+  if (staged?.lowered) {
+    disposeLoweredSceneNodes(...staged.lowered);
+  }
+  if (editorWorldState) {
+    editorWorldState.stagedPreview = null;
+  }
+}
+
+async function preloadEditorDocumentResources(documentValue) {
+  if (!editorWorldState) {
+    throw new Error('Editor world is not ready for resource preflight');
+  }
+  discardStagedEditorPreview();
+  const staged = {
+    assetProof: new Map(),
+    documentValue,
+    key: JSON.stringify(documentValue),
+    lowered: null,
+  };
+  editorWorldState.stagedPreview = staged;
+  for (const assetId of referencedSceneAssetIds(documentValue)) {
+    if (!editorWorldState.world.assets.has(assetId)) {
+      throw new Error('Scene references unknown manifest asset "' + assetId + '"');
+    }
+    await editorWorldState.world.assets.instantiate(assetId);
+    staged.assetProof.set(assetId, {
+      assetId,
+      loadedAt: Date.now(),
+      status: 'loaded',
+    });
+  }
+}
+
+async function instantiateEditorDocumentPreview(documentValue) {
+  if (!editorWorldState) {
+    throw new Error('Editor world is not ready for detached instantiation');
+  }
+  const key = JSON.stringify(documentValue);
+  const staged = editorWorldState.stagedPreview;
+  if (!staged || staged.key !== key) {
+    throw new Error(
+      'Detached editor instantiation requires matching preflighted resources',
+    );
+  }
+  consumeMaterializationFailure('detached');
+  const lowered = await lowerSceneDocumentObjects(documentValue, {
+    loadAsset: (assetId) => editorWorldState.world.assets.instantiate(assetId),
+    resolveAssetBounds: (assetId) => editorWorldState.world.assets.bounds(assetId),
+    useInstancing: true,
+  });
+  staged.lowered = lowered;
+}
+
+function commitEditorDocument(documentValue) {
+  if (!editorWorldState) {
+    throw new Error('Editor world is not ready for scene commit');
+  }
+  const key = JSON.stringify(documentValue);
+  const staged = editorWorldState.stagedPreview;
+  if (!staged || staged.key !== key || !staged.lowered) {
+    throw new Error('Editor scene commit does not match the preflighted document');
+  }
+  editorWorldState.lowerGeneration =
+    (editorWorldState.lowerGeneration || 0) + 1;
+  editorWorldState.lowerPromise = null;
+  editorWorldState.pendingDocumentKey = null;
+  const lowered = staged.lowered;
+  staged.lowered = null;
+  installLoweredEditorScene(
+    documentValue,
+    lowered,
+    key,
+    editorWorldState.currentSession,
+  );
+  editorWorldState.assetProof = new Map(staged.assetProof);
+  editorWorldState.stagedPreview = null;
+}
+
+function rollbackEditorDocument() {
+  discardStagedEditorPreview();
+}
+
+function scheduleEditorSceneLowering(session) {
+  if (!editorWorldState) {
+    return Promise.resolve();
+  }
+  const documentValue = session.document;
+  const key = JSON.stringify(documentValue);
+  if (editorWorldState.loweredDocumentKey === key) {
+    applyEditorReviewLens(documentValue);
+    return editorWorldState.lowerPromise || Promise.resolve();
+  }
+  if (editorWorldState.pendingDocumentKey === key && editorWorldState.lowerPromise) {
+    return editorWorldState.lowerPromise;
+  }
+  const generation = (editorWorldState.lowerGeneration || 0) + 1;
+  editorWorldState.lowerGeneration = generation;
+  editorWorldState.pendingDocumentKey = key;
+  const promise = (async () => {
+    const documentResult = await session.dispatch('scene_get_document', {});
+    const lowered = await lowerSceneDocumentObjects(documentValue, {
+      loadAsset: (assetId) => editorWorldState.world.assets.instantiate(assetId),
+      resolveAssetBounds: (assetId) => editorWorldState.world.assets.bounds(assetId),
+      runtimeHash: documentResult?.runtimeHash,
+      useInstancing: true,
+    });
+    if (!editorWorldState || editorWorldState.lowerGeneration !== generation) {
+      disposeLoweredSceneNodes(...lowered);
+      return;
+    }
+    installLoweredEditorScene(documentValue, lowered, key, session);
+  })().catch((error) => {
+    if (editorWorldState?.lowerGeneration === generation) {
+      editorWorldState.pendingDocumentKey = null;
+    }
+    console.error('[IWSDK Scene Editor] Scene materialization failed:', error);
+    throw error;
+  });
+  editorWorldState.lowerPromise = promise.finally(() => {
+    if (editorWorldState?.lowerGeneration === generation) {
+      editorWorldState.lowerPromise = null;
+    }
+  });
+  return editorWorldState.lowerPromise;
 }
 
 function updateSelectionHelpers() {
@@ -1889,29 +3939,63 @@ function updateSelectionHelpers() {
       replacements.push({
         helper: object,
         nodeId: object.userData.iwsdkSceneNodeId,
-        parent: object.parent,
         target: object.object,
       });
     }
   });
   for (const entry of replacements) {
-    if (!entry.parent || !entry.target) {
+    if (!entry.target) {
       continue;
     }
-    entry.target.updateMatrixWorld(true);
-    const replacement = new BoxHelper(entry.target, 0x9ff3c7);
+    const replacement = createEditorBoundsHelper(entry.target, 0x9ff3c7);
+    if (!replacement) {
+      entry.helper.parent?.remove(entry.helper);
+      disposeEditorHelper(entry.helper);
+      continue;
+    }
     replacement.name = \`\${entry.nodeId}-selection-outline\`;
     replacement.userData.iwsdkEditorHelper = true;
     replacement.userData.iwsdkEditorSelectionHelper = true;
     replacement.userData.iwsdkSceneNodeId = entry.nodeId;
-    entry.parent.remove(entry.helper);
-    entry.helper.geometry?.dispose?.();
-    entry.helper.material?.dispose?.();
-    entry.parent.add(replacement);
+    entry.helper.parent?.remove(entry.helper);
+    disposeEditorHelper(entry.helper);
+    editorWorldState.proxyRoot.add(replacement);
   }
 }
 
-function resizeEditorRenderer(size = {}) {
+function rebuildSelectionHelpers() {
+  if (!editorWorldState) {
+    return;
+  }
+  const existing = [];
+  editorWorldState.proxyRoot.traverse((object) => {
+    if (object.userData?.iwsdkEditorSelectionHelper === true) {
+      existing.push(object);
+    }
+  });
+  for (const helper of existing) {
+    helper.parent?.remove(helper);
+    helper.geometry?.dispose?.();
+    helper.material?.dispose?.();
+  }
+  for (const nodeId of window.__IWSDK_EDITOR_SELECTION || []) {
+    const object = editorWorldState.objectMap.get(nodeId);
+    if (!object || !object.parent) {
+      continue;
+    }
+    const helper = createEditorBoundsHelper(object, 0x9ff3c7);
+    if (!helper) {
+      continue;
+    }
+    helper.name = nodeId + '-selection-outline';
+    helper.userData.iwsdkEditorHelper = true;
+    helper.userData.iwsdkEditorSelectionHelper = true;
+    helper.userData.iwsdkSceneNodeId = nodeId;
+    editorWorldState.proxyRoot.add(helper);
+  }
+}
+
+function resizeEditorRenderer(size = {}, cameraState = null) {
   if (!editorWorldState) {
     return { height: 1, width: 1 };
   }
@@ -1921,9 +4005,52 @@ function resizeEditorRenderer(size = {}) {
   editorWorldState.world.renderer.setSize(width, height, false);
   editorWorldState.world.renderer.domElement.style.height = '100%';
   editorWorldState.world.renderer.domElement.style.width = '100%';
-  editorWorldState.world.camera.aspect = width / height;
-  editorWorldState.world.camera.updateProjectionMatrix();
+  updateEditorCameraProjection(
+    editorWorldState.world.camera,
+    cameraState || editorWorldState.currentCamera,
+    width / height,
+  );
   return { height, width };
+}
+
+function setEditorProjectionCamera(projection) {
+  if (!editorWorldState) {
+    return null;
+  }
+  const nextCamera =
+    projection === 'orthographic'
+      ? editorWorldState.orthographicCamera
+      : editorWorldState.perspectiveCamera;
+  if (editorWorldState.world.camera === nextCamera) {
+    return nextCamera;
+  }
+  editorWorldState.world.camera = nextCamera;
+  if (editorWorldState.orbitControls) {
+    editorWorldState.orbitControls.object = nextCamera;
+  }
+  if (editorWorldState.transformControls) {
+    editorWorldState.transformControls.camera = nextCamera;
+  }
+  return nextCamera;
+}
+
+function updateEditorCameraProjection(camera, state, aspect) {
+  if (!camera) {
+    return;
+  }
+  if (camera.isOrthographicCamera === true) {
+    const height = Math.max(0.001, state?.height ?? 10);
+    const halfHeight = height / 2;
+    const halfWidth = halfHeight * Math.max(0.001, aspect || 1);
+    camera.left = -halfWidth;
+    camera.right = halfWidth;
+    camera.top = halfHeight;
+    camera.bottom = -halfHeight;
+  } else {
+    camera.aspect = Math.max(0.001, aspect || 1);
+    camera.fov = state?.fov ?? 50;
+  }
+  camera.updateProjectionMatrix();
 }
 
 function applyEditorCamera(camera) {
@@ -1934,15 +4061,18 @@ function applyEditorCamera(camera) {
     fov: 50,
     lookAt: [0, 0, 0],
     position: [4, 3, 4],
+    projection: 'perspective',
     view: 'quarter',
   };
-  editorWorldState.world.camera.position.set(
+  const projection =
+    state.projection === 'orthographic' ? 'orthographic' : 'perspective';
+  const activeCamera = setEditorProjectionCamera(projection);
+  activeCamera.position.set(
     state.position?.[0] ?? 4,
     state.position?.[1] ?? 3,
     state.position?.[2] ?? 4,
   );
-  editorWorldState.world.camera.fov = state.fov ?? 50;
-  editorWorldState.world.camera.lookAt(
+  activeCamera.lookAt(
     state.lookAt?.[0] ?? 0,
     state.lookAt?.[1] ?? 0,
     state.lookAt?.[2] ?? 0,
@@ -1960,8 +4090,13 @@ function applyEditorCamera(camera) {
       editorWorldState.suppressOrbitChange = false;
     }
   }
-  editorWorldState.world.camera.updateProjectionMatrix();
-  editorWorldState.world.camera.updateMatrixWorld(true);
+  const canvas = editorWorldState.world.renderer.domElement;
+  updateEditorCameraProjection(
+    activeCamera,
+    state,
+    canvas.width / Math.max(1, canvas.height),
+  );
+  activeCamera.updateMatrixWorld(true);
 }
 
 function boundsForObjects(objects) {
@@ -1971,8 +4106,10 @@ function boundsForObjects(objects) {
     if (!object) {
       continue;
     }
-    object.updateMatrixWorld(true);
-    bounds.union(new Box3().setFromObject(object));
+    const objectBounds = boundsForObjectWithoutEditorHelpers(object);
+    if (objectBounds) {
+      bounds.union(objectBounds);
+    }
   }
   return bounds.isEmpty() ? null : bounds;
 }
@@ -1994,6 +4131,72 @@ function boundsForSceneObjects() {
     return null;
   }
   return boundsForObjects([...editorWorldState.objectMap.values()]);
+}
+
+function boundsForSceneFramingObjects() {
+  if (!editorWorldState) {
+    return null;
+  }
+  const bounds = new Box3();
+  bounds.makeEmpty();
+  editorWorldState.proxyRoot.updateMatrixWorld(true);
+  editorWorldState.proxyRoot.traverse((object) => {
+    if (
+      !objectIsEffectivelyVisible(object) ||
+      object.userData?.iwsdkEditorHelper === true ||
+      object.userData?.iwsdkSceneFramingRole === 'support'
+    ) {
+      return;
+    }
+    expandBoundsByOwnGeometry(bounds, object);
+  });
+  return bounds.isEmpty() ? null : bounds;
+}
+
+function expandBoundsByOwnGeometry(bounds, object) {
+  const geometry = object.geometry;
+  if (!geometry) {
+    return;
+  }
+  let localBounds;
+  if (object.isInstancedMesh === true || object.isSkinnedMesh === true) {
+    object.computeBoundingBox?.();
+    localBounds = object.boundingBox;
+  } else {
+    geometry.computeBoundingBox?.();
+    localBounds = geometry.boundingBox;
+  }
+  if (!localBounds || localBounds.isEmpty()) {
+    return;
+  }
+  bounds.union(localBounds.clone().applyMatrix4(object.matrixWorld));
+}
+
+function boundsForObjectWithoutEditorHelpers(object) {
+  object.updateMatrixWorld(true);
+  const authoredBounds = new Box3();
+  authoredBounds.makeEmpty();
+  object.traverse((entry) => {
+    if (entry.userData?.iwsdkEditorHelper === true) {
+      return;
+    }
+    expandBoundsByOwnGeometry(authoredBounds, entry);
+  });
+  if (!authoredBounds.isEmpty()) {
+    return authoredBounds;
+  }
+  const fallbackBounds = new Box3().setFromObject(object);
+  return fallbackBounds.isEmpty() ? null : fallbackBounds;
+}
+
+function createEditorBoundsHelper(object, color) {
+  const bounds = boundsForObjectWithoutEditorHelpers(object);
+  if (!bounds) {
+    return null;
+  }
+  const helper = new Box3Helper(bounds, color);
+  helper.object = object;
+  return helper;
 }
 
 function roundCameraVec3(vector) {
@@ -2023,18 +4226,27 @@ function frameViewportBounds(bounds, cameraState) {
     direction.set(1, 0.75, 1).normalize();
   }
 
-  const fov = cameraState?.fov ?? currentCamera.fov ?? 50;
   const maxSize = Math.max(size.x, size.y, size.z, 0.5);
+  const projection =
+    cameraState?.projection === 'orthographic'
+      ? 'orthographic'
+      : 'perspective';
+  const fov = cameraState?.fov ?? editorWorldState.perspectiveCamera.fov ?? 50;
   const radius = maxSize * 0.5;
-  const distance = Math.max(
-    1.5,
-    (radius / Math.sin(MathUtils.degToRad(fov) / 2)) * 1.35,
-  );
+  const distance =
+    projection === 'orthographic'
+      ? Math.max(1.5, currentCamera.position.distanceTo(currentTarget))
+      : Math.max(
+          1.5,
+          (radius / Math.sin(MathUtils.degToRad(fov) / 2)) * 1.35,
+        );
   const position = center.clone().add(direction.multiplyScalar(distance));
   const nextCamera = {
     fov,
+    ...(projection === 'orthographic' ? { height: maxSize * 1.35 } : {}),
     lookAt: roundCameraVec3(center),
     position: roundCameraVec3(position),
+    projection,
     view: 'custom',
   };
   if (cameraState) {
@@ -2046,15 +4258,14 @@ function frameViewportBounds(bounds, cameraState) {
   if (editorWorldState.currentSession) {
     updateProjectedHitTargets(editorWorldState.currentSession);
   }
-  editorWorldState.lastProof = createViewportProof();
   return editorWorldState.currentCamera;
 }
 
 function frameViewport(target, cameraState) {
   const bounds =
     target === 'scene'
-      ? boundsForSceneObjects()
-      : boundsForSelectedObjects() || boundsForSceneObjects();
+      ? boundsForSceneFramingObjects()
+      : boundsForSelectedObjects() || boundsForSceneFramingObjects();
   return frameViewportBounds(bounds, cameraState);
 }
 
@@ -2066,10 +4277,18 @@ function updateCameraStateFromWorld(cameraState) {
   const target = editorWorldState.orbitControls?.target || new Vector3(0, 0, 0);
   const lookAt = [target.x, target.y, target.z];
   const position = [camera.position.x, camera.position.y, camera.position.z];
-  cameraState.fov = camera.fov;
+  cameraState.projection =
+    camera.isOrthographicCamera === true ? 'orthographic' : 'perspective';
+  if (camera.isOrthographicCamera === true) {
+    cameraState.height = camera.top - camera.bottom;
+  } else {
+    cameraState.fov = camera.fov;
+    delete cameraState.height;
+  }
   cameraState.lookAt = lookAt;
   cameraState.position = position;
   cameraState.view = inferNamedCameraView(position, lookAt);
+  delete cameraState.viewId;
   window.__IWSDK_EDITOR_CAMERA = cameraState;
   return cameraState;
 }
@@ -2101,33 +4320,6 @@ function inferNamedCameraView(position, lookAt) {
     return 'back';
   }
   return 'custom';
-}
-
-function createOrientationGizmoAxis(name, directionValues, color, view) {
-  const direction = new Vector3(
-    directionValues[0],
-    directionValues[1],
-    directionValues[2],
-  ).normalize();
-  const axis = new Group();
-  axis.name = name;
-  axis.userData.iwsdkOrientationView = view;
-  axis.userData.iwsdkOrientationDirection = direction;
-
-  const material = new MeshBasicMaterial({ color });
-  const shaft = new Mesh(new CylinderGeometry(0.025, 0.025, 0.62, 12), material);
-  shaft.name = \`\${name}-shaft\`;
-  shaft.position.y = 0.32;
-  shaft.userData.iwsdkOrientationView = view;
-
-  const head = new Mesh(new ConeGeometry(0.075, 0.2, 16), material);
-  head.name = \`\${name}-head\`;
-  head.position.y = 0.72;
-  head.userData.iwsdkOrientationView = view;
-
-  axis.add(shaft, head);
-  axis.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction);
-  return axis;
 }
 
 function createOrientationGizmo(session) {
@@ -2199,7 +4391,6 @@ function createOrientationGizmo(session) {
     if (editorWorldState.currentSession) {
       updateProjectedHitTargets(editorWorldState.currentSession);
     }
-    editorWorldState.lastProof = createViewportProof();
   });
 
   renderOrientationGizmo(gizmo);
@@ -2216,15 +4407,602 @@ function renderOrientationGizmo(gizmo = editorWorldState?.orientationGizmo) {
   renderOrientationGizmoVisual(gizmo);
 }
 
+function hideCurrentEditorHelpersForRenderOnlyCapture() {
+  if (!editorWorldState || editorWorldState.renderOnlyCaptureDepth === 0) {
+    return;
+  }
+  const visibility = editorWorldState.renderOnlyHelperVisibility || [];
+  const tracked =
+    editorWorldState.renderOnlyTrackedHelpers ||
+    new Set(visibility.map(([object]) => object));
+  editorWorldState.renderOnlyHelperVisibility = visibility;
+  editorWorldState.renderOnlyTrackedHelpers = tracked;
+  editorWorldState.world.scene.traverse((object) => {
+    if (
+      object.userData?.iwsdkEditorHelper !== true ||
+      object.isLight === true
+    ) {
+      return;
+    }
+    if (!tracked.has(object)) {
+      tracked.add(object);
+      visibility.push([object, object.visible]);
+    }
+    object.visible = false;
+  });
+  editorWorldState.renderEditorOverlays = false;
+}
+
 function renderEditorWorld() {
   if (!editorWorldState) {
     return;
   }
+  hideCurrentEditorHelpersForRenderOnlyCapture();
+  syncEditorLightBindings();
+  const startedAt = performance.now();
   editorWorldState.world.renderer.render(
     editorWorldState.world.scene,
     editorWorldState.world.camera,
   );
-  renderOrientationGizmo();
+  const sceneRender = editorWorldState.world.renderer.info.render;
+  editorWorldState.lastSceneRenderInfo = {
+    calls: sceneRender.calls,
+    lines: sceneRender.lines,
+    points: sceneRender.points,
+    triangles: sceneRender.triangles,
+  };
+  const elapsed = performance.now() - startedAt;
+  editorWorldState.frameTimeSamples.push(Number(elapsed.toFixed(3)));
+  if (editorWorldState.frameTimeSamples.length > 120) {
+    editorWorldState.frameTimeSamples.shift();
+  }
+  if (editorWorldState.renderEditorOverlays !== false) {
+    renderOrientationGizmo();
+  }
+}
+
+function beginRenderOnlyCapture() {
+  if (!editorWorldState) {
+    return () => {};
+  }
+  if (editorWorldState.renderOnlyCaptureDepth === 0) {
+    editorWorldState.renderOnlyPreviousOverlayState =
+      editorWorldState.renderEditorOverlays;
+    editorWorldState.renderOnlyHelperVisibility = [];
+    editorWorldState.renderOnlyTrackedHelpers = new Set();
+    editorWorldState.renderEditorOverlays = false;
+  }
+  editorWorldState.renderOnlyCaptureDepth += 1;
+  hideCurrentEditorHelpersForRenderOnlyCapture();
+  let restored = false;
+  return () => {
+    if (restored || !editorWorldState) {
+      return;
+    }
+    restored = true;
+    editorWorldState.renderOnlyCaptureDepth = Math.max(
+      0,
+      editorWorldState.renderOnlyCaptureDepth - 1,
+    );
+    if (editorWorldState.renderOnlyCaptureDepth !== 0) {
+      return;
+    }
+    for (const [object, visible] of
+      editorWorldState.renderOnlyHelperVisibility || []) {
+      object.visible = visible;
+    }
+    editorWorldState.renderOnlyHelperVisibility = null;
+    editorWorldState.renderOnlyTrackedHelpers = null;
+    editorWorldState.renderEditorOverlays =
+      editorWorldState.renderOnlyPreviousOverlayState;
+    editorWorldState.renderOnlyPreviousOverlayState = true;
+  };
+}
+
+function captureReviewNodeMaskRegions(documentValue, width, height) {
+  if (!editorWorldState || !WebGLRenderTarget || width <= 0 || height <= 0) {
+    return {};
+  }
+  const nodeIds = new Set();
+  for (const feature of documentValue.authoring?.composition?.features || []) {
+    for (const criterion of feature.acceptance || []) {
+      if (
+        criterion.kind === 'projected-region' &&
+        criterion.measurement?.method === 'capture-node-mask-bounds-v1'
+      ) {
+        for (const nodeId of criterion.nodeRefs || []) {
+          nodeIds.add(nodeId);
+        }
+      }
+    }
+  }
+  if (nodeIds.size === 0) {
+    return {};
+  }
+
+  const renderer = editorWorldState.world.renderer;
+  const scene = editorWorldState.world.scene;
+  const camera = editorWorldState.world.camera;
+  const previousTarget = renderer.getRenderTarget();
+  const previousBackground = scene.background;
+  const previousClearColor = renderer.getClearColor(new Color()).clone();
+  const previousClearAlpha = renderer.getClearAlpha();
+  const renderTarget = new WebGLRenderTarget(width, height, {
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+  const pixels = new Uint8Array(width * height * 4);
+  const regions = {};
+  try {
+    scene.background = null;
+    renderer.setClearColor(0x000000, 1);
+    for (const nodeId of nodeIds) {
+      const targetObject = editorWorldState.objectMap.get(nodeId);
+      if (!targetObject || !objectIsEffectivelyVisible(targetObject)) {
+        continue;
+      }
+      const targetObjects = new Set();
+      targetObject.traverse((object) => targetObjects.add(object));
+      const originals = [];
+      const generatedMaterials = [];
+      scene.traverse((object) => {
+        if (
+          object.isMesh !== true ||
+          !objectIsEffectivelyVisible(object) ||
+          !materialCanRender(object.material)
+        ) {
+          return;
+        }
+        originals.push([object, object.material]);
+        object.material = createReviewMaskMaterial(
+          object.material,
+          targetObjects.has(object) ? 0xffffff : 0x000000,
+          generatedMaterials,
+        );
+      });
+      try {
+        renderer.setRenderTarget(renderTarget);
+        renderer.clear(true, true, true);
+        renderer.render(scene, camera);
+        renderer.readRenderTargetPixels(
+          renderTarget,
+          0,
+          0,
+          width,
+          height,
+          pixels,
+        );
+        const region = regionFromNodeMaskPixels(pixels, width, height);
+        if (region) {
+          regions[nodeId] = region;
+        }
+      } finally {
+        for (const [object, material] of originals) {
+          object.material = material;
+        }
+        for (const material of generatedMaterials) {
+          material.dispose();
+        }
+      }
+    }
+  } finally {
+    renderer.setRenderTarget(previousTarget);
+    renderer.setClearColor(previousClearColor, previousClearAlpha);
+    scene.background = previousBackground;
+    renderTarget.dispose();
+  }
+  return regions;
+}
+
+function createReviewMaskMaterial(material, color, generatedMaterials) {
+  const sourceMaterials = Array.isArray(material) ? material : [material];
+  const replacements = sourceMaterials.map((source) => {
+    const replacement = new MeshBasicMaterial({
+      color,
+      colorWrite: source?.colorWrite !== false,
+      depthTest: source?.depthTest !== false,
+      depthWrite: source?.depthWrite !== false,
+      fog: false,
+      side: source?.side,
+      toneMapped: false,
+      visible: source?.visible !== false,
+    });
+    generatedMaterials.push(replacement);
+    return replacement;
+  });
+  return Array.isArray(material) ? replacements : replacements[0];
+}
+
+function regionFromNodeMaskPixels(pixels, width, height) {
+  let minimumX = width;
+  let minimumY = height;
+  let maximumX = -1;
+  let maximumY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      if (pixels[offset] <= 127) {
+        continue;
+      }
+      minimumX = Math.min(minimumX, x);
+      maximumX = Math.max(maximumX, x);
+      minimumY = Math.min(minimumY, y);
+      maximumY = Math.max(maximumY, y);
+    }
+  }
+  if (maximumX < minimumX || maximumY < minimumY) {
+    return null;
+  }
+  const top = height - 1 - maximumY;
+  return [
+    minimumX / width,
+    top / height,
+    (maximumX - minimumX + 1) / width,
+    (maximumY - minimumY + 1) / height,
+  ];
+}
+
+function materialCanRender(material) {
+  const materials = Array.isArray(material) ? material : [material];
+  return materials.some((entry) => entry && entry.visible !== false);
+}
+
+function objectIsSubmittedForCamera(object, camera, frustum) {
+  if (!object.layers?.test(camera.layers)) {
+    return false;
+  }
+  // Lights enter the renderer's light lists based on visibility and layers rather
+  // than camera-frustum intersection, so retain them as rendering contributors.
+  if (object.isLight === true) {
+    return true;
+  }
+  if (object.isSprite === true) {
+    return (
+      materialCanRender(object.material) &&
+      (object.frustumCulled === false || frustum.intersectsSprite(object))
+    );
+  }
+  if (
+    object.isMesh !== true &&
+    object.isLine !== true &&
+    object.isPoints !== true
+  ) {
+    return false;
+  }
+  return (
+    object.geometry != null &&
+    materialCanRender(object.material) &&
+    (object.frustumCulled === false || frustum.intersectsObject(object))
+  );
+}
+
+function objectIsEffectivelyVisible(object) {
+  for (let current = object; current; current = current.parent) {
+    if (
+      current.visible === false ||
+      current.userData?.iwsdkEditorHelper === true
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function intersectionMaterialCanRender(intersection) {
+  const material = intersection.object?.material;
+  if (!Array.isArray(material)) {
+    return materialCanRender(material);
+  }
+  const materialIndex = intersection.face?.materialIndex;
+  if (materialIndex == null) {
+    return materialCanRender(material);
+  }
+  const entry = material[materialIndex];
+  return entry != null && entry.visible !== false;
+}
+
+function renderableWorldBounds(object) {
+  const geometry = object.geometry;
+  if (geometry) {
+    if (geometry.boundingBox == null) {
+      geometry.computeBoundingBox?.();
+    }
+    if (geometry.boundingBox != null) {
+      return new Box3().copy(geometry.boundingBox).applyMatrix4(object.matrixWorld);
+    }
+  }
+  const bounds = new Box3().setFromObject(object, true);
+  return bounds.isEmpty() ? null : bounds;
+}
+
+function projectedFirstHitSamples(object, camera) {
+  if (object.isSprite === true) {
+    const center = new Vector3();
+    object.getWorldPosition(center);
+    center.project(camera);
+    return Number.isFinite(center.x) && Number.isFinite(center.y)
+      ? [new Vector2(center.x, center.y)]
+      : [];
+  }
+  const bounds = renderableWorldBounds(object);
+  if (!bounds) {
+    return [];
+  }
+  const projected = [
+    [bounds.min.x, bounds.min.y, bounds.min.z],
+    [bounds.min.x, bounds.min.y, bounds.max.z],
+    [bounds.min.x, bounds.max.y, bounds.min.z],
+    [bounds.min.x, bounds.max.y, bounds.max.z],
+    [bounds.max.x, bounds.min.y, bounds.min.z],
+    [bounds.max.x, bounds.min.y, bounds.max.z],
+    [bounds.max.x, bounds.max.y, bounds.min.z],
+    [bounds.max.x, bounds.max.y, bounds.max.z],
+  ]
+    .map(([x, y, z]) => new Vector3(x, y, z).project(camera))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (projected.length === 0) {
+    return [];
+  }
+  const minimumX = Math.max(-1, Math.min(...projected.map((point) => point.x)));
+  const maximumX = Math.min(1, Math.max(...projected.map((point) => point.x)));
+  const minimumY = Math.max(-1, Math.min(...projected.map((point) => point.y)));
+  const maximumY = Math.min(1, Math.max(...projected.map((point) => point.y)));
+  if (minimumX > maximumX || minimumY > maximumY) {
+    return [];
+  }
+  const fractions = [0.5, 0.15, 0.85];
+  const samples = [];
+  for (const xFraction of fractions) {
+    for (const yFraction of fractions) {
+      samples.push(
+        new Vector2(
+          minimumX + (maximumX - minimumX) * xFraction,
+          minimumY + (maximumY - minimumY) * yFraction,
+        ),
+      );
+    }
+  }
+  const cameraPosition = new Vector3();
+  camera.getWorldPosition(cameraPosition);
+  if (
+    cameraPosition.x >= bounds.min.x &&
+    cameraPosition.x <= bounds.max.x &&
+    cameraPosition.z >= bounds.min.z &&
+    cameraPosition.z <= bounds.max.z &&
+    cameraPosition.y > bounds.max.y
+  ) {
+    samples.push(
+      new Vector2(-0.5, -0.8),
+      new Vector2(0, -0.8),
+      new Vector2(0.5, -0.8),
+    );
+  }
+  return samples;
+}
+
+function firstHitVisibleRenderables(camera, raycastObjects) {
+  const visible = new Set();
+  const raycaster = new Raycaster();
+  raycaster.layers.mask = camera.layers.mask;
+  raycaster.near = camera.near;
+  raycaster.far = camera.far;
+  for (const object of raycastObjects) {
+    for (const sample of projectedFirstHitSamples(object, camera)) {
+      raycaster.setFromCamera(sample, camera);
+      const firstHit = raycaster
+        .intersectObjects(raycastObjects, false)
+        .find(intersectionMaterialCanRender);
+      if (firstHit?.object === object) {
+        visible.add(object);
+        break;
+      }
+    }
+  }
+  return visible;
+}
+
+function objectTreeContributesToCapture(root, visibleRenderables, lights) {
+  if (!objectIsEffectivelyVisible(root)) {
+    return false;
+  }
+  let contributes = false;
+  const visit = (object) => {
+    if (
+      contributes ||
+      object.visible === false ||
+      object.userData?.iwsdkEditorHelper === true
+    ) {
+      return;
+    }
+    if (visibleRenderables.has(object) || lights.has(object)) {
+      contributes = true;
+      return;
+    }
+    for (const child of object.children || []) {
+      visit(child);
+      if (contributes) {
+        return;
+      }
+    }
+  };
+  visit(root);
+  return contributes;
+}
+
+function visibleEditorSceneNodeIds() {
+  if (!editorWorldState) {
+    return [];
+  }
+  const camera = editorWorldState.world.camera;
+  editorWorldState.world.scene.updateMatrixWorld(true);
+  camera.updateMatrixWorld(true);
+  const projection = new Matrix4().multiplyMatrices(
+    camera.projectionMatrix,
+    camera.matrixWorldInverse,
+  );
+  const frustum = new Frustum().setFromProjectionMatrix(projection);
+  const raycastObjects = [];
+  const lights = new Set();
+  editorWorldState.world.scene.traverse((object) => {
+    if (
+      !objectIsEffectivelyVisible(object) ||
+      !objectIsSubmittedForCamera(object, camera, frustum)
+    ) {
+      return;
+    }
+    if (object.isLight === true) {
+      lights.add(object);
+    } else {
+      raycastObjects.push(object);
+    }
+  });
+  const visibleRenderables = firstHitVisibleRenderables(camera, raycastObjects);
+  return [...editorWorldState.objectMap.entries()]
+    .filter(([, object]) =>
+      objectTreeContributesToCapture(object, visibleRenderables, lights),
+    )
+    .map(([nodeId]) => nodeId)
+    .sort();
+}
+
+function currentEditorRenderStats() {
+  if (!editorWorldState) {
+    return null;
+  }
+  const renderer = editorWorldState.world.renderer;
+  const info = renderer.info;
+  const renderInfo = editorWorldState.lastSceneRenderInfo || info.render;
+  const gl = renderer.getContext();
+  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+  const hostEnvironment = window.__IWSDK_HOST_BROWSER_ENVIRONMENT || {};
+  const emulationProfile = window.__IWSDK_EMULATION_PROFILE || {
+    active: false,
+    device: null,
+    runtime: null,
+  };
+  const hostUserAgent = hostEnvironment.userAgent || navigator.userAgent;
+  const shadowCasters = [];
+  const geometries = new Set();
+  const materials = new Set();
+  const renderedAssets = [];
+  let meshCount = 0;
+  let objectCount = 0;
+  editorWorldState.proxyRoot.traverse((object) => {
+    if (object === editorWorldState.proxyRoot || object.userData?.iwsdkEditorHelper) {
+      return;
+    }
+    objectCount += 1;
+    const assetId = object.userData?.iwsdkSceneAssetId;
+    if (typeof assetId === 'string') {
+      let assetMeshCount = 0;
+      object.traverse((entry) => {
+        if (entry.isMesh === true) {
+          assetMeshCount += 1;
+        }
+      });
+      renderedAssets.push({ id: assetId, meshCount: assetMeshCount });
+    }
+    if (object.isMesh !== true) {
+      return;
+    }
+    meshCount += 1;
+    if (object.geometry) {
+      geometries.add(object.geometry.uuid || object.geometry);
+    }
+    const objectMaterials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of objectMaterials) {
+      if (material) {
+        materials.add(material.uuid || material);
+      }
+    }
+  });
+  editorWorldState.world.scene.traverse((object) => {
+    if (object.castShadow === true) {
+      shadowCasters.push(object.uuid);
+    }
+  });
+  return {
+    available: true,
+    calls: renderInfo.calls,
+    frameTimeSamplesMs: [...editorWorldState.frameTimeSamples],
+    lines: renderInfo.lines,
+    environment: {
+      browser: hostUserAgent,
+      devicePixelRatio: window.devicePixelRatio,
+      emulatedUserAgent: emulationProfile.active ? navigator.userAgent : null,
+      emulationProfile: {
+        active: emulationProfile.active === true,
+        device: emulationProfile.device || null,
+        runtime: emulationProfile.runtime || null,
+      },
+      gpu: debugInfo
+        ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER),
+      hostPlatform:
+        hostEnvironment.platform || navigator.platform || 'unknown',
+      hostUserAgent,
+      renderer: 'IWSDK WebGL',
+      visibility: {
+        method: 'threejs-first-hit-sampling-v1',
+        occlusion: 'conservative-cpu-first-hit',
+        sampleGrid: '3x3-projected-bounds+overhead-lower-frame',
+        uncertainObjectsIncluded: false,
+      },
+    },
+    geometryCount: geometries.size,
+    points: renderInfo.points,
+    programs: Array.isArray(info.programs) ? info.programs.length : 0,
+    materialCount: materials.size,
+    meshCount,
+    nodeCount: countSceneDocumentNodes(
+      editorWorldState.currentSession?.document?.nodes || [],
+    ),
+    objectCount,
+    shadowCasters: shadowCasters.length,
+    sceneAssets: renderedAssets,
+    textures: info.memory.textures,
+    triangles: renderInfo.triangles,
+    visibleNodeIds: visibleEditorSceneNodeIds(),
+    framingBounds: sceneFramingBoundsStats(),
+    worldBounds: sceneWorldBoundsStats(),
+  };
+}
+
+function countSceneDocumentNodes(nodes) {
+  return nodes.reduce(
+    (count, node) => count + 1 + countSceneDocumentNodes(node.children || []),
+    0,
+  );
+}
+
+function sceneWorldBoundsStats() {
+  const bounds = boundsForSceneObjects();
+  if (!bounds) {
+    return null;
+  }
+  const size = new Vector3();
+  bounds.getSize(size);
+  return {
+    max: roundVec3(bounds.max.toArray()),
+    min: roundVec3(bounds.min.toArray()),
+    size: roundVec3(size.toArray()),
+  };
+}
+
+function sceneFramingBoundsStats() {
+  const bounds = boundsForSceneFramingObjects();
+  if (!bounds) {
+    return null;
+  }
+  const size = new Vector3();
+  bounds.getSize(size);
+  return {
+    max: roundVec3(bounds.max.toArray()),
+    min: roundVec3(bounds.min.toArray()),
+    size: roundVec3(size.toArray()),
+  };
 }
 
 function renderOrientationGizmoVisual(gizmo) {
@@ -2402,9 +5180,6 @@ function renderTransformToolbar() {
   const mode = editorWorldState?.transformMode || 'translate';
   const space = editorWorldState?.transformSpace || 'local';
   const snapEnabled = Boolean(editorWorldState?.transformSnapEnabled);
-  const surfacePlacementEnabled = Boolean(
-    editorWorldState?.surfacePlacementEnabled,
-  );
   document.querySelectorAll('[data-transform-mode]').forEach((button) => {
     button.toggleAttribute(
       'data-active',
@@ -2420,9 +5195,6 @@ function renderTransformToolbar() {
   document.querySelectorAll('[data-transform-snap]').forEach((button) => {
     button.toggleAttribute('data-active', snapEnabled);
   });
-  document.querySelectorAll('[data-surface-placement]').forEach((button) => {
-    button.toggleAttribute('data-active', surfacePlacementEnabled);
-  });
 }
 
 function setTransformMode(mode) {
@@ -2433,7 +5205,6 @@ function setTransformMode(mode) {
     editorWorldState.transformMode = mode;
     applyTransformControlSettings();
     renderEditorWorld();
-    editorWorldState.lastProof = createViewportProof();
   }
   renderTransformToolbar();
 }
@@ -2446,7 +5217,6 @@ function setTransformSpace(space) {
     editorWorldState.transformSpace = space;
     applyTransformControlSettings();
     renderEditorWorld();
-    editorWorldState.lastProof = createViewportProof();
   }
   renderTransformToolbar();
 }
@@ -2456,25 +5226,8 @@ function setTransformSnapEnabled(enabled) {
     editorWorldState.transformSnapEnabled = Boolean(enabled);
     applyTransformControlSettings();
     renderEditorWorld();
-    editorWorldState.lastProof = createViewportProof();
   }
   renderTransformToolbar();
-}
-
-function setSurfacePlacementEnabled(enabled) {
-  if (editorWorldState) {
-    editorWorldState.surfacePlacementEnabled = Boolean(enabled);
-    editorWorldState.surfacePlacementTargetNodeId = enabled ? selectedNodeId() : null;
-    editorWorldState.lastProof = createViewportProof();
-  }
-  renderTransformToolbar();
-}
-
-function currentSurfacePlacementTargetId() {
-  if (!editorWorldState?.surfacePlacementEnabled) {
-    return null;
-  }
-  return editorWorldState.surfacePlacementTargetNodeId || selectedNodeId();
 }
 
 function syncTransformControlsToSelection(session) {
@@ -2485,7 +5238,7 @@ function syncTransformControlsToSelection(session) {
   const nodeId = selectedNodeId();
   const object = nodeId ? editorWorldState.objectMap.get(nodeId) : null;
   const helper = editorWorldState.transformControls.getHelper();
-  if (!nodeId || !object) {
+  if (!nodeId || !object || lockedOutlinerNodeIds.has(nodeId)) {
     editorWorldState.transformControls.detach();
     editorWorldState.transformControlsAttachedNodeId = null;
     helper.visible = false;
@@ -2550,7 +5303,6 @@ function cancelTransformControlDrag(session) {
   if (session) {
     updateProjectedHitTargets(session);
   }
-  editorWorldState.lastProof = createViewportProof();
   return true;
 }
 
@@ -2651,33 +5403,25 @@ function syncEditorWorld(session, camera, size = {}) {
   }
   editorWorldState.currentCamera = camera;
   editorWorldState.currentSession = session;
-  resizeEditorRenderer(size);
+  resizeEditorRenderer(size, camera);
   applyEditorCamera(camera);
-  editorWorldState.world.scene.background = new Color(0x101418);
-  clearProxyRoot();
-  const selected = new Set(window.__IWSDK_EDITOR_SELECTION || []);
-  for (const node of session.document.nodes || []) {
-    syncRenderableNode(
-      session.document,
-      node,
-      editorWorldState.proxyRoot,
-      selected,
-    );
-  }
-  editorWorldState.proxyRoot.updateMatrixWorld(true);
+  void scheduleEditorSceneLowering(session).catch(() => {});
+  rebuildSelectionHelpers();
   syncTransformControlsToSelection(session);
   updateHoverHelper(session, editorWorldState.hoveredNodeId);
-  editorWorldState.world.renderer.setClearColor(0x101418, 1);
   editorWorldState.world.renderer.clear(true, true, true);
   renderEditorWorld();
   updateProjectedHitTargets(session);
-  editorWorldState.lastProof = createViewportProof();
 }
 
 async function createEditorWorld(session, camera) {
   const host = getViewportHost();
   const editorRuntime = window.FRAMEWORK_MCP_RUNTIME;
   const world = await World.create(host, {
+    assets: editorAssetManifest,
+    components: editorComponentManifest.componentRegistry
+      ? editorComponentManifest
+      : undefined,
     features: {
       camera: false,
       environmentRaycast: false,
@@ -2697,6 +5441,8 @@ async function createEditorWorld(session, camera) {
     },
     xr: false,
   });
+  // The editor renders on demand and must not compete with the runtime viewport.
+  world.renderer.setAnimationLoop(null);
   window.FRAMEWORK_MCP_RUNTIME = editorRuntime;
   const canvas = world.renderer.domElement;
   canvas.id = 'scene-canvas';
@@ -2705,6 +5451,16 @@ async function createEditorWorld(session, camera) {
   canvas.style.width = '100%';
   canvas.setAttribute('aria-label', 'IWSDK 3D scene viewport');
   world.renderer.setClearColor(0x101418, 1);
+
+  const perspectiveCamera = world.camera;
+  const orthographicCamera = new OrthographicCamera(
+    -1,
+    1,
+    1,
+    -1,
+    perspectiveCamera.near,
+    perspectiveCamera.far,
+  );
 
   const orbitControls = new OrbitControls(world.camera, canvas);
   orbitControls.enableDamping = false;
@@ -2749,18 +5505,36 @@ async function createEditorWorld(session, camera) {
   world.scene.add(directional);
 
   editorWorldState = {
-    assetCache: new Map(),
+    appliedRootComponentNames: new Set(),
     assetProof: new Map(),
     currentCamera: camera,
+    currentDocumentValue: null,
     currentSession: session,
+    editorAmbient: ambient,
+    editorDirectional: directional,
+    editorGrid: grid,
+    environmentPreviousState: null,
+    frameTimeSamples: [],
     host,
     hoveredNodeId: null,
     hoverHelper: null,
-    lastProof: null,
+    lensLayerMasks: new Map(),
+    lensMaterials: new Map(),
+    lensVisibility: new Map(),
+    lightBindings: new Map(),
+    lowerGeneration: 0,
+    loweredDocumentKey: null,
+    loweredNodes: [],
+    lowerPromise: null,
+    neutralMaterial: null,
+    nextMaterializationFailure: null,
     objectMap: new Map(),
+    orthographicCamera,
     orbitControls,
+    perspectiveCamera,
     proxyRoot,
     raycaster: new Raycaster(),
+    raycastCount: 0,
     requestRender: () => {
       if (editorWorldState?.currentSession) {
         renderCanvas(
@@ -2769,10 +5543,16 @@ async function createEditorWorld(session, camera) {
         );
       }
     },
+    renderEditorOverlays: true,
+    renderOnlyCaptureDepth: 0,
+    renderOnlyHelperVisibility: null,
+    renderOnlyTrackedHelpers: null,
+    renderOnlyPreviousOverlayState: true,
     pointer: new Vector2(),
-    surfacePlacementEnabled: false,
-    surfacePlacementLastTargetId: null,
-    surfacePlacementTargetNodeId: null,
+    pendingDocumentKey: null,
+    previewGhostMaterials: [],
+    previewVisibilityBaseline: new Map(),
+    stagedPreview: null,
     transformControlsAttachedNodeId: null,
     transformControls,
     transformDragState: null,
@@ -2790,9 +5570,9 @@ async function createEditorWorld(session, camera) {
     },
     transformSnapEnabled: false,
     transformSpace: 'local',
-    uiRefreshFrame: null,
     world,
   };
+  loadVisibilityArrangements();
   transformControls.addEventListener('mouseDown', () => {
     const nodeId = selectedNodeId();
     const node = nodeId ? findNodeById(session.document, nodeId) : null;
@@ -2818,7 +5598,6 @@ async function createEditorWorld(session, camera) {
     updateSelectionHelpers();
     renderEditorWorld();
     updateProjectedHitTargets(session);
-    editorWorldState.lastProof = createViewportProof();
   });
   transformControls.addEventListener('change', () => {
     updateSelectionHelpers();
@@ -2833,10 +5612,159 @@ async function createEditorWorld(session, camera) {
     if (editorWorldState.currentSession) {
       updateProjectedHitTargets(editorWorldState.currentSession);
     }
-    editorWorldState.lastProof = createViewportProof();
   });
   editorWorldState.orientationGizmo = createOrientationGizmo(session);
   syncEditorWorld(session, camera);
+  await waitForAssetLoads();
+}
+
+function editorResourceStateProof() {
+  if (!editorWorldState) {
+    return { proof: [], staged: null };
+  }
+  const summarizeProof = (proof) =>
+    [...proof.values()].sort((first, second) =>
+      first.assetId.localeCompare(second.assetId),
+    );
+  const staged = editorWorldState.stagedPreview;
+  return {
+    proof: summarizeProof(editorWorldState.assetProof),
+    staged: staged
+      ? {
+          key: staged.key,
+          lowered: Array.isArray(staged.lowered),
+          proof: summarizeProof(staged.assetProof),
+        }
+      : null,
+  };
+}
+
+function authoredRenderStateProof() {
+  if (!editorWorldState) {
+    return null;
+  }
+  const materials = new Map();
+  const lights = [];
+  editorWorldState.proxyRoot.traverse((object) => {
+    if (object.isMesh === true) {
+      const entries = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      for (const material of entries) {
+        const id = material?.userData?.iwsdkSceneMaterialId;
+        if (!id || materials.has(id)) {
+          continue;
+        }
+        const textures = [];
+        for (const property of [
+          'map',
+          'emissiveMap',
+          'roughnessMap',
+          'metalnessMap',
+          'aoMap',
+          'alphaMap',
+          'normalMap',
+          'bumpMap',
+        ]) {
+          const texture = material[property];
+          const metadata = texture?.userData?.iwsdkSceneProceduralTexture;
+          if (metadata) {
+            textures.push({ ...metadata, property, uuid: texture.uuid });
+          }
+        }
+        materials.set(id, {
+          id,
+          model: material.userData.iwsdkSceneMaterialModel,
+          textures,
+          type: material.type,
+          uuid: material.uuid,
+        });
+      }
+    }
+  });
+  editorWorldState.world.scene.traverse((object) => {
+    if (
+      object.isLight === true &&
+      typeof object.userData?.iwsdkLightComponent === 'string'
+    ) {
+      lights.push({
+        castShadow: object.castShadow === true,
+        color: object.color?.getHexString
+          ? '#' + object.color.getHexString()
+          : null,
+        intensity: object.intensity,
+        nodeId: object.userData.iwsdkSceneNodeId,
+        type: object.userData.iwsdkLightComponent,
+        uuid: object.uuid,
+      });
+    }
+  });
+  const background = editorWorldState.world.scene.background;
+  const imageBasedLighting = editorWorldState.world.scene.environment;
+  let domeGradient = null;
+  editorWorldState.world.scene.traverse((object) => {
+    if (object.userData?.iwsdkSceneDomeGradient != null) {
+      domeGradient = object.userData.iwsdkSceneDomeGradient;
+    }
+  });
+  return {
+    background:
+      background?.userData?.iwsdkSceneGradientBackground == null
+        ? null
+        : {
+            spec: background.userData.iwsdkSceneGradientBackground,
+            uuid: background.uuid,
+          },
+    domeGradient,
+    imageBasedLighting:
+      imageBasedLighting?.userData?.iwsdkSceneImageBasedLighting == null &&
+      imageBasedLighting?.userData?.iwsdkSceneIBLGradient == null
+        ? null
+        : {
+            spec:
+              imageBasedLighting.userData.iwsdkSceneImageBasedLighting ||
+              imageBasedLighting.userData.iwsdkSceneIBLGradient,
+            uuid: imageBasedLighting.uuid,
+          },
+    lights,
+    materials: [...materials.values()],
+    shadowMapType: editorWorldState.world.renderer.shadowMap.type,
+  };
+}
+
+function rendererGlobalsProof() {
+  if (!editorWorldState) {
+    return null;
+  }
+  const renderer = editorWorldState.world.renderer;
+  const scene = editorWorldState.world.scene;
+  const clearColor = new Color();
+  renderer.getClearColor(clearColor);
+  const background = scene.background;
+  const fog = scene.fog;
+  return {
+    background:
+      background?.isColor === true
+        ? { color: '#' + background.getHexString(), type: 'color' }
+        : background == null
+          ? null
+          : { type: background.type || background.constructor?.name || 'object' },
+    clearAlpha: renderer.getClearAlpha(),
+    clearColor: '#' + clearColor.getHexString(),
+    exposure: renderer.toneMappingExposure,
+    fog:
+      fog == null
+        ? null
+        : {
+            color: fog.color ? '#' + fog.color.getHexString() : null,
+            density: fog.density ?? null,
+            far: fog.far ?? null,
+            near: fog.near ?? null,
+            type: fog.type || fog.constructor?.name || 'fog',
+          },
+    shadows: renderer.shadowMap.enabled,
+    toneMapping: renderer.toneMapping,
+  };
 }
 
 function createViewportProof() {
@@ -2868,9 +5796,16 @@ function createViewportProof() {
     assetLoads: [...editorWorldState.assetProof.values()],
     canvasHeight: canvas.height,
     canvasWidth: canvas.width,
+    cameraHeight: editorWorldState.currentCamera?.height ?? null,
     cameraLookAt: editorWorldState.currentCamera?.lookAt ?? null,
     cameraPosition: editorWorldState.currentCamera?.position ?? null,
+    cameraProjection:
+      editorWorldState.currentCamera?.projection ?? 'perspective',
+    cameraViewId: editorWorldState.currentCamera?.viewId ?? null,
     contributions: editorContributionProof(),
+    documentHash: editorWorldState.currentSession
+      ? hashSceneDocument(editorWorldState.currentSession.document)
+      : null,
     layout: createLayoutProof(),
     materialCount,
     meshCount,
@@ -2893,14 +5828,24 @@ function createViewportProof() {
         }
       : null,
     renderer: canvas.dataset.renderer || 'unknown',
+    rendererCamera: {
+      isOrthographicCamera:
+        editorWorldState.world.camera.isOrthographicCamera === true,
+      isPerspectiveCamera:
+        editorWorldState.world.camera.isPerspectiveCamera === true,
+      type: editorWorldState.world.camera.type,
+    },
+    renderStats: currentEditorRenderStats(),
+    referenceMode: window.__IWSDK_EDITOR_REFERENCE_MODE || 'hidden',
+    rendererGlobals: rendererGlobalsProof(),
+    resourceState: editorResourceStateProof(),
+    reviewLens: window.__IWSDK_EDITOR_REVIEW_LENS || 'final',
+    runtimeHash: editorWorldState.currentSession
+      ? hashRuntimeSceneDocument(editorWorldState.currentSession.document)
+      : null,
     hoverBounds: hoverBoundsProof(),
     selectionBounds: selectionBoundsProof(),
     selectedRuntime: selectedRuntimeSummaryProof(),
-    surfacePlacement: {
-      enabled: Boolean(editorWorldState.surfacePlacementEnabled),
-      lastTargetNodeId: editorWorldState.surfacePlacementLastTargetId || null,
-      targetNodeId: currentSurfacePlacementTargetId(),
-    },
     transformControls: editorWorldState.transformControls
       ? {
           attachedNodeId: editorWorldState.transformControlsAttachedNodeId || null,
@@ -3025,133 +5970,222 @@ function findNodeHierarchyInfo(documentValue, nodeId) {
   return visit(documentValue.nodes || [], null, 0);
 }
 
-function renderOutlinerRows(nodes, selected, depth = 0, query = '') {
-  return (nodes || [])
-    .flatMap((node) => {
-      const childCount = (node.children || []).length;
-      const childRows = renderOutlinerRows(
-        node.children || [],
-        selected,
-        depth + 1,
-        query,
-      );
-      const matches = nodeMatchesOutlinerQuery(node, query);
-      if (query && !matches && childRows.length === 0) {
-        return [];
+function previewVisibilityStorageKey(scenePath = currentScenePath()) {
+  return scenePath ? 'iwsdk-editor-visibility:' + scenePath : null;
+}
+
+function loadVisibilityArrangements() {
+  const scenePath = currentScenePath();
+  if (visibilityArrangementScenePath === scenePath) {
+    return;
+  }
+  visibilityArrangementScenePath = scenePath;
+  visibilityArrangements = new Map();
+  const storageKey = previewVisibilityStorageKey(scenePath);
+  if (!storageKey || typeof localStorage === 'undefined') {
+    return;
+  }
+  try {
+    const value = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    for (const [name, state] of Object.entries(value)) {
+      if (state && typeof state === 'object' && !Array.isArray(state)) {
+        visibilityArrangements.set(name, state);
       }
-      return [
-        \`
-        <button
-          class="node-row"
-          data-node-id="\${escapeHtml(node.id)}"
-          draggable="true"
-          style="--depth: \${depth}"
-          \${selected.includes(node.id) ? 'data-active' : ''}
-        >
-          <span class="node-row-caret">\${
-            childCount > 0 ? renderLucideIcon('ChevronRight') : ''
-          }</span>
-          <span class="node-row-icon">\${renderLucideIcon(node.asset ? 'Box' : 'Folder')}</span>
-          <span class="node-row-main">
-            <span class="node-row-id">\${escapeHtml(node.name || node.id)}</span>
-            <span class="node-row-subtitle">\${escapeHtml(node.asset || node.id)}</span>
-          </span>
-          \${
-            childCount > 0
-              ? \`<span class="node-row-meta">\${childCount}</span>\`
-              : ''
-          }
-        </button>
-        \${childRows}
-      \`,
-      ];
-    })
-    .join('');
+    }
+  } catch {
+    visibilityArrangements = new Map();
+  }
 }
 
-function nodeMatchesOutlinerQuery(node, query) {
-  if (!query) {
+function currentPreviewVisibilityState() {
+  return {
+    contextNodeIds: [...previewContextNodeIds].sort(),
+    ghostedNodeIds: [...ghostedOutlinerNodeIds].sort(),
+    hiddenNodeIds: [...hiddenOutlinerNodeIds].sort(),
+    lockedNodeIds: [...lockedOutlinerNodeIds].sort(),
+    soloNodeId: soloOutlinerNodeId,
+  };
+}
+
+function persistVisibilityArrangements() {
+  const storageKey = previewVisibilityStorageKey();
+  if (!storageKey || typeof localStorage === 'undefined') {
+    return;
+  }
+  localStorage.setItem(
+    storageKey,
+    JSON.stringify(Object.fromEntries(visibilityArrangements)),
+  );
+}
+
+function replaceSetContents(target, values) {
+  target.clear();
+  for (const value of Array.isArray(values) ? values : []) {
+    if (typeof value === 'string') {
+      target.add(value);
+    }
+  }
+}
+
+function restorePreviewVisibilityArrangement(state) {
+  replaceSetContents(hiddenOutlinerNodeIds, state?.hiddenNodeIds);
+  replaceSetContents(ghostedOutlinerNodeIds, state?.ghostedNodeIds);
+  replaceSetContents(lockedOutlinerNodeIds, state?.lockedNodeIds);
+  replaceSetContents(previewContextNodeIds, state?.contextNodeIds);
+  soloOutlinerNodeId =
+    typeof state?.soloNodeId === 'string' ? state.soloNodeId : null;
+}
+
+function resetPreviewVisibilityState() {
+  hiddenOutlinerNodeIds.clear();
+  ghostedOutlinerNodeIds.clear();
+  lockedOutlinerNodeIds.clear();
+  previewContextNodeIds.clear();
+  soloOutlinerNodeId = null;
+}
+
+function nodeOrAncestorMatches(documentValue, nodeId, ids) {
+  let info = findNodeHierarchyInfo(documentValue, nodeId);
+  while (info) {
+    if (ids.has(info.node.id)) {
+      return true;
+    }
+    info = info.parentId
+      ? findNodeHierarchyInfo(documentValue, info.parentId)
+      : null;
+  }
+  return false;
+}
+
+function nodeContainsNode(documentValue, ancestorId, nodeId) {
+  if (ancestorId === nodeId) {
     return true;
   }
-  return [node.id, node.name, node.asset]
-    .filter((value) => typeof value === 'string')
-    .some((value) => value.toLowerCase().includes(query));
+  const ancestor = findNodeById(documentValue, ancestorId);
+  return Boolean(ancestor && nodeHasDescendant(ancestor, nodeId));
 }
 
-function renderAssetCatalog(assets, query = '') {
-  const rows = (assets || [])
-    .filter((asset) => assetMatchesCatalogQuery(asset, query))
-    .map(
-      (asset) => \`
-        <div class="asset-catalog-row" data-asset-id="\${escapeHtml(asset.id)}">
-          <span class="asset-catalog-thumb" aria-hidden="true">
-            \${renderLucideIcon('Box')}
-          </span>
-          <span class="asset-catalog-main">
-            <span class="asset-catalog-name">\${escapeHtml(asset.name || asset.id)}</span>
-            <span class="asset-catalog-meta">\${escapeHtml(assetCatalogMeta(asset))}</span>
-          </span>
-          <button class="asset-add-button icon-button" data-add-asset="\${escapeHtml(asset.id)}" title="Add \${escapeHtml(asset.name || asset.id)}" aria-label="Add \${escapeHtml(asset.name || asset.id)}">
-            \${renderLucideIcon('Plus')}
-          </button>
-        </div>
-      \`,
-    )
-    .join('');
-
-  return rows || '<div class="empty-state" data-empty-assets>No matching assets</div>';
-}
-
-function assetMatchesCatalogQuery(asset, query) {
-  if (!query) {
-    return true;
+function nodeIsPreviewContext(node) {
+  if (!node) {
+    return false;
   }
-  return [asset.id, asset.name, asset.type, asset.uri]
-    .filter((value) => typeof value === 'string')
-    .some((value) => value.toLowerCase().includes(query));
-}
-
-function assetCatalogMeta(asset) {
-  const type = inferAssetType(asset);
-  const bounds = asset.bounds;
-  const min = bounds?.min;
-  const max = bounds?.max;
   if (
-    Array.isArray(min) &&
-    Array.isArray(max) &&
-    min.length === 3 &&
-    max.length === 3
+    previewContextNodeIds.has(node.id) ||
+    node.framingRole === 'support' ||
+    nodeHasLightComponent(node)
   ) {
-    const size = max.map((value, index) =>
-      Math.max(0, value - Number(min[index] ?? value)),
-    );
-    if (
-      size.every((value) => Number.isFinite(value) && value >= 0 && value < 50)
-    ) {
-      return (
-        type +
-        ' | ' +
-        size.map((value) => trimNumber(value, 2)).join(' x ') +
-        'm'
-      );
-    }
+    return true;
   }
-  const fileName =
-    typeof asset.uri === 'string' ? asset.uri.split('/').filter(Boolean).pop() : '';
-  return fileName ? type + ' | ' + fileName : type;
+  const label = [node.id, node.name].filter(Boolean).join(' ').toLowerCase();
+  return /\\b(room|shell|stage|background|floor|ground|wall|ceiling|lighting)\\b/.test(
+    label,
+  );
 }
 
-function inferAssetType(asset) {
-  if (typeof asset.type === 'string' && asset.type.length > 0) {
-    return asset.type;
+function nodeOrAncestorIsPreviewContext(documentValue, node) {
+  let current = node;
+  while (current) {
+    if (nodeIsPreviewContext(current)) {
+      return true;
+    }
+    const info = findNodeHierarchyInfo(documentValue, current.id);
+    current = info?.parentId
+      ? findNodeById(documentValue, info.parentId)
+      : null;
   }
-  if (typeof asset.uri === 'string') {
-    const extension = asset.uri.split('?')[0].split('.').pop();
-    if (extension) {
-      return extension.toLowerCase();
+  return false;
+}
+
+function nodeIsInSoloContext(documentValue, node) {
+  if (!soloOutlinerNodeId) {
+    return true;
+  }
+  return (
+    nodeContainsNode(documentValue, soloOutlinerNodeId, node.id) ||
+    nodeContainsNode(documentValue, node.id, soloOutlinerNodeId) ||
+    nodeOrAncestorIsPreviewContext(documentValue, node)
+  );
+}
+
+function restoreEditorPreviewVisibility() {
+  if (!editorWorldState) {
+    return;
+  }
+  for (const [object, visible] of
+    editorWorldState.previewVisibilityBaseline || []) {
+    object.visible = visible;
+  }
+  editorWorldState.previewVisibilityBaseline = new Map();
+  for (const entry of editorWorldState.previewGhostMaterials || []) {
+    entry.mesh.material = entry.original;
+    for (const material of entry.clones) {
+      material.dispose?.();
     }
   }
-  return 'asset';
+  editorWorldState.previewGhostMaterials = [];
+}
+
+function ghostObjectMaterials(object) {
+  if (!editorWorldState || !object) {
+    return;
+  }
+  object.traverse((child) => {
+    if (!child.isMesh || child.userData?.iwsdkEditorHelper === true) {
+      return;
+    }
+    const original = child.material;
+    const originals = Array.isArray(original) ? original : [original];
+    const clones = originals.filter(Boolean).map((material) => {
+      const clone = material.clone();
+      clone.transparent = true;
+      clone.opacity = Math.min(Number(material.opacity ?? 1), 0.18);
+      clone.depthWrite = false;
+      return clone;
+    });
+    if (clones.length === 0) {
+      return;
+    }
+    child.material = Array.isArray(original) ? clones : clones[0];
+    editorWorldState.previewGhostMaterials.push({
+      clones,
+      mesh: child,
+      original,
+    });
+  });
+}
+
+function applyEditorPreviewVisibility(documentValue) {
+  if (!editorWorldState) {
+    return;
+  }
+  restoreEditorPreviewVisibility();
+  const nodes = nodesInDocument(documentValue);
+  for (const node of nodes) {
+    const object = editorWorldState.objectMap.get(node.id);
+    if (!object) {
+      continue;
+    }
+    editorWorldState.previewVisibilityBaseline.set(object, object.visible);
+    object.visible =
+      object.visible &&
+      !nodeOrAncestorMatches(documentValue, node.id, hiddenOutlinerNodeIds) &&
+      nodeIsInSoloContext(documentValue, node);
+  }
+  for (const node of nodes) {
+    const object = editorWorldState.objectMap.get(node.id);
+    if (!object?.visible) {
+      continue;
+    }
+    const explicitlyGhosted = ghostedOutlinerNodeIds.has(node.id);
+    const soloContextGhost =
+      soloOutlinerNodeId != null &&
+      nodeIsPreviewContext(node) &&
+      !nodeContainsNode(documentValue, node.id, soloOutlinerNodeId) &&
+      !nodeContainsNode(documentValue, soloOutlinerNodeId, node.id);
+    if (explicitlyGhosted || soloContextGhost) {
+      ghostObjectMaterials(object);
+    }
+  }
 }
 
 function trimNumber(value, digits = 2) {
@@ -3172,6 +6206,20 @@ function createNodeIdForAsset(documentValue, assetId) {
     candidate = base + '-' + index;
   }
   return candidate;
+}
+
+async function dispatchEditorTransaction(session, patches) {
+  const base = await session.dispatch('scene_get_document', {});
+  const candidate = applyScenePatch(session.document, {
+    op: 'transaction',
+    patches,
+  }).document;
+  return session.dispatch('scene_apply_transaction', {
+    candidateDocumentHash: hashSceneDocument(candidate),
+    expectedBaseDocumentHash: base.documentHash,
+    ownershipMode: 'replace-new',
+    patches,
+  });
 }
 
 function createGroupNodeId(documentValue) {
@@ -3206,33 +6254,24 @@ function defaultTransformForAsset(documentValue, assetId) {
 
 function addAssetFromCatalog(session, camera, assetId) {
   return runEditorMutation(async () => {
-    const asset = (session.document.assets || []).find(
+    const asset = sceneAssets(session.document).find(
       (entry) => entry.id === assetId,
     );
     if (!asset) {
       throw new Error(\`Unknown asset "\${assetId}"\`);
     }
     const nodeId = createNodeIdForAsset(session.document, assetId);
-    const surfaceTargetId = currentSurfacePlacementTargetId();
-    let result = await session.dispatch('scene_add_node', {
+    let result = await dispatchEditorTransaction(session, [{
       node: {
-        asset: assetId,
+        content: { asset: assetId, type: 'asset' },
         id: nodeId,
         name: asset.name || nodeId,
         transform: defaultTransformForAsset(session.document, assetId),
       },
-    });
-    if (surfaceTargetId) {
-      result = await session.dispatch('scene_place_on', {
-        align: 'center',
-        nodeId,
-        targetId: surfaceTargetId,
-      });
-      if (editorWorldState) {
-        editorWorldState.surfacePlacementLastTargetId = surfaceTargetId;
-        editorWorldState.surfacePlacementTargetNodeId = surfaceTargetId;
-      }
-    }
+      op: 'addNode',
+    }]);
+    setEditorSelection([nodeId]);
+    result = await session.dispatch('scene_select', { nodeIds: [nodeId] });
     syncSelectionFromResult(result);
     clearValidationResult();
     renderUi(session, camera);
@@ -3267,6 +6306,16 @@ function showSceneGraphContextMenu(session, camera, nodeId, point) {
   menu.hidden = false;
   menu.innerHTML = \`
     <div class="context-menu-label">\${escapeHtml(nodeId)}</div>
+    <button data-scene-graph-action="toggle-solo">\${
+      soloOutlinerNodeId === nodeId ? 'Exit Solo' : 'Solo Group'
+    }</button>
+    <button data-scene-graph-action="toggle-ghost">\${
+      ghostedOutlinerNodeIds.has(nodeId) ? 'Show Normally' : 'Ghost Group'
+    }</button>
+    <button data-scene-graph-action="toggle-lock">\${
+      lockedOutlinerNodeIds.has(nodeId) ? 'Unlock Group' : 'Lock Group'
+    }</button>
+    <button data-scene-graph-action="reset-visibility">Reset Visibility</button>
     <button data-scene-graph-action="group-selection" \${groupable ? '' : 'disabled'}>Group Selection</button>
     <button data-scene-graph-action="ungroup" \${canUngroup ? '' : 'disabled'}>Ungroup</button>
     <button data-scene-graph-action="move-up" \${canMoveUp ? '' : 'disabled'}>Move Up</button>
@@ -3276,7 +6325,7 @@ function showSceneGraphContextMenu(session, camera, nodeId, point) {
   \`;
 
   const menuWidth = 180;
-  const menuHeight = 248;
+  const menuHeight = 332;
   menu.style.left = \`\${Math.min(point.x, window.innerWidth - menuWidth - 8)}px\`;
   menu.style.top = \`\${Math.min(point.y, window.innerHeight - menuHeight - 8)}px\`;
 
@@ -3290,7 +6339,28 @@ function showSceneGraphContextMenu(session, camera, nodeId, point) {
 
 function runSceneGraphContextAction(session, camera, nodeId, action) {
   runEditorMutation(async () => {
-    if (action === 'duplicate') {
+    if (action === 'toggle-solo') {
+      soloOutlinerNodeId = soloOutlinerNodeId === nodeId ? null : nodeId;
+      applyEditorReviewLens(session.document);
+    } else if (action === 'toggle-ghost') {
+      if (ghostedOutlinerNodeIds.has(nodeId)) {
+        ghostedOutlinerNodeIds.delete(nodeId);
+      } else {
+        ghostedOutlinerNodeIds.add(nodeId);
+      }
+      applyEditorReviewLens(session.document);
+    } else if (action === 'toggle-lock') {
+      if (lockedOutlinerNodeIds.has(nodeId)) {
+        lockedOutlinerNodeIds.delete(nodeId);
+      } else {
+        lockedOutlinerNodeIds.add(nodeId);
+      }
+      syncTransformControlsToSelection(session);
+    } else if (action === 'reset-visibility') {
+      resetPreviewVisibilityState();
+      applyEditorReviewLens(session.document);
+      syncTransformControlsToSelection(session);
+    } else if (action === 'duplicate') {
       const result = await session.dispatch('scene_duplicate_node', { nodeId });
       syncSelectionFromResult(result);
     } else if (action === 'remove') {
@@ -3472,25 +6542,6 @@ function isValidOutlinerDrop(documentValue, draggedNodeId, targetNodeId) {
   return targetNodeId == null || !nodeHasDescendant(draggedNode, targetNodeId);
 }
 
-function draggedOutlinerNodeIdFromEvent(event) {
-  const dataNodeId = event.dataTransfer?.getData('text/plain');
-  if (dataNodeId) {
-    return dataNodeId;
-  }
-  return window.__IWSDK_EDITOR_DRAG_NODE_ID || null;
-}
-
-function setOutlinerDropState(element, state) {
-  if (!(element instanceof HTMLElement)) {
-    return;
-  }
-  if (state) {
-    element.dataset.dropActive = 'true';
-  } else {
-    delete element.dataset.dropActive;
-  }
-}
-
 function applyOutlinerReparent(session, camera, nodeId, parentId) {
   return runEditorMutation(async () => {
     const result = await session.dispatch('scene_apply_patch', {
@@ -3507,13 +6558,21 @@ function applyOutlinerReparent(session, camera, nodeId, parentId) {
   });
 }
 
+function setEditorSelection(nodeIds, { rootWhenEmpty = true } = {}) {
+  const selection = Array.isArray(nodeIds)
+    ? nodeIds.filter((nodeId) => typeof nodeId === 'string')
+    : [];
+  window.__IWSDK_EDITOR_SELECTION = selection;
+  window.__IWSDK_EDITOR_ROOT_SELECTED =
+    rootWhenEmpty && selection.length === 0;
+  return selection;
+}
+
 function syncSelectionFromResult(result) {
   const selection =
     result && typeof result === 'object' ? result.selection : undefined;
   if (Array.isArray(selection)) {
-    window.__IWSDK_EDITOR_SELECTION = selection.filter(
-      (nodeId) => typeof nodeId === 'string',
-    );
+    setEditorSelection(selection);
   }
 }
 
@@ -3531,8 +6590,10 @@ function invalidatesValidation(method) {
     'scene_remove_node',
     'scene_duplicate_node',
     'scene_set_transform',
+    'scene_set_framing_role',
     'scene_apply_patch',
-    'scene_place_on',
+    'scene_apply_transaction',
+    'scene_replace_document',
     'scene_look_at',
     'scene_undo',
     'scene_redo',
@@ -3564,6 +6625,9 @@ function mergeAutosaveResult(result, saveResult) {
   if (typeof result.action === 'string') {
     merged.action = result.action;
   }
+  if (result.lifecycle && typeof result.lifecycle === 'object') {
+    merged.lifecycle = result.lifecycle;
+  }
   return merged;
 }
 
@@ -3575,6 +6639,22 @@ function handleEditorMutationError(error) {
   ) {
     showSceneConflictDialog(error);
     return;
+  }
+  if (Array.isArray(error?.issues)) {
+    setValidationResult({
+      issues: error.issues,
+      lifecycle: error.lifecycle,
+      valid: false,
+    });
+    window.__IWSDK_EDITOR_BOTTOM_TAB = 'validation';
+    const panel = document.getElementById('editor-bottom-panel');
+    if (panel && editorWorldState?.currentSession) {
+      renderDiagnosticsPanel(
+        panel,
+        editorWorldState.currentSession,
+        editorWorldState.currentCamera,
+      );
+    }
   }
   const statusStrip = document.getElementById('editor-status-strip');
   if (statusStrip) {
@@ -3714,7 +6794,7 @@ function setTransformEditorMessage(inspector, message, isError = false) {
 
 async function runTransformMutation(inspector, operation) {
   try {
-    await operation();
+    await queueEditorMutation(operation);
   } catch (error) {
     setTransformEditorMessage(inspector, String(error?.message || error), true);
   }
@@ -3828,80 +6908,8 @@ function resetTransformField(inspector, session, camera, node, field) {
   });
 }
 
-function jsonObjectText(value) {
-  const objectValue =
-    value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  return JSON.stringify(objectValue, null, 2);
-}
-
-function parseJsonObjectText(value, fieldName) {
-  const text = String(value || '').trim();
-  const parsed = text.length === 0 ? {} : JSON.parse(text);
-  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(fieldName + ' must be a JSON object');
-  }
-  return parsed;
-}
-
-function setMetadataEditorMessage(inspector, message, isError = false) {
-  const messageNode = inspector.querySelector('#metadata-editor-message');
-  if (messageNode) {
-    messageNode.textContent = message;
-    messageNode.className = isError ? 'metadata-editor-error' : '';
-  }
-}
-
-async function runMetadataMutation(inspector, operation) {
-  try {
-    await operation();
-  } catch (error) {
-    setMetadataEditorMessage(inspector, String(error?.message || error), true);
-  }
-}
-
-function commitNodeMetadata(inspector, session, camera, node) {
-  runMetadataMutation(inspector, async () => {
-    const input = inspector.querySelector('[data-node-metadata]');
-    if (!(input instanceof HTMLTextAreaElement)) {
-      throw new Error('Missing node metadata field');
-    }
-    const metadata = parseJsonObjectText(input.value, 'Node metadata');
-    const signature = JSON.stringify(metadata);
-    if (
-      inspector.dataset.committedMetadataValue === signature ||
-      inspector.dataset.pendingMetadataValue === signature
-    ) {
-      setMetadataEditorMessage(inspector, '');
-      return;
-    }
-    inspector.dataset.pendingMetadataValue = signature;
-    try {
-      const result = await session.dispatch('scene_apply_patch', {
-        patch: {
-          nodeId: node.id,
-          op: 'setNodeMetadata',
-          value: metadata,
-        },
-      });
-      syncSelectionFromResult(result);
-      clearValidationResult();
-      setMetadataEditorMessage(inspector, '');
-      renderUi(session, camera);
-    } finally {
-      if (inspector.dataset.pendingMetadataValue === signature) {
-        delete inspector.dataset.pendingMetadataValue;
-      }
-    }
-  });
-}
-
 function documentStatusLabel() {
-  try {
-    const url = new URL(documentUrl, window.location.href);
-    return url.searchParams.get('scene') || url.pathname;
-  } catch {
-    return documentUrl;
-  }
+  return currentScenePath() || documentUrl;
 }
 
 function componentValueText(value) {
@@ -3921,136 +6929,62 @@ function componentNameForSchema(schema) {
     : schema.id;
 }
 
-function componentSchemasForDocument(documentValue) {
-  const schemas = new Map();
-  for (const schema of [
-    ...runtimeComponentSchemas(),
-    ...(documentValue.componentSchemas || []),
-  ]) {
-    if (schema && typeof schema.id === 'string') {
-      schemas.set(schema.id, schema);
-    }
-  }
-  return [...schemas.values()].sort((first, second) =>
+function componentSchemasForDocument(_documentValue) {
+  return runtimeComponentSchemas();
+}
+
+function runtimeComponentSchemas() {
+  return Object.values(runtimeComponentCatalog()).sort((first, second) =>
     first.id.localeCompare(second.id),
   );
 }
 
-function componentSchemaMapForDocument(documentValue) {
-  return new Map(
-    componentSchemasForDocument(documentValue).map((schema) => [
-      schema.id,
-      schema,
-    ]),
-  );
-}
-
-function runtimeComponentSchemas() {
-  if (!ComponentRegistry?.getAllComponents) {
-    return [];
+function runtimeComponentCatalog() {
+  if (!componentCatalogFromComponents || !IWSDK_BUILTIN_COMPONENTS) {
+    return {};
   }
-  return ComponentRegistry.getAllComponents().map(componentSchemaFromRuntime);
-}
-
-function componentSchemaFromRuntime(component) {
-  const fields = {};
-  for (const [fieldName, field] of Object.entries(component.schema || {})) {
-    const fieldSchema = {
-      type: String(field.type || 'Object'),
-    };
-    const defaultValue = sanitizeSceneJsonValue(field.default);
-    if (defaultValue !== undefined) {
-      fieldSchema.default = defaultValue;
-    }
-    if (field.enum && isPlainEditorRecord(field.enum)) {
-      fieldSchema.enum = Object.fromEntries(
-        Object.entries(field.enum).filter(
-          ([, value]) => typeof value === 'string',
-        ),
-      );
-    }
-    if (typeof field.fileTypes === 'string') {
-      fieldSchema.fileTypes = field.fileTypes;
-    }
-    if (typeof field.subfolder === 'string') {
-      fieldSchema.subfolder = field.subfolder;
-    }
-    if (Number.isFinite(field.min)) {
-      fieldSchema.min = field.min;
-    }
-    if (Number.isFinite(field.max)) {
-      fieldSchema.max = field.max;
-    }
-    if (fieldName.startsWith('_')) {
-      fieldSchema.internal = true;
-    }
-    fields[fieldName] = fieldSchema;
-  }
-  return {
-    description: component.description,
-    fields,
-    id: component.id,
+  const builtins = componentCatalogFromComponents(IWSDK_BUILTIN_COMPONENTS, {
     source: 'iwsdk',
-  };
-}
-
-function sanitizeSceneJsonValue(value) {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (Array.isArray(value)) {
-    const entries = value.map(sanitizeSceneJsonValue);
-    return entries.some((entry) => entry === undefined) ? undefined : entries;
-  }
-  if (isPlainEditorRecord(value)) {
-    const entries = Object.entries(value)
-      .map(([key, entry]) => [key, sanitizeSceneJsonValue(entry)])
-      .filter(([, entry]) => entry !== undefined);
-    return Object.fromEntries(entries);
-  }
-  return undefined;
+  });
+  const application = componentCatalogFromComponents(editorComponentManifest, {
+    source: 'app',
+  });
+  return { ...builtins, ...application };
 }
 
 function isPlainEditorRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isTypedComponentPayload(value) {
-  if (!isPlainEditorRecord(value)) {
-    return false;
-  }
-  const keys = Object.keys(value);
-  return (
-    keys.every((key) => key === 'type' || key === 'props') &&
-    typeof value.type === 'string' &&
-    value.type.length > 0
+function componentPayloadType(componentName, _value) {
+  return stripComponentPrefix(componentName);
+}
+
+function nodeHasLightComponent(node) {
+  return Object.keys(node?.components || {}).some((name) =>
+    [
+      'AmbientLight',
+      'HemisphereLight',
+      'DirectionalLight',
+      'PointLight',
+      'SpotLight',
+      'RectAreaLight',
+    ].includes(stripComponentPrefix(name)),
   );
 }
 
-function componentPayloadType(componentName, value) {
-  return isTypedComponentPayload(value) ? value.type : stripComponentPrefix(componentName);
-}
-
 function componentPayloadProps(value) {
-  if (isTypedComponentPayload(value)) {
-    return isPlainEditorRecord(value.props) ? value.props : {};
-  }
   return isPlainEditorRecord(value) ? value : {};
 }
 
 function defaultComponentProps(schema) {
   const props = {};
   for (const [fieldName, field] of Object.entries(schema.fields || {})) {
-    if (field.internal === true) {
+    if (field.hidden === true) {
       continue;
     }
-    const value =
-      field.default !== undefined ? field.default : defaultValueForField(field);
-    if (value !== undefined) {
-      props[fieldName] = value;
+    if (field.default !== undefined) {
+      props[fieldName] = field.default;
     }
   }
   return props;
@@ -4086,7 +7020,9 @@ function defaultValueForField(field) {
 }
 
 function setComponentEditorMessage(inspector, message, isError = false) {
-  const messageNode = inspector.querySelector('#component-editor-message');
+  const messageNode = inspector.querySelector(
+    '#component-editor-message',
+  );
   if (messageNode) {
     messageNode.textContent = message;
     messageNode.className = isError ? 'component-editor-error' : '';
@@ -4122,7 +7058,7 @@ function renderComponentRow(name, value, index, componentSchemaMap) {
   const title = schema?.name || componentType || name;
   const fieldControls = schema
     ? Object.entries(schema.fields || {})
-        .filter(([, field]) => field.internal !== true)
+        .filter(([, field]) => field.hidden !== true)
         .map(([fieldName, field]) =>
           renderComponentField(fieldName, field, props[fieldName]),
         )
@@ -4138,6 +7074,8 @@ function renderComponentRow(name, value, index, componentSchemaMap) {
     escapeHtml(name) +
     '" data-component-type="' +
     escapeHtml(componentType) +
+    '" data-component-props="' +
+    escapeHtml(componentValueText(props)) +
     '">' +
     '<div class="component-row-header"><span class="component-row-title"><strong>' +
     escapeHtml(title) +
@@ -4164,14 +7102,23 @@ function renderComponentField(fieldName, field, value) {
       : field.default !== undefined
         ? field.default
         : defaultValueForField(field);
+  const fieldLabelText = field.label || fieldName;
   const fieldLabel =
-    '<span class="component-field-label">' + escapeHtml(fieldName) + '</span>';
+    '<span class="component-field-label"' +
+    (field.help ? ' title="' + escapeHtml(field.help) + '"' : '') +
+    '>' +
+    escapeHtml(fieldLabelText) +
+    '</span>';
+  const omittedAttribute =
+    value === undefined ? ' data-component-field-omitted="true"' : '';
 
   if (field.type === 'Boolean') {
     return (
       '<label class="component-field-row component-boolean-row" data-component-field-row="' +
       escapeHtml(fieldName) +
-      '">' +
+      '"' +
+      omittedAttribute +
+      '>' +
       fieldLabel +
       '<input type="checkbox" data-component-field="' +
       escapeHtml(fieldName) +
@@ -4201,7 +7148,9 @@ function renderComponentField(fieldName, field, value) {
     return (
       '<label class="component-field-row" data-component-field-row="' +
       escapeHtml(fieldName) +
-      '">' +
+      '"' +
+      omittedAttribute +
+      '>' +
       fieldLabel +
       '<select data-component-field="' +
       escapeHtml(fieldName) +
@@ -4213,17 +7162,45 @@ function renderComponentField(fieldName, field, value) {
     );
   }
 
+  if (field.type === 'Color') {
+    const alpha =
+      Array.isArray(fieldValue) && Number.isFinite(fieldValue[3])
+        ? fieldValue[3]
+        : 1;
+    return (
+      '<label class="component-field-row component-color-row" data-component-field-row="' +
+      escapeHtml(fieldName) +
+      '"' +
+      omittedAttribute +
+      '>' +
+      fieldLabel +
+      '<input type="color" data-component-field="' +
+      escapeHtml(fieldName) +
+      '" data-component-field-type="Color" data-component-color-alpha="' +
+      escapeHtml(String(alpha)) +
+      '" value="' +
+      escapeHtml(componentColorHex(fieldValue)) +
+      '" aria-label="' +
+      escapeHtml(fieldLabelText + ' color') +
+      '" /></label>'
+    );
+  }
+
   if (isVectorComponentField(field.type)) {
     const length = vectorComponentFieldLength(field.type);
     return (
       '<div class="component-field-row component-vector-row" data-component-field-row="' +
       escapeHtml(fieldName) +
-      '">' +
+      '"' +
+      omittedAttribute +
+      '>' +
       fieldLabel +
       '<div class="component-vector-field" data-component-field="' +
       escapeHtml(fieldName) +
       '" data-component-field-type="' +
       escapeHtml(field.type) +
+      '" data-component-vector-count="' +
+      length +
       '" style="--component-vector-count: ' +
       length +
       '">' +
@@ -4233,12 +7210,22 @@ function renderComponentField(fieldName, field, value) {
   }
 
   if (isNumericComponentField(field.type)) {
+    const numericAttributes =
+      ' step="' + escapeHtml(String(field.step ?? 0.01)) + '"' +
+      (Number.isFinite(field.min)
+        ? ' min="' + escapeHtml(String(field.min)) + '"'
+        : '') +
+      (Number.isFinite(field.max)
+        ? ' max="' + escapeHtml(String(field.max)) + '"'
+        : '');
     return (
       '<label class="component-field-row" data-component-field-row="' +
       escapeHtml(fieldName) +
-      '">' +
+      '"' +
+      omittedAttribute +
+      '>' +
       fieldLabel +
-      '<input type="number" step="0.01" data-component-field="' +
+      '<input type="number"' + numericAttributes + ' data-component-field="' +
       escapeHtml(fieldName) +
       '" data-component-field-type="' +
       escapeHtml(field.type) +
@@ -4252,7 +7239,9 @@ function renderComponentField(fieldName, field, value) {
     return (
       '<label class="component-field-row component-object-row" data-component-field-row="' +
       escapeHtml(fieldName) +
-      '">' +
+      '"' +
+      omittedAttribute +
+      '>' +
       fieldLabel +
       '<textarea data-component-field="' +
       escapeHtml(fieldName) +
@@ -4267,7 +7256,9 @@ function renderComponentField(fieldName, field, value) {
   return (
     '<label class="component-field-row" data-component-field-row="' +
     escapeHtml(fieldName) +
-    '">' +
+    '"' +
+    omittedAttribute +
+    '>' +
     fieldLabel +
     '<input data-component-field="' +
     escapeHtml(fieldName) +
@@ -4277,6 +7268,17 @@ function renderComponentField(fieldName, field, value) {
     escapeHtml(String(fieldValue ?? '')) +
     '" /></label>'
   );
+}
+
+function componentColorHex(value) {
+  const entries = Array.isArray(value) ? value : [0, 0, 0, 1];
+  const channelHex = (channel) =>
+    Math.round(
+      Math.min(1, Math.max(0, Number.isFinite(channel) ? channel : 0)) * 255,
+    )
+      .toString(16)
+      .padStart(2, '0');
+  return '#' + entries.slice(0, 3).map(channelHex).join('');
 }
 
 function renderVectorComponentInputs(fieldName, fieldType, value) {
@@ -4305,7 +7307,7 @@ function isNumericComponentField(type) {
 }
 
 function isVectorComponentField(type) {
-  return ['Vec2', 'Vec3', 'Vec4', 'Color'].includes(type);
+  return ['Vec2', 'Vec3', 'Vec4'].includes(type);
 }
 
 function vectorComponentFieldLength(type) {
@@ -4315,7 +7317,6 @@ function vectorComponentFieldLength(type) {
     case 'Vec3':
       return 3;
     case 'Vec4':
-    case 'Color':
       return 4;
     default:
       return 0;
@@ -4332,21 +7333,31 @@ function readComponentRow(row, componentSchemaMap) {
   return {
     component,
     value: schema
-      ? typedComponentValue(componentType, readTypedComponentFields(row, schema))
+      ? readComponentFields(row, schema)
       : parseComponentValue(
           row.querySelector('[data-component-value]')?.value || '{}',
         ),
   };
 }
 
-function typedComponentValue(type, props) {
-  return { type, props };
-}
-
-function readTypedComponentFields(row, schema) {
-  const props = {};
+function readComponentFields(row, schema) {
+  const original = parseComponentValue(
+    row.getAttribute('data-component-props') || '{}',
+  );
+  const props =
+    original && typeof original === 'object' && !Array.isArray(original)
+      ? { ...original }
+      : {};
   for (const [fieldName, field] of Object.entries(schema.fields || {})) {
-    if (field.internal === true) {
+    if (field.hidden === true) {
+      continue;
+    }
+    const fieldRow = Array.from(
+      row.querySelectorAll('[data-component-field-row]'),
+    ).find(
+      (entry) => entry.getAttribute('data-component-field-row') === fieldName,
+    );
+    if (fieldRow?.dataset.componentFieldOmitted === 'true') {
       continue;
     }
     props[fieldName] = readComponentField(row, fieldName, field);
@@ -4385,6 +7396,22 @@ function readComponentField(row, fieldName, field) {
     throw new Error('Missing component field ' + fieldName);
   }
 
+  if (field.type === 'Color') {
+    const match =
+      input instanceof HTMLInputElement
+        ? /^#([0-9a-f]{6})$/iu.exec(input.value)
+        : null;
+    if (!match) {
+      throw new Error('Component field ' + fieldName + ' must be a color');
+    }
+    const alpha = Number(input.dataset.componentColorAlpha);
+    return [
+      parseInt(match[1].slice(0, 2), 16) / 255,
+      parseInt(match[1].slice(2, 4), 16) / 255,
+      parseInt(match[1].slice(4, 6), 16) / 255,
+      Number.isFinite(alpha) ? alpha : 1,
+    ];
+  }
   if (field.type === 'Boolean') {
     return input instanceof HTMLInputElement ? input.checked : false;
   }
@@ -4401,8 +7428,17 @@ function readComponentField(row, fieldName, field) {
   return input.value;
 }
 
+function queueEditorMutation(operation) {
+  const task = editorMutationQueue.then(operation);
+  editorMutationQueue = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
 function runEditorMutation(operation) {
-  operation().catch(handleEditorMutationError);
+  return queueEditorMutation(operation).catch(handleEditorMutationError);
 }
 
 function showSceneConflictDialog(error) {
@@ -4450,7 +7486,7 @@ function showSceneConflictDialog(error) {
 
 async function runInspectorMutation(inspector, operation) {
   try {
-    await operation();
+    await queueEditorMutation(operation);
   } catch (error) {
     setComponentEditorMessage(inspector, String(error?.message || error), true);
   }
@@ -4470,10 +7506,20 @@ function isComponentEditTarget(target) {
   );
 }
 
+function markComponentFieldAuthored(target) {
+  if (!isComponentEditTarget(target)) {
+    return;
+  }
+  const fieldRow = target.closest('[data-component-field-row]');
+  if (fieldRow instanceof HTMLElement) {
+    delete fieldRow.dataset.componentFieldOmitted;
+  }
+}
+
 function refreshEditorStatus(session, camera) {
   window.__IWSDK_EDITOR_CAMERA = camera;
   const documentValue = session.document;
-  const assets = documentValue.assets || [];
+  const assets = sceneAssets(documentValue);
   const nodes = nodesInDocument(documentValue);
   const status = document.getElementById('scene-status');
   const dirtyStatus = document.getElementById('dirty-status');
@@ -4484,14 +7530,30 @@ function refreshEditorStatus(session, camera) {
     status.textContent = \`\${nodes.length} nodes, \${assets.length} assets\`;
   }
   if (dirtyStatus) {
-    dirtyStatus.textContent = session.isDirty ? 'Unsaved changes' : 'Saved';
-    dirtyStatus.dataset.state = session.isDirty ? 'dirty' : 'saved';
+    const fileStatus = sceneFileReloadState.status;
+    dirtyStatus.textContent = session.isDirty
+      ? 'Unsaved changes'
+      : fileStatus === 'invalid'
+        ? 'Invalid file; showing last valid scene'
+        : fileStatus === 'conflict'
+          ? 'File conflict'
+          : 'Saved';
+    dirtyStatus.dataset.state =
+      session.isDirty || fileStatus === 'invalid' || fileStatus === 'conflict'
+        ? 'dirty'
+        : 'saved';
   }
   if (statusStrip) {
     statusStrip.textContent = [
       documentStatusLabel(),
       \`\${nodes.length} nodes\`,
-      session.isDirty ? 'unsaved changes' : 'saved',
+      session.isDirty
+        ? 'unsaved changes'
+        : sceneFileReloadState.status === 'invalid'
+          ? 'invalid file; last valid scene shown'
+          : sceneFileReloadState.status === 'conflict'
+            ? 'file conflict'
+            : 'saved',
       'IWSDK WebGL',
     ].join(' | ');
     statusStrip.dataset.state = session.isDirty ? 'dirty' : 'saved';
@@ -4501,9 +7563,23 @@ function refreshEditorStatus(session, camera) {
   }
 }
 
-function commitComponentRow(inspector, row, session, camera, node, componentSchemaMap) {
+function componentPatchForTarget(target, component, value) {
+  return target?.root === true
+    ? { component, op: 'updateRootComponent', value }
+    : { component, nodeId: target.id, op: 'updateComponent', value };
+}
+
+function commitComponentRow(inspector, row, session, camera, target, componentSchemaMap) {
+  let signature;
+  try {
+    // Capture the complete row at the DOM event boundary. The inspector may be
+    // rerendered while earlier autosaved edits are still queued.
+    signature = componentRowSignature(row, componentSchemaMap);
+  } catch (error) {
+    setComponentEditorMessage(inspector, String(error?.message || error), true);
+    return;
+  }
   runInspectorMutation(inspector, async () => {
-    const signature = componentRowSignature(row, componentSchemaMap);
     if (
       signature === row.dataset.committedValue ||
       signature === row.dataset.pendingValue
@@ -4514,12 +7590,7 @@ function commitComponentRow(inspector, row, session, camera, node, componentSche
     try {
       const { component, value } = JSON.parse(signature);
       const result = await session.dispatch('scene_apply_patch', {
-        patch: {
-          component,
-          nodeId: node.id,
-          op: 'updateComponent',
-          value,
-        },
+        patch: componentPatchForTarget(target, component, value),
       });
       row.dataset.committedValue = signature;
       syncSelectionFromResult(result);
@@ -4536,19 +7607,19 @@ function commitComponentRow(inspector, row, session, camera, node, componentSche
 }
 
 function renderDiagnosticsPanel(panel, session, camera) {
-  const requestedTab = window.__IWSDK_EDITOR_BOTTOM_TAB || 'console';
+  const requestedTab = window.__IWSDK_EDITOR_BOTTOM_TAB || 'assets';
   const bottomPanelContributions = contributionsForSlot('bottomPanel.tab');
   const contributionTabIds = bottomPanelContributions.map(
     (contribution) => 'contribution:' + contribution.id,
   );
   const activeTab = [
+    'assets',
     'console',
-    'events',
     'validation',
     ...contributionTabIds,
   ].includes(requestedTab)
     ? requestedTab
-    : 'console';
+    : 'assets';
   window.__IWSDK_EDITOR_BOTTOM_TAB = activeTab;
   panel.dataset.activeTab = activeTab;
   const tabList = panel.querySelector('.bottom-panel-tabs');
@@ -4573,7 +7644,7 @@ function renderDiagnosticsPanel(panel, session, camera) {
     if (button.dataset.bound !== 'true') {
       button.dataset.bound = 'true';
       button.addEventListener('click', () => {
-        window.__IWSDK_EDITOR_BOTTOM_TAB = tab || 'console';
+        window.__IWSDK_EDITOR_BOTTOM_TAB = tab || 'assets';
         renderDiagnosticsPanel(panel, session, camera);
       });
     }
@@ -4581,6 +7652,11 @@ function renderDiagnosticsPanel(panel, session, camera) {
 
   const content = panel.querySelector('#bottom-panel-content');
   if (!content) {
+    return;
+  }
+
+  if (activeTab === 'assets') {
+    void ensureAssetThumbnails(session.document);
     return;
   }
 
@@ -4596,32 +7672,9 @@ function renderDiagnosticsPanel(panel, session, camera) {
     return;
   }
 
-  if (activeTab === 'events') {
-    const events = Array.isArray(window.__IWSDK_EDITOR_EVENTS)
-      ? [...window.__IWSDK_EDITOR_EVENTS].reverse()
-      : [];
-    content.innerHTML = events.length
-      ? \`
-        <ul class="diagnostics-list">
-          \${events
-            .map(
-              (event) => \`
-                <li data-diagnostic-event="\${escapeHtml(event.method)}">
-                  <strong>\${escapeHtml(event.action)}</strong>
-                  <span>\${escapeHtml(event.method)}</span>
-                  <em>\${escapeHtml(formatTimestamp(event.timestamp))}</em>
-                </li>
-              \`,
-            )
-            .join('')}
-        </ul>
-      \`
-      : '<div class="empty-state">No scene events yet</div>';
-    return;
-  }
-
   if (activeTab === 'validation') {
     content.innerHTML = renderValidationDiagnostics(window.__IWSDK_EDITOR_VALIDATION);
+    bindValidationDiagnostics(content, session, camera);
     return;
   }
 
@@ -4689,11 +7742,22 @@ function renderValidationDiagnostics(validation) {
         .map((issue, index) => {
           const path = issue?.path || issue?.nodeId || 'scene';
           const message = issue?.message || JSON.stringify(issue);
+          const suggestedFix = issue?.suggestedFix;
           const severity = issue?.severity || 'error';
           return \`
-            <li data-diagnostic-validation="\${escapeHtml(path)}" data-state="\${escapeHtml(severity)}">
+            <li data-diagnostic-validation="\${escapeHtml(path)}" data-state="\${escapeHtml(severity)}" \${
+              issue?.nodeId
+                ? 'data-validation-node-id="' + escapeHtml(issue.nodeId) + '" tabindex="0"'
+                : ''
+            }>
               <strong>\${escapeHtml(path)}</strong>
-              <span>\${escapeHtml(message)}</span>
+              <span>\${escapeHtml(message)}\${
+                suggestedFix
+                  ? '<small class="diagnostic-fix">Fix: ' +
+                    escapeHtml(suggestedFix) +
+                    '</small>'
+                  : ''
+              }</span>
               <em>\${escapeHtml(severity + ' #' + (index + 1))}</em>
             </li>
           \`;
@@ -4701,6 +7765,27 @@ function renderValidationDiagnostics(validation) {
         .join('')}
     </ul>
   \`;
+}
+
+function bindValidationDiagnostics(content, session, camera) {
+  content.querySelectorAll('[data-validation-node-id]').forEach((entry) => {
+    const selectIssueNode = async () => {
+      const nodeId = entry.getAttribute('data-validation-node-id');
+      if (!nodeId || !findNodeById(session.document, nodeId)) {
+        return;
+      }
+      setEditorSelection([nodeId]);
+      await session.dispatch('scene_select', { nodeIds: [nodeId] });
+      renderUi(session, currentEditorCamera(camera));
+    };
+    entry.addEventListener('click', selectIssueNode);
+    entry.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        void selectIssueNode();
+      }
+    });
+  });
 }
 
 function formatTimestamp(timestamp) {
@@ -4728,7 +7813,10 @@ function inspectorSectionSummary(label, meta = '') {
 }
 
 function renderAssetInspector(node, assets) {
-  const selectedAsset = (assets || []).find((asset) => asset.id === node.asset);
+  const assetId = nodeAssetId(node);
+  const selectedAssetExists = (assets || []).some(
+    (asset) => asset.id === assetId,
+  );
   const options = [
     '<option value="">No asset</option>',
     ...(assets || []).map(
@@ -4736,79 +7824,27 @@ function renderAssetInspector(node, assets) {
         '<option value="' +
         escapeHtml(asset.id) +
         '" ' +
-        (asset.id === node.asset ? 'selected' : '') +
+        (asset.id === assetId ? 'selected' : '') +
         '>' +
         escapeHtml(asset.name || asset.id) +
         '</option>',
     ),
   ].join('');
-  const metadata = selectedAsset
-    ? renderAssetInspectorMetadata(selectedAsset)
-    : '<div class="asset-inspector-empty">This node has no asset reference.</div>';
   const warning =
-    node.asset && !selectedAsset
+    assetId && !selectedAssetExists
       ? '<div class="asset-inspector-warning">Unknown asset reference: ' +
-        escapeHtml(node.asset) +
+        escapeHtml(assetId) +
         '</div>'
       : '';
 
-  return \`
-    <div class="asset-inspector-card">
-      <label class="asset-reference-row">
-        <span>Asset</span>
-        <select data-node-asset-ref>\${options}</select>
-      </label>
-      \${warning}
-      \${metadata}
-    </div>
-  \`;
-}
-
-function renderAssetInspectorMetadata(asset) {
-  const rows = [
-    ['ID', asset.id],
-    ['Type', inferAssetType(asset)],
-    ['URI', asset.uri],
-    ['Bounds', assetInspectorBoundsText(asset)],
-  ].filter(([, value]) => value != null && String(value).length > 0);
-
   return (
-    '<dl class="asset-metadata-grid">' +
-    rows
-      .map(
-        ([label, value]) =>
-          '<div><dt>' +
-          escapeHtml(label) +
-          '</dt><dd title="' +
-          escapeHtml(String(value)) +
-          '">' +
-          escapeHtml(String(value)) +
-          '</dd></div>',
-      )
-      .join('') +
-    '</dl>'
+    '<div class="asset-inspector-card"><label class="asset-reference-row">' +
+    '<span>Asset</span><select data-node-asset-ref>' +
+    options +
+    '</select></label>' +
+    warning +
+    '</div>'
   );
-}
-
-function assetInspectorBoundsText(asset) {
-  const bounds = asset.bounds;
-  const min = bounds?.min;
-  const max = bounds?.max;
-  if (
-    !Array.isArray(min) ||
-    !Array.isArray(max) ||
-    min.length !== 3 ||
-    max.length !== 3
-  ) {
-    return '';
-  }
-  const size = max.map((value, index) =>
-    Math.abs(Number(value) - Number(min[index] ?? value)),
-  );
-  if (!size.every((value) => Number.isFinite(value) && value >= 0 && value < 50)) {
-    return 'unreliable raw bounds';
-  }
-  return size.map((value) => trimNumber(value, 3)).join(' x ') + 'm';
 }
 
 function renderMultiSelectInspector(inspector, session, camera, nodes) {
@@ -4911,6 +7947,290 @@ function commitNodeTitleEdit(inspector, session, camera, node) {
   });
 }
 
+function selectedSceneResource(documentValue, selection) {
+  const id = selection?.id;
+  switch (selection?.kind) {
+    case 'prefabs':
+      return scenePrefabs(documentValue).find((entry) => entry.id === id);
+    case 'views':
+      return (documentValue.authoring?.views || []).find((entry) => entry.id === id);
+    case 'environment':
+      return documentValue.environment;
+    case 'patterns':
+      return nodesInDocument(documentValue).find(
+        (node) => node.id === id && nodeContentKind(node) === 'pattern',
+      );
+    default:
+      return null;
+  }
+}
+
+function resourcePatchForSelection(selection, value) {
+  switch (selection.kind) {
+    case 'prefabs':
+      return { op: 'updatePrefab', prefab: value, prefabId: selection.id };
+    case 'views':
+      return { op: 'updateAuthoringView', view: value, viewId: selection.id };
+    case 'environment':
+      return { environment: value, op: 'setEnvironment' };
+    case 'patterns':
+      return { content: value.content, nodeId: selection.id, op: 'updateContent' };
+    default:
+      throw new Error('Unsupported scene resource kind');
+  }
+}
+
+const ROOT_INTRINSIC_COMPONENT_IDS = new Set([
+  'LevelRoot',
+  'LevelTag',
+  'Transform',
+]);
+
+function renderComponentEditor(
+  components,
+  componentSchemas,
+  componentSchemaMap,
+  excludedIds = new Set(),
+) {
+  const componentEntries = Object.entries(components || {});
+  const componentRows = renderComponentRows(
+    componentEntries,
+    componentSchemaMap,
+  );
+  const addableComponents = componentSchemas.filter(
+    (schema) =>
+      !excludedIds.has(schema.id) &&
+      components?.[componentNameForSchema(schema)] == null,
+  );
+  return \`
+    <details class="inspector-section component-editor" open>
+      \${inspectorSectionSummary('Components', String(componentEntries.length))}
+      <div id="component-editor-message"></div>
+      \${componentRows}
+      <button id="add-component" class="component-add-button" \${addableComponents.length > 0 ? '' : 'disabled'}>\${renderLucideIcon('Plus')}<span>Add Component</span></button>
+      \${renderComponentPicker(addableComponents)}
+    </details>
+  \`;
+}
+
+function renderComponentPicker(componentSchemas) {
+  const options = componentSchemas
+    .map((schema) => {
+      const name = schema.id;
+      const description = schema.description || schema.id;
+      const searchText = [name, schema.id, description, schema.source || '']
+        .join(' ')
+        .toLowerCase();
+      return \`
+        <button type="button" class="component-picker-option" data-component-picker-option="\${escapeHtml(schema.id)}" data-component-picker-search="\${escapeHtml(searchText)}">
+          <strong>\${escapeHtml(name)}</strong>
+          <span>\${escapeHtml(description)}</span>
+        </button>
+      \`;
+    })
+    .join('');
+  return \`
+    <dialog id="component-picker-dialog" class="component-picker-dialog" aria-labelledby="component-picker-title">
+      <div class="component-picker-card">
+        <header class="component-picker-header">
+          <h3 id="component-picker-title">Add Component</h3>
+          <button type="button" class="icon-button" data-close-component-picker aria-label="Close component picker" title="Close">\${renderLucideIcon('X')}</button>
+        </header>
+        <input id="component-picker-search" type="search" placeholder="Search components" aria-label="Search components" autocomplete="off" />
+        <div id="component-picker-list" class="component-picker-list">\${options}</div>
+        <div class="component-picker-empty" hidden>No matching components</div>
+      </div>
+    </dialog>
+  \`;
+}
+
+function renderRootInspector(inspector, session, camera) {
+  const componentSchemas = componentSchemasForDocument(session.document);
+  const componentSchemaMap = new Map(
+    componentSchemas.map((schema) => [schema.id, schema]),
+  );
+  inspector.innerHTML = \`
+    <div class="inspector-node scene-root-inspector" data-scene-root-inspector>
+      <div class="inspector-title">Scene Root</div>
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.pinned"></div>
+      \${renderComponentEditor(
+        session.document.components,
+        componentSchemas,
+        componentSchemaMap,
+        ROOT_INTRINSIC_COMPONENT_IDS,
+      )}
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.global"></div>
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.section"></div>
+    </div>
+  \`;
+  bindComponentEditor(
+    inspector,
+    session,
+    camera,
+    { root: true },
+    componentSchemaMap,
+  );
+}
+
+function bindComponentEditor(
+  inspector,
+  session,
+  camera,
+  target,
+  componentSchemaMap,
+) {
+  inspector.querySelectorAll('[data-component-index]').forEach((row) => {
+    row.dataset.committedValue = componentRowSignature(
+      row,
+      componentSchemaMap,
+    );
+    row.addEventListener('input', (event) => {
+      markComponentFieldAuthored(event.target);
+    });
+    row.addEventListener('change', (event) => {
+      const eventTarget = event.target;
+      markComponentFieldAuthored(eventTarget);
+      if (
+        eventTarget instanceof HTMLSelectElement ||
+        (eventTarget instanceof HTMLInputElement &&
+          (eventTarget.type === 'checkbox' || eventTarget.type === 'color'))
+      ) {
+        commitComponentRow(
+          inspector,
+          row,
+          session,
+          camera,
+          target,
+          componentSchemaMap,
+        );
+      }
+    });
+    row.addEventListener('focusout', (event) => {
+      if (!isComponentEditTarget(event.target)) {
+        return;
+      }
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && row.contains(nextTarget)) {
+        return;
+      }
+      commitComponentRow(
+        inspector,
+        row,
+        session,
+        camera,
+        target,
+        componentSchemaMap,
+      );
+    });
+    row.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || !isComponentEditTarget(event.target)) {
+        return;
+      }
+      if (
+        event.target instanceof HTMLTextAreaElement &&
+        !event.metaKey &&
+        !event.ctrlKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (event.target instanceof HTMLElement) {
+        event.target.blur();
+      }
+      commitComponentRow(
+        inspector,
+        row,
+        session,
+        camera,
+        target,
+        componentSchemaMap,
+      );
+    });
+    row
+      .querySelector('[data-remove-component]')
+      ?.addEventListener('click', () => {
+        runInspectorMutation(inspector, async () => {
+          const component = row.getAttribute('data-component-name') || '';
+          if (component.length === 0) {
+            throw new Error('Component name is required');
+          }
+          await session.dispatch('scene_apply_patch', {
+            patch: componentPatchForTarget(target, component),
+          });
+          clearValidationResult();
+          renderUi(session, camera);
+        });
+      });
+  });
+  const componentPicker = inspector.querySelector('#component-picker-dialog');
+  const componentSearch = inspector.querySelector('#component-picker-search');
+  const componentOptions = [
+    ...inspector.querySelectorAll('[data-component-picker-option]'),
+  ];
+  const filterComponentOptions = () => {
+    const query =
+      componentSearch instanceof HTMLInputElement
+        ? componentSearch.value.trim().toLowerCase()
+        : '';
+    let visibleCount = 0;
+    for (const option of componentOptions) {
+      const visible =
+        query.length === 0 ||
+        (option.getAttribute('data-component-picker-search') || '').includes(
+          query,
+        );
+      option.hidden = !visible;
+      if (visible) visibleCount += 1;
+    }
+    const empty = inspector.querySelector('.component-picker-empty');
+    if (empty instanceof HTMLElement) {
+      empty.hidden = visibleCount > 0;
+    }
+  };
+  inspector.querySelector('#add-component')?.addEventListener('click', () => {
+    if (!(componentPicker instanceof HTMLDialogElement)) {
+      throw new Error('Component picker dialog is unavailable');
+    }
+    if (componentSearch instanceof HTMLInputElement) {
+      componentSearch.value = '';
+    }
+    filterComponentOptions();
+    componentPicker.showModal();
+    requestAnimationFrame(() => componentSearch?.focus());
+  });
+  componentSearch?.addEventListener('input', filterComponentOptions);
+  componentPicker
+    ?.querySelector('[data-close-component-picker]')
+    ?.addEventListener('click', () => componentPicker.close());
+  componentPicker?.addEventListener('click', (event) => {
+    if (event.target === componentPicker) {
+      componentPicker.close();
+    }
+  });
+  for (const option of componentOptions) {
+    option.addEventListener('click', () => {
+      const schemaId = option.getAttribute('data-component-picker-option');
+      const schema = schemaId ? componentSchemaMap.get(schemaId) : null;
+      if (!schema) {
+        throw new Error('Component schema is required');
+      }
+      componentPicker?.close();
+      runInspectorMutation(inspector, async () => {
+        const component = componentNameForSchema(schema);
+        await session.dispatch('scene_apply_patch', {
+          patch: componentPatchForTarget(
+            target,
+            component,
+            defaultComponentProps(schema),
+          ),
+        });
+        clearValidationResult();
+        renderUi(session, camera);
+      });
+    });
+  }
+}
+
 function renderInspector(inspector, session, camera, node) {
   if (!node) {
     inspector.innerHTML = \`
@@ -4931,32 +8251,17 @@ function renderInspector(inspector, session, camera, node) {
     ['Rotation', 'rotationDeg', rotationDeg],
     ['Scale', 'scale', scale],
   ];
-  const assets = session.document.assets || [];
+  const assets = sceneAssets(session.document);
   const componentSchemas = componentSchemasForDocument(session.document);
   const componentSchemaMap = new Map(
     componentSchemas.map((schema) => [schema.id, schema]),
   );
-  const metadataText = jsonObjectText(node.metadata);
-  const metadataKeyCount =
-    node.metadata && typeof node.metadata === 'object'
-      ? Object.keys(node.metadata).length
-      : 0;
-  const componentEntries = Object.entries(node.components || {});
-  const componentRows = renderComponentRows(componentEntries, componentSchemaMap);
-  const addableComponentOptions = componentSchemas
-    .filter((schema) => node.components?.[componentNameForSchema(schema)] == null)
-    .map(
-      (schema) =>
-        \`<option value="\${escapeHtml(schema.id)}">\${escapeHtml(schema.name || schema.id)}</option>\`,
-    )
-    .join('');
-
   inspector.innerHTML = \`
     <div class="inspector-node">
       <input class="inspector-title inspector-title-edit" data-node-title-edit value="\${escapeHtml(node.id)}" aria-label="Node name" title="Rename node" spellcheck="false" />
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.pinned"></div>
       <details class="inspector-section asset-editor" open>
-        \${inspectorSectionSummary('Asset', node.asset || 'none')}
+        \${inspectorSectionSummary('Asset')}
         \${renderAssetInspector(node, assets)}
       </details>
       <details class="inspector-section transform-section" open>
@@ -4977,26 +8282,12 @@ function renderInspector(inspector, session, camera, node) {
             .join('')}
         </div>
         <div id="transform-editor-message"></div>
-        <button id="apply-transform">\${renderLucideIcon('Check')}<span>Apply Transform</span></button>
       </details>
-      <details class="inspector-section component-editor" open>
-        \${inspectorSectionSummary('Components', String(componentEntries.length))}
-        <div id="component-editor-message"></div>
-        \${componentRows}
-        <div class="component-row component-row-new">
-          <label>Type
-            <select id="new-component-type">\${addableComponentOptions}</select>
-          </label>
-          <button id="add-component" \${addableComponentOptions ? '' : 'disabled'}>\${renderLucideIcon('Plus')}<span>Add Component</span></button>
-        </div>
-      </details>
-      <details class="inspector-section metadata-editor">
-        \${inspectorSectionSummary('Metadata', metadataKeyCount + ' keys')}
-        <div class="metadata-editor-card">
-          <textarea data-node-metadata rows="5" spellcheck="false">\${escapeHtml(metadataText)}</textarea>
-          <div id="metadata-editor-message"></div>
-        </div>
-      </details>
+      \${renderComponentEditor(
+        node.components,
+        componentSchemas,
+        componentSchemaMap,
+      )}
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.global"></div>
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.section"></div>
     </div>
@@ -5005,7 +8296,6 @@ function renderInspector(inspector, session, camera, node) {
   inspector.dataset.committedTransformValue = transformEditorSignature(
     readTransformFields(inspector, transform),
   );
-  inspector.dataset.committedMetadataValue = JSON.stringify(node.metadata || {});
   inspector.querySelector('[data-node-title-edit]')?.addEventListener('focus', (event) => {
     if (event.target instanceof HTMLInputElement) {
       event.target.select();
@@ -5028,23 +8318,6 @@ function renderInspector(inspector, session, camera, node) {
       event.preventDefault();
       event.target.blur();
     }
-  });
-  inspector.querySelector('#apply-transform')?.addEventListener('click', () => {
-    commitTransformFields(inspector, session, camera, node, transform);
-  });
-  inspector.querySelector('[data-node-metadata]')?.addEventListener('focusout', () => {
-    commitNodeMetadata(inspector, session, camera, node);
-  });
-  inspector.querySelector('[data-node-metadata]')?.addEventListener('keydown', (event) => {
-    if (
-      event.key !== 'Enter' ||
-      (!event.metaKey && !event.ctrlKey) ||
-      !(event.target instanceof HTMLElement)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    event.target.blur();
   });
   inspector.querySelectorAll('[data-transform-field]').forEach((input) => {
     input.addEventListener('change', () => {
@@ -5081,85 +8354,16 @@ function renderInspector(inspector, session, camera, node) {
       const asset = select.value;
       const patch = {
         nodeId: node.id,
-        op: 'updateAssetRef',
-        ...(asset ? { asset } : {}),
+        op: 'updateContent',
+        ...(asset ? { content: { asset, type: 'asset' } } : {}),
       };
-      const result = await session.dispatch('scene_apply_patch', { patch });
+      const result = await dispatchEditorTransaction(session, [patch]);
       syncSelectionFromResult(result);
       clearValidationResult();
       renderUi(session, camera);
     });
   });
-  inspector.querySelectorAll('[data-component-index]').forEach((row) => {
-    row.dataset.committedValue = componentRowSignature(row, componentSchemaMap);
-    row.addEventListener('change', (event) => {
-      if (isComponentEditTarget(event.target)) {
-        commitComponentRow(inspector, row, session, camera, node, componentSchemaMap);
-      }
-    });
-    row.addEventListener('focusout', (event) => {
-      if (isComponentEditTarget(event.target)) {
-        commitComponentRow(inspector, row, session, camera, node, componentSchemaMap);
-      }
-    });
-    row.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' || !isComponentEditTarget(event.target)) {
-        return;
-      }
-      if (
-        event.target instanceof HTMLTextAreaElement &&
-        !event.metaKey &&
-        !event.ctrlKey
-      ) {
-        return;
-      }
-      event.preventDefault();
-      if (event.target instanceof HTMLElement) {
-        event.target.blur();
-      }
-      commitComponentRow(inspector, row, session, camera, node, componentSchemaMap);
-    });
-    row.querySelector('[data-remove-component]')?.addEventListener('click', () => {
-      runInspectorMutation(inspector, async () => {
-        const component = row.getAttribute('data-component-name') || '';
-        if (component.length === 0) {
-          throw new Error('Component name is required');
-        }
-        await session.dispatch('scene_apply_patch', {
-          patch: {
-            component,
-            nodeId: node.id,
-            op: 'updateComponent',
-          },
-        });
-        clearValidationResult();
-        renderUi(session, camera);
-      });
-    });
-  });
-  inspector.querySelector('#add-component')?.addEventListener('click', () => {
-    runInspectorMutation(inspector, async () => {
-      const typeInput = inspector.querySelector('#new-component-type');
-      if (!(typeInput instanceof HTMLSelectElement)) {
-        throw new Error('Missing component type field');
-      }
-      const schema = componentSchemaMap.get(typeInput.value);
-      if (!schema) {
-        throw new Error('Component schema is required');
-      }
-      const component = componentNameForSchema(schema);
-      await session.dispatch('scene_apply_patch', {
-        patch: {
-          component,
-          nodeId: node.id,
-          op: 'updateComponent',
-          value: typedComponentValue(schema.id, defaultComponentProps(schema)),
-        },
-      });
-      clearValidationResult();
-      renderUi(session, camera);
-    });
-  });
+  bindComponentEditor(inspector, session, camera, node, componentSchemaMap);
 }
 
 function projectNodePosition(position, camera) {
@@ -5195,22 +8399,6 @@ function projectNodePosition(position, camera) {
   }
 }
 
-function canvasProjectionMetrics(canvas) {
-  return {
-    centerX: canvas.width / 2,
-    centerY: canvas.height / 2,
-    scale: Math.min(canvas.width, canvas.height) / 10,
-  };
-}
-
-function projectNodeToCanvas(position, camera, metrics) {
-  const [xAxis, yAxis] = projectNodePosition(position, camera);
-  return {
-    x: metrics.centerX + xAxis * metrics.scale,
-    y: metrics.centerY - yAxis * metrics.scale,
-  };
-}
-
 function eventCanvasPoint(canvas, event) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = rect.width === 0 ? 1 : canvas.width / rect.width;
@@ -5221,32 +8409,6 @@ function eventCanvasPoint(canvas, event) {
   };
 }
 
-function screenDeltaToPositionDelta(deltaX, deltaY, camera, metrics) {
-  const xAxisDelta = deltaX / metrics.scale;
-  const yAxisDelta = -deltaY / metrics.scale;
-  const view = camera?.view || 'quarter';
-  switch (view) {
-    case 'top':
-      return [xAxisDelta, 0, yAxisDelta];
-    case 'front':
-      return [xAxisDelta, yAxisDelta, 0];
-    case 'back':
-      return [-xAxisDelta, yAxisDelta, 0];
-    case 'left':
-      return [0, yAxisDelta, xAxisDelta];
-    case 'right':
-      return [0, yAxisDelta, -xAxisDelta];
-    case 'orbit':
-    case 'custom':
-    case 'quarter':
-    default: {
-      const difference = xAxisDelta / 0.7;
-      const sum = yAxisDelta / -0.25;
-      return [(difference + sum) / 2, 0, (sum - difference) / 2];
-    }
-  }
-}
-
 function roundVec3(values) {
   return values.map((value) => Number(value.toFixed(4)));
 }
@@ -5255,6 +8417,7 @@ function pickCanvasNode(session, camera, canvas, event) {
   if (!editorWorldState) {
     return null;
   }
+  editorWorldState.raycastCount += 1;
   const rect = canvas.getBoundingClientRect();
   editorWorldState.pointer.set(
     ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -5273,6 +8436,10 @@ function pickCanvasNode(session, camera, canvas, event) {
     while (current) {
       const nodeId = current.userData?.iwsdkSceneNodeId;
       if (typeof nodeId === 'string') {
+        if (nodeOrAncestorMatches(session.document, nodeId, lockedOutlinerNodeIds)) {
+          current = current.parent;
+          continue;
+        }
         const node = findNodeById(session.document, nodeId);
         if (node) {
           return {
@@ -5294,230 +8461,91 @@ function renderCanvas(session, camera, size = {}) {
   syncEditorWorld(session, camera, size);
 }
 
+function editorWorkspaceSceneNodes(nodes) {
+  return (nodes || []).map((node) => ({
+    ...node,
+    expanded: !collapsedOutlinerNodeIds.has(node.id),
+    children: editorWorkspaceSceneNodes(node.children || []),
+  }));
+}
+
+function editorDirtyStatus(session) {
+  if (session.isDirty) {
+    return 'Unsaved changes';
+  }
+  if (sceneFileReloadState.status === 'invalid') {
+    return 'Invalid file; showing last valid scene';
+  }
+  if (sceneFileReloadState.status === 'conflict') {
+    return 'File conflict';
+  }
+  return 'Saved';
+}
+
+function editorStatusStripText(session, nodeCount) {
+  const documentState = session.isDirty
+    ? 'unsaved changes'
+    : sceneFileReloadState.status === 'invalid'
+      ? 'invalid file; last valid scene shown'
+      : sceneFileReloadState.status === 'conflict'
+        ? 'file conflict'
+        : 'saved';
+  return [
+    documentStatusLabel(),
+    nodeCount + ' nodes',
+    documentState,
+    'IWSDK WebGL',
+  ].join(' | ');
+}
+
 function renderUi(session, camera) {
   window.__IWSDK_EDITOR_CAMERA = camera;
   const documentValue = session.document;
-  const assets = documentValue.assets || [];
+  const assets = sceneAssets(documentValue);
   const nodes = nodesInDocument(documentValue);
-  const status = document.getElementById('scene-status');
-  const dirtyStatus = document.getElementById('dirty-status');
-  const statusStrip = document.getElementById('editor-status-strip');
-  const diagnosticsPanel = document.getElementById('editor-bottom-panel');
-  const outlinerFilter = document.getElementById('scene-graph-filter');
-  const outliner = document.getElementById('outliner');
-  const rootDropTarget = document.getElementById('scene-root-drop-target');
-  const assetCatalogFilter = document.getElementById('asset-catalog-filter');
-  const assetCatalog = document.getElementById('asset-catalog');
-  const inspector = document.getElementById('inspector');
   const selected = window.__IWSDK_EDITOR_SELECTION || [];
+  loadVisibilityArrangements();
 
-  if (status) {
-    status.textContent = \`\${nodes.length} nodes, \${assets.length} assets\`;
-  }
-  if (dirtyStatus) {
-    dirtyStatus.textContent = session.isDirty ? 'Unsaved changes' : 'Saved';
-    dirtyStatus.dataset.state = session.isDirty ? 'dirty' : 'saved';
-  }
-  if (statusStrip) {
-    statusStrip.textContent = [
-      documentStatusLabel(),
-      \`\${nodes.length} nodes\`,
-      session.isDirty ? 'unsaved changes' : 'saved',
-      'IWSDK WebGL',
-    ].join(' | ');
-    statusStrip.dataset.state = session.isDirty ? 'dirty' : 'saved';
-  }
+  workspaceUi?.update({
+    assetCount: assets.length,
+    dirty: session.isDirty,
+    dirtyStatus: editorDirtyStatus(session),
+    ghostedNodeIds: [...ghostedOutlinerNodeIds],
+    hiddenNodeIds: [...hiddenOutlinerNodeIds],
+    lockedNodeIds: [...lockedOutlinerNodeIds],
+    nodeCount: nodes.length,
+    nodes: editorWorkspaceSceneNodes(documentValue.nodes || []),
+    rootSelected: window.__IWSDK_EDITOR_ROOT_SELECTED === true,
+    sceneAssets: catalogSceneAssets(documentValue),
+    scenePath: currentScenePath(),
+    selectedNodeIds: selected,
+    soloNodeId: soloOutlinerNodeId,
+    statusStrip: editorStatusStripText(session, nodes.length),
+    transformMode: editorWorldState?.transformMode || 'translate',
+    transformSnapEnabled:
+      editorWorldState?.transformSnapEnabled === true,
+    transformSpace: editorWorldState?.transformSpace || 'local',
+    view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
+  });
+
+  const diagnosticsPanel = document.getElementById('editor-bottom-panel');
   if (diagnosticsPanel) {
     renderDiagnosticsPanel(diagnosticsPanel, session, camera);
   }
-  renderTransformToolbar();
-  const outlinerQuery =
-    outlinerFilter instanceof HTMLInputElement
-      ? outlinerFilter.value.trim().toLowerCase()
-      : '';
-  if (
-    outlinerFilter instanceof HTMLInputElement &&
-    outlinerFilter.dataset.bound !== 'true'
-  ) {
-    outlinerFilter.dataset.bound = 'true';
-    outlinerFilter.addEventListener('input', () => {
-      hideSceneGraphContextMenu();
-      renderUi(session, currentEditorCamera(camera));
-    });
-  }
-  const assetQuery =
-    assetCatalogFilter instanceof HTMLInputElement
-      ? assetCatalogFilter.value.trim().toLowerCase()
-      : '';
-  if (
-    assetCatalogFilter instanceof HTMLInputElement &&
-    assetCatalogFilter.dataset.bound !== 'true'
-  ) {
-    assetCatalogFilter.dataset.bound = 'true';
-    assetCatalogFilter.addEventListener('input', () => {
-      renderUi(session, currentEditorCamera(camera));
-    });
-  }
-  if (
-    rootDropTarget instanceof HTMLElement &&
-    rootDropTarget.dataset.bound !== 'true'
-  ) {
-    rootDropTarget.dataset.bound = 'true';
-    rootDropTarget.addEventListener('dragover', (event) => {
-      const draggedNodeId = draggedOutlinerNodeIdFromEvent(event);
-      const validDrop = isValidOutlinerDrop(
-        session.document,
-        draggedNodeId,
-        null,
-      );
-      if (!validDrop) {
-        setOutlinerDropState(rootDropTarget, false);
-        return;
-      }
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = 'move';
-      }
-      setOutlinerDropState(rootDropTarget, true);
-    });
-    rootDropTarget.addEventListener('dragleave', () => {
-      setOutlinerDropState(rootDropTarget, false);
-    });
-    rootDropTarget.addEventListener('drop', (event) => {
-      event.preventDefault();
-      setOutlinerDropState(rootDropTarget, false);
-      const draggedNodeId = draggedOutlinerNodeIdFromEvent(event);
-      window.__IWSDK_EDITOR_DRAG_NODE_ID = null;
-      if (!isValidOutlinerDrop(session.document, draggedNodeId, null)) {
-        return;
-      }
-      applyOutlinerReparent(
-        session,
-        currentEditorCamera(camera),
-        draggedNodeId,
-        null,
-      );
-    });
-  }
-  if (outliner) {
-    const rows = renderOutlinerRows(
-      documentValue.nodes || [],
-      selected,
-      0,
-      outlinerQuery,
-    );
-    outliner.innerHTML =
-      rows ||
-      '<div class="empty-state" data-empty-outliner>No matching nodes</div>';
-    outliner.querySelectorAll('[data-node-id]').forEach((button) => {
-      button.addEventListener('click', async (event) => {
-        hideSceneGraphContextMenu();
-        const nodeId = button.getAttribute('data-node-id');
-        if (!nodeId) {
-          return;
-        }
-        const nodeIds = selectionForNodeClick(nodeId, event);
-        window.__IWSDK_EDITOR_SELECTION = nodeIds;
-        await session.dispatch('scene_select', { nodeIds });
-        renderUi(session, currentEditorCamera(camera));
-      });
-      button.addEventListener('contextmenu', async (event) => {
-        event.preventDefault();
-        const nodeId = button.getAttribute('data-node-id');
-        if (!nodeId) {
-          return;
-        }
-        const currentSelection = selectedOutlinerNodeIds();
-        const nodeIds = currentSelection.includes(nodeId)
-          ? currentSelection
-          : [nodeId];
-        window.__IWSDK_EDITOR_SELECTION = nodeIds;
-        await session.dispatch('scene_select', { nodeIds });
-        const liveCamera = currentEditorCamera(camera);
-        renderUi(session, liveCamera);
-        showSceneGraphContextMenu(session, liveCamera, nodeId, {
-          x: event.clientX,
-          y: event.clientY,
-        });
-      });
-      button.addEventListener('dragstart', (event) => {
-        hideSceneGraphContextMenu();
-        const nodeId = button.getAttribute('data-node-id');
-        if (!nodeId || !event.dataTransfer) {
-          return;
-        }
-        window.__IWSDK_EDITOR_DRAG_NODE_ID = nodeId;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', nodeId);
-      });
-      button.addEventListener('dragend', () => {
-        window.__IWSDK_EDITOR_DRAG_NODE_ID = null;
-        setOutlinerDropState(button, false);
-        if (rootDropTarget instanceof HTMLElement) {
-          setOutlinerDropState(rootDropTarget, false);
-        }
-      });
-      button.addEventListener('dragover', (event) => {
-        const targetNodeId = button.getAttribute('data-node-id');
-        const draggedNodeId = draggedOutlinerNodeIdFromEvent(event);
-        const validDrop = isValidOutlinerDrop(
-          session.document,
-          draggedNodeId,
-          targetNodeId,
-        );
-        if (!validDrop) {
-          setOutlinerDropState(button, false);
-          return;
-        }
-        event.preventDefault();
-        if (event.dataTransfer) {
-          event.dataTransfer.dropEffect = 'move';
-        }
-        setOutlinerDropState(button, true);
-      });
-      button.addEventListener('dragleave', () => {
-        setOutlinerDropState(button, false);
-      });
-      button.addEventListener('drop', (event) => {
-        event.preventDefault();
-        setOutlinerDropState(button, false);
-        const targetNodeId = button.getAttribute('data-node-id');
-        const draggedNodeId = draggedOutlinerNodeIdFromEvent(event);
-        window.__IWSDK_EDITOR_DRAG_NODE_ID = null;
-        if (
-          !targetNodeId ||
-          !isValidOutlinerDrop(session.document, draggedNodeId, targetNodeId)
-        ) {
-          return;
-        }
-        applyOutlinerReparent(
-          session,
-          currentEditorCamera(camera),
-          draggedNodeId,
-          targetNodeId,
-        );
-      });
-    });
-  }
-  if (assetCatalog) {
-    assetCatalog.innerHTML = renderAssetCatalog(assets, assetQuery);
-    assetCatalog.querySelectorAll('[data-add-asset]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const assetId = button.getAttribute('data-add-asset');
-        if (assetId) {
-          addAssetFromCatalog(session, currentEditorCamera(camera), assetId);
-        }
-      });
-    });
-  }
+
+  const inspector = document.getElementById('inspector');
   if (inspector) {
-    const selectedNodes = selected
-      .map((nodeId) => findNodeById(documentValue, nodeId))
-      .filter(Boolean);
-    if (selectedNodes.length > 1) {
-      renderMultiSelectInspector(inspector, session, camera, selectedNodes);
+    if (window.__IWSDK_EDITOR_ROOT_SELECTED === true) {
+      renderRootInspector(inspector, session, camera);
     } else {
-      renderInspector(inspector, session, camera, selectedNodes[0] || null);
+      const selectedNodes = selected
+        .map((nodeId) => findNodeById(documentValue, nodeId))
+        .filter(Boolean);
+      if (selectedNodes.length > 1) {
+        renderMultiSelectInspector(inspector, session, camera, selectedNodes);
+      } else {
+        renderInspector(inspector, session, camera, selectedNodes[0] || null);
+      }
     }
   }
   renderEditorContributionSlots(session, camera);
@@ -5555,24 +8583,21 @@ function attachCanvasInteractions(canvas, session, getCamera, rerender) {
     const camera = getCamera();
     const hit = pickCanvasNode(session, camera, canvas, event);
     if (!hit) {
+      if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
+        setEditorSelection([]);
+        await session.dispatch('scene_select', { nodeIds: [] });
+        rerender();
+      }
       return;
     }
     const nodeIds = selectionForNodeClick(hit.node.id, event);
-    window.__IWSDK_EDITOR_SELECTION = nodeIds;
+    setEditorSelection(nodeIds);
     await session.dispatch('scene_select', { nodeIds });
     rerender();
   });
 
   canvas.addEventListener('pointermove', (event) => {
     if (!editorWorldState?.transformDragState) {
-      if (event.buttons !== 0 || eventHitsTransformControls(canvas, event)) {
-        return;
-      }
-      const camera = getCamera();
-      const hit = pickCanvasNode(session, camera, canvas, event);
-      updateHoverHelper(session, hit?.node.id ?? null);
-      renderEditorWorld();
-      requestEditorUiRefresh();
       return;
     }
     queueMicrotask(() => {
@@ -5584,7 +8609,6 @@ function attachCanvasInteractions(canvas, session, getCamera, rerender) {
       if (editorWorldState.currentSession) {
         updateProjectedHitTargets(editorWorldState.currentSession);
       }
-      editorWorldState.lastProof = createViewportProof();
     });
   });
 
@@ -5595,7 +8619,6 @@ function attachCanvasInteractions(canvas, session, getCamera, rerender) {
     updateHoverHelper(session, null);
     if (editorWorldState) {
       renderEditorWorld();
-      editorWorldState.lastProof = createViewportProof();
     }
   });
 
@@ -5603,7 +8626,6 @@ function attachCanvasInteractions(canvas, session, getCamera, rerender) {
     updateHoverHelper(session, null);
     if (editorWorldState) {
       renderEditorWorld();
-      editorWorldState.lastProof = createViewportProof();
     }
   });
 }
@@ -5627,6 +8649,13 @@ function attachKeyboardShortcuts(session, getCamera, rerender) {
       if (key === 'escape') {
         if (cancelTransformControlDrag(session)) {
           event.preventDefault();
+          rerender();
+          return;
+        }
+        if ((window.__IWSDK_EDITOR_SELECTION || []).length > 0) {
+          event.preventDefault();
+          setEditorSelection([]);
+          await session.dispatch('scene_select', { nodeIds: [] });
           rerender();
           return;
         }
@@ -5665,12 +8694,14 @@ function attachKeyboardShortcuts(session, getCamera, rerender) {
           return;
         }
         event.preventDefault();
-        for (const nodeId of nodeIds) {
-          await session.dispatch('scene_remove_node', { nodeId });
-        }
-        window.__IWSDK_EDITOR_SELECTION = [];
-        clearValidationResult();
-        rerender();
+        await runEditorMutation(async () => {
+          for (const nodeId of nodeIds) {
+            await session.dispatch('scene_remove_node', { nodeId });
+          }
+          setEditorSelection([]);
+          clearValidationResult();
+          rerender();
+        });
         return;
       }
       if (key === '1') {
@@ -5687,16 +8718,20 @@ function attachKeyboardShortcuts(session, getCamera, rerender) {
     }
     if (key === 'z') {
       event.preventDefault();
-      await session.dispatch(event.shiftKey ? 'scene_redo' : 'scene_undo', {});
-      clearValidationResult();
-      rerender();
+      await runEditorMutation(async () => {
+        await session.dispatch(event.shiftKey ? 'scene_redo' : 'scene_undo', {});
+        clearValidationResult();
+        rerender();
+      });
       return;
     }
     if (key === 'y') {
       event.preventDefault();
-      await session.dispatch('scene_redo', {});
-      clearValidationResult();
-      rerender();
+      await runEditorMutation(async () => {
+        await session.dispatch('scene_redo', {});
+        clearValidationResult();
+        rerender();
+      });
       return;
     }
     if (key === 's') {
@@ -5710,39 +8745,114 @@ function attachKeyboardShortcuts(session, getCamera, rerender) {
   });
 }
 
+async function sha256Base64Bytes(imageData) {
+  const binary = atob(imageData);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)]
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
 async function init() {
+  await loadEditorRuntimeDependencies();
   createEditorFrame();
   attachWorkspaceViewControls();
-  await loadEditorRuntimeDependencies();
   if (!hasConfiguredScenePath()) {
-    runtimeHandles = (method) => handlesWorkspaceMethod(method);
-    runtimeDispatch = (method, params = {}) =>
-      dispatchWorkspaceCommand(null, method, params);
-    window.IWSDK_SCENE_EDITOR = {
-      listContributions: () => [],
-      registerContribution: registerEditorContribution,
-      runtime: window.FRAMEWORK_MCP_RUNTIME,
-      session: null,
-      unregisterContribution: unregisterEditorContribution,
-    };
-    await renderScenePicker();
-    return;
+    const listedScenes = await dispatchWorkspaceCommand(
+      null,
+      'scene_list_files',
+      {},
+    );
+    const sceneFiles = listedScenes.files || [];
+    if (sceneFiles.length === 1) {
+      storeWorkspaceScenePath(sceneFiles[0].path);
+      if (window.__IWSDK_WORKSPACE_VIEW === 'editor') {
+        syncWorkspaceLocation('editor', currentScenePath(), { replace: true });
+      }
+    } else {
+      runtimeHandles = (method) => handlesWorkspaceMethod(method);
+      runtimeDispatch = (method, params = {}) =>
+        dispatchWorkspaceCommand(null, method, params);
+      window.IWSDK_SCENE_EDITOR = {
+        listContributions: () => [],
+        registerContribution: registerEditorContribution,
+        runtime: window.FRAMEWORK_MCP_RUNTIME,
+        session: null,
+        unregisterContribution: unregisterEditorContribution,
+      };
+      await renderScenePicker();
+      return;
+    }
   }
-  const loadedScene = await fetchSceneDocumentWithRevision(documentUrl);
+  const loadedScene = await fetchComposedSceneDocument(currentScenePath());
   const documentValue = loadedScene.document;
-  sceneDocumentRevision = loadedScene.revision;
-  let activeCamera = { fov: 50, lookAt: [0, 0, 0], position: [4, 3, 4], view: 'quarter' };
-  window.__IWSDK_EDITOR_SELECTION = [];
+  updateComposedSceneIdentity(loadedScene);
+  sceneFileReloadState = {
+    conflict: false,
+    diagnostics: [],
+    lastReloadedAt: new Date().toISOString(),
+    status: 'ready',
+  };
+  let activeCamera = {
+    fov: 50,
+    lookAt: [0, 0, 0],
+    position: [4, 3, 4],
+    projection: 'perspective',
+    view: 'quarter',
+  };
+  setEditorSelection([]);
 
   const session = new SceneEditorSession({
-    componentSchemas: runtimeComponentSchemas(),
+    componentCatalog: runtimeComponentCatalog(),
+    commitDocument: commitEditorDocument,
     document: documentValue,
+    listAssets: () => editorWorldState?.world?.assets?.list?.() || [],
+    instantiateDocumentPreview: instantiateEditorDocumentPreview,
+    preloadDocumentResources: preloadEditorDocumentResources,
+    resolveAssetBounds: (assetId) =>
+      editorWorldState?.world?.assets?.bounds?.(assetId),
+    registerReviewCapture: (capture) =>
+      fetchJsonOrThrow(reviewCapturesUrl, {
+        body: JSON.stringify({
+          action: 'issue',
+          capture,
+          scene: requireOpenScenePath(),
+          sessionId: window.__IWSDK_SCENE_SESSION_ID,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      }),
+    renderStats: () => {
+      const stats = currentEditorRenderStats();
+      if (!stats) {
+        throw new Error('Editor renderer statistics are unavailable');
+      }
+      return stats;
+    },
+    rollbackDocument: rollbackEditorDocument,
     saveDocument: async (serializedDocument) => {
+      if (sceneSourceHasImports) {
+        const error = new Error(
+          'Composed scenes are authored through their source files. Open an imported module to edit its contents.',
+        );
+        Object.assign(error, {
+          code: 'composed_scene_save_requires_source_edit',
+          recoverable: true,
+        });
+        throw error;
+      }
       const headers = { 'Content-Type': 'application/json' };
       if (sceneDocumentRevision != null) {
         headers['If-Match'] = sceneDocumentRevision;
       }
-      const saveResponse = await fetch(documentUrl, {
+      const saveResponse = await fetch(activeDocumentUrl(), {
         body: serializedDocument,
         headers,
         method: 'PUT',
@@ -5750,22 +8860,86 @@ async function init() {
       const text = await saveResponse.text();
       const json = text ? JSON.parse(text) : {};
       if (!saveResponse.ok) {
-        throw sceneFetchError(json, text || saveResponse.statusText);
+        // A failed save must retain the revision of the document loaded in the
+        // editor. Adopting the disk revision would let a retry overwrite it.
+        const error = sceneFetchError(json, text || saveResponse.statusText);
+        Object.assign(error, {
+          recoverable:
+            json?.code === 'scene_revision_conflict' ||
+            saveResponse.status >= 500,
+          retryAction: 'scene_save',
+        });
+        throw error;
       }
       sceneDocumentRevision =
         json?.revision ||
         saveResponse.headers.get('X-IWSDK-Scene-Revision') ||
         sceneDocumentRevision;
+      sceneSourceDocumentHash = json?.documentHash || sceneSourceDocumentHash;
+      sceneComposedDocumentHash = json?.documentHash || sceneComposedDocumentHash;
+      sceneRuntimeHash = json?.runtimeHash || sceneRuntimeHash;
+      sceneFileReloadState = {
+        conflict: false,
+        diagnostics: [],
+        lastReloadedAt: new Date().toISOString(),
+        status: 'ready',
+      };
       return json;
     },
-    screenshot: async (camera, size) => {
+    screenshot: async (camera, options) => {
       activeCamera = camera;
-      renderCanvas(session, camera, size);
-      await waitForAssetLoads();
-      renderCanvas(session, camera, size);
-      const canvas = getCanvas();
-      const imageData = canvas.toDataURL('image/png').split(',')[1] || '';
-      return { camera, imageData, mimeType: 'image/png' };
+      const captureMode = options.captureMode || 'render';
+      const restoreCaptureState =
+        captureMode === 'render' ? beginRenderOnlyCapture() : () => {};
+      try {
+        renderCanvas(session, camera, options);
+        await waitForAssetLoads();
+        renderCanvas(session, camera, options);
+        const canvas = getCanvas();
+        const imageData = canvas.toDataURL('image/png').split(',')[1] || '';
+        const screenshotSha256 = await sha256Base64Bytes(imageData);
+        const hashes = await session.dispatch('scene_get_document', {});
+        const renderStats = currentEditorRenderStats();
+        if (!renderStats) {
+          throw new Error('Editor renderer statistics are unavailable');
+        }
+        const nodeMaskRegions =
+          captureMode === 'render'
+            ? captureReviewNodeMaskRegions(
+                session.document,
+                canvas.width,
+                canvas.height,
+              )
+            : {};
+        return {
+          activeLens: window.__IWSDK_EDITOR_REVIEW_LENS || 'final',
+          camera,
+          captureMode,
+          documentHash: hashes?.documentHash,
+          height: canvas.height,
+          imageData,
+          mimeType: 'image/png',
+          ...(Object.keys(nodeMaskRegions).length === 0
+            ? {}
+            : { nodeMaskRegions }),
+          renderStats,
+          rendererEnvironment: renderStats?.environment,
+          runtimeHash: hashes?.runtimeHash,
+          screenshotSha256,
+          visibleNodeIds: renderStats.visibleNodeIds,
+          width: canvas.width,
+        };
+      } finally {
+        restoreCaptureState();
+        renderCanvas(session, activeCamera);
+      }
+    },
+    setReviewLens: (lens) => {
+      window.__IWSDK_EDITOR_REVIEW_LENS = lens;
+      if (editorWorldState) {
+        applyEditorReviewLens(session.document);
+        renderEditorWorld();
+      }
     },
   });
   const dispatchSceneCommand = session.dispatch.bind(session);
@@ -5786,21 +8960,47 @@ async function init() {
           await session.dispatch('scene_save', {}),
         );
       } catch (error) {
+        const recoveryState = await dispatchSceneCommand(
+          'scene_get_document',
+          {},
+        );
+        if (error && typeof error === 'object') {
+          Object.assign(error, {
+            dirty: session.isDirty,
+            documentHash: recoveryState?.documentHash,
+            runtimeHash: recoveryState?.runtimeHash,
+            retryAction: error.retryAction || 'scene_save',
+          });
+        }
         handleEditorMutationError(error);
+        throw error;
       }
     }
     return finalResult;
   };
 
   await createEditorWorld(session, activeCamera);
+  installSceneFileWatcher(session, () => activeCamera);
 
   const runtime = window.FRAMEWORK_MCP_RUNTIME;
   runtimeHandles = (method) =>
     handlesWorkspaceMethod(method) || session.handles(method);
   runtimeDispatch = async (method, params = {}) => {
-    const result = handlesWorkspaceMethod(method)
+    let result = handlesWorkspaceMethod(method)
       ? await dispatchWorkspaceCommand(session, method, params)
       : await session.dispatch(method, params);
+    if (method === 'scene_screenshot' && result && typeof result === 'object') {
+      result = {
+        ...result,
+        activeFile: currentScenePath(),
+        composedDocumentHash:
+          sceneComposedDocumentHash || result.documentHash || null,
+        conflict: sceneFileReloadState.conflict,
+        diagnostics: sceneFileReloadState.diagnostics,
+        runtimeHash: sceneRuntimeHash || result.runtimeHash || null,
+        sourceDocumentHash: sceneSourceDocumentHash,
+      };
+    }
     syncSelectionFromResult(result);
     if (method === 'scene_validate') {
       setValidationResult(result);
@@ -5813,7 +9013,7 @@ async function init() {
     }
     if (method === 'scene_get_selection' || method === 'scene_select') {
       const selection = await session.dispatch('scene_get_selection', {});
-      window.__IWSDK_EDITOR_SELECTION = selection.nodeIds || [];
+      setEditorSelection(selection.nodeIds || []);
     }
     if (method === 'scene_set_camera' && result.camera) {
       activeCamera = result.camera;
@@ -5830,6 +9030,13 @@ async function init() {
     unregisterContribution: unregisterEditorContribution,
   };
   window.IWSDK_SCENE_EDITOR_TEST_HOOKS = {
+    applyReviewLensDocument: (documentValue) => {
+      applyEditorReviewLens(documentValue);
+      renderEditorWorld();
+      return {
+        visibleNodeIds: visibleEditorSceneNodeIds(),
+      };
+    },
     captureViewport: (camera = activeCamera, size = {}) => {
       renderCanvas(session, camera, size);
       const canvas = getCanvas();
@@ -5844,8 +9051,67 @@ async function init() {
       ids: editorWorldState ? [...editorWorldState.objectMap.keys()] : [],
       objectCount: editorWorldState?.objectMap.size ?? 0,
     }),
+    getPreviewVisibilityState: () => ({
+      ...currentPreviewVisibilityState(),
+      raycastCount: editorWorldState?.raycastCount ?? 0,
+      objects: Object.fromEntries(
+        [...(editorWorldState?.objectMap || new Map())].map(
+          ([nodeId, object]) => [
+            nodeId,
+            {
+              visible: object.visible,
+            },
+          ],
+        ),
+      ),
+    }),
+    setObjectRenderState: (nodeId, state = {}) => {
+      const object = editorWorldState?.objectMap.get(nodeId);
+      if (!object) {
+        throw new Error('Unknown editor object "' + nodeId + '"');
+      }
+      if (typeof state.visible === 'boolean') {
+        object.visible = state.visible;
+        if (editorWorldState.previewVisibilityBaseline?.has(object)) {
+          editorWorldState.previewVisibilityBaseline.set(object, state.visible);
+        }
+      }
+      if (state.layer != null) {
+        if (!Number.isInteger(state.layer) || state.layer < 0 || state.layer > 31) {
+          throw new Error('Object layer must be an integer from 0 through 31');
+        }
+        object.traverse((entry) => entry.layers.set(state.layer));
+      }
+      renderEditorWorld();
+      return {
+        layerMask: object.layers.mask,
+        visible: object.visible,
+      };
+    },
     getContributions: () => editorContributionProof(),
+    getAuthoredRenderState: () => authoredRenderStateProof(),
+    getEnvironmentDomeState: () => {
+      const camera = editorWorldState?.world?.camera;
+      let dome = null;
+      editorWorldState?.world?.scene?.traverse((object) => {
+        if (object.userData?.iwsdkSceneDomeGradient != null) {
+          dome = object;
+        }
+      });
+      return {
+        cameraFar: camera?.far ?? null,
+        cameraPosition: camera?.position?.toArray?.() ?? null,
+        domeClipDepth:
+          dome?.material?.vertexShader?.includes?.('clipPosition.xyww') ?? false,
+        domePosition: dome?.position?.toArray?.() ?? null,
+        domeRadius: dome?.scale?.x ?? null,
+        domeTranslationFree:
+          dome?.material?.vertexShader?.includes?.('mat3(viewMatrix)') ?? false,
+      };
+    },
     getProof: () => createViewportProof(),
+    getResourceState: () => editorResourceStateProof(),
+    getRendererGlobals: () => rendererGlobalsProof(),
     getTransformControlObjectTransform: () =>
       objectTransformProof(editorWorldState?.transformControls?.object),
     findTransformControlPointerTarget: (axis = 'X') =>
@@ -5870,7 +9136,6 @@ async function init() {
       updateSelectionHelpers();
       renderEditorWorld();
       updateProjectedHitTargets(session);
-      editorWorldState.lastProof = createViewportProof();
       return {
         documentTransform: findNodeById(session.document, nodeId)?.transform,
         objectTransform: objectTransformProof(editorWorldState.transformControls.object),
@@ -5901,6 +9166,16 @@ async function init() {
       setSurfacePlacementEnabled(enabled),
     setTransformSnapEnabled: (enabled) => setTransformSnapEnabled(enabled),
     setTransformSpace: (space) => setTransformSpace(space),
+    setNextMaterializationFailure: (phase, message) => {
+      if (!['detached', 'install'].includes(phase)) {
+        throw new Error('Materialization failure phase must be detached or install');
+      }
+      editorWorldState.nextMaterializationFailure = {
+        message: String(message || 'Injected ' + phase + ' failure'),
+        phase,
+      };
+    },
+    hasSharedAsset: (key) => editorWorldState?.world.assets.has(String(key)) === true,
     simulateTransformControlCommit: async (transform) => {
       const nodeId = selectedNodeId();
       if (!nodeId || !editorWorldState?.transformControls?.object) {
@@ -5923,32 +9198,6 @@ async function init() {
     },
   };
 
-  document.querySelectorAll('[data-transform-mode]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const mode = button.getAttribute('data-transform-mode');
-      if (mode) {
-        setTransformMode(mode);
-      }
-    });
-  });
-  document.querySelectorAll('[data-transform-space]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const space = button.getAttribute('data-transform-space');
-      if (space) {
-        setTransformSpace(space);
-      }
-    });
-  });
-  document.querySelectorAll('[data-transform-snap]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setTransformSnapEnabled(!editorWorldState?.transformSnapEnabled);
-    });
-  });
-  document.querySelectorAll('[data-surface-placement]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setSurfacePlacementEnabled(!editorWorldState?.surfacePlacementEnabled);
-    });
-  });
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (
@@ -5963,25 +9212,6 @@ async function init() {
     if (event.key === 'Escape') {
       hideSceneGraphContextMenu();
     }
-  });
-  document.getElementById('undo')?.addEventListener('click', async () => {
-    await session.dispatch('scene_undo', {});
-    clearValidationResult();
-    renderUi(session, activeCamera);
-  });
-  document.getElementById('redo')?.addEventListener('click', async () => {
-    await session.dispatch('scene_redo', {});
-    clearValidationResult();
-    renderUi(session, activeCamera);
-  });
-  document.getElementById('save')?.addEventListener('click', async () => {
-    runEditorMutation(async () => {
-      await session.dispatch('scene_save', {});
-      renderUi(session, activeCamera);
-    });
-  });
-  document.getElementById('revert')?.addEventListener('click', () => {
-    window.location.reload();
   });
   attachCanvasInteractions(
     getCanvas(),
@@ -6030,8 +9260,11 @@ export function createEditorShellHtml(
   editorStylesheetVirtualId: string,
   documentUrl: string,
   options: {
+    publishUrl?: string;
+    reviewCapturesUrl?: string;
+    reviewsUrl?: string;
+    runtimePreflightUrl?: string;
     sceneFilesUrl?: string;
-    workspaceRoute?: string;
   } = {},
 ): string {
   return `<!doctype html>
@@ -6050,9 +9283,17 @@ export function createEditorShellHtml(
         'scene-' + Math.random().toString(36).slice(2);
       window.__IWSDK_EDITOR_CONFIG = {
         documentUrl: ${JSON.stringify(documentUrl)},
-        sceneFilesUrl: ${JSON.stringify(options.sceneFilesUrl ?? '/__iwsdk/workspace/scenes')},
-        workspaceRoute: ${JSON.stringify(options.workspaceRoute ?? '/__iwsdk/workspace')}
+        publishUrl: ${JSON.stringify(options.publishUrl ?? '/__iwsdk/workspace/publish')},
+        reviewCapturesUrl: ${JSON.stringify(options.reviewCapturesUrl ?? '/__iwsdk/workspace/reviews/captures')},
+        reviewsUrl: ${JSON.stringify(options.reviewsUrl ?? '/__iwsdk/workspace/reviews')},
+        runtimePreflightUrl: ${JSON.stringify(options.runtimePreflightUrl ?? '/__iwsdk/workspace/runtime-preflight')},
+        sceneFilesUrl: ${JSON.stringify(options.sceneFilesUrl ?? '/__iwsdk/workspace/scenes')}
       };
+      window.__IWSDK_HOST_BROWSER_ENVIRONMENT =
+        window.__IWSDK_HOST_BROWSER_ENVIRONMENT || Object.freeze({
+          platform: navigator.userAgentData?.platform || navigator.platform || null,
+          userAgent: navigator.userAgent
+        });
     </script>
     <script>
       import(${JSON.stringify(editorRuntimeVirtualId)}).catch((error) => {

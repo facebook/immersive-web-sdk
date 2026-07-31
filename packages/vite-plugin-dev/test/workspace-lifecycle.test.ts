@@ -37,6 +37,153 @@ afterEach(() => {
 });
 
 describe('managed workspace lifecycle', () => {
+  test('defaults AI sessions to the visible collaborate workspace', async () => {
+    const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
+    const httpServer = {
+      address: vi.fn(() => ({ port: 4173 })),
+      on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+    };
+    const managedBrowser = {
+      close: vi.fn().mockResolvedValue(undefined),
+      onClose: vi.fn(),
+    };
+    mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
+    const plugin = iwsdkDev({ ai: {} });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-ai-default-collaborate',
+      server: {},
+    } as never);
+    plugin.configureServer?.({
+      config: { server: { port: 4173 } },
+      httpServer,
+      middlewares: { use: vi.fn() },
+      resolvedUrls: {
+        local: ['http://localhost:4173/'],
+        network: [],
+      },
+    } as never);
+
+    await handlers.get('listening')?.[0]?.();
+
+    expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
+      'http://localhost:4173/',
+      false,
+      false,
+      null,
+      { height: 800, width: 800 },
+      false,
+      expect.any(Object),
+      'iwer',
+    );
+    expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
+      expect.objectContaining({ aiMode: 'collaborate' }),
+    );
+
+    handlers.get('close')?.[0]?.();
+  });
+
+  test('keeps agent mode as an explicit headless option', async () => {
+    const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
+    const httpServer = {
+      address: vi.fn(() => ({ port: 4173 })),
+      on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+    };
+    const managedBrowser = {
+      close: vi.fn().mockResolvedValue(undefined),
+      onClose: vi.fn(),
+    };
+    mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
+    const plugin = iwsdkDev({ ai: { mode: 'agent' } });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-ai-agent',
+      server: {},
+    } as never);
+    plugin.configureServer?.({
+      config: { server: { port: 4173 } },
+      httpServer,
+      middlewares: { use: vi.fn() },
+      resolvedUrls: {
+        local: ['http://localhost:4173/'],
+        network: [],
+      },
+    } as never);
+
+    await handlers.get('listening')?.[0]?.();
+
+    expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
+      'http://localhost:4173/',
+      true,
+      false,
+      { height: 800, width: 800 },
+      { height: 800, width: 800 },
+      false,
+      expect.any(Object),
+      'iwer',
+    );
+    expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
+      expect.objectContaining({ aiMode: 'agent' }),
+    );
+
+    handlers.get('close')?.[0]?.();
+  });
+
+  test('launches the managed browser at the clean origin root', async () => {
+    const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
+    const httpServer = {
+      address: vi.fn(() => ({ port: 4173 })),
+      on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+    };
+    const managedBrowser = {
+      close: vi.fn().mockResolvedValue(undefined),
+      onClose: vi.fn(),
+    };
+    mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
+    const plugin = iwsdkDev({ workspace: { enabled: true } });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-workspace-clean-root',
+      server: {},
+    } as never);
+    plugin.configureServer?.({
+      config: { server: { port: 4173 } },
+      httpServer,
+      middlewares: { use: vi.fn() },
+      resolvedUrls: {
+        local: ['http://localhost:4173/'],
+        network: [],
+      },
+    } as never);
+
+    await handlers.get('listening')?.[0]?.();
+    expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
+      'http://localhost:4173/',
+      false,
+      false,
+      null,
+      { height: 800, width: 800 },
+      false,
+      expect.objectContaining({ topLevelPathnames: ['/'] }),
+      'workspace',
+    );
+
+    await Promise.resolve();
+    handlers.get('close')?.[0]?.();
+  });
+
   test('registers no browser startup state when workspace.open is false', async () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
@@ -81,9 +228,9 @@ describe('managed workspace lifecycle', () => {
     handlers.get('close')?.[0]?.();
   });
 
-  test('marks workspace readiness only after editor initialization resolves', () => {
+  test('marks workspace readiness only after editor initialization resolves', async () => {
     const plugin = iwsdkDev({ workspace: { enabled: true } });
-    const source = plugin.load?.('\0/@iwsdk-editor-runtime') as string;
+    const source = (await plugin.load?.('\0/@iwsdk-editor-runtime')) as string;
     const initStart = source.indexOf('init().then(() => {');
     const ready = source.indexOf('window.__IWSDK_SCENE_EDITOR_READY = true;');
 

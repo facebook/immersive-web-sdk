@@ -5,4 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-export { MCPWebSocketClient, initMCPClient } from './ws-client.js';
+export {
+  MCPWebSocketClient,
+  initMCPBridge,
+  initMCPClient,
+} from './ws-client.js';

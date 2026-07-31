@@ -6,7 +6,7 @@
  */
 
 import { writeFile } from 'fs/promises';
-import type { Frame, Page } from 'playwright';
+import type { Page } from 'playwright';
 import { afterEach, describe, expect, test } from 'vitest';
 import {
   createEditorTestHarness,
@@ -22,61 +22,52 @@ afterEach(async () => {
   harness = undefined;
 });
 
-async function workspaceRuntimeFrame(page: Page): Promise<Frame> {
-  const frameElement = await page.waitForSelector('#workspace-runtime-frame');
-  const frame = await frameElement.contentFrame();
-  if (!frame) {
-    throw new Error('Workspace runtime iframe is not attached');
-  }
-  return frame;
-}
-
-async function runtimeFrameNodePosition(
-  page: Page,
-  nodeId: string,
-): Promise<number[] | null> {
-  const frame = await workspaceRuntimeFrame(page);
-  return frame.evaluate((id) => {
-    const proof = (window as any).__APP_RUNTIME_PROOF;
-    const node = proof?.nodes?.find((entry: any) => entry.id === id);
-    return node?.position ?? null;
-  }, nodeId);
+async function attemptSceneSave(page: Page): Promise<Record<string, any>> {
+  return page.evaluate(async () => {
+    try {
+      await (window as any).IWSDK_SCENE_EDITOR.runtime.dispatch(
+        'scene_save',
+        {},
+      );
+      return { ok: true };
+    } catch (error) {
+      return {
+        code: (error as any)?.code,
+        currentRevision: (error as any)?.currentRevision,
+        expectedRevision: (error as any)?.expectedRevision,
+        message: (error as Error)?.message,
+        ok: false,
+        path: (error as any)?.path,
+      };
+    }
+  });
 }
 
 describe('editor save/reload runtime parity', () => {
-  test('blocks invalid scene saves from the editor UI without writing to disk', async () => {
+  test('rejects invalid scene mutations without writing to disk', async () => {
     harness = await createEditorTestHarness('editor-invalid-save');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
     const sceneBefore = await harness.readScene();
 
-    await dispatchSceneTool(editor.page, 'scene_apply_patch', {
-      patch: {
-        component: 'TestInspectable',
-        nodeId: 'table-1',
-        op: 'updateComponent',
-        value: {
-          props: {
+    await expect(
+      dispatchSceneTool(editor.page, 'scene_apply_patch', {
+        patch: {
+          component: 'TestInspectable',
+          nodeId: 'table-1',
+          op: 'updateComponent',
+          value: {
             enabled: 'yes',
             label: 'schema-invalid',
             offset: [0, 0, 0],
             strength: 0.5,
           },
-          type: 'TestInspectable',
         },
-      },
-    });
+      }),
+    ).rejects.toThrow(/value does not match Boolean/);
     await expect
       .poll(() => editor.page.locator('#dirty-status').textContent())
-      .toBe('Unsaved changes');
-
-    await editor.page.locator('#save').click();
-    await expect
-      .poll(() => editor.page.locator('#editor-status-strip').textContent())
-      .toContain('Cannot save invalid scene');
-    await expect
-      .poll(() => editor.page.locator('#editor-status-strip').textContent())
-      .toContain('component field "enabled" must be a boolean');
+      .toBe('Saved');
     expect(await harness.readScene()).toEqual(sceneBefore);
   }, 45000);
 
@@ -97,12 +88,12 @@ describe('editor save/reload runtime parity', () => {
           ...(await harness.readScene()),
           nodes: [
             {
-              asset: 'table',
+              content: { asset: 'table', type: 'asset' },
               id: 'external-table',
               transform: { position: [-0.3, 0, 0.2] },
             },
             {
-              asset: 'vase',
+              content: { asset: 'vase', type: 'asset' },
               id: 'external-vase',
               transform: { position: [-0.3, 0.55, 0.2] },
             },
@@ -114,24 +105,7 @@ describe('editor save/reload runtime parity', () => {
       'utf8',
     );
 
-    const toolConflict = await editor.page.evaluate(async () => {
-      try {
-        await (window as any).IWSDK_SCENE_EDITOR.runtime.dispatch(
-          'scene_save',
-          {},
-        );
-        return { ok: true };
-      } catch (error) {
-        return {
-          code: (error as any)?.code,
-          currentRevision: (error as any)?.currentRevision,
-          expectedRevision: (error as any)?.expectedRevision,
-          message: (error as Error)?.message,
-          ok: false,
-          path: (error as any)?.path,
-        };
-      }
-    });
+    const toolConflict = await attemptSceneSave(editor.page);
     expect(toolConflict).toMatchObject({
       code: 'scene_revision_conflict',
       message: 'Scene file changed on disk.',
@@ -144,7 +118,16 @@ describe('editor save/reload runtime parity', () => {
       toolConflict.expectedRevision,
     );
 
-    await editor.page.locator('#save').click();
+    const repeatedConflict = await attemptSceneSave(editor.page);
+    expect(repeatedConflict).toMatchObject(toolConflict);
+
+    await editor.page.locator('[data-node-id="table-1"]').click();
+    await editor.page
+      .locator('[data-transform-field="position.0"]')
+      .fill('0.5');
+    await editor.page
+      .locator('[data-transform-field="position.0"]')
+      .press('Enter');
     await expect
       .poll(() =>
         editor.page.locator('#scene-save-conflict-dialog').textContent(),
@@ -163,20 +146,13 @@ describe('editor save/reload runtime parity', () => {
     harness = await createEditorTestHarness('editor-save-reload');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
-    await dispatchSceneTool(editor.page, 'workspace_set_view', {
-      view: 'split',
-    });
-    await expect
-      .poll(() => runtimeFrameNodePosition(editor.page, 'table-1'))
-      .toEqual([0, 0, 0]);
-
     const transformResult = await dispatchSceneTool(
       editor.page,
       'scene_set_transform',
       {
         nodeId: 'table-1',
         transform: {
-          position: [0.4, 0, -0.25],
+          position: [0.4, 4, -0.25],
           rotationDeg: [0, 20, 0],
           scale: 1.1,
         },
@@ -191,9 +167,9 @@ describe('editor save/reload runtime parity', () => {
       'scene_add_node',
       {
         node: {
-          asset: 'vase',
+          content: { asset: 'vase', type: 'asset' },
           id: 'vase-1',
-          transform: { position: [0.4, 0.55, -0.25] },
+          transform: { position: [0.4, -2, -0.25] },
         },
       },
     );
@@ -204,27 +180,21 @@ describe('editor save/reload runtime parity', () => {
     await expect
       .poll(() => editor.page.locator('#dirty-status').textContent())
       .toBe('Saved');
-    await expect
-      .poll(() => runtimeFrameNodePosition(editor.page, 'table-1'))
-      .toEqual([0.4, 0, -0.25]);
-    await expect
-      .poll(() => runtimeFrameNodePosition(editor.page, 'vase-1'))
-      .toEqual([0.4, 0.55, -0.25]);
-
     const savedScene = await harness.readScene();
     expect(savedScene.nodes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'table-1',
           transform: {
-            position: [0.4, 0, -0.25],
+            position: [0.4, 4, -0.25],
             rotationDeg: [0, 20, 0],
             scale: 1.1,
           },
         }),
         expect.objectContaining({
+          content: { asset: 'vase', type: 'asset' },
           id: 'vase-1',
-          transform: { position: [0.4, 0.55, -0.25] },
+          transform: { position: [0.4, -2, -0.25] },
         }),
       ]),
     );
@@ -252,11 +222,11 @@ describe('editor save/reload runtime parity', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: 'table-1',
-          position: [0.4, 0, -0.25],
+          position: [0.4, 4, -0.25],
         }),
         expect.objectContaining({
           id: 'vase-1',
-          position: [0.4, 0.55, -0.25],
+          position: [0.4, -2, -0.25],
         }),
       ]),
     );

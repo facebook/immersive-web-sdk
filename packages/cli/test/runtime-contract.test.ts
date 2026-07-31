@@ -8,61 +8,71 @@
 import { describe, expect, test } from 'vitest';
 import {
   RUNTIME_MCP_TOOLS,
-  SCENE_FILE_MCP_TOOL_NAMES,
-  SCENE_EDITOR_MCP_TOOL_NAMES,
-  WORKSPACE_MCP_TOOL_NAMES,
+  SCENE_MCP_TOOL_NAMES,
   getRuntimeOperationByToolName,
   resolveRuntimeOperationRequest,
 } from '../src/runtime-contract.js';
 
-describe('runtime contract scene editor tools', () => {
-  test('lists every native scene editor MCP tool with editor routing', () => {
-    const listedToolNames = new Set(RUNTIME_MCP_TOOLS.map((tool) => tool.name));
+describe('runtime contract scene tools', () => {
+  test('exposes exactly the file-first scene surface', () => {
+    const sceneTools = RUNTIME_MCP_TOOLS.map((tool) => tool.name).filter(
+      (name) => name.startsWith('scene_'),
+    );
 
-    for (const toolName of [
-      ...SCENE_EDITOR_MCP_TOOL_NAMES,
-      ...SCENE_FILE_MCP_TOOL_NAMES,
-      ...WORKSPACE_MCP_TOOL_NAMES,
-    ]) {
-      expect(listedToolNames.has(toolName)).toBe(true);
+    expect(new Set(sceneTools)).toEqual(new Set(SCENE_MCP_TOOL_NAMES));
+    expect(sceneTools).toHaveLength(9);
+    expect(
+      RUNTIME_MCP_TOOLS.some((tool) => tool.name.startsWith('workspace_')),
+    ).toBe(false);
+  });
+
+  test('routes every scene tool to the managed editor page', () => {
+    for (const toolName of SCENE_MCP_TOOL_NAMES) {
       expect(getRuntimeOperationByToolName(toolName)).toMatchObject({
         mcpName: toolName,
         target: { role: 'editor' },
+        wsMethod: toolName,
       });
     }
   });
 
-  test('exposes runtime hierarchy and object transforms on the app path', () => {
-    expect(
-      getRuntimeOperationByToolName('scene_get_runtime_hierarchy'),
-    ).toMatchObject({
-      cliPath: ['scene', 'runtime-hierarchy'],
-      mcpName: 'scene_get_runtime_hierarchy',
-      wsMethod: 'get_scene_hierarchy',
+  test('makes render-file the validate, compose, and PNG operation', () => {
+    const render = getRuntimeOperationByToolName('scene_render_file');
+
+    expect(render).toMatchObject({
+      cliPath: ['scene', 'render-file'],
+      target: { role: 'editor' },
+      wsMethod: 'scene_render_file',
     });
-    expect(
-      getRuntimeOperationByToolName('scene_get_runtime_hierarchy')?.target,
-    ).toBeUndefined();
-    expect(
-      getRuntimeOperationByToolName('scene_get_object_transform'),
-    ).toMatchObject({
-      mcpName: 'scene_get_object_transform',
-      wsMethod: 'get_object_transform',
-    });
-    expect(
-      getRuntimeOperationByToolName('scene_get_object_transform')?.target,
-    ).toBeUndefined();
+    expect(render?.inputSchema.required).toEqual(['path']);
+    expect(render?.description).toContain('Invalid files');
+    expect(render?.description).toContain('PNG');
   });
 
-  test('documents deterministic orbit screenshot steps in the scene camera schema', () => {
+  test('describes the consolidated live scene state', () => {
+    const state = getRuntimeOperationByToolName('scene_get_state');
+
+    expect(state).toMatchObject({
+      cliPath: ['scene', 'state'],
+      target: { role: 'editor' },
+      wsMethod: 'scene_get_state',
+    });
+    expect(state?.description).toContain('source/composed/runtime hashes');
+    expect(state?.description).toContain('conflict');
+  });
+
+  test('retains deterministic camera and screenshot controls', () => {
     const screenshot = getRuntimeOperationByToolName('scene_screenshot');
     const camera = getRuntimeOperationByToolName('scene_set_camera');
 
     expect(screenshot?.inputSchema.properties?.orbitStep).toMatchObject({
       type: 'number',
     });
-    expect(camera?.inputSchema.properties?.step).toMatchObject({
-      type: 'number',
+    expect(camera?.inputSchema.properties?.viewId).toMatchObject({
+      type: 'string',
+    });
+    expect(screenshot?.inputSchema.properties?.captureMode).toMatchObject({
+      enum: ['render', 'editor'],
     });
   });
 
@@ -88,8 +98,5 @@ describe('runtime contract scene editor tools', () => {
       params: { __iwsdkScreenshotTarget: 'workspace' },
       target: { role: 'editor' },
     });
-    expect(() =>
-      resolveRuntimeOperationRequest(operation!, { target: 'other' }),
-    ).toThrow(/runtime, editor, or workspace/);
   });
 });

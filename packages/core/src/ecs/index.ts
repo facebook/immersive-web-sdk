@@ -8,5 +8,7 @@
 export * from './system.js';
 export * from './world.js';
 export * from './component.js';
+export * from './component-manifest.js';
+export * from './builtin-components.js';
 export * from './entity.js';
 export * from './component-registry.js';

@@ -14,7 +14,7 @@ import {
   metaQuestPro,
   oculusQuest1,
 } from 'iwer';
-import { initMCPClient } from './mcp/ws-client.js';
+import { initMCPBridge, initMCPClient } from './mcp/ws-client.js';
 import type { ProcessedDevOptions } from './types.js';
 
 // Configuration will be replaced by the plugin
@@ -104,6 +104,36 @@ function shouldActivate(
 function initDevRuntime(config: ProcessedDevOptions): void {
   console.log('[IWSDK Dev] Configuration:', config);
 
+  const hostEnvironment = (window as any).__IWSDK_HOST_BROWSER_ENVIRONMENT ?? {
+    platform:
+      (navigator as any).userAgentData?.platform || navigator.platform || null,
+    userAgent: navigator.userAgent,
+  };
+  (window as any).__IWSDK_HOST_BROWSER_ENVIRONMENT = hostEnvironment;
+  (window as any).__IWSDK_EMULATION_PROFILE = {
+    active: false,
+    device: null,
+    runtime: null,
+  };
+
+  const isManagedTab = (window as any).__IWER_MCP_MANAGED === true;
+  const isManagedWorkspacePage =
+    (window as any).__IWSDK_MCP_PAGE_ROLE === 'editor' ||
+    location.pathname.startsWith('/__iwsdk/workspace') ||
+    location.pathname.startsWith('/__iwsdk/editor');
+
+  // The native editor command surface does not depend on WebXR emulation.
+  // Browser-first starters intentionally keep IWER disabled; connect their
+  // managed editor directly while leaving normal app tabs untouched.
+  if (
+    config.workspace &&
+    config.iwer === false &&
+    isManagedTab &&
+    isManagedWorkspacePage
+  ) {
+    (window as any).IWER_MCP = initMCPBridge({ verbose: config.verbose });
+  }
+
   const shouldActivateResult = shouldActivate(
     config.activation,
     config.userAgentException,
@@ -148,12 +178,18 @@ function initDevRuntime(config: ProcessedDevOptions): void {
         deviceConfig ? config.device : 'metaQuest3 (fallback)',
       );
     }
-    xrDevice.installRuntime();
+    // The dev emulator must own navigator.xr even when desktop Chrome exposes
+    // a native-but-unusable WebXR surface in headless mode.
+    xrDevice.installRuntime({ forceInstall: true });
+    (window as any).__IWSDK_EMULATION_PROFILE = {
+      active: true,
+      device: config.device,
+      runtime: 'IWER',
+    };
 
     // DevUI visibility per session:
     // - Normal browser tabs (not Playwright-managed): always show DevUI
     // - Playwright-managed tabs: follow the mode's devUI setting
-    const isManagedTab = (window as any).__IWER_MCP_MANAGED;
     if (!config.ai || !isManagedTab || config.ai.devUI) {
       xrDevice.installDevUI(DevUI);
     }
@@ -183,7 +219,7 @@ function initDevRuntime(config: ProcessedDevOptions): void {
 
     // Initialize MCP client only in the Playwright-managed tab.
     // Manual browser tabs get IWER + DevUI but are not remote-controlled.
-    if (config.ai && (window as any).__IWER_MCP_MANAGED) {
+    if (config.workspace && isManagedTab) {
       if (config.verbose) {
         console.log('[IWSDK Dev] 🔌 Initializing MCP client...');
       }

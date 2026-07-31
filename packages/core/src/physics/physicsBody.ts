@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '.././index.js';
+import { Types, createComponent } from '../ecs/component.js';
 
 /** Motion type for {@link PhysicsBody}. @category Physics */
 export const PhysicsState = {

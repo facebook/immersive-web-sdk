@@ -6,6 +6,7 @@
  */
 
 import { ComponentRegistry, Types, createComponent } from 'elics';
+export type { AnyComponent, AnySchema } from 'elics';
 
 /** Elics query operators re-export. @category ECS */
 export { eq, ne, lt, le, gt, ge, isin, nin } from 'elics';

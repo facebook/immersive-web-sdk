@@ -5,12 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import path from 'path';
 import { afterEach, describe, expect, test } from 'vitest';
 import {
   createEditorTestHarness,
   dispatchSceneTool,
   expectRealWebGLViewport,
-  getEditorProof,
   type EditorTestHarness,
 } from './editor-e2e-fixture.js';
 
@@ -22,43 +23,65 @@ afterEach(async () => {
 });
 
 describe('editor asset catalog', () => {
-  test('filters catalog assets and adds a rendered node through the scene session', async () => {
+  test('filters manifest assets and adds one through the scene session', async () => {
     harness = await createEditorTestHarness('editor-asset-catalog');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
+    await editor.page.locator('[data-bottom-tab="assets"]').click();
 
     await expect
       .poll(() =>
         editor.page
-          .locator('#asset-catalog [data-asset-id]')
+          .locator('#asset-catalog [data-add-asset]')
           .evaluateAll((rows) =>
-            rows.map((row) => row.getAttribute('data-asset-id')),
+            rows.map((row) => row.getAttribute('data-add-asset')),
           ),
       )
-      .toEqual(['table', 'vase']);
+      .toEqual(['table', 'vase', 'procedural-plinth']);
     await expect
       .poll(() =>
         editor.page
-          .locator('[data-asset-id="vase"] .asset-catalog-meta')
+          .locator('#asset-catalog .asset-catalog-thumb img')
+          .evaluateAll((images) =>
+            images.map((image) => image.getAttribute('src')),
+          ),
+      )
+      .toEqual([
+        expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
+      ]);
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-asset-id="procedural-plinth"] .asset-catalog-name')
+          .textContent(),
+      )
+      .toBe('procedural-plinth');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-add-asset="vase"]')
+          .locator('xpath=ancestor::*[contains(@class, "asset-catalog-row")]')
           .textContent(),
       )
       .toContain('gltf');
 
-    await editor.page.locator('#asset-catalog-filter').fill('vas');
+    await editor.page.locator('#asset-filter').fill('vas');
     await expect
       .poll(() =>
         editor.page
-          .locator('#asset-catalog [data-asset-id]')
+          .locator('#asset-catalog [data-add-asset]')
           .evaluateAll((rows) =>
-            rows.map((row) => row.getAttribute('data-asset-id')),
+            rows.map((row) => row.getAttribute('data-add-asset')),
           ),
       )
       .toEqual(['vase']);
-    await editor.page.locator('#asset-catalog-filter').fill('missing');
+    await editor.page.locator('#asset-filter').fill('missing');
     await expect
-      .poll(() => editor.page.locator('[data-empty-assets]').textContent())
-      .toBe('No matching assets');
-    await editor.page.locator('#asset-catalog-filter').fill('');
+      .poll(() => editor.page.locator('#asset-catalog').textContent())
+      .toContain('No assets found');
+    await editor.page.locator('#asset-filter').fill('');
 
     await editor.page.locator('[data-add-asset="vase"]').click();
     await expect
@@ -79,9 +102,9 @@ describe('editor asset catalog', () => {
       .toMatchObject({
         nodeIds: ['table-1', 'vase-1'],
         selected: ['vase-1'],
-        status: '2 nodes, 2 assets',
+        status: '2 nodes, 3 assets',
         vaseNode: {
-          asset: 'vase',
+          content: { asset: 'vase', type: 'asset' },
           id: 'vase-1',
           transform: { position: expect.any(Array) },
         },
@@ -110,7 +133,10 @@ describe('editor asset catalog', () => {
     const savedScene = await harness.readScene();
     expect(savedScene.nodes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ asset: 'vase', id: 'vase-1' }),
+        expect.objectContaining({
+          content: { asset: 'vase', type: 'asset' },
+          id: 'vase-1',
+        }),
       ]),
     );
 
@@ -121,83 +147,6 @@ describe('editor asset catalog', () => {
       expect.arrayContaining([
         expect.objectContaining({
           nodeId: 'vase-1',
-        }),
-      ]),
-    );
-  }, 15000);
-
-  test('places added catalog assets on the selected support when surface placement is enabled', async () => {
-    harness = await createEditorTestHarness('editor-asset-surface-placement');
-    const editor = await harness.openEditor();
-    await expectRealWebGLViewport(editor);
-
-    await editor.page.locator('[data-node-id="table-1"]').click();
-    await expect
-      .poll(() =>
-        editor.page.evaluate(() => (window as any).__IWSDK_EDITOR_SELECTION),
-      )
-      .toEqual(['table-1']);
-
-    await editor.page.locator('[data-surface-placement]').click();
-    await expect
-      .poll(() =>
-        editor.page
-          .locator('[data-surface-placement]')
-          .evaluate((button) => button.hasAttribute('data-active')),
-      )
-      .toBe(true);
-    await expect
-      .poll(() => getEditorProof(editor.page))
-      .toMatchObject({
-        surfacePlacement: {
-          enabled: true,
-          targetNodeId: 'table-1',
-        },
-      });
-
-    await editor.page.locator('[data-add-asset="vase"]').click();
-    await expect
-      .poll(() =>
-        editor.page.evaluate(() => {
-          const documentValue = (window as any).IWSDK_SCENE_EDITOR.session
-            .document;
-          const vase = documentValue.nodes.find(
-            (node: { id: string }) => node.id === 'vase-1',
-          );
-          const proof = (
-            window as any
-          ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getProof();
-          return {
-            events: ((window as any).__IWSDK_EDITOR_EVENTS || []).map(
-              (event: { method: string }) => event.method,
-            ),
-            nodeIds: documentValue.nodes.map((node: { id: string }) => node.id),
-            persistedPlaceOn: Boolean(vase?.transform?.placeOn),
-            selected: (window as any).__IWSDK_EDITOR_SELECTION,
-            surfacePlacement: proof.surfacePlacement,
-            vasePosition: vase?.transform?.position,
-          };
-        }),
-      )
-      .toMatchObject({
-        events: expect.arrayContaining(['scene_add_node', 'scene_place_on']),
-        nodeIds: ['table-1', 'vase-1'],
-        persistedPlaceOn: false,
-        selected: ['vase-1'],
-        surfacePlacement: {
-          enabled: true,
-          lastTargetNodeId: 'table-1',
-          targetNodeId: 'table-1',
-        },
-        vasePosition: [0, 0.5, 0],
-      });
-
-    const proof = await getEditorProof(editor.page);
-    expect(proof.objectHierarchy).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          nodeId: 'vase-1',
-          parentNodeId: null,
         }),
       ]),
     );
@@ -216,8 +165,8 @@ describe('editor asset catalog', () => {
       .poll(() => editor.page.locator('[data-node-asset-ref]').inputValue())
       .toBe('table');
     await expect
-      .poll(() => editor.page.locator('.asset-metadata-grid').textContent())
-      .toContain('/assets/table.gltf');
+      .poll(() => editor.page.locator('.asset-metadata-grid').count())
+      .toBe(0);
 
     await editor.page.locator('[data-node-asset-ref]').selectOption('vase');
     await expect
@@ -229,7 +178,7 @@ describe('editor asset catalog', () => {
             window as any
           ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getProof();
           return {
-            asset: documentValue.nodes[0].asset,
+            asset: documentValue.nodes[0].content?.asset,
             dirty: document.querySelector('#dirty-status')?.textContent,
             runtimeAsset: proof.objectHierarchy.find(
               (entry: { nodeId: string }) => entry.nodeId === 'table-1',
@@ -240,7 +189,7 @@ describe('editor asset catalog', () => {
       )
       .toEqual({
         asset: 'vase',
-        dirty: 'Unsaved changes',
+        dirty: 'Saved',
         runtimeAsset: 'vase',
         selected: ['table-1'],
       });
@@ -250,7 +199,7 @@ describe('editor asset catalog', () => {
     ).resolves.toMatchObject({ dirty: false });
     const savedScene = await harness.readScene();
     expect(savedScene.nodes[0]).toMatchObject({
-      asset: 'vase',
+      content: { asset: 'vase', type: 'asset' },
       id: 'table-1',
     });
 
@@ -264,5 +213,47 @@ describe('editor asset catalog', () => {
         }),
       ]),
     );
+  }, 15000);
+
+  test('does not consult or rewrite external review artifacts', async () => {
+    harness = await createEditorTestHarness('editor-asset-stale-review');
+    const reviewRoot = path.join(
+      harness.tempRoot,
+      'public/scenes/editor-smoke.iwsdk.review',
+    );
+    const workflowPath = path.join(
+      reviewRoot,
+      'workflow.iwsdk.review-workflow.json',
+    );
+    await mkdir(reviewRoot, { recursive: true });
+    await writeFile(
+      workflowPath,
+      JSON.stringify({
+        contractHash: null,
+        documentHash: `sha256:${'0'.repeat(64)}`,
+        lockedMaxCorrectionRounds: 0,
+        phase: 'manual-edit',
+        round: 0,
+        runtimeHash: `sha256:${'1'.repeat(64)}`,
+        version: 'iwsdk.review-workflow.v1',
+      }),
+      'utf8',
+    );
+
+    const editor = await harness.openEditor();
+    await expectRealWebGLViewport(editor);
+    await editor.page.locator('[data-bottom-tab="assets"]').click();
+    await editor.page.locator('[data-add-asset="vase"]').click();
+
+    await expect
+      .poll(async () => (await harness?.readScene()).nodes.length)
+      .toBe(2);
+    await expect
+      .poll(() => editor.page.locator('#editor-status-strip').textContent())
+      .not.toContain('outside the server-owned review workflow');
+    const workflow = JSON.parse(await readFile(workflowPath, 'utf8'));
+    expect(workflow).toMatchObject({ phase: 'manual-edit', round: 0 });
+    expect(workflow.documentHash).toBe(`sha256:${'0'.repeat(64)}`);
+    expect(editor.errors()).toEqual([]);
   }, 15000);
 });

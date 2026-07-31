@@ -7,36 +7,53 @@
 
 import {
   assertValidSceneDocument,
-  migrateSceneDocument,
-  resolveLookAtTransformInDocument,
-  resolvePlaceOnTransform,
-  type SceneAsset,
+  composeSceneDocument,
+  hashRuntimeSceneDocument,
+  type JsonObject,
   type SceneDocument,
+  type SceneCompositionDependency,
   type SceneNode,
-  type SceneScale,
-  type SceneTransform,
+  type SceneNodeContent,
+  type SceneNodeFramingRole,
+  type Sha256,
 } from '@iwsdk/scene-composition';
-import { AssetManager } from '../asset/index.js';
 import type { Entity } from '../ecs/entity.js';
 import type { World } from '../ecs/world.js';
 import { Object3D } from '../runtime/index.js';
 import { LevelComponentApplier } from './level-component-applier.js';
+import {
+  disposeLoweredSceneNodes,
+  lowerSceneDocumentObjects,
+  resolveSceneDocumentForLowering,
+  type SceneLoweredNode,
+  type SceneLoweredVirtualNode,
+} from './level-scene-object.js';
 
 export interface SceneJSONImportedNode {
-  node: SceneNode;
-  nodeId: string;
   assetId?: string;
   componentTypes: string[];
+  contentType?: SceneNodeContent['type'];
   entity: Entity;
+  framingRole: SceneNodeFramingRole;
+  instanceIndex?: number;
+  metadata?: JsonObject;
+  node: SceneNode;
+  nodeId: string;
   object: Object3D;
   parentNodeId?: string;
+  runtimeHash: Sha256;
+  sourceNodeId: string;
 }
 
 export interface SceneJSONLoadResult {
+  dependencies: SceneCompositionDependency[];
   document: SceneDocument;
   nodes: Map<string, SceneJSONImportedNode>;
   rootEntities: Entity[];
+  runtimeHash: Sha256;
 }
+
+export interface SceneJSONImportOptions {}
 
 /**
  * Loads native IWSDK scene JSON documents into a level root.
@@ -55,6 +72,7 @@ export class SceneJSONImporter {
     world: World,
     url: string,
     parentEntity: Entity,
+    _options: SceneJSONImportOptions = {},
   ): Promise<SceneJSONLoadResult> {
     const response = await fetch(url);
     if (!response.ok) {
@@ -63,9 +81,13 @@ export class SceneJSONImporter {
       );
     }
 
-    const document = migrateSceneDocument(await response.json());
-    assertValidSceneDocument(document);
-    return this.loadDocument(world, document, parentEntity, url);
+    return this.loadDocument(
+      world,
+      await response.json(),
+      parentEntity,
+      response.url || url,
+      _options,
+    );
   }
 
   static async loadDocument(
@@ -73,252 +95,230 @@ export class SceneJSONImporter {
     document: SceneDocument,
     parentEntity: Entity,
     documentUrl?: string,
+    _options: SceneJSONImportOptions = {},
   ): Promise<SceneJSONLoadResult> {
-    const migratedDocument = migrateSceneDocument(document);
-    const resolvedDocument = resolveAuthoringTransforms(migratedDocument);
-    assertValidSceneDocument(resolvedDocument);
+    const sourceDocument = structuredClone(document);
+    const validationOptions = {
+      componentCatalog: world.componentCatalog,
+      // Authoring review completeness is not part of the runtime projection.
+      // Draft scenes that the editor can render must remain runtime-loadable.
+      validateAuthoringWorkflow: false,
+    };
+    assertValidSceneDocument(sourceDocument, validationOptions);
+    if ((sourceDocument.imports?.length ?? 0) > 0 && documentUrl == null) {
+      throw new Error(
+        'Scene documents with imports require a document URL for relative resolution',
+      );
+    }
+    const compositionSource =
+      documentUrl == null ? undefined : canonicalSceneSource(documentUrl);
+    const composed = await composeSceneDocument(sourceDocument, {
+      ...validationOptions,
+      ...(compositionSource == null ? {} : { source: compositionSource }),
+      resolve: async ({ importer, src }) => {
+        if (importer == null) {
+          throw new Error(
+            `Cannot resolve scene import "${src}" without an importer URL`,
+          );
+        }
+        const source = new URL(src, importer).href;
+        const response = await fetch(source);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load IWSDK scene module "${source}": ${response.status} ${response.statusText}`,
+          );
+        }
+        return {
+          document: await response.json(),
+          source: response.url || source,
+        };
+      },
+    });
+    const runtimeHash = hashRuntimeSceneDocument(composed.document);
+    const resolvedDocument = resolveSceneDocumentForLowering(composed.document);
+    assertValidSceneDocument(resolvedDocument, validationOptions);
     const result: SceneJSONLoadResult = {
+      dependencies: composed.dependencies,
       document: resolvedDocument,
       nodes: new Map(),
       rootEntities: [],
+      runtimeHash,
     };
 
-    for (const node of resolvedDocument.nodes) {
-      const entity = await this.createNode(
-        world,
-        resolvedDocument,
-        node,
-        parentEntity,
-        documentUrl,
-        result,
+    let roots: SceneLoweredNode[] = [];
+    const createdEntities: Entity[] = [];
+    try {
+      if (resolvedDocument.components != null) {
+        LevelComponentApplier.applyComponents(
+          parentEntity,
+          resolvedDocument.components,
+          world,
+          { nodeId: '$root', strict: true },
+        );
+      }
+      roots = await lowerSceneDocumentObjects(resolvedDocument, {
+        loadAsset: (assetId) => world.assets.instantiate(assetId),
+        resolveAssetBounds: (assetId) => world.assets.bounds(assetId),
+        runtimeHash,
+      });
+      for (const root of roots) {
+        const entity = this.createEntityForLoweredNode(
+          world,
+          root,
+          parentEntity,
+          documentUrl,
+          result,
+          createdEntities,
+        );
+        result.rootEntities.push(entity);
+      }
+      const parentObject = parentEntity.object3D ?? world.getActiveRoot();
+      parentObject.userData.iwsdkSceneRuntimeHash = runtimeHash;
+      parentObject.userData.iwsdkSceneDocumentMetadata = cloneJson(
+        resolvedDocument.metadata,
       );
-      result.rootEntities.push(entity);
+      parentObject.userData.iwsdkSceneRootComponents = cloneJson(
+        resolvedDocument.components,
+      );
+      parentObject.userData.iwsdkSceneEnvironment = cloneJson(
+        resolvedDocument.environment,
+      );
+    } catch (error) {
+      for (const entity of createdEntities.reverse()) {
+        entity.destroy();
+      }
+      for (const root of roots) {
+        root.object.removeFromParent();
+      }
+      disposeLoweredSceneNodes(...roots);
+      throw error;
     }
-
     return result;
   }
 
-  private static async createNode(
+  private static createEntityForLoweredNode(
     world: World,
-    document: SceneDocument,
-    node: SceneNode,
+    lowered: SceneLoweredNode,
     parentEntity: Entity,
     documentUrl: string | undefined,
     result: SceneJSONLoadResult,
-    parentNodeId?: string,
-  ): Promise<Entity> {
-    const object = await this.createObjectForNode(document, node, documentUrl);
-    object.name = node.name ?? node.id;
-    markObjectForSceneNode(object, node, documentUrl);
-    applyTransform(object, node.transform);
-
+    createdEntities: Entity[],
+  ): Entity {
     const parentObject = parentEntity.object3D ?? world.getActiveRoot();
-    parentObject.add(object);
-
-    const entity = world.createTransformEntity(object, parentEntity);
-    if (node.components != null) {
-      LevelComponentApplier.applyComponents(entity, node.components, world, {
-        nodeId: node.id,
-        strict: true,
-      });
+    if (lowered.object.parent !== parentObject) {
+      parentObject.add(lowered.object);
     }
-    result.nodes.set(node.id, {
-      assetId: node.asset,
-      componentTypes: Object.keys(node.components ?? {}),
-      entity,
-      node,
-      nodeId: node.id,
-      object,
-      parentNodeId,
+    lowered.object.traverse((object) => {
+      object.userData.iwsdkSceneDocumentUrl = documentUrl;
+      object.userData.iwsdkSceneRuntimeHash = result.runtimeHash;
     });
 
-    for (const child of node.children ?? []) {
-      await this.createNode(
+    const entity = world.createTransformEntity(lowered.object, parentEntity);
+    createdEntities.push(entity);
+    if (lowered.node.components != null) {
+      LevelComponentApplier.applyComponents(
+        entity,
+        lowered.node.components,
         world,
-        document,
+        { nodeId: lowered.id, strict: true },
+      );
+    }
+    addImportedNode(result, lowered, entity);
+    for (const virtual of lowered.virtualNodes) {
+      addVirtualImportedNode(result, virtual, entity);
+    }
+    for (const child of lowered.children) {
+      this.createEntityForLoweredNode(
+        world,
         child,
         entity,
         documentUrl,
         result,
-        node.id,
+        createdEntities,
       );
     }
-
     return entity;
-  }
-
-  private static async createObjectForNode(
-    document: SceneDocument,
-    node: SceneNode,
-    documentUrl: string | undefined,
-  ): Promise<Object3D> {
-    if (node.asset == null) {
-      return new Object3D();
-    }
-
-    const asset = document.assets?.find((entry) => entry.id === node.asset);
-    if (asset == null) {
-      throw new Error(
-        `Scene node "${node.id}" references unknown asset "${node.asset}"`,
-      );
-    }
-
-    if (asset.type != null && asset.type !== 'gltf') {
-      return new Object3D();
-    }
-
-    const assetUrl = resolveAssetUrl(asset, documentUrl);
-    const loaded = await AssetManager.loadGLTF(assetUrl, asset.id);
-    const cached = AssetManager.getGLTF(asset.id);
-    return (cached?.scene ?? loaded.scene.clone(true)) as Object3D;
   }
 }
 
-function markObjectForSceneNode(
-  object: Object3D,
-  node: SceneNode,
-  documentUrl: string | undefined,
+function addImportedNode(
+  result: SceneJSONLoadResult,
+  lowered: SceneLoweredNode,
+  entity: Entity,
 ): void {
-  object.userData.iwsdkSceneNodeId = node.id;
-  object.userData.iwsdkSceneAssetId = node.asset;
-  object.userData.iwsdkSceneDocumentUrl = documentUrl;
-  object.traverse((child) => {
-    child.userData.iwsdkSceneNodeId = node.id;
-    child.userData.iwsdkSceneAssetId = node.asset;
-    child.userData.iwsdkSceneDocumentUrl = documentUrl;
+  assertUniqueRuntimeNodeId(result, lowered.id);
+  const content = lowered.node.content;
+  result.nodes.set(lowered.id, {
+    assetId: content?.type === 'asset' ? content.asset : undefined,
+    componentTypes: Object.keys(lowered.node.components ?? {}),
+    contentType: content?.type,
+    entity,
+    framingRole:
+      lowered.object.userData.iwsdkSceneFramingRole === 'support'
+        ? 'support'
+        : 'content',
+    metadata: cloneJson(lowered.node.metadata),
+    node: lowered.node,
+    nodeId: lowered.id,
+    object: lowered.object,
+    parentNodeId: lowered.parentNodeId,
+    runtimeHash: result.runtimeHash,
+    sourceNodeId: lowered.sourceNodeId,
   });
 }
 
-function resolveAuthoringTransforms(document: SceneDocument): SceneDocument {
-  const resolvedDocument = structuredClone(document);
-  const nodes = flattenNodes(resolvedDocument.nodes);
-  const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const resolvingPlaceOn = new Set<string>();
-  const resolvedPlaceOn = new Set<string>();
-
-  for (const node of nodes) {
-    resolveNodePlaceOn(
-      resolvedDocument,
-      nodesById,
-      resolvingPlaceOn,
-      resolvedPlaceOn,
-      node,
-    );
-  }
-
-  for (const node of nodes) {
-    if (node.transform?.lookAt != null) {
-      node.transform = resolveLookAtTransformInDocument(
-        resolvedDocument,
-        node.id,
-        node.transform.lookAt,
-      );
-    }
-  }
-
-  return resolvedDocument;
-}
-
-function resolveNodePlaceOn(
-  document: SceneDocument,
-  nodesById: Map<string, SceneNode>,
-  resolving: Set<string>,
-  resolved: Set<string>,
-  node: SceneNode,
+function addVirtualImportedNode(
+  result: SceneJSONLoadResult,
+  lowered: SceneLoweredVirtualNode,
+  entity: Entity,
 ): void {
-  if (resolved.has(node.id)) {
-    return;
-  }
-
-  if (resolving.has(node.id)) {
-    throw new Error(`Cycle detected while resolving placeOn for "${node.id}"`);
-  }
-
-  resolving.add(node.id);
-  const placeOn = node.transform?.placeOn;
-  if (placeOn != null) {
-    const targetId = typeof placeOn === 'string' ? placeOn : placeOn.target;
-    const target = nodesById.get(targetId);
-    if (target == null) {
-      throw new Error(
-        `Scene node "${node.id}" placeOn target "${targetId}" was not found`,
-      );
-    }
-    resolveNodePlaceOn(document, nodesById, resolving, resolved, target);
-    node.transform = resolvePlaceOnTransform(document, node.id, placeOn);
-  }
-  resolving.delete(node.id);
-  resolved.add(node.id);
+  assertUniqueRuntimeNodeId(result, lowered.id);
+  const content = lowered.node.content;
+  result.nodes.set(lowered.id, {
+    componentTypes: [],
+    contentType: content?.type,
+    entity,
+    framingRole:
+      lowered.object.userData.iwsdkSceneFramingRole === 'support'
+        ? 'support'
+        : 'content',
+    instanceIndex: lowered.instanceIndex,
+    metadata: cloneJson(lowered.node.metadata),
+    node: lowered.node,
+    nodeId: lowered.id,
+    object: lowered.object,
+    parentNodeId: lowered.parentNodeId,
+    runtimeHash: result.runtimeHash,
+    sourceNodeId: lowered.sourceNodeId,
+  });
 }
 
-function flattenNodes(
-  nodes: SceneNode[],
-  result: SceneNode[] = [],
-): SceneNode[] {
-  for (const node of nodes) {
-    result.push(node);
-    flattenNodes(node.children ?? [], result);
-  }
-
-  return result;
-}
-
-function applyTransform(
-  object: Object3D,
-  transform: SceneTransform | undefined,
+function assertUniqueRuntimeNodeId(
+  result: SceneJSONLoadResult,
+  nodeId: string,
 ): void {
-  if (transform?.position != null) {
-    object.position.set(...transform.position);
+  if (result.nodes.has(nodeId)) {
+    throw new Error(`Duplicate lowered scene node id "${nodeId}"`);
   }
-
-  if (transform?.rotationDeg != null) {
-    object.rotation.set(
-      degreesToRadians(transform.rotationDeg[0]),
-      degreesToRadians(transform.rotationDeg[1]),
-      degreesToRadians(transform.rotationDeg[2]),
-    );
-  }
-
-  if (transform?.scale != null) {
-    const scale = scaleToVec3(transform.scale);
-    object.scale.set(...scale);
-  }
-
-  object.updateMatrixWorld(true);
-}
-
-function scaleToVec3(scale: SceneScale): [number, number, number] {
-  return typeof scale === 'number' ? [scale, scale, scale] : scale;
-}
-
-function resolveAssetUrl(
-  asset: SceneAsset,
-  documentUrl: string | undefined,
-): string {
-  if (/^(?:[a-z]+:)?\/\//i.test(asset.uri) || asset.uri.startsWith('/')) {
-    return asset.uri;
-  }
-
-  if (documentUrl == null) {
-    return asset.uri;
-  }
-
-  if (globalThis.location != null) {
-    return new URL(asset.uri, new URL(documentUrl, globalThis.location.href))
-      .href;
-  }
-
-  return asset.uri;
 }
 
 function parsePathname(url: string): string {
   try {
-    return new URL(url, 'http://iwsdk.local').pathname;
+    return new URL(url, 'https://iwsdk.local').pathname.toLowerCase();
   } catch {
-    return url.split(/[?#]/, 1)[0] ?? url;
+    return url.split(/[?#]/, 1)[0].toLowerCase();
   }
 }
 
-function degreesToRadians(degrees: number): number {
-  return (degrees * Math.PI) / 180;
+function canonicalSceneSource(source: string): string {
+  const browserBase = (globalThis as { location?: { href?: string } }).location
+    ?.href;
+  return new URL(source, browserBase ?? 'https://iwsdk.local/').href;
+}
+
+function cloneJson<T>(value: T): T {
+  if (value === undefined) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
 }

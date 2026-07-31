@@ -61,13 +61,9 @@ iwsdkDev({
   // AI agent configuration — omit to disable entirely
   ai: {
     // Usage mode:
-    // 'agent' - headless Playwright, fixed viewport, no DevUI (default)
-    // 'oversight' - visible Playwright, freely resizable, no DevUI
-    // 'collaborate' - visible Playwright, freely resizable, DevUI on
-    mode: 'agent',
-
-    // Which AI tools to generate MCP config for
-    tools: ['claude'], // default
+    // 'collaborate' - visible Playwright, freely resizable, DevUI on (default)
+    // 'agent' - headless Playwright, fixed viewport, no DevUI
+    mode: 'collaborate',
 
     // Screenshot size constraint (viewport in agent mode, downscale bound otherwise)
     screenshotSize: { width: 800, height: 800 }, // default
@@ -99,7 +95,7 @@ iwsdkDev({
 });
 ```
 
-### AI Agent Mode (default)
+### AI Agent Mode
 
 ```javascript
 iwsdkDev({
@@ -108,21 +104,12 @@ iwsdkDev({
 });
 ```
 
-### Collaborate Mode (human + agent share session)
+### Collaborate Mode (default; human + agent share session)
 
 ```javascript
 iwsdkDev({
   emulator: { device: 'metaQuest3' },
   ai: { mode: 'collaborate' },
-});
-```
-
-### Oversight Mode (watch the agent)
-
-```javascript
-iwsdkDev({
-  emulator: { device: 'metaQuest3' },
-  ai: { mode: 'oversight' },
 });
 ```
 

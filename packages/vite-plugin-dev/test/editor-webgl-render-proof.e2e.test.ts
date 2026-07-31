@@ -8,9 +8,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import {
   createEditorTestHarness,
-  dispatchSceneTool,
   expectRealWebGLViewport,
-  getEditorProof,
   MANAGED_WORKSPACE_HEADERS,
   type EditorTestHarness,
 } from './editor-e2e-fixture.js';
@@ -23,23 +21,22 @@ afterEach(async () => {
 });
 
 describe('editor WebGL render proof', () => {
-  test('rejects placeholder renderers and proves IWSDK WebGL scene ownership', async () => {
+  test('renders manifest assets in an IWSDK-owned WebGL viewport', async () => {
     harness = await createEditorTestHarness('editor-webgl-render-proof');
     const editor = await harness.openEditor();
     const proof = await expectRealWebGLViewport(editor);
     const editorCanvasWidth = proof.canvasWidth;
 
     expect(proof.webglContextType).toMatch(/WebGL/i);
-    await expect
-      .poll(() => getEditorProof(editor.page).then((entry) => entry.assetLoads))
-      .toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            assetId: 'table',
-            status: 'loaded',
-          }),
-        ]),
-      );
+    expect(proof.objectHierarchy).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assetId: 'table',
+          nodeId: 'table-1',
+          parentNodeId: null,
+        }),
+      ]),
+    );
     expect(
       editor.responses.some(
         (response) =>
@@ -48,69 +45,14 @@ describe('editor WebGL render proof', () => {
           response.url.includes('/assets/table.gltf'),
       ),
     ).toBe(true);
-    expect(proof.objectHierarchy).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          nodeId: 'table-1',
-          parentNodeId: null,
-        }),
-      ]),
-    );
 
-    await expect
-      .poll(() => dispatchSceneTool(editor.page, 'workspace_get_state'))
-      .toMatchObject({
-        editor: {
-          dirty: false,
-          pageId: expect.stringMatching(/:editor$/),
-          ready: true,
-          scenePath: 'public/scenes/editor-smoke.iwsdk.scene.json',
-          sceneSessionId: expect.any(String),
-        },
-        managed: true,
-        runtime: {
-          pageId: expect.stringMatching(/:runtime$/),
-        },
-        view: 'editor',
-        workspace: {
-          pageId: expect.any(String),
-          tabGeneration: expect.any(Number),
-        },
-      });
+    expect(
+      await editor.page
+        .locator('html')
+        .getAttribute('data-iwsdk-workspace-view'),
+    ).toBe('editor');
 
-    const sceneFiles = await dispatchSceneTool(editor.page, 'scene_list_files');
-    expect(sceneFiles).toMatchObject({
-      files: [
-        expect.objectContaining({
-          path: 'public/scenes/editor-smoke.iwsdk.scene.json',
-        }),
-      ],
-    });
-
-    const createdScene = await dispatchSceneTool(editor.page, 'scene_create', {
-      open: false,
-      path: 'public/scenes/created-from-workspace.iwsdk.scene.json',
-    });
-    expect(createdScene).toMatchObject({
-      opened: false,
-      path: 'public/scenes/created-from-workspace.iwsdk.scene.json',
-      previousRevision: 'missing',
-      revision: expect.any(String),
-      writtenRevision: expect.any(String),
-    });
-    await expect
-      .poll(() => dispatchSceneTool(editor.page, 'scene_list_files'))
-      .toMatchObject({
-        files: expect.arrayContaining([
-          expect.objectContaining({
-            path: 'public/scenes/created-from-workspace.iwsdk.scene.json',
-          }),
-        ]),
-      });
-
-    await dispatchSceneTool(editor.page, 'workspace_set_view', {
-      view: 'runtime',
-    });
+    await editor.page.locator('[data-workspace-view-button="runtime"]').click();
     await expect
       .poll(() =>
         editor.page.evaluate(
@@ -118,53 +60,38 @@ describe('editor WebGL render proof', () => {
         ),
       )
       .toBe('runtime');
-    expect(await isVisible(editor.page, '#workspace-runtime-frame')).toBe(true);
-    expect(await isVisible(editor.page, '[data-workspace-editor-pane]')).toBe(
-      false,
-    );
-
-    await dispatchSceneTool(editor.page, 'workspace_set_view', {
-      view: 'split',
-    });
     await expect
       .poll(() =>
-        editor.page.evaluate(
-          () => document.documentElement.dataset.iwsdkWorkspaceView,
-        ),
+        editor.page
+          .frameLocator('#workspace-runtime-frame')
+          .locator('#app-status')
+          .textContent(),
       )
-      .toBe('split');
-    expect(await isVisible(editor.page, '#workspace-runtime-frame')).toBe(true);
-    expect(await isVisible(editor.page, '[data-workspace-editor-pane]')).toBe(
-      true,
-    );
+      .toBe('1 nodes');
+
     await expect
       .poll(() =>
-        getEditorProof(editor.page).then((entry) => entry.canvasWidth),
+        editor.page
+          .locator('[data-workspace-view-button]')
+          .evaluateAll((buttons) =>
+            buttons.map((button) =>
+              button.getAttribute('data-workspace-view-button'),
+            ),
+          ),
       )
-      .toBeLessThan(editorCanvasWidth - 100);
-    const splitCanvasWidth = (await getEditorProof(editor.page)).canvasWidth;
+      .toEqual(['runtime', 'editor']);
 
-    await dispatchSceneTool(editor.page, 'workspace_set_view', {
-      view: 'editor',
-    });
+    await editor.page.locator('[data-workspace-view-button="editor"]').click();
     await expect
       .poll(() =>
-        getEditorProof(editor.page).then((entry) => entry.canvasWidth),
+        editor.page
+          .locator('#scene-canvas')
+          .evaluate((canvas) => canvas.clientWidth),
       )
-      .toBeGreaterThan(splitCanvasWidth + 100);
-
-    await expect(
-      dispatchSceneTool(editor.page, 'workspace_open_scene', {
-        path: 'public/scenes/editor-smoke.iwsdk.scene.json',
-      }),
-    ).resolves.toMatchObject({
-      path: 'public/scenes/editor-smoke.iwsdk.scene.json',
-      revision: expect.any(String),
-      reloading: true,
-    });
+      .toBe(editorCanvasWidth);
   }, 15000);
 
-  test('shows scene picker and supports headless scene file tools without a scene target', async () => {
+  test('auto-opens the only scene and keeps ordinary app tabs unwrapped', async () => {
     harness = await createEditorTestHarness('editor-scene-picker');
     const context = await harness.browser.newContext({
       extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
@@ -172,74 +99,33 @@ describe('editor WebGL render proof', () => {
     });
     const page = await context.newPage();
 
-    await page.goto(`${harness.baseUrl}__iwsdk/workspace`, {
-      waitUntil: 'domcontentloaded',
-    });
+    await page.goto(harness.baseUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() =>
+      Boolean((window as any).IWSDK_SCENE_EDITOR),
+    );
+    expect(page.url()).toBe(harness.baseUrl);
     await expect
-      .poll(() => page.locator('.scene-picker-dialog h1').textContent())
-      .toBe('Open Scene');
+      .poll(() =>
+        page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+      )
+      .toBe('runtime');
 
-    const state = await dispatchSceneTool(page, 'workspace_get_state');
-    expect(state).toMatchObject({
-      editor: {
-        ready: false,
-        scenePath: null,
-      },
-      managed: true,
-      view: 'editor',
-    });
-
-    const files = await dispatchSceneTool(page, 'scene_list_files');
-    expect(files).toMatchObject({
-      files: [
-        expect.objectContaining({
-          path: 'public/scenes/editor-smoke.iwsdk.scene.json',
-        }),
-      ],
-    });
-
-    const created = await dispatchSceneTool(page, 'scene_create', {
-      open: false,
-      path: 'public/scenes/from-picker.iwsdk.scene.json',
-    });
-    expect(created).toMatchObject({
-      opened: false,
-      path: 'public/scenes/from-picker.iwsdk.scene.json',
-      previousRevision: 'missing',
-      revision: expect.any(String),
-      writtenRevision: expect.any(String),
-    });
-
-    await page
-      .locator('input[name="path"]')
-      .fill('public/scenes/from-picker-ui.iwsdk.scene.json');
-    await page.locator('#scene-picker-create button[type="submit"]').click();
-    await page.waitForURL(/from-picker-ui\.iwsdk\.scene\.json/, {
-      timeout: 10000,
-    });
+    await page.locator('[data-workspace-view-button="editor"]').click();
+    await page.waitForURL(/#editor\/editor-smoke\.iwsdk\.scene\.json$/u);
     await expect
-      .poll(() => dispatchSceneTool(page, 'workspace_get_state'))
-      .toMatchObject({
-        editor: {
-          ready: true,
-          scenePath: 'public/scenes/from-picker-ui.iwsdk.scene.json',
-        },
-      });
+      .poll(() => page.locator('.scene-picker-dialog').count())
+      .toBe(0);
+    await expect
+      .poll(() => page.locator('#scene-canvas').isVisible())
+      .toBe(true);
+
+    const ordinaryApp = await harness.openApp();
+    expect(ordinaryApp.page.url()).toBe(harness.baseUrl);
+    expect(
+      await ordinaryApp.page.evaluate(
+        () => (window as any).__IWSDK_EDITOR_CONFIG == null,
+      ),
+    ).toBe(true);
+    await context.close();
   }, 15000);
 });
-
-async function isVisible(
-  page: { locator(selector: string): any },
-  selector: string,
-) {
-  return page.locator(selector).evaluate((element: Element) => {
-    const style = window.getComputedStyle(element);
-    const rect = element.getBoundingClientRect();
-    return (
-      style.display !== 'none' &&
-      style.visibility !== 'hidden' &&
-      rect.width > 0 &&
-      rect.height > 0
-    );
-  });
-}

@@ -95,18 +95,6 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         display: none;
       }
 
-      html[data-iwsdk-workspace-view="split"] .workspace-runtime-frame {
-        display: block;
-        width: 50vw;
-      }
-
-      html[data-iwsdk-workspace-view="split"] .workspace-editor-pane {
-        border-left: 1px solid #19191c;
-        display: block;
-        left: 50vw;
-        width: 50vw;
-      }
-
       .scene-picker-dialog {
         align-items: center;
         background: rgba(16, 16, 19, 0.92);
@@ -202,7 +190,7 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
       }
 
       .editor-shell {
-        --bottom-panel-h: 148px;
+        --bottom-panel-h: 210px;
         --left-panel-w: 250px;
         --right-panel-w: 300px;
         --titlebar-h: 0px;
@@ -263,6 +251,7 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         border-right: 1px solid #19191c;
         bottom: var(--bottom-panel-h);
         left: 0;
+        overflow: hidden;
         width: var(--left-panel-w);
       }
 
@@ -278,7 +267,8 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
       }
 
       .scene-graph-section {
-        flex: 1;
+        flex: 1 1 180px;
+        min-height: 100px;
         overflow: auto;
       }
 
@@ -588,6 +578,10 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         scrollbar-width: thin;
       }
 
+      .editor-bottom-panel[data-active-tab="assets"] .bottom-panel-content {
+        display: none;
+      }
+
       .diagnostics-list {
         display: grid;
         gap: 6px;
@@ -618,6 +612,14 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         border-color: rgba(79, 224, 176, 0.28);
       }
 
+      .diagnostics-list li[data-validation-node-id] {
+        cursor: pointer;
+      }
+
+      .diagnostics-list li[data-validation-node-id]:hover {
+        background: rgba(45, 45, 50, 0.9);
+      }
+
       .diagnostics-list strong,
       .diagnostics-list span,
       .diagnostics-list em {
@@ -639,6 +641,18 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
           11px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
           Consolas, monospace;
         font-style: normal;
+      }
+
+      .diagnostics-list li[data-diagnostic-validation] span {
+        white-space: normal;
+      }
+
+      .diagnostic-fix {
+        color: #c5c5cb;
+        display: block;
+        font-size: 10px;
+        line-height: 14px;
+        margin-top: 2px;
       }
 
       #editor-status-strip {
@@ -691,19 +705,50 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         width: 100%;
       }
 
-      .asset-catalog-section {
-        border-top: 1px solid #1d1d20;
-        display: flex;
-        flex: 0 0 218px;
+      .asset-library-section {
+        display: none;
         flex-direction: column;
-        min-height: 150px;
+        min-height: 0;
         overflow: hidden;
       }
 
+      .editor-bottom-panel[data-active-tab="assets"] .asset-library-section {
+        display: flex;
+      }
+
+      .asset-library-project {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .asset-library-project {
+        flex: 1 1 auto;
+      }
+
+      .asset-browser-controls {
+        align-items: center;
+        display: grid;
+        gap: 5px;
+        grid-template-columns: minmax(0, 1fr) 24px;
+      }
+
+      .asset-browser-controls .icon-button {
+        height: 24px;
+        min-height: 24px;
+        min-width: 24px;
+        padding: 4px;
+        width: 24px;
+      }
+
       #asset-catalog {
+        display: grid;
+        gap: 6px;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
         min-height: 0;
         overflow: auto;
-        padding: 2px 0 6px;
+        padding: 0 6px 6px;
         scrollbar-color: #3d3d3f transparent;
         scrollbar-width: thin;
       }
@@ -716,9 +761,11 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         color: #d8d8de;
         display: grid;
         gap: 6px;
-        grid-template-columns: 24px minmax(0, 1fr) 24px;
-        min-height: 34px;
-        padding: 3px 6px;
+        grid-template-columns: minmax(0, 1fr) 24px;
+        grid-template-rows: 78px auto;
+        min-height: 110px;
+        padding: 5px;
+        position: relative;
         width: 100%;
       }
 
@@ -734,9 +781,18 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         border: 1px solid #4a4a50;
         border-radius: 4px;
         display: inline-flex;
-        height: 24px;
+        grid-column: 1 / -1;
+        height: 78px;
         justify-content: center;
-        width: 24px;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      .asset-catalog-thumb img {
+        display: block;
+        height: 100%;
+        object-fit: cover;
+        width: 100%;
       }
 
       .asset-catalog-thumb .lucide-icon {
@@ -775,6 +831,7 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
       }
 
       .asset-add-button {
+        align-self: center;
         background: transparent;
         border-color: transparent;
       }
@@ -811,6 +868,14 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         color: #ffffff;
       }
 
+      .node-row[data-preview-hidden] .node-row-main {
+        opacity: 0.48;
+      }
+
+      .node-row[data-preview-locked] .node-row-id {
+        color: #b8b8be;
+      }
+
       .node-row-caret,
       .node-row-icon {
         align-items: center;
@@ -819,6 +884,24 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         flex: 0 0 14px;
         justify-content: center;
         width: 14px;
+      }
+
+      .node-row-caret[data-outliner-disclosure],
+      .node-row-caret[data-scene-root-disclosure] {
+        border-radius: 3px;
+        cursor: pointer;
+        height: 18px;
+      }
+
+      .node-row-caret[data-outliner-disclosure]:hover,
+      .node-row-caret[data-scene-root-disclosure]:hover {
+        background: #4a4a50;
+        color: #ededed;
+      }
+
+      .node-row-caret[data-scene-root-disclosure]:focus-visible {
+        outline: 1px solid #7aa7ef;
+        outline-offset: 1px;
       }
 
       .node-row-main {
@@ -862,6 +945,46 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         min-width: 14px;
         padding: 0 4px;
         text-align: center;
+      }
+
+      .node-row-preview-state {
+        align-items: center;
+        color: #aaaab1;
+        display: inline-flex;
+        flex: 0 0 auto;
+        gap: 2px;
+      }
+
+      .node-row-visibility {
+        align-items: center;
+        border-radius: 3px;
+        color: #8f8f96;
+        display: inline-flex;
+        flex: 0 0 18px;
+        height: 18px;
+        justify-content: center;
+        opacity: 0;
+        width: 18px;
+      }
+
+      .node-row:hover .node-row-visibility,
+      .node-row[data-preview-hidden] .node-row-visibility {
+        opacity: 1;
+      }
+
+      .node-row-visibility:hover {
+        background: #4a4a50;
+        color: #ededed;
+      }
+
+      .node-row-visibility .lucide-icon {
+        height: 13px;
+        width: 13px;
+      }
+
+      .node-row-preview-state .lucide-icon {
+        height: 12px;
+        width: 12px;
       }
 
       .scene-graph-context-menu {
@@ -968,7 +1091,7 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         display: grid;
         font-size: 10px;
         font-weight: 700;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 50%);
         letter-spacing: 0;
         list-style: none;
         margin: 0;
@@ -1019,10 +1142,15 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
 
       .inspector-section-meta {
         color: #8f8f96;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font:
           10px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
           Consolas, monospace;
         font-weight: 400;
+        text-align: right;
       }
 
       .transform-editor {
@@ -1094,13 +1222,16 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         width: 100%;
       }
 
-      #apply-transform {
-        align-items: center;
-        display: inline-flex;
-        gap: 6px;
-        justify-content: center;
-        margin: 0 8px 7px;
-        width: calc(100% - 16px);
+      input[type="number"] {
+        appearance: textfield;
+        -moz-appearance: textfield;
+      }
+
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
+        -webkit-appearance: none;
       }
 
       #transform-editor-message {
@@ -1108,6 +1239,10 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         font-size: 11px;
         min-height: 14px;
         padding: 0 8px;
+      }
+
+      #transform-editor-message:empty {
+        display: none;
       }
 
       #transform-editor-message.transform-editor-error {
@@ -1168,87 +1303,12 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         font-size: 11px;
       }
 
-      .asset-metadata-grid {
-        display: grid;
-        gap: 4px;
-        margin: 0;
-      }
-
-      .asset-metadata-grid div {
-        align-items: baseline;
-        display: grid;
-        gap: 6px;
-        grid-template-columns: 58px minmax(0, 1fr);
-        min-width: 0;
-      }
-
-      .asset-metadata-grid dt,
-      .asset-metadata-grid dd {
-        margin: 0;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .asset-metadata-grid dt {
-        color: #8f8f96;
-        font-size: 10px;
-      }
-
-      .asset-metadata-grid dd {
-        color: #d8d8de;
-        font:
-          10px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-          Consolas, monospace;
-      }
-
-      .asset-inspector-empty,
       .asset-inspector-warning {
-        color: #9c9c9c;
+        color: #f3978f;
         font-size: 11px;
       }
 
-      .asset-inspector-warning {
-        color: #f3978f;
-      }
-
-      .metadata-editor-card {
-        background: #27272b;
-        border: 1px solid #3e3e44;
-        border-radius: 4px;
-        display: grid;
-        gap: 5px;
-        margin: 0 8px 7px;
-        padding: 5px;
-      }
-
-      .metadata-editor-card textarea {
-        background: #222226;
-        border: 1px solid #494950;
-        border-radius: 4px;
-        box-sizing: border-box;
-        color: #ededed;
-        font:
-          11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", monospace;
-        min-height: 76px;
-        min-width: 0;
-        resize: vertical;
-        width: 100%;
-      }
-
-      #metadata-editor-message {
-        color: #4fe0b0;
-        font-size: 11px;
-        min-height: 14px;
-      }
-
-      #metadata-editor-message.metadata-editor-error {
-        color: #f3978f;
-      }
-
-      .component-editor {
+      .component-editor[open] {
         padding-bottom: 6px;
       }
 
@@ -1333,6 +1393,18 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         white-space: nowrap;
       }
 
+      .component-color-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .component-color-row input[type="color"] {
+        cursor: pointer;
+        height: 26px;
+        min-height: 26px;
+        padding: 2px;
+        width: 44px;
+      }
+
       .component-vector-field {
         display: grid;
         gap: 4px;
@@ -1341,6 +1413,10 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
           minmax(0, 1fr)
         );
         min-width: 0;
+      }
+
+      .component-vector-field[data-component-vector-count="4"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .component-axis-field {
@@ -1387,12 +1463,112 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         width: 100%;
       }
 
-      #add-component {
+      .component-add-button {
         align-items: center;
         display: inline-flex;
         gap: 5px;
         justify-content: center;
+        margin: 0 8px 1px;
+        width: calc(100% - 16px);
+      }
+
+      .component-picker-dialog {
+        background: transparent;
+        border: 0;
+        color: #ededed;
+        max-height: calc(100vh - 64px);
+        max-width: calc(100vw - 64px);
+        padding: 0;
+        width: min(480px, calc(100vw - 64px));
+      }
+
+      .component-picker-dialog::backdrop {
+        background: rgba(12, 12, 14, 0.7);
+      }
+
+      .component-picker-card {
+        background: #2e2e32;
+        border: 1px solid #505057;
+        border-radius: 4px;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+        box-sizing: border-box;
+        display: grid;
+        gap: 10px;
+        max-height: calc(100vh - 64px);
+        padding: 12px;
+      }
+
+      .component-picker-header {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .component-picker-header h3 {
+        font-size: 14px;
+        margin: 0;
+      }
+
+      #component-picker-search {
+        box-sizing: border-box;
+        margin: 0;
         width: 100%;
+      }
+
+      .component-picker-list {
+        display: grid;
+        gap: 3px;
+        max-height: min(420px, calc(100vh - 180px));
+        overflow-y: auto;
+      }
+
+      .component-picker-option {
+        align-items: start;
+        background: #35353a;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        display: grid;
+        gap: 2px;
+        justify-items: start;
+        min-height: 44px;
+        padding: 6px 8px;
+        text-align: left;
+        width: 100%;
+      }
+
+      .component-picker-option:hover,
+      .component-picker-option:focus-visible {
+        background: #414147;
+        border-color: #62626a;
+      }
+
+      .component-picker-option strong {
+        color: #f1f1f3;
+        font-size: 12px;
+      }
+
+      .component-picker-option span {
+        color: #a7a7ad;
+        font:
+          10px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, monospace;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+      }
+
+      .component-picker-empty {
+        color: #a7a7ad;
+        font-size: 12px;
+        padding: 12px 4px;
+        text-align: center;
+      }
+
+      .component-picker-empty[hidden],
+      .component-picker-option[hidden] {
+        display: none;
       }
 
       #component-editor-message {
@@ -1400,6 +1576,10 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         font-size: 12px;
         min-height: 16px;
         padding: 0 8px;
+      }
+
+      #component-editor-message:empty {
+        display: none;
       }
 
       #component-editor-message.component-editor-error {
@@ -1489,5 +1669,67 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         overflow: auto;
         padding: 8px;
         white-space: pre-wrap;
+      }
+
+      @media (max-width: 720px) {
+        .workspace-view-switcher {
+          right: 4px;
+          top: 4px;
+        }
+
+        .workspace-view-switcher button {
+          padding: 0 5px;
+        }
+
+        .editor-shell {
+          --bottom-panel-h: 0px;
+          --left-panel-w: 0px;
+          --right-panel-w: 0px;
+          --toolbar-h: 34px;
+        }
+
+        .editor-toolbar {
+          flex-wrap: nowrap;
+          left: 0;
+          overflow-x: auto;
+          right: 0;
+        }
+
+        .editor-panel {
+          bottom: 0;
+          min-width: 0;
+          top: 58%;
+          width: 50%;
+        }
+
+        .editor-panel-left {
+          left: 0;
+        }
+
+        .editor-panel-right {
+          right: 0;
+        }
+
+        .editor-bottom-panel {
+          display: none;
+        }
+
+        #editor-status-strip {
+          bottom: 42%;
+          left: 0;
+          right: 0;
+        }
+
+        .viewport-overlay-slot {
+          left: 8px;
+          max-width: min(220px, calc(100vw - 104px));
+        }
+
+        #orientation-gizmo {
+          height: 80px;
+          right: 8px;
+          width: 80px;
+        }
+
       }
 `;

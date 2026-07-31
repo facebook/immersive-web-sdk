@@ -25,7 +25,6 @@ import {
   ShaderMaterial,
   SphereGeometry,
   Texture,
-  CubeTexture,
   EquirectangularReflectionMapping,
 } from '../runtime/index.js';
 import { DomeGradient } from './dome-gradient.js';
@@ -36,6 +35,7 @@ import {
 } from './gradient-environment.js';
 import { IBLGradient } from './ibl-gradient.js';
 import { IBLTexture } from './ibl-texture.js';
+import { SceneAREnvironmentController } from './scene-ar-environment.js';
 
 /**
  * Compute sky/equator/ground hex colors from RGB views, reusing a single shared
@@ -63,18 +63,16 @@ interface EnvState {
   gradientDome?: Mesh;
   gradientEnvironmentScene?: GradientEnvironment;
   gradientEnvironmentMesh?: Mesh;
-  savedBackground?: Texture | CubeTexture | Color | null;
-  isAR?: boolean;
 }
 
 /**
  * Unified background and image‑based lighting system.
  *
  * @remarks
- * - Background is driven by {@link DomeTexture} (HDR/LDR equirect) or {@link DomeGradient} (procedural sphere) and writes to `scene.background`.
+ * - {@link DomeTexture} writes an HDR/LDR equirectangular texture to `scene.background`; {@link DomeGradient} renders a procedural, clipping-proof sky mesh.
  * - IBL is driven by {@link IBLTexture} ("room" or HDR/LDR equirect via PMREM) or {@link IBLGradient} (PMREM of a gradient scene) and writes to `scene.environment`.
  * - Rotation and intensity hooks forward to `scene.backgroundRotation`, `scene.backgroundIntensity`, and `scene.environmentRotation`, `scene.environmentIntensity`.
- * - In immersive AR, background visuals are hidden while environment lighting remains active.
+ * - AR sessions always hide authored backgrounds for passthrough while retaining IBL.
  * - PMREM targets are regenerated only when sources change; the dome mesh and geometry are reused.
  *
  * @category Environment & Lighting
@@ -105,21 +103,28 @@ export class EnvironmentSystem extends createSystem({
   private recenterYawOffset: number = 0;
   private resetListenerCleanup: (() => void) | null = null;
   private needsResetListener: boolean = false;
+  private arEnvironment!: SceneAREnvironmentController;
 
   init(): void {
     this.pmrem = new PMREMGenerator(this.renderer);
+    this.arEnvironment = new SceneAREnvironmentController(
+      this.scene,
+      this.renderer,
+    );
     this.cleanupFuncs.push(() => {
+      this.arEnvironment.restore();
       this.pmrem.dispose();
       this.state.environmentTarget?.dispose();
       this.state.environmentTarget = undefined;
       this.clearGradientDome();
+      this.clearGradientEnvironment();
       this.gradientGeometry?.dispose();
       this.gradientGeometry = undefined;
     });
 
     // XR background toggle
     this.cleanupFuncs.push(
-      this.visibilityState.subscribe(() => this.updateBackgroundForXRMode()),
+      this.visibilityState.subscribe(() => this.updateSceneARMode()),
     );
 
     // XR recenter compensation
@@ -158,6 +163,8 @@ export class EnvironmentSystem extends createSystem({
 
     if (backgroundEntity) {
       this.processBackground(backgroundEntity);
+    } else {
+      this.clearBackgroundSource();
     }
 
     // Choose IBL source: IBLTexture > IBLGradient
@@ -175,14 +182,11 @@ export class EnvironmentSystem extends createSystem({
 
     if (iblEntity) {
       this.processIBL(iblEntity);
+    } else {
+      this.clearIBLSource();
     }
 
-    // Keep gradient dome centered and sized
-    if (this.state.gradientDome) {
-      this.state.gradientDome.position.copy(this.camera.position);
-      const r = Math.max(1e-3, (this.camera?.far || 1000) * 0.95);
-      this.state.gradientDome.scale.setScalar(r);
-    }
+    this.updateSceneARMode();
   }
 
   // Background handling
@@ -274,9 +278,13 @@ export class EnvironmentSystem extends createSystem({
     if (!forIBL) {
       // Background gradient dome mesh
       this.ensureGradientDome(skyHex, equatorHex, groundHex, intensity);
-      // Ensure correct visibility for AR sessions (hide in AR)
       if (this.state.gradientDome) {
-        this.state.gradientDome.visible = !this.state.isAR;
+        this.state.gradientDome.userData.iwsdkSceneDomeGradient = {
+          equator: Array.from(equatorV),
+          ground: Array.from(groundV),
+          intensity,
+          sky: Array.from(skyV),
+        };
       }
     }
   }
@@ -395,6 +403,12 @@ export class EnvironmentSystem extends createSystem({
     }
 
     const target = this.pmrem.fromScene(gradientScene);
+    target.texture.userData.iwsdkSceneIBLGradient = {
+      equator: Array.from(equatorV),
+      ground: Array.from(groundV),
+      intensity,
+      sky: Array.from(skyV),
+    };
     this.setEnvironment(target);
     // Apply IBL intensity for gradient as well
     this.scene.environmentIntensity = intensity;
@@ -420,6 +434,7 @@ export class EnvironmentSystem extends createSystem({
     } else {
       this.needsResetListener = true;
     }
+    this.updateSceneARMode();
   };
 
   private attachResetListener(refSpace: XRReferenceSpace): void {
@@ -437,6 +452,7 @@ export class EnvironmentSystem extends createSystem({
     this.resetListenerCleanup = null;
     this.recenterYawOffset = 0;
     this.needsResetListener = false;
+    this.updateSceneARMode(null);
   };
 
   private onReferenceSpaceReset(event: XRReferenceSpaceEvent): void {
@@ -481,40 +497,20 @@ export class EnvironmentSystem extends createSystem({
     }
   }
 
-  // XR background handling
-  private updateBackgroundForXRMode(): void {
-    const session = this.xrManager.getSession?.() ?? this.world.session;
-    const blend: string | undefined = session?.environmentBlendMode;
-    const isAR =
-      blend === 'alpha-blend' ||
-      blend === 'additive' ||
-      blend === 'subtractive';
-
-    if (isAR === this.state.isAR) {
-      return;
-    }
-    this.state.isAR = isAR;
-
-    if (isAR) {
-      if (
-        this.scene.background !== null &&
-        this.state.savedBackground === undefined
-      ) {
-        this.state.savedBackground = this.scene.background;
-        this.scene.background = null;
-      }
-      // Hide procedural gradient dome in AR as well
-      if (this.state.gradientDome) {
-        this.state.gradientDome.visible = false;
-      }
-    } else if (this.state.savedBackground !== undefined) {
-      this.scene.background = this.state.savedBackground;
-      this.state.savedBackground = undefined;
-      // Restore gradient dome visibility when exiting AR
-      if (this.state.gradientDome) {
-        this.state.gradientDome.visible = true;
-      }
-    }
+  // Apply document AR overrides only while an actual AR session is active.
+  private updateSceneARMode(sessionOverride?: XRSession | null): void {
+    const managerSession = this.xrManager.getSession?.();
+    const session =
+      sessionOverride === undefined
+        ? managerSession === undefined
+          ? this.world.session
+          : managerSession
+        : sessionOverride;
+    this.arEnvironment.update({
+      session,
+      authoredBackgrounds:
+        this.state.gradientDome == null ? [] : [this.state.gradientDome],
+    });
   }
 
   // Gradient dome mesh utilities (background)
@@ -536,7 +532,6 @@ export class EnvironmentSystem extends createSystem({
         BackSide,
       );
       const dome = new Mesh(this.gradientGeometry, material);
-      dome.scale.setScalar(Math.max(1e-3, (this.camera?.far || 1000) * 0.95));
       dome.renderOrder = -1e9;
       dome.frustumCulled = false;
       this.scene.add(dome);
@@ -559,9 +554,36 @@ export class EnvironmentSystem extends createSystem({
       (this.state.gradientDome.material as ShaderMaterial).dispose();
       this.state.gradientDome = undefined;
     }
+  }
+
+  private clearGradientEnvironment(): void {
     if (this.state.gradientEnvironmentScene) {
       this.state.gradientEnvironmentScene.dispose();
       this.state.gradientEnvironmentScene = undefined;
     }
+    this.state.gradientEnvironmentMesh = undefined;
+  }
+
+  private clearBackgroundSource(): void {
+    this.clearGradientDome();
+    if (
+      this.state.backgroundTexture != null &&
+      this.scene.background === this.state.backgroundTexture
+    ) {
+      this.scene.background = null;
+    }
+    this.state.backgroundTexture = undefined;
+    this.state.backgroundSource = undefined;
+  }
+
+  private clearIBLSource(): void {
+    const target = this.state.environmentTarget;
+    if (target != null && this.scene.environment === target.texture) {
+      this.scene.environment = null;
+    }
+    target?.dispose();
+    this.state.environmentTarget = undefined;
+    this.state.environmentSource = undefined;
+    this.clearGradientEnvironment();
   }
 }

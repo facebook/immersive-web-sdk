@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '.././index.js';
+import { Types, createComponent } from '../ecs/component.js';
 
 /** Available physics shape types for {@link PhysicsShape}. @category Physics */
 export const PhysicsShapeType = {
@@ -16,7 +16,8 @@ export const PhysicsShapeType = {
   /** A cylinder shape is defined by the radius in dimensions[0] and height in dimensions[1]. */
   Cylinder: 'Cylinder',
   /** Capsules are similar to cylinders, but have two half-spheres on each end.
-   * A Capsules shape is defined by the radius in dimensions[0] and height in dimensions[1]. */
+   * A Capsules shape uses radius in dimensions[0] and total end-to-end height in dimensions[1],
+   * which must be at least twice the radius. */
   Capsules: 'Capsules',
   /** A convex is a shape that, if two points are part of the shape, then the segment between these two points is
    * also part of the shape. The physics engine would creates a convex wrapper around the mesh. This is a great

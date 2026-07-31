@@ -30,11 +30,12 @@ describe('editor outliner reparent', () => {
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-1',
         transform: { position: [1, 0, 0] },
       },
     });
+    await expect.poll(() => worldPosition(editor, 'vase-1')).toEqual([1, 0, 0]);
     const preReparentWorldPosition = await worldPosition(editor, 'vase-1');
 
     await dragOutlinerNode(editor, 'vase-1', '[data-node-id="table-1"]');

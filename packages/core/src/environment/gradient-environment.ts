@@ -21,21 +21,27 @@ import {
  */
 export const GRADIENT_SHADER = {
   vertexShader: /* glsl */ `
-    varying vec3 vWorldPosition;
+    varying vec3 vWorldDirection;
     void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      // A sky is directional, not positional. Strip camera translation so the
+      // dome follows every browser/XR camera without depending on its parent
+      // transform, then pin it to clip-space depth to avoid near/far clipping.
+      vec3 worldDirection = mat3(modelMatrix) * position;
+      vWorldDirection = worldDirection;
+      vec4 clipPosition = projectionMatrix
+        * mat4(mat3(viewMatrix))
+        * vec4(worldDirection, 1.0);
+      gl_Position = clipPosition.xyww;
     }
   `,
   fragmentShader: /* glsl */ `
     uniform vec3 skyColor;
     uniform vec3 equatorColor;
     uniform vec3 groundColor;
-    varying vec3 vWorldPosition;
+    varying vec3 vWorldDirection;
     
     void main() {
-      float h = normalize(vWorldPosition).y;
+      float h = normalize(vWorldDirection).y;
       vec3 color;
       
       if (h > 0.0) {

@@ -20,11 +20,16 @@ import {
   ecsSnapshot,
   ecsDiff,
 } from './ecs-debug-tools.js';
-import { getSceneHierarchy, getObjectTransform } from './scene-tools.js';
+import {
+  getObjectTransform,
+  getRenderStats,
+  getSceneHierarchy,
+} from './scene-tools.js';
 
 const SUPPORTED_METHODS = [
   'get_scene_hierarchy',
   'get_object_transform',
+  'get_render_stats',
   'ecs_pause',
   'ecs_resume',
   'ecs_step',
@@ -74,6 +79,8 @@ export class MCPRuntime {
         return getSceneHierarchy(this.world, params);
       case 'get_object_transform':
         return getObjectTransform(this.world, params);
+      case 'get_render_stats':
+        return getRenderStats(this.world);
       case 'ecs_pause':
         return ecsPause(this.world);
       case 'ecs_resume':

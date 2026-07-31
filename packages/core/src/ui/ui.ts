@@ -11,81 +11,19 @@ import {
   setPreferredColorScheme,
 } from '@pmndrs/uikit';
 import { interpret } from '@pmndrs/uikitml';
-import { Types, createComponent } from '../ecs/component.js';
+import { Types } from '../ecs/component.js';
 import type { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import { Vector3 } from '../runtime/three.js';
 import { UIKitDocument } from './document.js';
+import {
+  PanelDocument,
+  PanelUI,
+  type ColorScheme,
+} from './panel-components.js';
 
-/**
- * Color scheme options for UI theming.
- * @category UI
- */
-export const ColorSchemeType = {
-  /** Follow system/browser color scheme preference */
-  System: 'system',
-  /** Force light mode */
-  Light: 'light',
-  /** Force dark mode */
-  Dark: 'dark',
-} as const;
-
-/**
- * Type representing available color scheme options.
- * @category UI
- */
-export type ColorScheme =
-  (typeof ColorSchemeType)[keyof typeof ColorSchemeType];
-
-/**
- * Props accepted by the {@link PanelUI} component.
- * @category UI
- */
-export interface PanelUIProps {
-  /** Path to compiled UIKitML JSON. @example "/ui/settings.json" */
-  config: string;
-  /** Max panel width in meters. @defaultValue 1 */
-  maxWidth?: number;
-  /** Max panel height in meters. @defaultValue 1 */
-  maxHeight?: number;
-}
-
-/**
- * Component for 3D panel UI elements with file‑based configuration.
- *
- * @remarks
- * - Compile `.uikitml` → JSON using the UIKitML Vite plugin, then set {@link PanelUIProps.config}.
- * - When parented to world space (default), {@link PanelUISystem} drives target dimensions from
- *   {@link PanelUIProps.maxWidth} / {@link PanelUIProps.maxHeight} and accounts for world scale.
- * - Pointer events are forwarded by the input layer when canvas pointer events are enabled.
- * @category UI
- * @see /getting-started/06-spatial-ui
- */
-export const PanelUI = createComponent(
-  'PanelUI',
-  {
-    /** Path to .json file */
-    config: { type: Types.String, default: '' },
-    /** Max width constraint */
-    maxWidth: { type: Types.Float32, default: 1 },
-    /** Max height constraint */
-    maxHeight: { type: Types.Float32, default: 1 },
-  },
-  'Component for 3D panel UI elements with file-based configuration',
-);
-
-/**
- * Internal component containing the loaded UI document (a UIKitDocument `Group`).
- * @category UI
- * @hideineditor
- */
-export const PanelDocument = createComponent(
-  'PanelDocument',
-  {
-    document: { type: Types.Object, default: undefined }, // UIKitDocument (extends Group)
-  },
-  'Internal component containing loaded UI document',
-);
+export { ColorSchemeType, PanelDocument, PanelUI } from './panel-components.js';
+export type { ColorScheme, PanelUIProps } from './panel-components.js';
 
 /**
  * Renders and updates spatial UI panels.

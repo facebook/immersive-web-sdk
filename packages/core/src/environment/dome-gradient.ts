@@ -10,7 +10,8 @@ import { Types, createComponent } from '../ecs/component.js';
  * Procedural gradient background dome.
  *
  * @remarks
- * - Renders an inward‑facing sphere and writes to `scene.background`.
+ * - Renders an inward-facing, translation-free sky sphere behind the scene.
+ * - Clip-space depth keeps it independent of camera near/far planes.
  * - Colors are Unity‑style sky/equator/ground; intensity multiplies shader output.
  *
  * @category Environment & Lighting

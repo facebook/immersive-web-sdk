@@ -6,11 +6,12 @@
  */
 
 import type { SceneDocument } from '@iwsdk/scene-composition';
+import type { SceneComponentCatalog } from '@iwsdk/scene-composition';
 import { XROrigin } from '@iwsdk/xr-input';
 import type { PointerEventsMap } from '@pmndrs/pointer-events';
 import { Signal, signal } from '@preact/signals-core';
 import { AnyComponent, World as ElicsWorld } from 'elics';
-import { AssetManager } from '../asset/index.js';
+import { AssetManager, RenderableAssetRegistry } from '../asset/index.js';
 // Environment is driven by components/systems; no world helpers
 // NOTE: import `launchXR` and types directly from submodules — not the
 // `../init/index.js` barrel — so loading this file does not pull in
@@ -99,6 +100,10 @@ export class World extends ElicsWorld {
   public input!: InputManager;
   public player!: XROrigin;
   public assetManager!: typeof AssetManager;
+  /** Renderable assets registered by the application manifest. */
+  public assets!: RenderableAssetRegistry;
+  /** Component definitions shared by scene validation and editor tooling. */
+  public componentCatalog!: SceneComponentCatalog;
   public scene!: Scene;
   public sceneEntity!: Entity;
   public activeLevel!: Signal<Entity>;
@@ -111,6 +116,7 @@ export class World extends ElicsWorld {
   public requestedLevelUrl: string | undefined;
   public requestedLevelDocument: SceneDocument | undefined;
   public _resolveLevelLoad: (() => void) | undefined;
+  public _rejectLevelLoad: ((reason: unknown) => void) | undefined;
   /** Default XR options used when calling {@link World.launchXR} without overrides. */
   public xrDefaults: import('../init/xr.js').XROptions | undefined;
   /** MCP runtime for framework-specific tools. Set automatically during World.create(). */
@@ -257,21 +263,23 @@ export class World extends ElicsWorld {
 
   /** Request a level change; LevelSystem performs the work and resolves. */
   async loadLevel(url?: string): Promise<void> {
-    this.resolvePendingLevelLoad();
+    this.rejectPendingLevelLoad();
     this.requestedLevelDocument = undefined;
     this.requestedLevelUrl = url ?? '';
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       this._resolveLevelLoad = resolve;
+      this._rejectLevelLoad = reject;
     });
   }
 
   /** Request an in-memory native scene document level load; LevelSystem performs the work and resolves. */
   async loadSceneDocument(document: SceneDocument): Promise<void> {
-    this.resolvePendingLevelLoad();
+    this.rejectPendingLevelLoad();
     this.requestedLevelUrl = undefined;
     this.requestedLevelDocument = document;
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       this._resolveLevelLoad = resolve;
+      this._rejectLevelLoad = reject;
     });
   }
 
@@ -279,13 +287,14 @@ export class World extends ElicsWorld {
     this.session?.end();
   }
 
-  private resolvePendingLevelLoad(): void {
-    if (this._resolveLevelLoad == null) {
+  private rejectPendingLevelLoad(): void {
+    if (this._resolveLevelLoad == null && this._rejectLevelLoad == null) {
       return;
     }
-    const resolve = this._resolveLevelLoad;
+    const reject = this._rejectLevelLoad;
     this._resolveLevelLoad = undefined;
-    resolve();
+    this._rejectLevelLoad = undefined;
+    reject?.(new Error('Level load was superseded by a newer request'));
   }
 
   /**

@@ -79,7 +79,6 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       if (
         (command === 'xr' ||
           command === 'browser' ||
-          command === 'workspace' ||
           command === 'scene' ||
           command === 'ecs') &&
         subcommand
@@ -156,7 +155,6 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         throw new Error('Usage: iwsdk mcp stdio|inspect');
       case 'xr':
       case 'browser':
-      case 'workspace':
       case 'scene':
       case 'ecs':
         result = await handleRuntimeOperation(
@@ -186,6 +184,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
     const failure =
       error instanceof RuntimeCommandExecutionError
         ? createFailure(error.message, 'runtime_command_failed', {
+            ...(error.details ?? {}),
             cause: error.issueCause,
             browser: error.browser ?? null,
           })

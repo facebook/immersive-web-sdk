@@ -5,20 +5,26 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import {
+  deriveSceneInstanceNodeId,
+  deriveScenePatternInstanceNamespace,
+  generateScenePatternTransforms,
+} from './expansion.js';
+import { getSceneNodeLocalBounds } from './primitives.js';
 import type {
   SceneAlignOptions,
   SceneAlignment,
   SceneAxis,
-  SceneAsset,
+  SceneBounds,
   SceneDocument,
   SceneNode,
-  ScenePlaceOn,
+  ScenePrefabNodeOverride,
   SceneSnapOptions,
   SceneScale,
   SceneTransform,
   Vec3,
 } from './types.js';
-import { findNode, findNodeLocation } from './utils.js';
+import { deepClone, findNode, findNodeLocation } from './utils.js';
 
 const AXIS_TO_INDEX: Record<SceneAxis, 0 | 1 | 2> = {
   x: 0,
@@ -27,6 +33,15 @@ const AXIS_TO_INDEX: Record<SceneAxis, 0 | 1 | 2> = {
 };
 const INDEX_TO_AXIS: SceneAxis[] = ['x', 'y', 'z'];
 const IDENTITY_LINEAR_MATRIX: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+export interface SceneBoundsQueryOptions {
+  excludeNodeIds?: readonly string[];
+  resolveAssetBounds?: SceneAssetBoundsResolver;
+}
+
+export type SceneAssetBoundsResolver = (
+  assetId: string,
+) => SceneBounds | undefined;
 
 export function resolveLookAtYawDeg(position: Vec3, target: Vec3): number {
   const dx = target[0] - position[0];
@@ -50,8 +65,6 @@ export function resolveLookAtTransform(
       rotation[2],
     ],
   };
-  delete nextTransform.lookAt;
-
   return nextTransform;
 }
 
@@ -66,6 +79,81 @@ export function resolveLookAtTransformInDocument(
     location.node,
     worldPointToLocal(target, parentWorldTransform),
   );
+}
+
+/** Resolve authoring-only orientation constraints into runtime transforms. */
+export function resolveSceneAuthoringTransforms(
+  document: SceneDocument,
+): SceneDocument {
+  const resolvedDocument = JSON.parse(
+    JSON.stringify(document),
+  ) as SceneDocument;
+  const nodes = flattenSceneNodes(resolvedDocument.nodes);
+  for (const node of nodes) {
+    const lookAt = node.constraints?.lookAt;
+    if (lookAt != null) {
+      node.transform = resolveLookAtTransformInDocument(
+        resolvedDocument,
+        node.id,
+        lookAt.target,
+      );
+    }
+  }
+  return resolvedDocument;
+}
+
+/** Apply prefab overrides and resolve its local constraints without mutation. */
+export function resolveScenePrefabRoot(
+  document: SceneDocument,
+  root: SceneNode,
+  overrides: Record<string, ScenePrefabNodeOverride> | undefined,
+): SceneNode {
+  const resolvedRoot = applyScenePrefabOverrides(root, overrides);
+  const scope: SceneDocument = {
+    nodes: [resolvedRoot],
+    resources: {
+      ...(document.resources.prefabs == null
+        ? {}
+        : { prefabs: document.resources.prefabs }),
+    },
+    units: document.units,
+    version: document.version,
+  };
+  return resolveSceneAuthoringTransforms(scope).nodes[0];
+}
+
+function applyScenePrefabOverrides(
+  source: SceneNode,
+  overrides: Record<string, ScenePrefabNodeOverride> | undefined,
+): SceneNode {
+  const node = deepClone(source);
+  const override = overrides?.[source.id];
+  if (override?.transform != null) {
+    node.transform = { ...(node.transform ?? {}), ...override.transform };
+  }
+  if (override?.components != null) {
+    node.components = {
+      ...(node.components ?? {}),
+      ...deepClone(override.components),
+    };
+  }
+  if (source.children != null) {
+    node.children = source.children.map((child) =>
+      applyScenePrefabOverrides(child, overrides),
+    );
+  }
+  return node;
+}
+
+function flattenSceneNodes(
+  nodes: SceneNode[],
+  result: SceneNode[] = [],
+): SceneNode[] {
+  for (const node of nodes) {
+    result.push(node);
+    flattenSceneNodes(node.children ?? [], result);
+  }
+  return result;
 }
 
 export function snapPositionToGrid(
@@ -146,64 +234,6 @@ export function resolveAlignTransforms(
       ];
     }),
   );
-}
-
-export function resolvePlaceOnTransform(
-  document: SceneDocument,
-  nodeId: string,
-  placeOn: string | ScenePlaceOn,
-): SceneTransform {
-  const location = findRequiredNodeLocation(document, nodeId);
-  const node = location.node;
-  const targetId = typeof placeOn === 'string' ? placeOn : placeOn.target;
-  const clearance = typeof placeOn === 'string' ? 0 : (placeOn.clearance ?? 0);
-  const align =
-    typeof placeOn === 'string' ? 'center' : (placeOn.align ?? 'center');
-
-  const nodeBounds = findRequiredAsset(document, node.asset, node.id).bounds;
-  const target = findRequiredNode(document, targetId);
-  const targetBounds = findRequiredAsset(
-    document,
-    target.asset,
-    target.id,
-  ).bounds;
-
-  if (nodeBounds == null) {
-    throw new Error(`Node "${node.id}" asset is missing bounds metadata`);
-  }
-
-  if (targetBounds == null) {
-    throw new Error(`Target "${target.id}" asset is missing bounds metadata`);
-  }
-
-  const nodeWorldTransform = getNodeWorldTransform(document, nodeId);
-  const nodeParentWorldTransform = getParentWorldTransform(document, nodeId);
-  const targetWorldTransform = getNodeWorldTransform(document, targetId);
-  const nodeWorldBounds = getNodeWorldBounds(document, nodeId);
-  const targetWorldBounds = getNodeWorldBounds(document, targetId);
-  const targetTop = targetWorldBounds.max[1];
-  const nodeBottomOffset =
-    nodeWorldBounds.min[1] - nodeWorldTransform.position[1];
-  const nextWorldPosition: Vec3 = [
-    align === 'center'
-      ? targetWorldTransform.position[0]
-      : nodeWorldTransform.position[0],
-    targetTop - nodeBottomOffset + clearance,
-    align === 'center'
-      ? targetWorldTransform.position[2]
-      : nodeWorldTransform.position[2],
-  ];
-  const nextPosition = worldPointToLocal(
-    nextWorldPosition,
-    nodeParentWorldTransform,
-  );
-  const nextTransform: SceneTransform = {
-    ...(node.transform ?? {}),
-    position: nextPosition,
-  };
-  delete nextTransform.placeOn;
-
-  return nextTransform;
 }
 
 export function resolveReparentTransform(
@@ -527,32 +557,253 @@ function getAlignmentTargetMetric(
   return getBoundsMetric(bounds, options.axisIndex, options.edge);
 }
 
-function getNodeWorldBounds(document: SceneDocument, nodeId: string) {
+export function getNodeWorldBounds(
+  document: SceneDocument,
+  nodeId: string,
+  options: SceneBoundsQueryOptions = {},
+) {
   const node = findRequiredNode(document, nodeId);
   const worldTransform = getNodeWorldTransform(document, nodeId);
-  if (node.asset == null) {
-    return {
-      min: worldTransform.position,
-      max: worldTransform.position,
-    };
-  }
-
-  const asset = findAsset(document, node.asset);
-  if (asset?.bounds == null) {
-    return {
-      min: worldTransform.position,
-      max: worldTransform.position,
-    };
-  }
-
-  const corners = boundsCorners(asset.bounds);
-  const worldCorners = corners.map((corner) =>
-    addVec3(
-      worldTransform.position,
-      transformVec3(worldTransform.linear, corner),
-    ),
+  const excludedNodeIds = new Set(options.excludeNodeIds ?? []);
+  const points = collectNodeBoundsPoints(
+    document,
+    node,
+    worldTransform,
+    [],
+    node.id,
+    excludedNodeIds,
+    undefined,
+    options.resolveAssetBounds,
   );
-  return boundsFromPoints(worldCorners);
+  if (points.length === 0) {
+    return {
+      min: worldTransform.position,
+      max: worldTransform.position,
+    };
+  }
+  return boundsFromPoints(points);
+}
+
+/** Bounds of all renderable content below a node, relative to its own origin. */
+export function getNodeLocalBounds(
+  document: SceneDocument,
+  node: SceneNode,
+  options: SceneBoundsQueryOptions = {},
+) {
+  const excludedNodeIds = new Set(options.excludeNodeIds ?? []);
+  const points = collectNodeBoundsPoints(
+    document,
+    node,
+    identityWorldTransform(),
+    [],
+    node.id,
+    excludedNodeIds,
+    undefined,
+    options.resolveAssetBounds,
+  );
+  return points.length === 0 ? undefined : boundsFromPoints(points);
+}
+
+/** Conservative collision sphere used by deterministic scatter lowering. */
+export function getSceneNodeCollisionRadius(
+  document: SceneDocument,
+  node: SceneNode,
+  options: SceneBoundsQueryOptions = {},
+): number {
+  const points = collectNodeBoundsPoints(
+    document,
+    node,
+    identityWorldTransform(),
+    [],
+    node.id,
+    new Set(),
+    undefined,
+    options.resolveAssetBounds,
+  );
+  const transform = node.transform ?? {};
+  const linear = composeLinearTransform(
+    transform.rotationDeg ?? [0, 0, 0],
+    scaleToVec3(transform.scale),
+  );
+  return points.reduce(
+    (radius, point) =>
+      Math.max(radius, vectorLength(transformVec3(linear, point))),
+    0,
+  );
+}
+
+function collectNodeBoundsPoints(
+  document: SceneDocument,
+  node: SceneNode,
+  nodeWorldTransform: ResolvedWorldTransform,
+  prefabStack: readonly string[],
+  runtimeNodeId: string,
+  excludedNodeIds: ReadonlySet<string>,
+  derivedNamespace?: string,
+  resolveAssetBounds?: SceneAssetBoundsResolver,
+): Vec3[] {
+  if (excludedNodeIds.has(runtimeNodeId)) {
+    return [];
+  }
+  const points: Vec3[] = [];
+  const directBounds = getNodeDirectLocalBounds(node, resolveAssetBounds);
+  if (directBounds != null) {
+    points.push(
+      ...boundsCorners(directBounds).map((corner) =>
+        transformPoint(nodeWorldTransform, corner),
+      ),
+    );
+  }
+
+  const content = node.content;
+  if (content?.type === 'instance' || content?.type === 'pattern') {
+    const prefab = findRequiredPrefab(document, content.prefab);
+    if (prefabStack.includes(prefab.id)) {
+      throw new Error(
+        `Recursive scene prefab expansion: ${[...prefabStack, prefab.id].join(' -> ')}`,
+      );
+    }
+    const root = resolveScenePrefabRoot(
+      document,
+      prefab.root,
+      content.overrides,
+    );
+    const nextStack = [...prefabStack, prefab.id];
+    if (content.type === 'instance') {
+      points.push(
+        ...collectNodeBoundsPoints(
+          document,
+          root,
+          appendSceneTransform(nodeWorldTransform, root.transform),
+          nextStack,
+          deriveSceneInstanceNodeId(runtimeNodeId, root.id),
+          excludedNodeIds,
+          runtimeNodeId,
+          resolveAssetBounds,
+        ),
+      );
+    } else {
+      const collisionRadius = getSceneNodeCollisionRadiusInternal(
+        document,
+        root,
+        nextStack,
+        resolveAssetBounds,
+      );
+      const transforms = generateScenePatternTransforms(content.distribution, {
+        collisionRadius,
+        seedKey: runtimeNodeId,
+      });
+      for (let index = 0; index < transforms.length; index += 1) {
+        const transform = transforms[index];
+        const namespace = deriveScenePatternInstanceNamespace(
+          runtimeNodeId,
+          index,
+        );
+        const instanceTransform = appendSceneTransform(
+          nodeWorldTransform,
+          transform,
+        );
+        points.push(
+          ...collectNodeBoundsPoints(
+            document,
+            root,
+            appendSceneTransform(instanceTransform, root.transform),
+            nextStack,
+            deriveSceneInstanceNodeId(namespace, root.id),
+            excludedNodeIds,
+            namespace,
+            resolveAssetBounds,
+          ),
+        );
+      }
+    }
+  }
+
+  for (const child of node.children ?? []) {
+    points.push(
+      ...collectNodeBoundsPoints(
+        document,
+        child,
+        appendSceneTransform(nodeWorldTransform, child.transform),
+        prefabStack,
+        derivedNamespace == null
+          ? child.id
+          : deriveSceneInstanceNodeId(derivedNamespace, child.id),
+        excludedNodeIds,
+        derivedNamespace,
+        resolveAssetBounds,
+      ),
+    );
+  }
+  return points;
+}
+
+function getSceneNodeCollisionRadiusInternal(
+  document: SceneDocument,
+  node: SceneNode,
+  prefabStack: readonly string[],
+  resolveAssetBounds?: SceneAssetBoundsResolver,
+) {
+  const points = collectNodeBoundsPoints(
+    document,
+    node,
+    identityWorldTransform(),
+    prefabStack,
+    node.id,
+    new Set(),
+    undefined,
+    resolveAssetBounds,
+  );
+  const transform = node.transform ?? {};
+  const linear = composeLinearTransform(
+    transform.rotationDeg ?? [0, 0, 0],
+    scaleToVec3(transform.scale),
+  );
+  return points.reduce(
+    (radius, point) =>
+      Math.max(radius, vectorLength(transformVec3(linear, point))),
+    0,
+  );
+}
+
+function appendSceneTransform(
+  parent: ResolvedWorldTransform,
+  transform: SceneTransform | undefined,
+): ResolvedWorldTransform {
+  const position = transform?.position ?? [0, 0, 0];
+  const localLinear = composeLinearTransform(
+    transform?.rotationDeg ?? [0, 0, 0],
+    scaleToVec3(transform?.scale),
+  );
+  return {
+    linear: multiplyMat3(parent.linear, localLinear),
+    position: addVec3(parent.position, transformVec3(parent.linear, position)),
+  };
+}
+
+function transformPoint(transform: ResolvedWorldTransform, point: Vec3): Vec3 {
+  return addVec3(transform.position, transformVec3(transform.linear, point));
+}
+
+function getNodeDirectLocalBounds(
+  node: SceneNode,
+  resolveAssetBounds?: SceneAssetBoundsResolver,
+) {
+  const assetId =
+    node.content?.type === 'asset' ? node.content.asset : undefined;
+  const assetBounds =
+    assetId == null ? undefined : resolveAssetBounds?.(assetId);
+  return getSceneNodeLocalBounds(node, assetBounds);
+}
+
+function findRequiredPrefab(document: SceneDocument, prefabId: string) {
+  const prefab = document.resources.prefabs?.find(
+    (entry) => entry.id === prefabId,
+  );
+  if (prefab == null) {
+    throw new Error(`Scene references unknown prefab "${prefabId}"`);
+  }
+  return prefab;
 }
 
 function boundsCorners(bounds: { min: Vec3; max: Vec3 }): Vec3[] {
@@ -605,30 +856,6 @@ function findRequiredNode(document: SceneDocument, nodeId: string) {
   }
 
   return node;
-}
-
-function findAsset(
-  document: SceneDocument,
-  assetId: string,
-): SceneAsset | undefined {
-  return (document.assets ?? []).find((entry) => entry.id === assetId);
-}
-
-function findRequiredAsset(
-  document: SceneDocument,
-  assetId: string | undefined,
-  nodeId: string,
-): SceneAsset {
-  if (assetId == null) {
-    throw new Error(`Node "${nodeId}" has no asset`);
-  }
-
-  const asset = (document.assets ?? []).find((entry) => entry.id === assetId);
-  if (asset == null) {
-    throw new Error(`Unknown asset "${assetId}" for node "${nodeId}"`);
-  }
-
-  return asset;
 }
 
 function scaleToVec3(scale: SceneScale | undefined): Vec3 {

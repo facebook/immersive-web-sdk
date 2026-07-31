@@ -18,6 +18,7 @@ const pluginConfig = {
   input: {
     index: 'src/index.ts',
     'editor/scene-editor-session': 'src/editor/scene-editor-session.ts',
+    'editor/editor-workspace': 'src/editor/editor-workspace.tsx',
   },
   output: [
     {

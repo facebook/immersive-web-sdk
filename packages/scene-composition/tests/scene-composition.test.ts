@@ -7,844 +7,2048 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  CURRENT_SCENE_REVIEW_VERSION,
   CURRENT_SCENE_VERSION,
   SCENE_DOCUMENT_JSON_SCHEMA,
   SCENE_DOCUMENT_SCHEMA_ID,
+  SCENE_REVIEW_JSON_SCHEMA,
+  SCENE_REVIEW_SCHEMA_ID,
   SceneCommandHistory,
   applyScenePatch,
-  migrateSceneDocument,
+  canonicalizeJson,
+  createSceneComponentCatalog,
+  getNodeWorldBounds,
+  getScenePatternInstanceCount,
+  getScenePatternRequestedCount,
+  getScenePrimitiveBounds,
+  finalizeSceneReviewDraft,
+  generateSceneProceduralTexture,
+  hashSceneCapabilitySnapshot,
+  hashSceneComponentSchema,
+  hashRuntimeSceneDocument,
+  hashSceneReviewContract,
+  hashSceneDocument,
   parseSceneDocument,
-  resolveAlignTransforms,
-  resolveLookAtTransform,
-  resolveLookAtTransformInDocument,
+  parseSceneReview,
+  projectRuntimeSceneDocument,
   resolveLookAtYawDeg,
-  resolvePlaceOnTransform,
-  resolveSnapTransform,
+  resolveSceneAuthoringTransforms,
   serializeSceneDocument,
-  snapPositionToGrid,
+  serializeSceneReview,
+  sha256,
+  validateSceneCapabilities,
   validateSceneDocument,
+  validateSceneReview,
+  validateSceneReviewAgainstDocument,
+  type SceneCapabilitySnapshot,
   type SceneDocument,
+  type ScenePatternDistribution,
+  type SceneReview,
 } from '../src/index.js';
+
+const HASH_A = `sha256:${'a'.repeat(64)}` as const;
+const HASH_B = `sha256:${'b'.repeat(64)}` as const;
+const HASH_C = `sha256:${'c'.repeat(64)}` as const;
+const HASH_D = `sha256:${'d'.repeat(64)}` as const;
+const MARKER_SCHEMA = {
+  id: 'Marker',
+  source: 'app' as const,
+  fields: {
+    enabled: { type: 'Boolean' as const },
+    weight: { type: 'Float32' as const, min: 0, max: 1 },
+  },
+};
+const DIRECTIONAL_LIGHT_SCHEMA = {
+  id: 'DirectionalLight',
+  source: 'iwsdk' as const,
+  fields: {
+    castShadow: { type: 'Boolean' as const, default: false },
+    color: { type: 'Color' as const, default: [1, 1, 1, 1] },
+    intensity: { type: 'Float32' as const, default: 1, min: 0 },
+  },
+};
+const TEST_COMPONENT_CATALOG = createSceneComponentCatalog([
+  MARKER_SCHEMA,
+  DIRECTIONAL_LIGHT_SCHEMA,
+]);
+
+const TEST_ASSET_BOUNDS: Record<
+  string,
+  { min: [number, number, number]; max: [number, number, number] }
+> = {
+  ground: { min: [-5, 0, -5], max: [5, 0, 5] },
+  table: { min: [-0.6, -0.45, -0.6], max: [0.6, 0.45, 0.6] },
+  chair: { min: [-0.6, 0, -0.6], max: [0.6, 1.2, 0.6] },
+  flower: { min: [-0.1, 0, -0.1], max: [0.1, 0.4, 0.1] },
+  'part-box': { min: [-1, -1, -2], max: [1, 1, 2] },
+  'unit-box': { min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] },
+  'table-model': { min: [-1, 0, -1], max: [1, 1, 1] },
+  'lamp-model': { min: [-0.25, 0, -0.25], max: [0.25, 0.5, 0.25] },
+  'marker-body': { min: [-1, -0.5, -0.5], max: [1, 0.5, 0.5] },
+};
+
+const resolveTestAssetBounds = (assetId: string) => TEST_ASSET_BOUNDS[assetId];
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function unresolvedLocalSchemaRefs(schema: unknown): string[] {
+  const unresolved = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value == null || typeof value !== 'object') {
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    if (typeof record.$ref === 'string' && record.$ref.startsWith('#/')) {
+      const resolved = record.$ref
+        .slice(2)
+        .split('/')
+        .map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'))
+        .reduce<unknown>((current, part) => {
+          if (current == null || typeof current !== 'object') {
+            return undefined;
+          }
+          return (current as Record<string, unknown>)[part];
+        }, schema);
+      if (resolved === undefined) {
+        unresolved.add(record.$ref);
+      }
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(schema);
+  return [...unresolved].sort();
+}
 
 function makeScene(): SceneDocument {
   return {
-    assets: [
-      {
-        bounds: {
-          max: [1, 1, 1],
-          min: [-1, 0, -1],
+    version: CURRENT_SCENE_VERSION,
+    units: 'meters',
+    metadata: { 'example.owner': 'tests' },
+    authoring: {
+      composition: {
+        mode: 'static',
+        input: {
+          kind: 'hybrid',
+          prompt: 'A small garden table',
+          references: [
+            {
+              id: 'reference',
+              uri: './reference.png',
+              roles: ['layout', 'palette'],
+              width: 800,
+              height: 600,
+              sha256:
+                'd05d6f4cbb7459ae63cefbb3929af25375392d940b63ff460be36a842db5b9c8',
+            },
+          ],
         },
-        id: 'table',
-        type: 'gltf',
-        uri: '/iwsdk-assets/table/table.gltf',
-      },
-      {
-        bounds: {
-          max: [0.25, 0.5, 0.25],
-          min: [-0.25, 0, -0.25],
+        target: {
+          surfaces: ['browser', 'vr'],
+          style: 'stylized-pbr',
+          assetPolicy: 'manifest-assets',
         },
-        id: 'lamp',
-        type: 'gltf',
-        uri: '/iwsdk-assets/lamp/lamp.gltf',
-      },
-    ],
-    nodes: [
-      {
-        asset: 'table',
-        children: [
+        feasibility: { status: 'supported' },
+        provenance: {
+          adapter: { id: 'hybrid-intake', version: '1.0.0' },
+          skill: { id: 'iwsdk-scene-composer', version: '1.0.0' },
+          capabilityHash: HASH_C,
+          inputHashes: [
+            'sha256:03e49b58c84b95d6939257508689e845fd1366da227ccd33177eb2d345b3ec56',
+            'sha256:d05d6f4cbb7459ae63cefbb3929af25375392d940b63ff460be36a842db5b9c8',
+          ],
+        },
+        representationPolicy: {
+          fidelityCeiling: 'stylized-blockout',
+          allowed: ['asset', 'prefab', 'pattern'],
+        },
+        features: [
           {
-            components: {
-              'example.ChildMarker': {
-                enabled: true,
+            id: 'table-feature',
+            priority: 'required',
+            description: 'A table is visible',
+            nodeRefs: ['table'],
+            acceptance: [
+              {
+                id: 'table-presence',
+                kind: 'presence',
+                nodeRefs: ['table'],
+                view: 'hero',
               },
-            },
-            id: 'nested-child',
-            transform: {
-              position: [0, 0.1, 0],
-            },
+              {
+                id: 'table-region',
+                kind: 'projected-region',
+                measurement: {
+                  method: 'capture-node-mask-bounds-v1',
+                  applicability: 'visible-node-mask',
+                },
+                nodeRefs: ['table'],
+                view: 'hero',
+                reference: 'reference',
+                region: [0.1, 0.2, 0.3, 0.4],
+                centerTolerance: 0.3,
+              },
+            ],
+            evidence: [
+              { reference: 'reference', region: [0.1, 0.2, 0.3, 0.4] },
+            ],
+          },
+          {
+            id: 'flowers',
+            priority: 'optional',
+            description: 'Repeated flowers',
+            nodeRefs: ['flower-pattern'],
+            acceptance: [
+              {
+                id: 'flower-count',
+                kind: 'count',
+                pattern: 'flower-pattern',
+                minimum: 3,
+              },
+            ],
           },
         ],
-        components: {
-          'com.iwsdk.components.Interactable': {
-            enabled: true,
+        assumptions: [
+          {
+            id: 'hidden-depth',
+            statement: 'Depth is inferred',
+            certainty: 'low',
+          },
+        ],
+        review: {
+          heroView: 'hero',
+          requiredViews: ['hero', 'top'],
+          lenses: ['layout', 'geometry', 'final'],
+          maxCorrectionRounds: 2,
+        },
+      },
+      nodeAnnotations: [
+        {
+          node: 'table',
+          featureRefs: ['table-feature'],
+          reviewLayer: 'layout',
+        },
+      ],
+      views: [
+        {
+          id: 'hero',
+          role: 'hero',
+          projection: 'perspective',
+          position: [0, 2, -4],
+          target: [0, 0, 0],
+          fov: 45,
+        },
+        {
+          id: 'top',
+          role: 'diagnostic',
+          projection: 'orthographic',
+          position: [0, 10, 0],
+          target: [0, 0, 0],
+          height: 10,
+        },
+      ],
+    },
+    resources: {
+      prefabs: [
+        {
+          id: 'flower',
+          root: {
+            id: 'flower-root',
+            content: {
+              type: 'asset',
+              asset: 'flower',
+            },
           },
         },
-        id: 'table-node',
-        transform: {
-          position: [2, 0, -1],
+      ],
+    },
+    environment: {
+      background: { type: 'color', color: '#cbd5c1' },
+      fog: { type: 'linear', near: 10, far: 30 },
+      toneMapping: 'aces',
+      exposure: 1,
+      shadows: true,
+      ar: { background: 'transparent', lights: 'combined' },
+    },
+    nodes: [
+      {
+        id: 'ground',
+        content: {
+          type: 'asset',
+          asset: 'ground',
+          receiveShadow: true,
+        },
+      },
+      {
+        id: 'table',
+        content: {
+          type: 'asset',
+          asset: 'table',
+          castShadow: true,
+        },
+        transform: { position: [0, 0.45, 0] },
+        components: {
+          'com.iwsdk.components.Marker': {
+            enabled: true,
+            weight: 0.5,
+          },
+        },
+      },
+      {
+        id: 'chair',
+        content: { type: 'asset', asset: 'chair', castShadow: true },
+      },
+      {
+        id: 'flower-pattern',
+        content: {
+          type: 'pattern',
+          prefab: 'flower',
+          distribution: {
+            type: 'scatter',
+            count: 12,
+            seed: 42,
+            algorithm: 'pcg32-box-rejection-v1',
+            collision: 'allow',
+            region: { type: 'box', size: [3, 0.1, 1] },
+            variation: { scale: [0.8, 1.2], yawDeg: [0, 360] },
+          },
+        },
+      },
+      {
+        id: 'sun',
+        transform: { rotationDeg: [55, -45, 0] },
+        components: {
+          'com.iwsdk.components.DirectionalLight': {
+            castShadow: true,
+            color: [1, 1, 1, 1],
+            intensity: 2,
+          },
         },
       },
     ],
-    units: 'meters',
-    version: CURRENT_SCENE_VERSION,
   };
 }
 
-describe('@iwsdk/scene-composition', () => {
-  it('validates native scene documents and reports actionable issues', () => {
-    const valid = validateSceneDocument(makeScene());
-    expect(valid.valid).toBe(true);
-    expect(valid.issues).toEqual([]);
+function makeReview(scene = makeScene()): SceneReview {
+  return {
+    version: CURRENT_SCENE_REVIEW_VERSION,
+    documentHash: hashSceneDocument(scene),
+    runtimeHash: hashRuntimeSceneDocument(scene),
+    capabilityHash: HASH_C,
+    sourceHashes: [
+      'sha256:03e49b58c84b95d6939257508689e845fd1366da227ccd33177eb2d345b3ec56',
+      'sha256:d05d6f4cbb7459ae63cefbb3929af25375392d940b63ff460be36a842db5b9c8',
+    ],
+    round: 1,
+    result: 'pass',
+    lenses: [
+      {
+        id: 'layout',
+        status: 'pass',
+        captures: [
+          {
+            id: 'layout-hero',
+            view: 'hero',
+            path: './layout.png',
+            screenshotSha256: HASH_D,
+            width: 1280,
+            height: 720,
+            camera: {
+              projection: 'perspective',
+              position: [0, 2, -4],
+              target: [0, 0, 0],
+              fov: 45,
+            },
+            rendererEnvironment: { browser: 'test', pixelRatio: 1 },
+            visibleNodeIds: ['table'],
+            nodeMaskRegions: { table: [0.1, 0.2, 0.3, 0.4] },
+          },
+          {
+            id: 'layout-top',
+            view: 'top',
+            path: './layout-top.png',
+            screenshotSha256: HASH_D,
+            width: 1280,
+            height: 720,
+            camera: {
+              projection: 'orthographic',
+              position: [0, 10, 0],
+              target: [0, 0, 0],
+              height: 10,
+            },
+            rendererEnvironment: { browser: 'test', pixelRatio: 1 },
+            visibleNodeIds: ['table', 'flower-pattern/0000/flower-root'],
+          },
+        ],
+      },
+    ],
+    featureResults: [
+      {
+        feature: 'table-feature',
+        criterion: 'table-presence',
+        status: 'pass',
+        evidenceRefs: ['layout-hero'],
+      },
+      {
+        feature: 'table-feature',
+        criterion: 'table-region',
+        status: 'pass',
+        evidenceRefs: ['layout-hero'],
+      },
+    ],
+    waivers: [],
+    stop: { reason: 'success', openDefectTags: [] },
+  };
+}
 
-    const invalid = validateSceneDocument({
-      ...makeScene(),
-      nodes: [
-        { asset: 'missing', id: 'duplicate' },
-        { id: 'duplicate', transform: { position: [0, Number.NaN, 0] } },
-      ],
+function makeReviewLens(
+  review: SceneReview,
+  id: SceneReview['lenses'][number]['id'],
+): SceneReview['lenses'][number] {
+  const lens = clone(review.lenses[0]);
+  lens.id = id;
+  if (id !== 'layout') {
+    lens.captures.forEach((capture) => {
+      capture.id = `${id}-${capture.id}`;
+      capture.path = `./${id}-${capture.view}.png`;
+    });
+  }
+  return lens;
+}
+
+describe('@iwsdk/scene-composition v1', () => {
+  it('validates raw component properties against an external catalog', () => {
+    const scene = makeScene();
+    const marker = scene.nodes[1].components?.[
+      'com.iwsdk.components.Marker'
+    ] as Record<string, unknown>;
+    marker.enabled = 'yes';
+
+    expect(validateSceneDocument(scene)).toEqual({ valid: true, issues: [] });
+    expect(
+      validateSceneDocument(scene, {
+        componentCatalog: TEST_COMPONENT_CATALOG,
+      }).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'type',
+        path: '$.nodes[1].components["com.iwsdk.components.Marker"].enabled',
+      }),
+    );
+  });
+
+  it('validates the complete closed authoring and runtime contract', () => {
+    expect(validateSceneDocument(makeScene())).toEqual({
+      valid: true,
+      issues: [],
+    });
+    expect(SCENE_DOCUMENT_SCHEMA_ID).toBe(
+      'https://iwsdk.dev/schemas/iwsdk.scene.v1.schema.json',
+    );
+    expect(SCENE_DOCUMENT_JSON_SCHEMA.title).toBe('IWSDK Scene Document v1');
+    expect(SCENE_DOCUMENT_JSON_SCHEMA.required).toEqual([
+      'version',
+      'units',
+      'resources',
+      'nodes',
+    ]);
+    expect(SCENE_DOCUMENT_JSON_SCHEMA.additionalProperties).toBe(false);
+
+    const unknownTop = { ...makeScene(), unexpected: true };
+    expect(validateSceneDocument(unknownTop).issues).toContainEqual(
+      expect.objectContaining({ path: '$.unexpected', code: 'schema' }),
+    );
+    const unknownNode = makeScene() as SceneDocument & {
+      nodes: Array<SceneDocument['nodes'][number] & { asset?: string }>;
+    };
+    unknownNode.nodes[0].asset = 'chair-model';
+    expect(validateSceneDocument(unknownNode).issues).toContainEqual(
+      expect.objectContaining({ path: '$.nodes[0].asset', code: 'schema' }),
+    );
+  });
+
+  it('validates, serializes, and hashes optional node framing roles', () => {
+    const contentScene = makeScene();
+    const supportScene = makeScene();
+    supportScene.nodes[0].framingRole = 'support';
+
+    expect(validateSceneDocument(contentScene)).toEqual({
+      valid: true,
+      issues: [],
+    });
+    expect(validateSceneDocument(supportScene)).toEqual({
+      valid: true,
+      issues: [],
+    });
+    const serialized = serializeSceneDocument(supportScene);
+    expect(parseSceneDocument(serialized).nodes[0].framingRole).toBe('support');
+    expect(hashSceneDocument(supportScene)).not.toBe(
+      hashSceneDocument(contentScene),
+    );
+    expect(hashRuntimeSceneDocument(supportScene)).not.toBe(
+      hashRuntimeSceneDocument(contentScene),
+    );
+
+    const invalid = clone(supportScene) as SceneDocument & {
+      nodes: Array<SceneDocument['nodes'][number] & { framingRole: string }>;
+    };
+    invalid.nodes[0].framingRole = 'background';
+    expect(validateSceneDocument(invalid).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.nodes[0].framingRole',
+        code: 'schema',
+      }),
+    );
+  });
+
+  it('requires layout annotations and features to resolve to renderable leaves', () => {
+    const hiddenChair = makeScene();
+    const hiddenChairRoot = hiddenChair.nodes.find(
+      (node) => node.id === 'table',
+    )!;
+    hiddenChairRoot.content = { type: 'group' };
+    hiddenChairRoot.children = [
+      {
+        id: 'chair-geometry',
+        content: { type: 'asset', asset: 'chair' },
+      },
+    ];
+    hiddenChair.authoring!.nodeAnnotations!.push({
+      node: 'chair-geometry',
+      reviewLayer: 'geometry',
     });
 
-    expect(invalid.valid).toBe(false);
-    expect(invalid.issues.map((issue) => issue.path)).toContain(
-      '$.nodes[0].asset',
-    );
-    expect(invalid.issues.map((issue) => issue.message)).toContain(
-      'duplicate node id "duplicate"',
+    expect(validateSceneDocument(hiddenChair).issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'review-visibility',
+          path: '$.authoring.nodeAnnotations[0]',
+          message:
+            'layout annotation for node "table" has no effectively layout-visible renderable',
+        }),
+        expect.objectContaining({
+          code: 'review-visibility',
+          path: '$.authoring.composition.features[0].nodeRefs',
+          message:
+            'layout feature "table-feature" has no effectively layout-visible renderable',
+        }),
+      ]),
     );
 
-    const missingReference = validateSceneDocument({
-      ...makeScene(),
-      nodes: [
-        {
-          id: 'floating-lamp',
-          transform: { placeOn: 'missing-table' },
-        },
-      ],
+    const inheritedLayout = makeScene();
+    const inheritedLayoutRoot = inheritedLayout.nodes.find(
+      (node) => node.id === 'table',
+    )!;
+    inheritedLayoutRoot.content = { type: 'group' };
+    inheritedLayoutRoot.children = [
+      {
+        id: 'chair-layout-inherited',
+        content: { type: 'asset', asset: 'chair' },
+      },
+    ];
+    expect(validateSceneDocument(inheritedLayout)).toEqual({
+      valid: true,
+      issues: [],
     });
 
-    expect(missingReference.valid).toBe(false);
-    expect(missingReference.issues).toContainEqual({
-      message: 'unknown placeOn target "missing-table"',
-      path: '$.nodes[0].transform.placeOn',
+    const explicitLayout = makeScene();
+    const explicitLayoutRoot = explicitLayout.nodes.find(
+      (node) => node.id === 'table',
+    )!;
+    explicitLayoutRoot.content = { type: 'group' };
+    explicitLayoutRoot.children = [
+      {
+        id: 'chair-layout-explicit',
+        content: { type: 'asset', asset: 'chair' },
+      },
+    ];
+    explicitLayout.authoring!.nodeAnnotations = [
+      { node: 'table', reviewLayer: 'geometry' },
+      {
+        featureRefs: ['table-feature'],
+        node: 'chair-layout-explicit',
+        reviewLayer: 'layout',
+      },
+    ];
+    expect(validateSceneDocument(explicitLayout)).toEqual({
+      valid: true,
+      issues: [],
     });
   });
 
-  it('validates typed component schemas and payloads', () => {
-    const typedScene: SceneDocument = {
-      ...makeScene(),
-      componentSchemas: [
-        {
-          fields: {
-            config: { default: '', type: 'String' },
-            maxHeight: { default: 1, type: 'Float32' },
-            maxWidth: { default: 1, type: 'Float32' },
-          },
-          id: 'PanelUI',
-          source: 'iwsdk',
-        },
-      ],
-      nodes: [
-        {
-          components: {
-            'com.iwsdk.components.PanelUI': {
-              props: {
-                config: '/ui/panel.json',
-                maxHeight: 1,
-                maxWidth: 2,
-              },
-              type: 'PanelUI',
+  it.each(['instance', 'pattern'] as const)(
+    'does not count renderables hidden by %s prefab overrides as layout-visible',
+    (contentType) => {
+      const scene = makeScene();
+      scene.resources.prefabs!.push({
+        id: 'hidden-assembly',
+        root: {
+          children: [
+            {
+              children: [
+                {
+                  content: { type: 'asset', asset: 'chair' },
+                  id: 'visible-leaf',
+                },
+              ],
+              content: { type: 'group' },
+              id: 'hidden-ancestor',
             },
-          },
-          id: 'panel-node',
+          ],
+          content: { type: 'group' },
+          id: 'assembly-root',
         },
-      ],
+      });
+      const table = scene.nodes.find((node) => node.id === 'table')!;
+      table.content =
+        contentType === 'instance'
+          ? {
+              overrides: { 'assembly-root': { visible: false } },
+              prefab: 'hidden-assembly',
+              type: 'instance',
+            }
+          : {
+              distribution: { count: 1, step: [1, 0, 0], type: 'linear' },
+              overrides: { 'hidden-ancestor': { visible: false } },
+              prefab: 'hidden-assembly',
+              type: 'pattern',
+            };
+
+      expect(validateSceneDocument(scene).issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'review-visibility',
+            path: '$.authoring.nodeAnnotations[0]',
+          }),
+          expect.objectContaining({
+            code: 'review-visibility',
+            path: '$.authoring.composition.features[0].nodeRefs',
+          }),
+        ]),
+      );
+    },
+  );
+
+  it('rejects composition features without implementation bindings', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.features[0].nodeRefs = [];
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.features[0].nodeRefs',
+      }),
+    );
+  });
+
+  it('binds acceptance subjects to the feature subtree and covers required bindings', () => {
+    const unrelated = makeScene();
+    unrelated.authoring!.composition!.features[0].acceptance[0] = {
+      id: 'unrelated-presence',
+      kind: 'presence',
+      nodeRefs: ['chair'],
+      view: 'hero',
     };
+    expect(validateSceneDocument(unrelated).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.features[0].acceptance[0].nodeRefs[0]',
+        message: expect.stringContaining('outside feature'),
+      }),
+    );
 
-    expect(validateSceneDocument(typedScene)).toEqual({
-      issues: [],
+    const descendant = makeScene();
+    const table = descendant.nodes.find((node) => node.id === 'table')!;
+    table.children = [
+      {
+        id: 'table-detail',
+        content: { type: 'asset', asset: 'table-detail' },
+      },
+    ];
+    descendant.authoring!.composition!.features[0].acceptance = [
+      {
+        id: 'detail-presence',
+        kind: 'presence',
+        nodeRefs: ['table-detail'],
+        view: 'hero',
+      },
+    ];
+    expect(validateSceneDocument(descendant)).toEqual({
       valid: true,
+      issues: [],
     });
 
-    const invalid = validateSceneDocument({
-      ...typedScene,
-      componentSchemas: [
-        typedScene.componentSchemas![0],
-        typedScene.componentSchemas![0],
-        {
-          fields: {
-            bad: { default: () => null, type: 'Function' },
-          },
-          id: 'BadComponent',
-          source: 'external',
-        },
-      ],
-      nodes: [
-        {
-          components: {
-            'com.iwsdk.components.PanelUI': {
-              props: [],
-              type: 'WrongType',
-            },
-          },
-          id: 'bad-panel-node',
-        },
-      ],
-    });
+    const uncovered = makeScene();
+    uncovered.authoring!.composition!.features[0].nodeRefs.push('chair');
+    expect(validateSceneDocument(uncovered).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.features[0].nodeRefs[1]',
+        message: expect.stringContaining('not covered'),
+      }),
+    );
+  });
 
-    expect(invalid.valid).toBe(false);
-    expect(invalid.issues.map((issue) => issue.message)).toEqual(
+  it('validates identity-critical object inspection specifications', () => {
+    const scene = makeScene();
+    const feature = scene.authoring!.composition!.features[0];
+    feature.identityCritical = true;
+    feature.objectInspection = {
+      silhouette: ['The top remains wider than the pedestal from hero view'],
+      proportions: ['The top-to-base height ratio remains recognizable'],
+      parts: [
+        {
+          id: 'table-body',
+          description: 'Primary top and pedestal assembly',
+          nodeRefs: ['table'],
+        },
+      ],
+      negativeSpace: ['Preserve open space below the tabletop'],
+      contacts: [
+        {
+          id: 'table-ground-contact',
+          description: 'The pedestal meets the ground',
+          nodeRefs: ['table'],
+          targetNodeRefs: ['ground'],
+        },
+      ],
+      materialResponse: ['Wood reads as rough under authored lighting'],
+      requiredViews: ['hero', 'top'],
+      context: {
+        background: 'neutral',
+        lighting: 'authored',
+        includeNodeRefs: ['ground'],
+      },
+    };
+    expect(validateSceneDocument(scene)).toEqual({ valid: true, issues: [] });
+
+    const missingSpec = makeScene();
+    missingSpec.authoring!.composition!.features[0].identityCritical = true;
+    expect(validateSceneDocument(missingSpec).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'required',
+        path: '$.authoring.composition.features[0].objectInspection',
+      }),
+    );
+
+    const invalid = clone(scene);
+    invalid.authoring!.composition!.features[0].objectInspection!.parts.push({
+      id: 'table-body',
+      description: 'Unbound chair detail',
+      nodeRefs: ['chair'],
+    });
+    invalid.authoring!.composition!.features[0].objectInspection!.requiredViews =
+      ['missing-view'];
+    expect(validateSceneDocument(invalid).issues).toEqual(
       expect.arrayContaining([
-        'duplicate component schema id "PanelUI"',
-        'component field type is not supported',
-        'component field default must be JSON serializable',
-        'component schema source must be "iwsdk", "app", or "scene"',
-        'typed component "com.iwsdk.components.PanelUI" type must match its component key',
-        'typed component "com.iwsdk.components.PanelUI" props must be a JSON object',
+        expect.objectContaining({ code: 'duplicate-id' }),
+        expect.objectContaining({
+          path: '$.authoring.composition.features[0].objectInspection.parts[1].nodeRefs[0]',
+          message: expect.stringContaining('outside feature'),
+        }),
+        expect.objectContaining({
+          path: '$.authoring.composition.features[0].objectInspection.requiredViews[0]',
+          code: 'reference',
+        }),
       ]),
     );
   });
 
-  it('parses, validates, and serializes scenes with stable formatting', () => {
-    const scene = makeScene();
-    const serialized = serializeSceneDocument(scene);
-    const parsed = parseSceneDocument(serialized);
-
-    expect(parsed).toEqual(scene);
-    expect(serializeSceneDocument(parsed)).toBe(serialized);
-    expect(serialized.endsWith('\n')).toBe(true);
-  });
-
-  it('exports a JSON Schema for editor and agent tooling', () => {
-    expect(SCENE_DOCUMENT_JSON_SCHEMA.$id).toBe(SCENE_DOCUMENT_SCHEMA_ID);
-    expect(SCENE_DOCUMENT_JSON_SCHEMA.properties.version).toEqual({
-      const: CURRENT_SCENE_VERSION,
-      description: 'Scene document schema version.',
-    });
-    expect(SCENE_DOCUMENT_JSON_SCHEMA.required).toEqual([
-      'version',
-      'units',
-      'nodes',
-    ]);
-    expect(SCENE_DOCUMENT_JSON_SCHEMA.$defs.node.properties.children).toEqual({
-      type: 'array',
-      items: { $ref: '#/$defs/node' },
-    });
-    expect(
-      JSON.parse(JSON.stringify(SCENE_DOCUMENT_JSON_SCHEMA)),
-    ).toMatchObject({
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      $defs: {
-        asset: { required: ['id', 'uri'] },
-        transform: {
-          properties: {
-            lookAt: { $ref: '#/$defs/vec3' },
-            placeOn: {
-              oneOf: [
-                { type: 'string', minLength: 1 },
-                { $ref: '#/$defs/placeOn' },
-              ],
-            },
-          },
-        },
-      },
-    });
-  });
-
-  it('applies reversible scene patches and maintains command history', () => {
-    const scene = makeScene();
-    const added = applyScenePatch(scene, {
-      node: {
-        asset: 'lamp',
-        id: 'lamp-node',
-      },
-      op: 'addNode',
-      parentId: 'table-node',
-    });
-
-    expect(added.document.nodes[0].children?.map((node) => node.id)).toEqual([
-      'nested-child',
-      'lamp-node',
-    ]);
-
-    const transformed = applyScenePatch(added.document, {
-      nodeId: 'lamp-node',
-      op: 'updateTransform',
-      transform: {
-        position: [2, 1, -1],
-        rotationDeg: [0, 90, 0],
-      },
-    });
-
-    expect(
-      transformed.document.nodes[0].children?.find(
-        (node) => node.id === 'lamp-node',
-      )?.transform,
-    ).toEqual({
-      position: [2, 1, -1],
-      rotationDeg: [0, 90, 0],
-    });
-
-    const removed = applyScenePatch(transformed.document, transformed.inverse);
-    expect(
-      removed.document.nodes[0].children?.find(
-        (node) => node.id === 'lamp-node',
-      )?.transform,
-    ).toBeUndefined();
-
-    const history = new SceneCommandHistory(scene);
-    history.apply({
-      nodeId: 'table-node',
-      op: 'updateComponent',
-      component: 'com.iwsdk.components.Interactable',
-      value: {
-        enabled: false,
-      },
-    });
-
-    expect(
-      history.document.nodes[0].components?.[
-        'com.iwsdk.components.Interactable'
-      ],
-    ).toEqual({ enabled: false });
-    history.undo();
-    expect(
-      history.document.nodes[0].components?.[
-        'com.iwsdk.components.Interactable'
-      ],
-    ).toEqual({ enabled: true });
-    history.redo();
-    expect(
-      history.document.nodes[0].components?.[
-        'com.iwsdk.components.Interactable'
-      ],
-    ).toEqual({ enabled: false });
-  });
-
-  it('moves nodes between parents reversibly and rejects hierarchy cycles', () => {
-    const scene = applyScenePatch(makeScene(), {
-      node: {
-        asset: 'lamp',
-        id: 'lamp-node',
-      },
-      op: 'addNode',
-    }).document;
-
-    const movedUnderTable = applyScenePatch(scene, {
-      nodeId: 'lamp-node',
-      op: 'moveNode',
-      parentId: 'table-node',
-    });
-    expect(movedUnderTable.document.nodes.map((node) => node.id)).toEqual([
-      'table-node',
-    ]);
-    expect(
-      movedUnderTable.document.nodes[0].children?.map((node) => node.id),
-    ).toEqual(['nested-child', 'lamp-node']);
-
-    const scaledScene = applyScenePatch(
-      applyScenePatch(makeScene(), {
-        nodeId: 'table-node',
-        op: 'updateTransform',
-        transform: {
-          position: [2, 0, -1],
-          scale: [2, 1, 2],
-        },
-      }).document,
+  it('accepts manifest assets, every pattern, and component-carried lights', () => {
+    const distributions: ScenePatternDistribution[] = [
+      { type: 'linear', count: 3, step: [1, 0, 0] },
+      { type: 'grid', count: [2, 2, 1], spacing: [1, 1, 1] },
+      { type: 'radial', count: 4, radius: 2, arcDeg: 180 },
       {
-        node: {
-          asset: 'lamp',
-          id: 'world-stable-lamp',
-          transform: {
-            position: [4, 0, 1],
-            scale: 2,
-          },
-        },
-        op: 'addNode',
+        type: 'along-path',
+        points: [
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        count: 4,
       },
-    ).document;
-    const preserveWorldMove = applyScenePatch(scaledScene, {
-      nodeId: 'world-stable-lamp',
-      op: 'moveNode',
-      parentId: 'table-node',
-      preserveWorldTransform: true,
+      {
+        type: 'scatter',
+        count: 4,
+        seed: 1,
+        algorithm: 'pcg32-box-rejection-v1',
+        collision: 'skip',
+        region: { type: 'sphere', radius: 2 },
+      },
+      { type: 'explicit', transforms: [{}, { position: [1, 0, 0] }] },
+    ];
+    expect(validateSceneDocument(makeScene())).toEqual({
+      valid: true,
+      issues: [],
     });
-    const worldStableLamp = preserveWorldMove.document.nodes[0].children?.find(
-      (node) => node.id === 'world-stable-lamp',
-    );
-    expect(worldStableLamp?.transform).toEqual({
-      position: [1, 0, 1],
-      scale: [1, 2, 1],
+    distributions.forEach((distribution) => {
+      const scene = makeScene();
+      scene.nodes[3].content = {
+        type: 'pattern',
+        prefab: 'flower',
+        distribution,
+      };
+      expect(validateSceneDocument(scene), distribution.type).toEqual({
+        valid: true,
+        issues: [],
+      });
     });
-    expect(preserveWorldMove.inverse).toMatchObject({
-      nodeId: 'world-stable-lamp',
-      op: 'moveNode',
-      parentId: null,
-      preserveWorldTransform: true,
-    });
-    const preserveWorldRestored = applyScenePatch(
-      preserveWorldMove.document,
-      preserveWorldMove.inverse,
-    );
-    expect(preserveWorldRestored.document.nodes[1].transform).toEqual({
-      position: [4, 0, 1],
-      scale: 2,
-    });
-
-    const restored = applyScenePatch(
-      movedUnderTable.document,
-      movedUnderTable.inverse,
-    );
-    expect(restored.document.nodes.map((node) => node.id)).toEqual([
-      'table-node',
-      'lamp-node',
-    ]);
-    expect(restored.document.nodes[0].children?.map((node) => node.id)).toEqual(
-      ['nested-child'],
-    );
-
-    const unparented = applyScenePatch(movedUnderTable.document, {
-      index: 0,
-      nodeId: 'nested-child',
-      op: 'moveNode',
-      parentId: null,
-    });
-    expect(unparented.document.nodes.map((node) => node.id)).toEqual([
-      'nested-child',
-      'table-node',
-    ]);
-    expect(
-      unparented.document.nodes[1].children?.map((node) => node.id),
-    ).toEqual(['lamp-node']);
-
-    expect(() =>
-      applyScenePatch(movedUnderTable.document, {
-        nodeId: 'table-node',
-        op: 'moveNode',
-        parentId: 'nested-child',
-      }),
-    ).toThrow(
-      'Cannot move node "table-node" under its descendant "nested-child"',
+    const scene = makeScene();
+    expect(scene.nodes[4].content).toBeUndefined();
+    expect(scene.nodes[4].components).toHaveProperty(
+      'com.iwsdk.components.DirectionalLight',
     );
   });
 
-  it('preserves world transforms through rotated parents without materializing identity transforms', () => {
-    const scene = applyScenePatch(
-      applyScenePatch(makeScene(), {
-        nodeId: 'table-node',
-        op: 'updateTransform',
-        transform: {
-          position: [2, 0, -1],
-          rotationDeg: [0, 90, 0],
-          scale: [1, 2, 1],
-        },
-      }).document,
-      {
-        node: {
-          asset: 'lamp',
-          id: 'world-stable-rotated-lamp',
-          transform: {
-            position: [4, 0, 1],
-            rotationDeg: [0, 45, 0],
-            scale: 2,
-          },
-        },
-        op: 'addNode',
-      },
-    ).document;
-
-    const moved = applyScenePatch(scene, {
-      nodeId: 'world-stable-rotated-lamp',
-      op: 'moveNode',
-      parentId: 'table-node',
-      preserveWorldTransform: true,
-    });
-    const movedLamp = moved.document.nodes[0].children?.find(
-      (node) => node.id === 'world-stable-rotated-lamp',
+  it('rejects unresolved references and excessive pattern expansion', () => {
+    const scene = makeScene();
+    scene.nodes[3].content = { type: 'instance', prefab: 'missing' };
+    const result = validateSceneDocument(scene);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: 'reference' }),
     );
-    expect(movedLamp?.transform).toEqual({
-      position: [-2, 0, 2],
-      rotationDeg: [0, -45, 0],
-      scale: [2, 1, 2],
-    });
 
-    const restored = applyScenePatch(moved.document, moved.inverse);
-    expect(restored.document.nodes[1].transform).toEqual({
-      position: [4, 0, 1],
-      rotationDeg: [0, 45, 0],
-      scale: 2,
-    });
-
-    const identityMoveScene: SceneDocument = {
-      nodes: [{ id: 'parent' }, { id: 'bare-child' }],
-      units: 'meters',
-      version: CURRENT_SCENE_VERSION,
+    const excessive = makeScene();
+    excessive.nodes[3].content = {
+      type: 'pattern',
+      prefab: 'flower',
+      distribution: { type: 'grid', count: [101, 100, 1], spacing: [1, 1, 1] },
     };
-    const identityMove = applyScenePatch(identityMoveScene, {
-      nodeId: 'bare-child',
-      op: 'moveNode',
-      parentId: 'parent',
-      preserveWorldTransform: true,
+    expect(validateSceneDocument(excessive).issues).toContainEqual(
+      expect.objectContaining({ code: 'limit' }),
+    );
+  });
+
+  it('rejects prefab recursion before materialization', () => {
+    const recursive = makeScene();
+    recursive.resources.prefabs![0].root.content = {
+      type: 'instance',
+      prefab: 'flower',
+    };
+    expect(validateSceneDocument(recursive).issues).toContainEqual(
+      expect.objectContaining({ code: 'cycle' }),
+    );
+  });
+
+  it('validates authoring bindings and input-specific requirements', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.features[0].nodeRefs = ['missing'];
+    scene.authoring!.composition!.review.heroView = 'missing-view';
+    scene.authoring!.composition!.input = { kind: 'hybrid' };
+    const result = validateSceneDocument(scene);
+    expect(result.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['reference', 'required']),
+    );
+  });
+
+  it('can validate document integrity without enforcing composition workflow policy', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.feasibility = {
+      status: 'blocked',
+      reasons: ['Needs an authoring decision'],
+    };
+
+    expect(validateSceneDocument(scene).valid).toBe(false);
+    expect(
+      validateSceneDocument(scene, { validateAuthoringWorkflow: false }),
+    ).toEqual({ issues: [], valid: true });
+  });
+
+  it('enforces asset sourcing and representation policies across nodes and prefabs', () => {
+    const obsoletePolicy = makeScene();
+    (obsoletePolicy.authoring!.composition!.target as any).assetPolicy =
+      'declared-assets';
+    expect(validateSceneDocument(obsoletePolicy).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.target.assetPolicy',
+        code: 'schema',
+      }),
+    );
+
+    const restricted = makeScene();
+    restricted.authoring!.composition!.representationPolicy.allowed = ['asset'];
+    expect(validateSceneDocument(restricted).issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.resources.prefabs',
+          code: 'policy',
+        }),
+        expect.objectContaining({
+          path: '$.nodes[3].content.type',
+          code: 'policy',
+        }),
+      ]),
+    );
+
+    const nestedPrefabAsset = makeScene();
+    nestedPrefabAsset.authoring!.composition!.representationPolicy.allowed = [
+      'prefab',
+      'pattern',
+    ];
+    nestedPrefabAsset.resources.prefabs![0].root.children = [
+      {
+        id: 'nested-asset',
+        content: { type: 'asset', asset: 'chair' },
+      },
+    ];
+    expect(validateSceneDocument(nestedPrefabAsset).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.resources.prefabs[0].root.children[0].content.type',
+        code: 'policy',
+      }),
+    );
+  });
+
+  it('binds provenance and review identity to every prompt and image source', () => {
+    const scene = makeScene();
+    expect(validateSceneDocument(scene)).toEqual({ valid: true, issues: [] });
+
+    scene.authoring!.composition!.provenance.inputHashes = [
+      scene.authoring!.composition!.provenance.inputHashes[1],
+      HASH_A,
+    ];
+    expect(validateSceneDocument(scene).issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'declared input hash "sha256:03e49b58',
+          ),
+        }),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'does not identify a declared prompt or reference',
+          ),
+        }),
+      ]),
+    );
+
+    const reviewScene = makeScene();
+    reviewScene.authoring!.composition!.review.lenses = ['layout'];
+    const review = makeReview(reviewScene);
+    review.sourceHashes.shift();
+    expect(
+      validateSceneReviewAgainstDocument(review, reviewScene).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        path: '$.sourceHashes',
+        message: expect.stringContaining('source hash'),
+      }),
+    );
+  });
+
+  it('places a hard schema ceiling on correction rounds', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.maxCorrectionRounds = 11;
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.review.maxCorrectionRounds',
+        code: 'schema',
+      }),
+    );
+
+    const review = makeReview();
+    review.round = 11;
+    expect(validateSceneReview(review).issues).toContainEqual(
+      expect.objectContaining({ path: '$.round', code: 'schema' }),
+    );
+
+    const initial = makeReview();
+    initial.round = 0;
+    initial.previousReview = {
+      path: 'records/previous.iwsdk.scene-review.json',
+      reviewSha256: HASH_A,
+    };
+    expect(validateSceneReview(initial).issues).toContainEqual(
+      expect.objectContaining({ path: '$.previousReview', code: 'state' }),
+    );
+  });
+
+  it('resolves every local reference in exported document and review schemas', () => {
+    expect(unresolvedLocalSchemaRefs(SCENE_DOCUMENT_JSON_SCHEMA)).toEqual([]);
+    expect(unresolvedLocalSchemaRefs(SCENE_REVIEW_JSON_SCHEMA)).toEqual([]);
+  });
+
+  it('rejects blocked or undocumented conditional compilation contracts', () => {
+    const blocked = makeScene();
+    blocked.authoring!.composition!.feasibility = {
+      status: 'blocked',
+      reasons: ['Required representation is unavailable'],
+    };
+    expect(validateSceneDocument(blocked).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.authoring.composition.feasibility.status',
+        code: 'state',
+      }),
+    );
+
+    const conditional = makeScene();
+    conditional.authoring!.composition!.feasibility = {
+      status: 'conditional',
+      reasons: ['Approximation requires acceptance'],
+    };
+    conditional.authoring!.composition!.provenance.inputHashes = [HASH_A];
+    const issues = validateSceneDocument(conditional).issues;
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: expect.stringContaining('acceptedApproximations'),
+        }),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'missing from compilation provenance',
+          ),
+        }),
+      ]),
+    );
+  });
+
+  it('requires namespaced keys at the opaque metadata extension points', () => {
+    const scene = makeScene();
+    scene.metadata = { owner: 'invalid', 'example.valid': true };
+    scene.nodes[0].metadata = { debug: true };
+    const result = validateSceneDocument(scene);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.metadata.owner',
+          code: 'namespace',
+        }),
+        expect.objectContaining({
+          path: '$.nodes[0].metadata.debug',
+          code: 'namespace',
+        }),
+      ]),
+    );
+  });
+
+  it('canonicalizes, hashes, and projects authoring data deterministically', () => {
+    expect(canonicalizeJson({ z: 1, a: [3, { y: true, x: null }] })).toBe(
+      '{"a":[3,{"x":null,"y":true}],"z":1}',
+    );
+    expect(sha256('')).toBe(
+      'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    const scene = makeScene();
+    const reordered = JSON.parse(
+      `{"units":"meters","version":"iwsdk.scene.v1","nodes":${JSON.stringify(scene.nodes)},"resources":${JSON.stringify(scene.resources)},"environment":${JSON.stringify(scene.environment)},"metadata":${JSON.stringify(scene.metadata)},"authoring":${JSON.stringify(scene.authoring)}}`,
+    ) as SceneDocument;
+    expect(hashSceneDocument(reordered)).toBe(hashSceneDocument(scene));
+    expect(hashRuntimeSceneDocument(reordered)).toBe(
+      hashRuntimeSceneDocument(scene),
+    );
+
+    const changedAuthoring = clone(scene);
+    changedAuthoring.authoring!.composition!.input.prompt = 'Changed prompt';
+    changedAuthoring.authoring!.composition!.provenance.inputHashes[0] =
+      sha256('Changed prompt');
+    expect(hashSceneDocument(changedAuthoring)).not.toBe(
+      hashSceneDocument(scene),
+    );
+    expect(hashRuntimeSceneDocument(changedAuthoring)).toBe(
+      hashRuntimeSceneDocument(scene),
+    );
+    expect(hashSceneReviewContract(changedAuthoring)).not.toBe(
+      hashSceneReviewContract(scene),
+    );
+    const changedRuntimeOnly = clone(scene);
+    changedRuntimeOnly.nodes[0].transform = { position: [2, 0, 0] };
+    expect(hashSceneReviewContract(changedRuntimeOnly)).toBe(
+      hashSceneReviewContract(scene),
+    );
+    expect(projectRuntimeSceneDocument(scene)).not.toHaveProperty('authoring');
+  });
+
+  it('parses and serializes v1 scenes with stable formatting', () => {
+    const serialized = serializeSceneDocument(makeScene());
+    expect(serialized.endsWith('\n')).toBe(true);
+    expect(serializeSceneDocument(parseSceneDocument(serialized))).toBe(
+      serialized,
+    );
+    expect(() =>
+      parseSceneDocument(
+        JSON.stringify({
+          ...makeScene(),
+          version: 'unsupported.scene.version',
+        }),
+      ),
+    ).toThrow('Invalid IWSDK scene document');
+  });
+
+  it('validates the closed scene-review v1 evidence contract', () => {
+    const review = makeReview();
+    expect(validateSceneReview(review)).toEqual({ valid: true, issues: [] });
+    expect(SCENE_REVIEW_SCHEMA_ID).toContain('scene-review.v1');
+    expect(SCENE_REVIEW_JSON_SCHEMA.additionalProperties).toBe(false);
+    const serialized = serializeSceneReview(review);
+    expect(parseSceneReview(serialized)).toEqual(review);
+
+    const missingEvidence = clone(review);
+    missingEvidence.featureResults[0].evidenceRefs = ['missing'];
+    expect(validateSceneReview(missingEvidence).issues).toContainEqual(
+      expect.objectContaining({ code: 'reference' }),
+    );
+
+    const falsePass = clone(review);
+    falsePass.featureResults[0].status = 'partial';
+    expect(validateSceneReview(falsePass).issues).toContainEqual(
+      expect.objectContaining({ path: '$.result', code: 'state' }),
+    );
+
+    const accepted = clone(falsePass);
+    accepted.result = 'accepted-with-gaps';
+    accepted.waivers = [
+      {
+        feature: 'table-feature',
+        criterion: 'table-presence',
+        reason: 'User accepted the gap',
+        authorizedBy: 'user',
+      },
+    ];
+    expect(validateSceneReview(accepted)).toEqual({ valid: true, issues: [] });
+  });
+
+  it('binds review evidence to an exact scene revision and authoring contract', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    const review = makeReview(scene);
+    expect(validateSceneReviewAgainstDocument(review, scene, HASH_C)).toEqual({
+      valid: true,
+      issues: [],
+    });
+    review.documentHash = HASH_A;
+    review.featureResults.pop();
+    const invalid = validateSceneReviewAgainstDocument(review, scene);
+    expect(invalid.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['hash-mismatch', 'reference']),
+    );
+  });
+
+  it('rejects deterministic pass claims that contradict measured scene facts', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    scene.authoring!.composition!.features[0].acceptance.push({
+      id: 'impossible-table-count',
+      kind: 'count',
+      nodeRefs: ['table'],
+      equals: 999999,
+    });
+    const review = makeReview(scene);
+    review.featureResults.push({
+      feature: 'table-feature',
+      criterion: 'impossible-table-count',
+      status: 'pass',
+      evidenceRefs: ['layout-hero'],
+    });
+
+    expect(
+      validateSceneReviewAgainstDocument(review, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'criterion-mismatch',
+        path: '$.featureResults[2].status',
+        message: expect.stringContaining('"actual":1'),
+      }),
+    );
+
+    review.featureResults[2].status = 'fail';
+    review.result = 'fail';
+    review.stop.reason = 'plateau';
+    expect(validateSceneReviewAgainstDocument(review, scene)).toEqual({
+      valid: true,
+      issues: [],
+    });
+  });
+
+  it('finalizes deterministic review results and routes failures to refinement', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    scene.authoring!.composition!.features[0].acceptance.push({
+      id: 'impossible-table-count',
+      kind: 'count',
+      nodeRefs: ['table'],
+      equals: 999999,
+    });
+    const captures = makeReview(scene).lenses[0].captures;
+    const finalized = finalizeSceneReviewDraft(scene, HASH_C, {
+      lenses: [{ captures, id: 'layout', status: 'pass' }],
+      round: 0,
+    });
+
+    expect(finalized.review).toMatchObject({
+      capabilityHash: HASH_C,
+      documentHash: hashSceneDocument(scene),
+      result: 'fail',
+      runtimeHash: hashRuntimeSceneDocument(scene),
+      stop: {
+        reason: 'continue-refining',
+        openDefectTags: ['criterion:table-feature/impossible-table-count'],
+      },
+    });
+    expect(finalized.review.featureResults).toContainEqual(
+      expect.objectContaining({
+        criterion: 'impossible-table-count',
+        evidenceRefs: ['layout-hero'],
+        feature: 'table-feature',
+        status: 'fail',
+      }),
+    );
+    expect(finalized.deterministicEvaluations).toContainEqual(
+      expect.objectContaining({
+        criterion: 'impossible-table-count',
+        reason: 'criterion-not-satisfied',
+        status: 'fail',
+      }),
+    );
+    expect(validateSceneReviewAgainstDocument(finalized.review, scene)).toEqual(
+      { valid: true, issues: [] },
+    );
+
+    const invalidRouting = clone(finalized.review);
+    invalidRouting.result = 'pass';
+    invalidRouting.featureResults.forEach((result) => {
+      result.status = 'pass';
+    });
+    expect(validateSceneReview(invalidRouting).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'state',
+        path: '$.stop.reason',
+      }),
+    );
+  });
+
+  it('requires the exact configured view for deterministic and visual evidence', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    const review = makeReview(scene);
+    review.featureResults[0].evidenceRefs = ['layout-top'];
+    expect(
+      validateSceneReviewAgainstDocument(review, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'criterion-mismatch',
+        path: '$.featureResults[0].status',
+        message: expect.stringContaining('capture-required'),
+      }),
+    );
+
+    scene.authoring!.composition!.features[0].acceptance.push({
+      id: 'table-reads-visually',
+      kind: 'visual-judgment',
+      view: 'hero',
+      criterion: 'The table reads clearly as the focal object.',
+    });
+    const visualReview = makeReview(scene);
+    visualReview.featureResults.push({
+      feature: 'table-feature',
+      criterion: 'table-reads-visually',
+      status: 'pass',
+      evidenceRefs: ['layout-hero'],
     });
     expect(
-      identityMove.document.nodes[0].children?.[0].transform,
-    ).toBeUndefined();
-    const identityRestored = applyScenePatch(
-      identityMove.document,
-      identityMove.inverse,
-    );
-    expect(identityRestored.document.nodes[1].transform).toBeUndefined();
-  });
-
-  it('renames nodes reversibly and rejects duplicate ids', () => {
-    const renamed = applyScenePatch(makeScene(), {
-      newNodeId: 'table-renamed',
-      nodeId: 'table-node',
-      op: 'renameNode',
-    });
-
-    expect(renamed.document.nodes[0].id).toBe('table-renamed');
-    expect(renamed.inverse).toEqual({
-      newNodeId: 'table-node',
-      nodeId: 'table-renamed',
-      op: 'renameNode',
-    });
-
-    const restored = applyScenePatch(renamed.document, renamed.inverse);
-    expect(restored.document.nodes[0].id).toBe('table-node');
-
-    expect(() =>
-      applyScenePatch(makeScene(), {
-        newNodeId: 'nested-child',
-        nodeId: 'table-node',
-        op: 'renameNode',
+      validateSceneReviewAgainstDocument(visualReview, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'required',
+        path: '$.featureResults[2].observation',
       }),
-    ).toThrow('Cannot rename node "table-node" to duplicate id "nested-child"');
-  });
-
-  it('keeps command history strict by default but can wrap invalid loaded documents for validation tools', () => {
-    const invalid = {
-      ...makeScene(),
-      nodes: [
-        {
-          asset: 'missing',
-          id: 'bad-node',
-        },
-      ],
-    } as unknown as SceneDocument;
-
-    expect(() => new SceneCommandHistory(invalid)).toThrow(
-      'Invalid IWSDK scene document',
     );
-
-    const history = new SceneCommandHistory(invalid, {
-      validateInitialDocument: false,
-    });
-    expect(history.document.nodes[0]).toMatchObject({
-      asset: 'missing',
-      id: 'bad-node',
+    visualReview.featureResults[2].observation =
+      'The cylindrical top and centered support read clearly as a table.';
+    expect(validateSceneReviewAgainstDocument(visualReview, scene)).toEqual({
+      valid: true,
+      issues: [],
     });
   });
 
-  it('rejects malformed scene patches before mutating documents', () => {
+  it('requires complete review evidence, required views, and the active capability hash', () => {
     const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    const review = makeReview(scene);
+    review.capabilityHash = HASH_A;
+    review.lenses[0].captures = [];
+    review.featureResults.forEach((result) => {
+      result.evidenceRefs = [];
+    });
 
-    expect(() =>
-      applyScenePatch(scene, {
-        op: 'moveNode',
-        nodeId: '',
-      } as any),
-    ).toThrow('nodeId must be a non-empty string');
+    const result = validateSceneReviewAgainstDocument(review, scene, HASH_C);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: '$.capabilityHash' }),
+        expect.objectContaining({
+          message: 'required lens "layout" has no captures',
+        }),
+        expect.objectContaining({
+          message: 'required view "hero" has no capture',
+        }),
+        expect.objectContaining({
+          message: 'required view "top" has no capture',
+        }),
+        expect.objectContaining({
+          message:
+            'required criterion "table-feature/table-presence" has no evidence',
+        }),
+      ]),
+    );
+  });
 
-    expect(() =>
-      applyScenePatch(scene, {
-        node: {
-          asset: 'lamp',
-          id: 'bad-index',
-        },
-        op: 'addNode',
-        index: -1,
+  it('enforces the zero-based correction ceiling and round-limit stop reason', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['layout'];
+    const review = makeReview(scene);
+
+    review.round = 0;
+    expect(validateSceneReviewAgainstDocument(review, scene)).toEqual({
+      valid: true,
+      issues: [],
+    });
+
+    review.round = 1;
+    review.stop.reason = 'round-limit';
+    expect(
+      validateSceneReviewAgainstDocument(review, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({ path: '$.stop.reason', code: 'state' }),
+    );
+
+    review.round = 2;
+    expect(validateSceneReviewAgainstDocument(review, scene)).toEqual({
+      valid: true,
+      issues: [],
+    });
+
+    review.round = 3;
+    expect(
+      validateSceneReviewAgainstDocument(review, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({ path: '$.round', code: 'limit' }),
+    );
+  });
+
+  it('requires configured and recorded lenses to use canonical workflow order', () => {
+    const scene = makeScene();
+    scene.authoring!.composition!.review.lenses = ['geometry', 'layout'];
+    const review = makeReview(scene);
+    review.lenses = [
+      makeReviewLens(review, 'geometry'),
+      makeReviewLens(review, 'layout'),
+    ];
+
+    expect(
+      validateSceneReviewAgainstDocument(review, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        path: '$.lenses',
+        code: 'state',
+        message:
+          'scene review configuration lenses must be a canonical subset ordered layout, geometry, final',
       }),
-    ).toThrow('index must be a non-negative integer');
+    );
+
+    scene.authoring!.composition!.review.lenses = [
+      'layout',
+      'geometry',
+      'final',
+    ];
+    const orderedReview = makeReview(scene);
+    orderedReview.lenses = [
+      makeReviewLens(orderedReview, 'layout'),
+      makeReviewLens(orderedReview, 'final'),
+      makeReviewLens(orderedReview, 'geometry'),
+    ];
+    expect(
+      validateSceneReviewAgainstDocument(orderedReview, scene).issues,
+    ).toContainEqual(
+      expect.objectContaining({ path: '$.lenses', code: 'state' }),
+    );
+  });
+
+  it('prevents a later configured lens from passing an earlier failed gate', () => {
+    const scene = makeScene();
+    const review = makeReview(scene);
+    review.result = 'fail';
+    review.stop.reason = 'plateau';
+    review.lenses = [
+      { ...makeReviewLens(review, 'layout'), status: 'fail' },
+      makeReviewLens(review, 'geometry'),
+      makeReviewLens(review, 'final'),
+    ];
+
+    const result = validateSceneReviewAgainstDocument(review, scene);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.lenses[1].status',
+          code: 'state',
+        }),
+        expect.objectContaining({
+          path: '$.lenses[2].status',
+          code: 'state',
+        }),
+      ]),
+    );
+  });
+
+  it('requires explicit user authorization for accepted review gaps', () => {
+    const review = makeReview();
+    review.result = 'accepted-with-gaps';
+    review.featureResults[0].status = 'partial';
+    review.waivers = [
+      {
+        feature: 'table-feature',
+        criterion: 'table-presence',
+        reason: 'Agent claimed acceptance without user authorization',
+        authorizedBy: 'agent',
+      } as any,
+    ];
+    expect(validateSceneReview(review).issues).toContainEqual(
+      expect.objectContaining({ path: '$.waivers[0].authorizedBy' }),
+    );
+  });
+
+  it('computes bounds for the complete primitive family', () => {
+    expect(
+      getScenePrimitiveBounds({ type: 'capsule', radius: 0.5, length: 2 }),
+    ).toEqual({
+      min: [-0.5, -1.5, -0.5],
+      max: [0.5, 1.5, 0.5],
+    });
+    expect(
+      getScenePrimitiveBounds({
+        type: 'extrude',
+        points: [
+          [-2, -1],
+          [3, -1],
+          [0, 4],
+        ],
+        depth: 2,
+      }),
+    ).toEqual({ min: [-2, -1, -1], max: [3, 4, 1] });
+    expect(
+      getScenePrimitiveBounds({
+        type: 'tube',
+        points: [
+          [0, 1, 2],
+          [3, -1, 4],
+        ],
+        radius: 0.5,
+      }),
+    ).toEqual({ min: [-0.5, -1.5, 1.5], max: [3.5, 1.5, 4.5] });
+  });
+
+  it('applies reversible node patches with isolated command history', () => {
+    const scene = makeScene();
+    const history = new SceneCommandHistory(scene);
+    const content = {
+      type: 'asset' as const,
+      asset: 'replacement-table',
+      castShadow: true,
+    };
+    history.apply({ op: 'updateContent', nodeId: 'table', content });
+    content.asset = 'mutated-after-apply';
+    expect(history.document.nodes[1].content).toEqual({
+      type: 'asset',
+      asset: 'replacement-table',
+      castShadow: true,
+    });
+    history.undo();
+    expect(history.document).toEqual(scene);
+    history.redo();
+    expect(history.document.nodes[1].content?.type).toBe('asset');
+
+    const result = applyScenePatch(scene, {
+      op: 'updateConstraints',
+      nodeId: 'chair',
+      constraints: { lookAt: { mode: 'yaw-v1', target: [0, 0, 0] } },
+    });
+    expect(applyScenePatch(result.document, result.inverse).document).toEqual(
+      scene,
+    );
+  });
+
+  it('authors level-root components with reversible patches', () => {
+    const scene = makeScene();
+    const history = new SceneCommandHistory(scene);
+
+    history.apply({
+      component: 'com.iwsdk.components.DomeGradient',
+      op: 'updateRootComponent',
+      value: {
+        equator: [0.5, 0.6, 0.7, 1],
+        ground: [0.2, 0.25, 0.3, 1],
+        intensity: 0.8,
+        sky: [0.1, 0.3, 0.6, 1],
+      },
+    });
+    expect(history.document.components).toMatchObject({
+      'com.iwsdk.components.DomeGradient': { intensity: 0.8 },
+    });
+
+    history.apply({
+      component: 'com.iwsdk.components.DomeGradient',
+      op: 'updateRootComponent',
+    });
+    expect(history.document.components).toEqual({});
+    history.undo();
+    expect(history.document.components).toHaveProperty(
+      'com.iwsdk.components.DomeGradient',
+    );
+    history.undo();
+    expect(history.document).toEqual(scene);
+  });
+
+  it('updates framing roles atomically and restores omission through undo', () => {
+    const scene = makeScene();
+    const originalHash = hashSceneDocument(scene);
+    const history = new SceneCommandHistory(scene);
+
+    history.apply({
+      framingRole: 'support',
+      nodeId: 'table',
+      op: 'updateFramingRole',
+    });
+    expect(history.document.nodes[1]).toMatchObject({
+      framingRole: 'support',
+      id: 'table',
+    });
+    expect(hashSceneDocument(history.document)).not.toBe(originalHash);
+
+    history.undo();
+    expect(history.document).toEqual(scene);
+    expect(history.document.nodes[1]).not.toHaveProperty('framingRole');
+
+    history.redo();
+    expect(history.document.nodes[1].framingRole).toBe('support');
+
+    const contentResult = applyScenePatch(history.document, {
+      framingRole: 'content',
+      nodeId: 'table',
+      op: 'updateFramingRole',
+    });
+    expect(contentResult.document.nodes[1].framingRole).toBe('content');
+    expect(
+      applyScenePatch(contentResult.document, contentResult.inverse).document,
+    ).toEqual(history.document);
 
     expect(() =>
       applyScenePatch(scene, {
-        component: 'example.BadPayload',
-        nodeId: 'table-node',
-        op: 'updateComponent',
-        value: Number.NaN,
-      } as any),
-    ).toThrow('value must be JSON serializable');
-
+        framingRole: 'background' as 'content',
+        nodeId: 'table',
+        op: 'updateFramingRole',
+      }),
+    ).toThrow('framingRole must be "content" or "support"');
+    expect(() =>
+      applyScenePatch(scene, {
+        framingRole: 'support',
+        nodeId: 'missing',
+        op: 'updateFramingRole',
+      }),
+    ).toThrow('Unknown node "missing"');
     expect(scene).toEqual(makeScene());
   });
 
-  it('undoes editor metadata patches by deleting previously absent editor blocks', () => {
+  it('applies node, environment, view, and whole-document transactions atomically', () => {
     const scene = makeScene();
-    const updatedDocumentMetadata = applyScenePatch(scene, {
-      op: 'setEditorMetadata',
-      value: { expanded: true },
-    });
-    expect(updatedDocumentMetadata.document.editor).toEqual({ expanded: true });
-    expect(
-      applyScenePatch(
-        updatedDocumentMetadata.document,
-        updatedDocumentMetadata.inverse,
-      ).document.editor,
-    ).toBeUndefined();
-
-    const updatedNodeMetadata = applyScenePatch(scene, {
-      nodeId: 'table-node',
-      op: 'setEditorMetadata',
-      value: { locked: true },
-    });
-    expect(updatedNodeMetadata.document.nodes[0].editor).toEqual({
-      locked: true,
-    });
-    expect(
-      applyScenePatch(updatedNodeMetadata.document, updatedNodeMetadata.inverse)
-        .document.nodes[0].editor,
-    ).toBeUndefined();
-  });
-
-  it('does not materialize children arrays while rejecting childless reorders', () => {
-    const scene: SceneDocument = {
-      nodes: [{ id: 'empty-parent' }],
-      units: 'meters',
-      version: CURRENT_SCENE_VERSION,
-    };
-
-    const reordered = applyScenePatch(scene, {
-      childIds: [],
-      op: 'reorderChildren',
-      parentId: 'empty-parent',
-    });
-    expect(reordered.document.nodes[0].children).toBeUndefined();
-    expect(scene.nodes[0].children).toBeUndefined();
-  });
-
-  it('resolves lookAt yaw and placeOn transforms deterministically', () => {
-    expect(resolveLookAtYawDeg([0, 0, 0], [1, 0, 0])).toBe(90);
-    expect(resolveLookAtYawDeg([0, 0, 0], [0, 0, -1])).toBe(180);
-
-    const scene = makeScene();
-    const addLamp = applyScenePatch(scene, {
-      node: {
-        asset: 'lamp',
-        id: 'lamp-node',
-        transform: {
-          position: [10, 0, 10],
-        },
-      },
-      op: 'addNode',
-    }).document;
-
-    const lamp = addLamp.nodes.find((node) => node.id === 'lamp-node');
-    expect(lamp).toBeDefined();
-    expect(resolveLookAtTransform(lamp!, [10, 0, 11]).rotationDeg).toEqual([
-      0, 0, 0,
-    ]);
-
-    expect(resolvePlaceOnTransform(addLamp, 'lamp-node', 'table-node')).toEqual(
+    const history = new SceneCommandHistory(scene);
+    history.applyTransaction([
       {
-        position: [2, 1, -1],
-      },
-    );
-
-    const nestedLamp = applyScenePatch(scene, {
-      node: {
-        asset: 'lamp',
-        id: 'nested-lamp',
-        transform: {
-          position: [10, 0, 10],
-        },
-      },
-      op: 'addNode',
-      parentId: 'table-node',
-    }).document;
-    const nestedLampPlacement = resolvePlaceOnTransform(
-      nestedLamp,
-      'nested-lamp',
-      'table-node',
-    );
-    expect(nestedLampPlacement).toEqual({
-      position: [0, 1, 0],
-    });
-    const placedNestedLamp = applyScenePatch(nestedLamp, {
-      nodeId: 'nested-lamp',
-      op: 'updateTransform',
-      transform: nestedLampPlacement,
-    }).document;
-    expect(
-      resolveLookAtTransformInDocument(
-        placedNestedLamp,
-        'nested-lamp',
-        [2, 1, 0],
-      ).rotationDeg,
-    ).toEqual([0, 0, 0]);
-  });
-
-  it('snaps transforms and aligns centers or bounds edges deterministically', () => {
-    expect(snapPositionToGrid([0.24, 0.26, -0.26], { gridSize: 0.25 })).toEqual(
-      [0.25, 0.25, -0.25],
-    );
-    expect(
-      snapPositionToGrid([0.36, 0.74, 0.37], {
-        axes: ['x', 'z'],
-        gridSize: [0.5, 1, 0.25],
-        origin: [0.1, 0, 0],
-      }),
-    ).toEqual([0.6, 0.74, 0.25]);
-    expect(
-      resolveSnapTransform({
-        id: 'free-node',
-        transform: { position: [1.49, 0.51, -1.51], rotationDeg: [0, 30, 0] },
-      }),
-    ).toEqual({
-      position: [1, 1, -2],
-      rotationDeg: [0, 30, 0],
-    });
-
-    const scene = applyScenePatch(makeScene(), {
-      node: {
-        asset: 'lamp',
-        id: 'lamp-node',
-        transform: {
-          position: [10, 0, 3],
-          scale: [2, 1, 1],
-        },
-      },
-      op: 'addNode',
-    }).document;
-
-    expect(
-      resolveAlignTransforms(scene, ['lamp-node'], {
-        axis: 'x',
-        edge: 'center',
-        targetNodeId: 'table-node',
-      })['lamp-node'],
-    ).toEqual({
-      position: [2, 0, 3],
-      scale: [2, 1, 1],
-    });
-    expect(
-      resolveAlignTransforms(scene, ['lamp-node'], {
-        axis: 'x',
-        edge: 'min',
-        targetEdge: 'max',
-        targetNodeId: 'table-node',
-      })['lamp-node'],
-    ).toEqual({
-      position: [3.5, 0, 3],
-      scale: [2, 1, 1],
-    });
-    expect(
-      resolveAlignTransforms(scene, ['lamp-node'], {
-        axis: 'z',
-        edge: 'max',
-        targetValue: 1,
-      })['lamp-node'],
-    ).toEqual({
-      position: [10, 0, 0.75],
-      scale: [2, 1, 1],
-    });
-    expect(() => resolveAlignTransforms(scene, [], { axis: 'x' })).toThrow(
-      'At least one node id is required for alignment',
-    );
-  });
-
-  it('resolves placeOn, lookAt, and align in world space under rotated parents', () => {
-    const scene = applyScenePatch(
-      applyScenePatch(makeScene(), {
-        nodeId: 'table-node',
-        op: 'updateTransform',
-        transform: {
-          position: [2, 0, -1],
-          rotationDeg: [0, 90, 0],
-          scale: [1, 2, 1],
-        },
-      }).document,
-      {
-        node: {
-          asset: 'lamp',
-          id: 'nested-lamp',
-          transform: {
-            position: [10, 0, 10],
-          },
-        },
         op: 'addNode',
-        parentId: 'table-node',
+        node: {
+          id: 'accent-ball',
+          content: { type: 'asset', asset: 'accent-ball' },
+        },
       },
-    ).document;
+      {
+        op: 'setEnvironment',
+        environment: { background: { type: 'transparent' }, exposure: 1.25 },
+      },
+      {
+        op: 'addAuthoringView',
+        view: {
+          id: 'side',
+          role: 'diagnostic',
+          projection: 'orthographic',
+          position: [10, 1, 0],
+          target: [0, 1, 0],
+          height: 8,
+        },
+      },
+    ]);
+    expect(history.document.nodes.at(-1)?.id).toBe('accent-ball');
+    expect(history.document.authoring?.views?.at(-1)?.id).toBe('side');
+    history.undo();
+    expect(history.document).toEqual(scene);
+    history.redo();
+    expect(history.document.nodes.at(-1)?.id).toBe('accent-ball');
 
-    const placement = resolvePlaceOnTransform(
-      scene,
-      'nested-lamp',
-      'table-node',
-    );
-    expect(placement).toEqual({ position: [0, 1, 0] });
-
-    const placedScene = applyScenePatch(scene, {
-      nodeId: 'nested-lamp',
-      op: 'updateTransform',
-      transform: placement,
-    }).document;
-    expect(
-      resolveLookAtTransformInDocument(placedScene, 'nested-lamp', [2, 2, 0])
-        .rotationDeg,
-    ).toEqual([0, 270, 0]);
-
-    const aligned = resolveAlignTransforms(placedScene, ['nested-lamp'], {
-      axis: 'x',
-      edge: 'center',
-      targetValue: 3,
-    })['nested-lamp'];
-    expect(aligned.position).toEqual([0, 1, 1]);
+    const replacement = makeScene();
+    replacement.nodes = [{ id: 'replacement' }];
+    replacement.authoring = undefined;
+    replacement.resources = {};
+    history.replace(replacement);
+    expect(history.document).toEqual(replacement);
+    replacement.nodes[0].id = 'mutated-after-apply';
+    expect(history.document.nodes[0].id).toBe('replacement');
   });
 
-  it('runs the phase-1 E2E document flow without browser or runtime imports', () => {
-    const previousVersionFixture = {
-      ...makeScene(),
-      version: 'iwsdk.scene.v0',
-    };
-    const migrated = migrateSceneDocument(previousVersionFixture);
-    const history = new SceneCommandHistory(migrated);
-
-    history.apply({
-      node: {
-        asset: 'lamp',
-        id: 'task-lamp',
-        transform: {
-          position: [0, 0, 0],
-        },
-      },
-      op: 'addNode',
-    });
-    const placeOn = resolvePlaceOnTransform(
-      history.document,
-      'task-lamp',
-      'table-node',
-    );
-    history.apply({
-      nodeId: 'task-lamp',
-      op: 'updateTransform',
-      transform: resolveLookAtTransform(
+  it('rewrites every authoring node reference during an atomic rename', () => {
+    const scene = makeScene();
+    const feature = scene.authoring!.composition!.features[0];
+    feature.identityCritical = true;
+    feature.objectInspection = {
+      silhouette: ['Keep the authored outline'],
+      proportions: ['Keep the authored proportions'],
+      parts: [{ id: 'body', description: 'Table body', nodeRefs: ['table'] }],
+      negativeSpace: ['Keep the authored openings'],
+      contacts: [
         {
-          id: 'task-lamp',
-          transform: placeOn,
+          id: 'ground-contact',
+          description: 'Table meets ground',
+          nodeRefs: ['table'],
+          targetNodeRefs: ['ground'],
         },
-        [2, 1, 1],
-      ),
-    });
-    history.apply({
-      component: 'example.AuthoringNote',
-      nodeId: 'task-lamp',
-      op: 'updateComponent',
-      value: {
-        createdBy: 'test',
+      ],
+      materialResponse: ['Keep the authored response'],
+      requiredViews: ['hero'],
+      context: {
+        background: 'authored',
+        lighting: 'authored',
+        includeNodeRefs: ['table'],
       },
+    };
+    const renamed = applyScenePatch(scene, {
+      op: 'renameNode',
+      nodeId: 'table',
+      newNodeId: 'table-renamed',
+    }).document;
+    expect(renamed.nodes[1].id).toBe('table-renamed');
+    expect(renamed.authoring?.composition?.features[0].nodeRefs).toEqual([
+      'table-renamed',
+    ]);
+    expect(
+      renamed.authoring?.composition?.features[0].acceptance[0],
+    ).toMatchObject({ nodeRefs: ['table-renamed'] });
+    expect(
+      renamed.authoring?.composition?.features[0].objectInspection,
+    ).toMatchObject({
+      parts: [{ nodeRefs: ['table-renamed'] }],
+      context: { includeNodeRefs: ['table-renamed'] },
     });
-    history.undo();
-    history.redo();
+    expect(renamed.authoring?.nodeAnnotations?.[0].node).toBe('table-renamed');
+    expect(validateSceneDocument(renamed)).toEqual({ valid: true, issues: [] });
+  });
 
-    const serialized = serializeSceneDocument(history.document);
-    const reloaded = parseSceneDocument(serialized);
-    const taskLamp = reloaded.nodes.find((node) => node.id === 'task-lamp');
+  it('retains deterministic transform helpers on scene nodes', () => {
+    expect(resolveLookAtYawDeg([0, 0, 0], [1, 0, 0])).toBe(90);
+  });
 
-    expect(reloaded.metadata?.migratedFrom).toBe('iwsdk.scene.v0');
-    expect(taskLamp?.transform?.position).toEqual([2, 1, -1]);
-    expect(taskLamp?.transform?.rotationDeg).toEqual([0, 0, 0]);
-    expect(taskLamp?.components?.['example.AuthoringNote']).toEqual({
-      createdBy: 'test',
+  it('aggregates transformed group children for bounds without mutation', () => {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'assembly',
+          content: { type: 'group' },
+          transform: { position: [10, 0, 0], rotationDeg: [0, 90, 0] },
+          children: [
+            {
+              id: 'offset',
+              content: { type: 'group' },
+              transform: { position: [2, 0, 0] },
+              children: [
+                {
+                  id: 'part',
+                  content: { type: 'asset', asset: 'part-box' },
+                  transform: { position: [0, 1, 1] },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const before = clone(scene);
+
+    expect(
+      getNodeWorldBounds(scene, 'assembly', {
+        resolveAssetBounds: resolveTestAssetBounds,
+      }),
+    ).toEqual({
+      min: [9, 0, -3],
+      max: [13, 2, -1],
     });
+    expect(scene).toEqual(before);
+  });
+
+  it('resolves lookAt constraints without mutating authored transforms', () => {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'table',
+          content: { type: 'asset', asset: 'table-model' },
+          transform: { scale: 2 },
+          children: [
+            {
+              id: 'lamp',
+              content: { type: 'asset', asset: 'lamp-model' },
+              constraints: {
+                lookAt: { mode: 'yaw-v1', target: [2, 2, 0] },
+              },
+              transform: { position: [0, 1, 0] },
+            },
+          ],
+        },
+      ],
+    };
+    const before = clone(scene);
+
+    const resolved = resolveSceneAuthoringTransforms(scene);
+    expect(resolved.nodes[0].children?.[0].transform).toEqual({
+      position: [0, 1, 0],
+      rotationDeg: [0, 90, 0],
+    });
+    expect(scene).toEqual(before);
+  });
+
+  it('aggregates prefab geometry for every deterministic pattern distribution', () => {
+    const distributions: ScenePatternDistribution[] = [
+      { type: 'linear', count: 2, step: [3, 0, 0] },
+      { type: 'grid', count: [2, 1, 2], spacing: [3, 1, 3] },
+      { type: 'radial', count: 3, radius: 3, faceCenter: true },
+      {
+        type: 'along-path',
+        points: [
+          [0, 0, 0],
+          [4, 0, 2],
+        ],
+        count: 3,
+        orientToPath: true,
+      },
+      {
+        type: 'scatter',
+        count: 3,
+        seed: 7,
+        algorithm: 'pcg32-box-rejection-v1',
+        collision: 'allow',
+        region: { type: 'box', size: [4, 1, 4] },
+      },
+      {
+        type: 'explicit',
+        transforms: [
+          { position: [-2, 0, 0] },
+          { position: [2, 0, 0], scale: 2 },
+        ],
+      },
+    ];
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {
+        prefabs: [
+          {
+            id: 'marker',
+            root: {
+              id: 'root',
+              content: { type: 'group' },
+              transform: { rotationDeg: [0, 30, 0], scale: [1, 2, 1] },
+              children: [
+                {
+                  id: 'body',
+                  content: { type: 'asset', asset: 'marker-body' },
+                  transform: { position: [1, 0.5, 0] },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      nodes: distributions.map((distribution, index) => ({
+        id: `pattern-${index}`,
+        content: {
+          type: 'pattern',
+          prefab: 'marker',
+          distribution,
+        },
+      })),
+    };
+    const before = clone(scene);
+
+    expect(getScenePatternInstanceCount(distributions[0])).toBe(2);
+    expect(getScenePatternRequestedCount(distributions[1])).toBe(4);
+
+    for (const node of scene.nodes) {
+      const bounds = getNodeWorldBounds(scene, node.id, {
+        resolveAssetBounds: resolveTestAssetBounds,
+      });
+      expect(bounds.max[0]).toBeGreaterThan(bounds.min[0]);
+      expect(bounds.max[1]).toBeGreaterThan(bounds.min[1]);
+      expect(bounds.max[2]).toBeGreaterThan(bounds.min[2]);
+    }
+    expect(scene).toEqual(before);
+  });
+
+  it('rejects authored and nested aliases of derived runtime node ids', () => {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {
+        prefabs: [
+          {
+            id: 'chair-parts',
+            root: { id: 'root', content: { type: 'group' } },
+          },
+        ],
+      },
+      nodes: [
+        {
+          id: 'chair',
+          content: { type: 'instance', prefab: 'chair-parts' },
+        },
+        { id: 'chair/root', content: { type: 'group' } },
+      ],
+    };
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'duplicate-id',
+        message: expect.stringContaining(
+          'derived runtime node id "chair/root"',
+        ),
+      }),
+    );
+
+    scene.nodes = [
+      {
+        id: 'chairs',
+        content: {
+          type: 'pattern',
+          prefab: 'chair-parts',
+          distribution: { type: 'linear', count: 1, step: [1, 0, 0] },
+        },
+      },
+      { id: 'chairs/0000/root', content: { type: 'group' } },
+    ];
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'duplicate-id',
+        message: expect.stringContaining('"chairs/0000/root"'),
+      }),
+    );
+
+    scene.resources.prefabs = [
+      {
+        id: 'inner',
+        root: { id: 'root', content: { type: 'group' } },
+      },
+      {
+        id: 'outer',
+        root: {
+          id: 'root',
+          content: { type: 'group' },
+          children: [
+            { id: 'seat/root', content: { type: 'group' } },
+            {
+              id: 'seat',
+              content: { type: 'instance', prefab: 'inner' },
+            },
+          ],
+        },
+      },
+    ];
+    scene.nodes = [
+      { id: 'chair', content: { type: 'instance', prefab: 'outer' } },
+    ];
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'duplicate-id',
+        message: expect.stringContaining('"chair/seat/root"'),
+      }),
+    );
+  });
+
+  it('keeps document and runtime hash formats explicit', () => {
+    expect(hashSceneDocument(makeScene())).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(hashRuntimeSceneDocument(makeScene())).toMatch(
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    expect(HASH_B).toMatch(/^sha256:/u);
+  });
+
+  it('validates bounded studio lighting and environment settings', () => {
+    const scene = makeScene();
+    scene.environment = {
+      background: {
+        bottomColor: '#eeeeee',
+        topColor: '#ffffff',
+        type: 'gradient',
+      },
+      imageBasedLighting: { intensity: 0.72, sigma: 0.04, type: 'room' },
+      shadowMapType: 'pcf-soft',
+      shadows: true,
+    };
+    scene.nodes[4].components = {
+      'com.iwsdk.components.RectAreaLight': {
+        color: [1, 1, 1, 1],
+        height: 4,
+        intensity: 3,
+        width: 5,
+      },
+    };
+    expect(validateSceneDocument(scene)).toEqual({ valid: true, issues: [] });
+
+    scene.environment!.imageBasedLighting!.sigma = 0.12;
+    expect(validateSceneDocument(scene).issues).toContainEqual(
+      expect.objectContaining({
+        path: '$.environment.imageBasedLighting.sigma',
+        code: 'schema',
+      }),
+    );
+    scene.environment!.imageBasedLighting!.sigma = 0.04;
+  });
+
+  it('generates deterministic periodic maps with resolution-invariant normals', () => {
+    const color = proceduralColorTexture(101, [64, 64]);
+    const first = generateSceneProceduralTexture('albedo', color);
+    const second = generateSceneProceduralTexture('albedo', color);
+    expect(second.dataHash).toBe(first.dataHash);
+    expect(
+      generateSceneProceduralTexture('albedo', {
+        ...color,
+        seed: 102,
+      }).dataHash,
+    ).not.toBe(first.dataHash);
+
+    const normal64 = generateSceneProceduralTexture('normal', {
+      ...proceduralNormalTexture(73, [64, 64]),
+      scale: [1, 1],
+    }).data;
+    const normal256 = generateSceneProceduralTexture('normal', {
+      ...proceduralNormalTexture(73, [256, 256]),
+      scale: [1, 1],
+    }).data;
+    expect(meanNormalZ(normal64)).toBeCloseTo(meanNormalZ(normal256), 1);
+    expect(maxNormalEdgeDelta(normal256, 256, 256)).toBeLessThan(18);
+  });
+
+  it('capability-gates manifest asset nodes and component schema hashes', () => {
+    const scene = makeScene();
+    const markerHash = hashSceneComponentSchema(MARKER_SCHEMA);
+    const directionalLightHash = hashSceneComponentSchema(
+      DIRECTIONAL_LIGHT_SCHEMA,
+    );
+    const snapshot: SceneCapabilitySnapshot = {
+      sdkVersion: '0.4.2',
+      sceneVersions: [CURRENT_SCENE_VERSION],
+      nodeContentTypes: ['group', 'instance', 'pattern'],
+      patternTypes: [
+        'linear',
+        'grid',
+        'radial',
+        'along-path',
+        'scatter',
+        'explicit',
+      ],
+      imageBasedLightingTypes: [],
+      shadowMapTypes: [],
+      componentSchemaHashes: {
+        DirectionalLight: directionalLightHash,
+        Marker: markerHash,
+      },
+    };
+    scene.authoring!.composition!.provenance.capabilityHash =
+      hashSceneCapabilitySnapshot(snapshot);
+    expect(
+      validateSceneCapabilities(scene, snapshot, {
+        componentCatalog: TEST_COMPONENT_CATALOG,
+      }).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'capability',
+        message: expect.stringContaining('asset'),
+      }),
+    );
+    snapshot.nodeContentTypes.push('asset');
+    scene.authoring!.composition!.provenance.capabilityHash =
+      hashSceneCapabilitySnapshot(snapshot);
+    expect(
+      validateSceneCapabilities(scene, snapshot, {
+        componentCatalog: TEST_COMPONENT_CATALOG,
+      }),
+    ).toEqual({
+      valid: true,
+      issues: [],
+    });
+    scene.authoring!.composition!.provenance.capabilityHash = HASH_A;
+    expect(
+      validateSceneCapabilities(scene, snapshot, {
+        componentCatalog: TEST_COMPONENT_CATALOG,
+        validateAuthoringWorkflow: false,
+      }),
+    ).toEqual({ issues: [], valid: true });
+    expect(hashSceneCapabilitySnapshot(snapshot)).toMatch(
+      /^sha256:[0-9a-f]{64}$/u,
+    );
   });
 });
+
+function proceduralColorTexture(seed: number, resolution: [number, number]) {
+  return {
+    algorithm: 'periodic-fbm-v1' as const,
+    bands: [
+      { amplitude: 0.7, frequency: [2, 3] as [number, number] },
+      { amplitude: 0.3, frequency: [11, 13] as [number, number] },
+    ],
+    ramp: [
+      { at: 0, color: '#08235f' as const },
+      { at: 1, color: '#304d8c' as const },
+    ],
+    resolution,
+    sampler: { wrapU: 'repeat' as const, wrapV: 'repeat' as const },
+    seed,
+    type: 'procedural' as const,
+  };
+}
+
+function proceduralScalarTexture(seed: number, resolution: [number, number]) {
+  const color = proceduralColorTexture(seed, resolution);
+  const { ramp: _ramp, ...common } = color;
+  return { ...common, range: [0.2, 0.8] as [number, number] };
+}
+
+function proceduralNormalTexture(seed: number, resolution: [number, number]) {
+  const scalar = proceduralScalarTexture(seed, resolution);
+  const { range: _range, ...common } = scalar;
+  return common;
+}
+
+function meanNormalZ(data: Uint8Array): number {
+  let sum = 0;
+  for (let index = 2; index < data.length; index += 4) {
+    sum += data[index] / 255;
+  }
+  return sum / (data.length / 4);
+}
+
+function maxNormalEdgeDelta(
+  data: Uint8Array,
+  width: number,
+  height: number,
+): number {
+  let max = 0;
+  for (let y = 0; y < height; y += 1) {
+    const first = y * width * 4;
+    const last = (y * width + width - 1) * 4;
+    for (let channel = 0; channel < 3; channel += 1) {
+      max = Math.max(
+        max,
+        Math.abs(data[first + channel] - data[last + channel]),
+      );
+    }
+  }
+  return max;
+}

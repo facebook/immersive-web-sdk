@@ -36,6 +36,7 @@ type RuntimeResponse = {
   result?: unknown;
   error?: {
     message?: string;
+    data?: Record<string, unknown>;
     cause?:
       | 'browser_not_ready'
       | 'browser_not_launched'
@@ -358,13 +359,65 @@ describe('mcp stdio interface shaping', () => {
     }
   });
 
+  test('returns render-file metadata and PNG together', async () => {
+    const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
+      if (method === 'scene_render_file') {
+        return {
+          result: {
+            composedDocumentHash: `sha256:${'a'.repeat(64)}`,
+            diagnostics: [],
+            imageData: ONE_BY_ONE_PNG_BASE64,
+            mimeType: 'image/png',
+            path: 'public/scenes/test.iwsdk.scene.json',
+            valid: true,
+          },
+          _tabId: 'editor-tab',
+          _tabGeneration: 2,
+        };
+      }
+      return { result: { ok: true } };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'scene_render_file',
+        arguments: { path: 'public/scenes/test.iwsdk.scene.json' },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(3);
+      expect(JSON.parse(result.content[0]?.text ?? '')).toMatchObject({
+        path: 'public/scenes/test.iwsdk.scene.json',
+        valid: true,
+      });
+      expect(result.content[1]).toMatchObject({
+        type: 'image',
+        data: ONE_BY_ONE_PNG_BASE64,
+        mimeType: 'image/png',
+      });
+      expect(JSON.parse(result.content[2]?.text ?? '')).toEqual({
+        _tab: { generation: 2, id: 'editor-tab' },
+      });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
   test('returns structured JSON error content with cause and browser details', async () => {
     const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
-      if (method === 'get_object_transform') {
+      if (method === 'scene_get_state') {
         return {
           error: {
-            message: 'Permission denied while reading object transform',
+            message: 'Permission denied while reading scene state',
             cause: 'permission_denied',
+            data: {
+              code: 'scene_state_denied',
+              issues: [{ code: 'state-unavailable' }],
+              recoverable: false,
+              retryAction: 'scene_get_state',
+            },
           },
           _tabId: 'tab-1',
           _tabGeneration: 1,
@@ -381,16 +434,20 @@ describe('mcp stdio interface shaping', () => {
 
     try {
       const result = await mcp.client.callTool({
-        name: 'scene_get_object_transform',
-        arguments: { uuid: 'missing-object' },
+        name: 'scene_get_state',
+        arguments: {},
       });
 
       expect(result.isError).toBe(true);
       expect(result.content).toHaveLength(1);
       const payload = JSON.parse(result.content[0]?.text ?? '');
       expect(payload).toMatchObject({
-        message: 'Permission denied while reading object transform',
+        message: 'Permission denied while reading scene state',
         cause: 'permission_denied',
+        code: 'scene_state_denied',
+        issues: [{ code: 'state-unavailable' }],
+        recoverable: false,
+        retryAction: 'scene_get_state',
         browser: {
           status: 'connected',
           connected: true,

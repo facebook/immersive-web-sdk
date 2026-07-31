@@ -8,10 +8,10 @@
 import {
   CURRENT_SCENE_VERSION,
   type SceneDocument,
+  validateSceneDocument,
 } from '@iwsdk/scene-composition';
 import { signal } from '@preact/signals-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AssetManager } from '../../src/asset/index.js';
 import { createComponent, Types } from '../../src/ecs/component.js';
 import type { Entity } from '../../src/ecs/entity.js';
 import { World } from '../../src/ecs/world.js';
@@ -21,7 +21,14 @@ import { GLXFImporter } from '../../src/level/level-glxf-importer.js';
 import { LevelImporter } from '../../src/level/level-importer.js';
 import { SceneJSONImporter } from '../../src/level/level-scene-json-importer.js';
 import { LevelSystem } from '../../src/level/level-system.js';
-import { Object3D, Vector3 } from '../../src/runtime/index.js';
+import {
+  BoxGeometry,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  Scene,
+  Vector3,
+} from '../../src/runtime/index.js';
 import { PanelUI } from '../../src/ui/index.js';
 
 // The runtime barrel pulls in xr-input's cursor-visual.ts, which touches
@@ -62,54 +69,29 @@ interface FakeEntity extends Entity {
 
 function makeScene(): SceneDocument {
   return {
-    assets: [
-      {
-        bounds: {
-          max: [1, 1, 1],
-          min: [-1, 0, -1],
-        },
-        id: 'table',
-        type: 'other',
-        uri: '/unused/table',
-      },
-      {
-        bounds: {
-          max: [0.25, 0.5, 0.25],
-          min: [-0.25, 0, -0.25],
-        },
-        id: 'lamp',
-        type: 'gltf',
-        uri: '/assets/lamp.gltf',
-      },
-    ],
+    resources: {},
     nodes: [
       {
-        asset: 'table',
+        content: { asset: 'table', type: 'asset' },
         children: [
           {
-            asset: 'lamp',
+            constraints: {
+              lookAt: { mode: 'yaw-v1', target: [2, 1, 1] },
+            },
+            content: { asset: 'lamp', type: 'asset' },
             components: {
               NativeSmoke: {
-                props: {
-                  enabled: true,
-                },
-                type: 'NativeSmoke',
+                enabled: true,
               },
             },
             id: 'lamp-node',
-            transform: {
-              lookAt: [2, 1, 1],
-              placeOn: 'table-node',
-            },
+            transform: { position: [0, 1, 0] },
           },
         ],
         components: {
           PanelUI: {
-            props: {
-              config: '/ui/panel.uikitml',
-              maxWidth: 2,
-            },
-            type: 'PanelUI',
+            config: '/ui/panel.uikitml',
+            maxWidth: 2,
           },
           'com.iwsdk.components.RayInteractable': {},
         },
@@ -132,7 +114,37 @@ function makeWorld() {
   const root = makeEntity(rootObject, nextIndex++);
   const entities: FakeEntity[] = [];
 
+  const assetBounds = {
+    table: { max: [1, 1, 1], min: [-1, 0, -1] },
+    lamp: { max: [0.25, 0.5, 0.25], min: [-0.25, 0, -0.25] },
+    book: { max: [0.5, 0.1, 0.5], min: [-0.5, 0, -0.5] },
+    vase: { max: [0.1, 0.3, 0.1], min: [-0.1, 0, -0.1] },
+    chair: { max: [0.5, 0.5, 0.5], min: [-0.5, -0.5, -0.5] },
+    building: { max: [1.5, 1, 0.5], min: [-1.5, -1, -0.5] },
+  } as const;
+  const instantiate = vi.fn(async (assetId: string) => {
+    if (!(assetId in assetBounds)) {
+      throw new Error(`Unknown renderable asset "${assetId}"`);
+    }
+    if (assetId === 'building') {
+      return new Mesh(
+        new BoxGeometry(3, 2, 1),
+        new MeshStandardMaterial({ color: '#336699' }),
+      );
+    }
+    const object = new Object3D();
+    const child = new Object3D();
+    child.name = `${assetId}-asset`;
+    object.add(child);
+    return object;
+  });
   const world = {
+    componentCatalog: undefined,
+    assets: {
+      bounds: (assetId: string) =>
+        assetBounds[assetId as keyof typeof assetBounds],
+      instantiate,
+    },
     createTransformEntity: vi.fn((object: Object3D, parent: FakeEntity) => {
       const entity = makeEntity(object, nextIndex++);
       entity.parentEntity = parent;
@@ -143,7 +155,13 @@ function makeWorld() {
     registerComponent: vi.fn(),
   };
 
-  return { entities, root, rootObject, world: world as unknown as World };
+  return {
+    entities,
+    instantiate,
+    root,
+    rootObject,
+    world: world as unknown as World,
+  };
 }
 
 function makeEntity(object3D: Object3D, index: number): FakeEntity {
@@ -163,24 +181,188 @@ function makeEntity(object3D: Object3D, index: number): FakeEntity {
   return entity;
 }
 
+function makeEnvironmentRenderer() {
+  let clearAlpha = 1;
+  return {
+    getClearAlpha: () => clearAlpha,
+    setClearAlpha: (value: number) => {
+      clearAlpha = value;
+    },
+    shadowMap: { enabled: false },
+    toneMapping: 0,
+    toneMappingExposure: 1,
+    xr: {},
+  } as any;
+}
+
 describe('SceneJSONImporter', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
+  it('loads draft authoring metadata that is not review-complete', async () => {
+    const { root, world } = makeWorld();
+    const scene = makeScene();
+    const hash = `sha256:${'0'.repeat(64)}`;
+    scene.authoring = {
+      composition: {
+        assumptions: [],
+        feasibility: { status: 'supported' },
+        features: [
+          {
+            acceptance: [
+              {
+                id: 'table-present',
+                kind: 'presence',
+                nodeRefs: ['table-node'],
+                view: 'hero',
+              },
+            ],
+            description: 'The table is the identity-critical subject.',
+            id: 'table-feature',
+            identityCritical: true,
+            nodeRefs: ['table-node'],
+            priority: 'required',
+          },
+        ],
+        input: { kind: 'text', prompt: 'A table', references: [] },
+        mode: 'static',
+        provenance: {
+          adapter: { id: 'text-intake', version: '1.0.0' },
+          capabilityHash: hash,
+          inputHashes: [hash],
+          skill: { id: 'iwsdk-scene-composer', version: '1.0.0' },
+        },
+        representationPolicy: {
+          allowed: ['asset'],
+          fidelityCeiling: 'draft',
+        },
+        review: {
+          heroView: 'hero',
+          lenses: ['layout', 'geometry', 'final'],
+          maxCorrectionRounds: 2,
+          requiredViews: ['hero'],
+        },
+        target: {
+          assetPolicy: 'manifest-assets',
+          style: 'draft',
+          surfaces: ['browser'],
+        },
+      },
+      nodeAnnotations: [
+        {
+          featureRefs: ['table-feature'],
+          node: 'table-node',
+          reviewLayer: 'geometry',
+        },
+      ],
+      views: [
+        {
+          fov: 45,
+          id: 'hero',
+          position: [0, 2, 4],
+          projection: 'perspective',
+          role: 'hero',
+          target: [0, 1, 0],
+        },
+      ],
+    };
+
+    expect(validateSceneDocument(scene)).toMatchObject({ valid: false });
+    await expect(
+      SceneJSONImporter.loadDocument(world, scene, root),
+    ).resolves.toMatchObject({ document: expect.any(Object) });
+  });
+
+  it('resolves imported scene modules before lowering the runtime document', async () => {
+    const { root, world } = makeWorld();
+    const moduleDocument: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'chair',
+          content: { type: 'asset', asset: 'chair' },
+        },
+      ],
+    };
+    const fetchModule = vi.fn(
+      async () =>
+        new Response(JSON.stringify(moduleDocument), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }),
+    );
+    vi.stubGlobal('fetch', fetchModule);
+
+    const result = await SceneJSONImporter.loadDocument(
+      world,
+      {
+        version: CURRENT_SCENE_VERSION,
+        units: 'meters',
+        imports: [
+          {
+            id: 'alcove',
+            src: './modules/alcove.iwsdk.scene.json',
+            transform: { position: [2, 0, 0] },
+          },
+        ],
+        resources: {},
+        nodes: [],
+      },
+      root,
+      'https://example.test/scenes/root.iwsdk.scene.json',
+    );
+
+    expect(fetchModule).toHaveBeenCalledWith(
+      'https://example.test/scenes/modules/alcove.iwsdk.scene.json',
+    );
+    expect(result.dependencies).toEqual([
+      expect.objectContaining({
+        namespace: 'alcove',
+        source: 'https://example.test/scenes/modules/alcove.iwsdk.scene.json',
+      }),
+    ]);
+    expect([...result.nodes.keys()]).toEqual(['alcove', 'alcove/chair']);
+    expect(result.document.imports).toBeUndefined();
+    expect(result.document.nodes[0]).toMatchObject({
+      id: 'alcove',
+      transform: { position: [2, 0, 0] },
+    });
+  });
+
+  it('requires a document URL when a scene document imports modules', async () => {
+    const { root, world } = makeWorld();
+
+    await expect(
+      SceneJSONImporter.loadDocument(
+        world,
+        {
+          version: CURRENT_SCENE_VERSION,
+          units: 'meters',
+          imports: [{ id: 'module', src: './module.iwsdk.scene.json' }],
+          resources: {},
+          nodes: [],
+        },
+        root,
+      ),
+    ).rejects.toThrow(/require a document URL/);
+  });
+
   it('loads native scene JSON into Object3D hierarchy, ECS entities, and components', async () => {
-    const { entities, root, rootObject, world } = makeWorld();
+    const { entities, instantiate, root, rootObject, world } = makeWorld();
     const assetRoot = new Object3D();
     const assetChild = new Object3D();
     assetChild.name = 'asset-child';
     assetRoot.add(assetChild);
     assetRoot.name = 'asset-root';
-    vi.spyOn(AssetManager, 'loadGLTF').mockResolvedValue({
-      scene: assetRoot,
-      scenes: [assetRoot],
-    } as any);
-    vi.spyOn(AssetManager, 'getGLTF').mockReturnValue(null);
+    instantiate.mockImplementation(async (assetId) =>
+      assetId === 'lamp'
+        ? assetRoot.clone(true)
+        : Object.assign(new Object3D(), { name: 'table-asset' }),
+    );
 
     const result = await SceneJSONImporter.loadDocument(
       world,
@@ -188,10 +370,8 @@ describe('SceneJSONImporter', () => {
       root,
     );
 
-    expect(AssetManager.loadGLTF).toHaveBeenCalledWith(
-      '/assets/lamp.gltf',
-      'lamp',
-    );
+    expect(instantiate).toHaveBeenCalledWith('table');
+    expect(instantiate).toHaveBeenCalledWith('lamp');
     expect(entities).toHaveLength(2);
     expect(rootObject.children.map((child) => child.name)).toEqual([
       'table-node',
@@ -229,8 +409,8 @@ describe('SceneJSONImporter', () => {
       iwsdkSceneAssetId: 'lamp',
       iwsdkSceneNodeId: 'lamp-node',
     });
-    expect(lamp.object3D.children[0]?.userData).toMatchObject({
-      iwsdkSceneAssetId: 'lamp',
+    expect(lamp.object3D.userData).toMatchObject({
+      iwsdkSceneContent: { asset: 'lamp', type: 'asset' },
       iwsdkSceneNodeId: 'lamp-node',
     });
 
@@ -262,28 +442,74 @@ describe('SceneJSONImporter', () => {
     });
   });
 
+  it('loads procedural manifest assets as real Three.js meshes', async () => {
+    const { entities, root, rootObject, world } = makeWorld();
+    const scene: SceneDocument = {
+      resources: {},
+      nodes: [
+        {
+          content: {
+            asset: 'building',
+            castShadow: false,
+            receiveShadow: true,
+            type: 'asset',
+          },
+          id: 'building',
+          name: 'Building mesh',
+          transform: { position: [4, 1, -2] },
+        },
+      ],
+      units: 'meters',
+      version: CURRENT_SCENE_VERSION,
+    };
+
+    const result = await SceneJSONImporter.loadDocument(world, scene, root);
+    const imported = result.nodes.get('building');
+
+    expect(entities).toHaveLength(1);
+    expect(imported).toMatchObject({
+      assetId: 'building',
+      entity: entities[0],
+      nodeId: 'building',
+    });
+    expect(imported?.object).toBeInstanceOf(Mesh);
+
+    const mesh = imported?.object as Mesh;
+    expect(mesh.name).toBe('Building mesh');
+    expect(mesh.position.toArray()).toEqual([4, 1, -2]);
+    expect(mesh.castShadow).toBe(false);
+    expect(mesh.receiveShadow).toBe(true);
+    expect(mesh.geometry).toMatchObject({
+      parameters: { depth: 1, height: 2, width: 3 },
+      type: 'BoxGeometry',
+    });
+    expect(mesh.material).toBeInstanceOf(MeshStandardMaterial);
+
+    const material = mesh.material as MeshStandardMaterial;
+    expect(material.color.getHexString()).toBe('336699');
+    expect(mesh.userData).toMatchObject({
+      iwsdkSceneAssetId: 'building',
+      iwsdkSceneNodeId: 'building',
+    });
+    expect(rootObject.children).toEqual([mesh]);
+  });
+
   it('maps deprecated Interactable component aliases to RayInteractable', async () => {
     const { entities, root, world } = makeWorld();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const scene = makeScene();
     scene.nodes = [
       {
-        asset: 'table',
+        content: { type: 'group' },
         components: {
-          Interactable: {
-            props: {},
-            type: 'Interactable',
-          },
+          Interactable: {},
         },
         id: 'unprefixed-legacy-interactable',
       },
       {
-        asset: 'table',
+        content: { type: 'group' },
         components: {
-          'com.iwsdk.components.Interactable': {
-            props: {},
-            type: 'Interactable',
-          },
+          'com.iwsdk.components.Interactable': {},
         },
         id: 'prefixed-legacy-interactable',
       },
@@ -308,7 +534,6 @@ describe('SceneJSONImporter', () => {
     const scene = makeScene();
     scene.nodes = [
       {
-        asset: 'table',
         components: {
           MissingComponent: {},
         },
@@ -323,24 +548,71 @@ describe('SceneJSONImporter', () => {
     );
   });
 
-  it('fails strict typed component mismatches with node and component context', () => {
+  it('rolls back attached assets and entities without disposing shared manifest resources', async () => {
+    const { entities, instantiate, root, rootObject, world } = makeWorld();
+    const material = new MeshStandardMaterial();
+    const geometry = new BoxGeometry(1, 1, 1);
+    const disposeGeometry = vi.spyOn(geometry, 'dispose');
+    const disposeMaterial = vi.spyOn(material, 'dispose');
+    instantiate.mockResolvedValue(new Mesh(geometry, material));
+    const scene = makeScene();
+    scene.nodes = [
+      {
+        components: { MissingComponent: {} },
+        content: { asset: 'table', type: 'asset' },
+        id: 'bad-asset-node',
+      },
+    ];
+
+    await expect(
+      SceneJSONImporter.loadDocument(world, scene, root),
+    ).rejects.toThrow('Unknown component "MissingComponent"');
+
+    expect(entities).toHaveLength(1);
+    expect(entities[0].destroy).toHaveBeenCalledOnce();
+    expect(rootObject.children).toEqual([]);
+    expect(disposeGeometry).not.toHaveBeenCalled();
+    expect(disposeMaterial).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown manifest assets before mutating runtime parent state', async () => {
+    const { entities, root, rootObject, world } = makeWorld();
+    rootObject.userData.sentinel = 'unchanged';
+    const scene = makeScene();
+    scene.nodes = [
+      {
+        content: { asset: 'missing', type: 'asset' },
+        id: 'missing-node',
+      },
+    ];
+
+    await expect(
+      SceneJSONImporter.loadDocument(world, scene, root),
+    ).rejects.toThrow('Unknown renderable asset "missing"');
+
+    expect(entities).toHaveLength(0);
+    expect(rootObject.children).toEqual([]);
+    expect(rootObject.userData).toEqual({ sentinel: 'unchanged' });
+  });
+
+  it('treats type and props as ordinary fields in raw component payloads', () => {
     const { root, world } = makeWorld();
 
-    expect(() =>
-      LevelComponentApplier.applyComponents(
-        root,
-        {
-          NativeSmoke: {
-            props: {},
-            type: 'PanelUI',
-          },
+    LevelComponentApplier.applyComponents(
+      root,
+      {
+        NativeSmoke: {
+          props: {},
+          type: 'PanelUI',
         },
-        world,
-        { nodeId: 'typed-node', strict: true },
-      ),
-    ).toThrow(
-      'Scene node "typed-node" component "NativeSmoke": Typed component payload type "PanelUI" does not match component key "NativeSmoke".',
+      },
+      world,
+      { nodeId: 'raw-node', strict: true },
     );
+    expect(root.componentCalls).toContainEqual({
+      component: NativeSmoke,
+      props: {},
+    });
   });
 
   it('keeps legacy component imports prefix-gated while native strict imports allow bare keys', () => {
@@ -387,25 +659,21 @@ describe('SceneJSONImporter', () => {
 
   it('fetches, validates, and loads scene URLs', async () => {
     const { root, world } = makeWorld();
-    const previousVersionScene = {
-      ...makeScene(),
-      version: 'iwsdk.scene.v0',
+    const scene: SceneDocument = {
+      nodes: [{ id: 'scene-root' }],
+      resources: {},
+      units: 'meters',
+      version: CURRENT_SCENE_VERSION,
     };
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
-        json: async () => previousVersionScene,
+        json: async () => scene,
         ok: true,
         status: 200,
         statusText: 'OK',
       }),
     );
-    vi.spyOn(AssetManager, 'loadGLTF').mockResolvedValue({
-      scene: new Object3D(),
-      scenes: [],
-    } as any);
-    vi.spyOn(AssetManager, 'getGLTF').mockReturnValue(null);
-
     const result = await SceneJSONImporter.load(
       world,
       '/scenes/main.iwsdk.scene.json',
@@ -414,63 +682,10 @@ describe('SceneJSONImporter', () => {
 
     expect(fetch).toHaveBeenCalledWith('/scenes/main.iwsdk.scene.json');
     expect(result.document).toMatchObject({
-      metadata: {
-        migratedFrom: 'iwsdk.scene.v0',
-      },
-      version: CURRENT_SCENE_VERSION,
-    });
-  });
-
-  it('resolves placeOn dependencies before document order', async () => {
-    const { root, world } = makeWorld();
-    const scene: SceneDocument = {
-      assets: [
-        {
-          bounds: { max: [1, 1, 1], min: [-1, 0, -1] },
-          id: 'table',
-          type: 'other',
-          uri: '/unused/table',
-        },
-        {
-          bounds: { max: [0.5, 0.1, 0.5], min: [-0.5, 0, -0.5] },
-          id: 'book',
-          type: 'other',
-          uri: '/unused/book',
-        },
-        {
-          bounds: { max: [0.1, 0.3, 0.1], min: [-0.1, 0, -0.1] },
-          id: 'vase',
-          type: 'other',
-          uri: '/unused/vase',
-        },
-      ],
-      nodes: [
-        {
-          asset: 'vase',
-          id: 'vase-node',
-          transform: { placeOn: 'book-node' },
-        },
-        {
-          asset: 'book',
-          id: 'book-node',
-          transform: { placeOn: 'table-node' },
-        },
-        {
-          asset: 'table',
-          id: 'table-node',
-        },
-      ],
+      nodes: [{ id: 'scene-root' }],
+      resources: {},
       units: 'meters',
       version: CURRENT_SCENE_VERSION,
-    };
-
-    const result = await SceneJSONImporter.loadDocument(world, scene, root);
-
-    expect(result.document.nodes[1].transform).toEqual({
-      position: [0, 1, 0],
-    });
-    expect(result.document.nodes[0].transform).toEqual({
-      position: [0, 1.1, 0],
     });
   });
 
@@ -498,7 +713,8 @@ describe('SceneJSONImporter', () => {
     const world = new World();
     const existingRoot = makeEntity(new Object3D(), 1);
     const existingLevelEntity = makeEntity(new Object3D(), 2);
-    const sceneEntity = makeEntity(new Object3D(), 3);
+    const runtimeScene = new Scene();
+    const sceneEntity = makeEntity(runtimeScene, 3);
     const createdRoots: FakeEntity[] = [];
     const scene = makeScene();
     const loadDocument = vi
@@ -506,6 +722,8 @@ describe('SceneJSONImporter', () => {
       .mockResolvedValue(undefined);
 
     world.sceneEntity = sceneEntity;
+    world.scene = runtimeScene;
+    world.renderer = makeEnvironmentRenderer();
     world.activeLevel = signal(existingRoot);
     world.createTransformEntity = vi.fn((object?: Object3D) => {
       const entity = makeEntity(
@@ -544,21 +762,18 @@ describe('SceneJSONImporter', () => {
     expect(loadDocument).toHaveBeenCalledWith(world, scene, createdRoots[0]);
   });
 
-  it('settles a superseded level load promise before registering the next one', async () => {
+  it('rejects a superseded level load before registering the next one', async () => {
     const world = new World();
     const scene = makeScene();
     const firstLoad = world.loadLevel('/first.glxf');
-    let firstSettled = false;
-    void firstLoad.then(() => {
-      firstSettled = true;
-    });
+    const firstRejection = expect(firstLoad).rejects.toThrow(
+      'Level load was superseded by a newer request',
+    );
 
     await Promise.resolve();
-    expect(firstSettled).toBe(false);
 
     const secondLoad = world.loadSceneDocument(scene);
-    await firstLoad;
-    expect(firstSettled).toBe(true);
+    await firstRejection;
     expect(world.requestedLevelUrl).toBeUndefined();
     expect(world.requestedLevelDocument).toBe(scene);
 

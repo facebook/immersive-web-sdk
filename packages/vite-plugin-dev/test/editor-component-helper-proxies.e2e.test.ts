@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 describe('editor component helper proxies', () => {
-  test('renders typed component-only nodes as selectable editor helpers without serializing helper artifacts', async () => {
+  test('renders component-only nodes as selectable editor helpers without serializing helper artifacts', async () => {
     harness = await createEditorTestHarness('editor-component-helper-proxies');
     const editor = await harness.openEditor();
     const initialProof = await expectRealWebGLViewport(editor);
@@ -33,10 +33,7 @@ describe('editor component helper proxies', () => {
       node: {
         components: {
           'com.iwsdk.components.AudioSource': {
-            props: {
-              src: '/audio/ambient.wav',
-            },
-            type: 'AudioSource',
+            src: '/audio/ambient.wav',
           },
         },
         id: 'audio-source-1',
@@ -47,10 +44,26 @@ describe('editor component helper proxies', () => {
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
         components: {
-          'com.iwsdk.components.CameraSource': {
-            props: {},
-            type: 'CameraSource',
+          'com.iwsdk.components.SpotLight': {
+            angleDeg: 32,
+            color: [1, 0.5, 0.25, 1],
+            distance: 2,
+            intensity: 40,
+            penumbra: 0.25,
           },
+        },
+        id: 'spot-light-1',
+        name: 'Reading Spot',
+        transform: {
+          position: [0.3, 1.8, 0.4],
+          rotationDeg: [-35, 20, 0],
+        },
+      },
+    });
+    await dispatchSceneTool(editor.page, 'scene_add_node', {
+      node: {
+        components: {
+          'com.iwsdk.components.CameraSource': {},
         },
         id: 'camera-source-1',
         name: 'Shot Camera',
@@ -63,10 +76,7 @@ describe('editor component helper proxies', () => {
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
         components: {
-          'com.iwsdk.components.DomeGradient': {
-            props: {},
-            type: 'DomeGradient',
-          },
+          'com.iwsdk.components.DomeGradient': {},
         },
         id: 'environment-light-1',
         name: 'Environment Light',
@@ -80,11 +90,12 @@ describe('editor component helper proxies', () => {
         'audio-source-1': 'audio-source',
         'camera-source-1': 'camera-source',
         'environment-light-1': 'environment-light',
+        'spot-light-1': 'spot-light',
         'table-1': null,
       });
     await expect
       .poll(() => getEditorProof(editor.page).then((proof) => proof.meshCount))
-      .toBeGreaterThanOrEqual(initialProof.meshCount + 6);
+      .toBeGreaterThanOrEqual(initialProof.meshCount + 7);
 
     await assertSelectableRuntimeHelper(editor, 'audio-source-1', {
       component: 'AudioSource',
@@ -98,7 +109,32 @@ describe('editor component helper proxies', () => {
       component: 'DomeGradient',
       helperType: 'environment-light',
     });
+    await assertSelectableRuntimeHelper(editor, 'spot-light-1', {
+      component: 'SpotLight',
+      helperType: 'spot-light',
+      meshCount: 1,
+    });
+    await expect
+      .poll(() =>
+        editor.page.evaluate(
+          () =>
+            (
+              window as any
+            ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getAuthoredRenderState().lights,
+        ),
+      )
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            color: '#ff8040',
+            intensity: 40,
+            nodeId: 'spot-light-1',
+            type: 'spot',
+          }),
+        ]),
+      );
 
+    await selectNode(editor.page, 'environment-light-1');
     await editor.page.evaluate(() => {
       (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode(
         'translate',
@@ -128,10 +164,17 @@ describe('editor component helper proxies', () => {
     await focusComponentCommitTarget(editor);
     await expect
       .poll(() => componentValue(editor, 'environment-light-1', 'DomeGradient'))
-      .toMatchObject({
-        props: { intensity: 1.75 },
-        type: 'DomeGradient',
-      });
+      .toMatchObject({ intensity: 1.75 });
+    await expect
+      .poll(() =>
+        editor.page.evaluate(() => ({
+          conflict: Boolean(
+            document.querySelector('#scene-save-conflict-dialog'),
+          ),
+          dirty: (window as any).IWSDK_SCENE_EDITOR.session.isDirty,
+        })),
+      )
+      .toEqual({ conflict: false, dirty: false });
 
     await expect(
       dispatchSceneTool(editor.page, 'scene_save'),
@@ -140,6 +183,7 @@ describe('editor component helper proxies', () => {
     expect(savedScene.nodes.map((node: { id: string }) => node.id)).toEqual([
       'table-1',
       'audio-source-1',
+      'spot-light-1',
       'camera-source-1',
       'environment-light-1',
     ]);
@@ -147,7 +191,7 @@ describe('editor component helper proxies', () => {
       (entry: { id: string }) =>
         entry.id.endsWith('-1') && entry.id !== 'table-1',
     )) {
-      expect(node.asset).toBeUndefined();
+      expect(node.content).toBeUndefined();
       expect(node.fallback).toBeUndefined();
       expect(node.helperType).toBeUndefined();
       expect(node.components).toBeDefined();
@@ -158,8 +202,7 @@ describe('editor component helper proxies', () => {
     expect(savedLight).toMatchObject({
       components: {
         'com.iwsdk.components.DomeGradient': {
-          props: { intensity: 1.75 },
-          type: 'DomeGradient',
+          intensity: 1.75,
         },
       },
       transform: { position: [0.25, 1.55, 0.35] },
@@ -173,6 +216,7 @@ describe('editor component helper proxies', () => {
         'audio-source-1': 'audio-source',
         'camera-source-1': 'camera-source',
         'environment-light-1': 'environment-light',
+        'spot-light-1': 'spot-light',
       });
     await selectNode(reloadedEditor.page, 'environment-light-1');
     await expect(
@@ -221,13 +265,13 @@ async function componentValue(
 async function focusComponentCommitTarget(
   editor: EditorPageContext,
 ): Promise<void> {
-  await editor.page.locator('#new-component-type').focus();
+  await editor.page.locator('#add-component').focus();
 }
 
 async function assertSelectableRuntimeHelper(
   editor: EditorPageContext,
   nodeId: string,
-  expected: { component: string; helperType: string },
+  expected: { component: string; helperType: string; meshCount?: number },
 ): Promise<void> {
   await selectNode(editor.page, nodeId);
   await expect
@@ -238,7 +282,7 @@ async function assertSelectableRuntimeHelper(
       components: expect.arrayContaining([expected.component]),
       fallback: expected.helperType + '-helper',
       helperType: expected.helperType,
-      meshCount: 2,
+      meshCount: expected.meshCount ?? 2,
       nodeId,
       ready: true,
     });

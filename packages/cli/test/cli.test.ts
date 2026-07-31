@@ -283,7 +283,8 @@ async function startRuntimeFixture(
         result:
           request.method === 'get_session_status'
             ? { sessionMode: 'immersive-vr', running: true }
-            : request.method === 'screenshot'
+            : request.method === 'screenshot' ||
+                request.method === 'scene_screenshot'
               ? {
                   imageData: ONE_BY_ONE_PNG_BASE64,
                   mimeType: 'image/png',
@@ -349,6 +350,7 @@ function buildManagedRuntimeScript(
     finalBrowserDelayMs?: number;
     finalBrowserError?: RuntimeBrowserState['lastError'];
     probeReadyDelayMs?: number;
+    probeWritesSession?: boolean;
     workspaceOnly?: boolean;
   } = {},
 ): string {
@@ -457,7 +459,7 @@ wss.on('connection', (socket) => {
           currentBrowser.lastBridgeConnectedAt ?? new Date().toISOString(),
         lastCommandReadyAt: new Date().toISOString(),
       };
-      await writeSession(currentPort, currentBrowser);
+      ${options.probeWritesSession === false ? '' : 'await writeSession(currentPort, currentBrowser);'}
       socket.send(
         JSON.stringify({
           id: request.id,
@@ -524,16 +526,14 @@ describe('runtime commands and project resolution', () => {
       expect(parsedStatus.data.operation).toBe('xr.status');
       expect(parsedStatus.data.result.running).toBe(true);
 
-      const workspaceState = await runCli(
-        ['workspace', 'state'],
+      const sceneState = await runCli(
+        ['scene', 'state'],
         path.join(appA, 'src'),
       );
-      expect(workspaceState.exitCode).toBe(0);
-      const parsedWorkspaceState = JSON.parse(workspaceState.stdout);
-      expect(parsedWorkspaceState.data.operation).toBe('workspace.state');
-      expect(parsedWorkspaceState.data.result.method).toBe(
-        'workspace_get_state',
-      );
+      expect(sceneState.exitCode).toBe(0);
+      const parsedSceneState = JSON.parse(sceneState.stdout);
+      expect(parsedSceneState.data.operation).toBe('scene.state');
+      expect(parsedSceneState.data.result.method).toBe('scene_get_state');
 
       const screenshot = await runCli(
         ['browser', 'screenshot'],
@@ -542,6 +542,25 @@ describe('runtime commands and project resolution', () => {
       expect(screenshot.exitCode).toBe(0);
       const parsedScreenshot = JSON.parse(screenshot.stdout);
       expect(existsSync(parsedScreenshot.data.screenshotPath)).toBe(true);
+
+      const requestedSceneScreenshot = path.join(appA, 'scene-capture.png');
+      const sceneScreenshot = await runCli(
+        [
+          'scene',
+          'screenshot',
+          '--output-file',
+          requestedSceneScreenshot,
+          '--raw',
+        ],
+        path.join(appA, 'src'),
+      );
+      expect(sceneScreenshot.exitCode).toBe(0);
+      const parsedSceneScreenshot = JSON.parse(sceneScreenshot.stdout);
+      expect(parsedSceneScreenshot.data.screenshotPath).toBe(
+        requestedSceneScreenshot,
+      );
+      expect(existsSync(requestedSceneScreenshot)).toBe(true);
+      expect(parsedSceneScreenshot.imageData).toBeUndefined();
     } finally {
       await runtime.close();
     }
@@ -610,13 +629,21 @@ describe('runtime introspection and raw output', () => {
     expect(ecsHelp.stdout).toContain('name (required)');
     expect(ecsHelp.stdout).not.toContain('systemName');
 
-    const workspaceHelp = await runCli(
-      ['workspace', 'set-view', '--help'],
+    const renderFileHelp = await runCli(
+      ['scene', 'render-file', '--help'],
       appA,
     );
-    expect(workspaceHelp.exitCode).toBe(0);
-    expect(workspaceHelp.stdout).toContain('Usage: iwsdk workspace set-view');
-    expect(workspaceHelp.stdout).toContain('view (required) [enum]');
+    expect(renderFileHelp.exitCode).toBe(0);
+    expect(renderFileHelp.stdout).toContain('Usage: iwsdk scene render-file');
+    expect(renderFileHelp.stdout).toContain('path (required)');
+
+    const sceneScreenshotHelp = await runCli(
+      ['scene', 'screenshot', '--help'],
+      appA,
+    );
+    expect(sceneScreenshotHelp.exitCode).toBe(0);
+    expect(sceneScreenshotHelp.stdout).toContain('--output-file <path>');
+    expect(sceneScreenshotHelp.stdout).toContain('takes precedence over --raw');
   });
 
   test('returns underlying runtime payloads with --raw', async () => {
@@ -999,6 +1026,52 @@ process.exit(1);
     expect(parsedDown.data.stopped).toBe(true);
   });
 
+  test('treats dev down as a clean stop for a foreground dev process', async () => {
+    const fixtureScript = path.join(appA, 'dev-foreground.mjs');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-foreground'),
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: {
+        'dev:runtime': 'node dev-foreground.mjs',
+      },
+    });
+
+    const foreground = spawn(
+      'node',
+      [CLI_PATH, 'dev', 'up', '--foreground', '--timeout', '15000'],
+      {
+        cwd: appA,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    foreground.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    foreground.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    const foregroundExit = new Promise<number>((resolve, reject) => {
+      foreground.on('error', reject);
+      foreground.on('close', (exitCode) => resolve(exitCode ?? 1));
+    });
+
+    await waitForSessionFile(getRuntimeSessionFilePath(appA));
+    const attached = await runCli(['dev', 'up', '--timeout', '15000'], appA);
+    expect(attached.exitCode, attached.stderr).toBe(0);
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode, down.stderr).toBe(0);
+
+    await expect(foregroundExit).resolves.toBe(0);
+    expect(stdout).toContain('[IWSDK] Runtime ready at');
+    expect(stderr).not.toContain('dev_up_exit');
+  });
+
   test('waits for browser command readiness before reporting dev up success', async () => {
     const fixtureScript = path.join(appA, 'dev-probe-delay.mjs');
     await writeFile(
@@ -1031,7 +1104,36 @@ process.exit(1);
     expect(down.exitCode).toBe(0);
   });
 
-  test('accepts a launched workspace-only browser without marking MCP commands ready', async () => {
+  test('returns workspace-only command-ready probe state when session persistence lags', async () => {
+    const fixtureScript = path.join(appA, 'dev-probe-session-lag.mjs');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-probe-session-lag', {
+        finalBrowserDelayMs: 25,
+        probeWritesSession: false,
+        workspaceOnly: true,
+      }),
+      'utf8',
+    );
+
+    await createAppFixture(appA, {
+      scripts: {
+        'dev:runtime': 'node dev-probe-session-lag.mjs',
+      },
+    });
+
+    const up = await runCli(['dev', 'up', '--timeout', '15000'], appA);
+    expect(up.exitCode, up.stderr).toBe(0);
+    const parsedUp = JSON.parse(up.stdout);
+    expect(parsedUp.data.session.aiMode).toBeUndefined();
+    expect(parsedUp.data.session.browser.status).toBe('connected');
+    expect(parsedUp.data.session.browser.commandReady).toBe(true);
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode).toBe(0);
+  });
+
+  test('does not accept a workspace-only browser before commands are ready', async () => {
     const fixtureScript = path.join(appA, 'dev-workspace-only.mjs');
     await writeFile(
       fixtureScript,
@@ -1049,13 +1151,18 @@ process.exit(1);
       },
     });
 
-    const up = await runCli(['dev', 'up', '--timeout', '15000'], appA);
-    expect(up.exitCode).toBe(0);
-    const parsedUp = JSON.parse(up.stdout);
-    expect(parsedUp.data.session.aiMode).toBeUndefined();
-    expect(parsedUp.data.session.browser.status).toBe('waiting_for_connection');
-    expect(parsedUp.data.session.browser.commandReady).toBe(false);
-    expect(parsedUp.data.session.browser.lastCommandReadyAt).toBeUndefined();
+    const up = await runCli(['dev', 'up', '--timeout', '750'], appA);
+    expect(up.exitCode).toBe(1);
+    const parsedUp = JSON.parse(up.stderr);
+    expect(parsedUp.error.code).toBe('dev_browser_not_ready');
+    expect(parsedUp.error.details.session.aiMode).toBeUndefined();
+    expect(parsedUp.error.details.session.browser.status).toBe(
+      'waiting_for_connection',
+    );
+    expect(parsedUp.error.details.session.browser.commandReady).toBe(false);
+    expect(
+      parsedUp.error.details.session.browser.lastCommandReadyAt,
+    ).toBeUndefined();
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);

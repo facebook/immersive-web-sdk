@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, test } from 'vitest';
 import {
+  addComponentViaPicker,
   createEditorTestHarness,
   expectRealWebGLViewport,
   selectNode,
@@ -28,10 +29,10 @@ describe('editor component inspector', () => {
     await expectRealWebGLViewport(editor);
     await selectNode(editor.page, 'table-1');
 
-    await editor.page
-      .locator('#new-component-type')
-      .selectOption('TestInspectable');
-    await editor.page.locator('#add-component').click();
+    await expect
+      .poll(() => editor.page.locator('#new-component-type').count())
+      .toBe(0);
+    await addComponentViaPicker(editor.page, 'TestInspectable');
 
     const componentRow = editor.page.locator(
       '[data-component-type="TestInspectable"]',
@@ -57,13 +58,10 @@ describe('editor component inspector', () => {
     await expect
       .poll(() => readComponent(editor))
       .toMatchObject({
-        props: {
-          enabled: true,
-          label: 'Edited label',
-          offset: [0, 0, 0],
-          strength: 0.5,
-        },
-        type: 'TestInspectable',
+        enabled: true,
+        label: 'Edited label',
+        offset: [0, 0, 0],
+        strength: 0.5,
       });
 
     await componentRow
@@ -71,7 +69,7 @@ describe('editor component inspector', () => {
       .fill('0.75');
     await editor.page.locator('#add-component').focus();
     await expect
-      .poll(async () => (await readComponent(editor)).props.strength)
+      .poll(async () => (await readComponent(editor)).strength)
       .toBe(0.75);
 
     await componentRow
@@ -81,14 +79,14 @@ describe('editor component inspector', () => {
       .fill('1.25');
     await editor.page.locator('#add-component').focus();
     await expect
-      .poll(async () => (await readComponent(editor)).props.offset)
+      .poll(async () => (await readComponent(editor)).offset)
       .toEqual([0, 1.25, 0]);
 
     await componentRow
       .locator('[data-component-field="enabled"]')
       .setChecked(false);
     await expect
-      .poll(async () => (await readComponent(editor)).props.enabled)
+      .poll(async () => (await readComponent(editor)).enabled)
       .toBe(false);
 
     await componentRow.locator('[data-remove-component]').click();

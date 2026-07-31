@@ -30,14 +30,14 @@ describe('editor outliner grouping', () => {
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-1',
         transform: { position: [1, 0, 0] },
       },
     });
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-2',
         transform: { position: [2, 0, 0] },
       },
@@ -80,6 +80,32 @@ describe('editor outliner grouping', () => {
       .poll(() => childNodeIds(editor, 'group-1'))
       .toEqual(['vase-1', 'vase-2']);
     await expect.poll(() => selectedNodeIds(editor)).toEqual(['group-1']);
+    await expect
+      .poll(() => outlinerNodeIds(editor))
+      .toEqual(['table-1', 'group-1', 'vase-1', 'vase-2']);
+    const groupDisclosure = editor.page.locator(
+      '[data-node-id="group-1"] [data-outliner-disclosure]',
+    );
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-node-id="group-1"]')
+          .getAttribute('aria-expanded'),
+      )
+      .toBe('true');
+    await groupDisclosure.click();
+    await expect
+      .poll(() => outlinerNodeIds(editor))
+      .toEqual(['table-1', 'group-1']);
+    await expect.poll(() => selectedNodeIds(editor)).toEqual(['group-1']);
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-node-id="group-1"]')
+          .getAttribute('aria-expanded'),
+      )
+      .toBe('false');
+    await editor.page.locator('[data-node-id="group-1"]').press('ArrowRight');
     await expect
       .poll(() => outlinerNodeIds(editor))
       .toEqual(['table-1', 'group-1', 'vase-1', 'vase-2']);

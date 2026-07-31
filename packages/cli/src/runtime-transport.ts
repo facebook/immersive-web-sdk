@@ -15,8 +15,13 @@ import {
 } from './runtime-contract.js';
 
 const FAST_WSS_FALLBACK_TIMEOUT_MS = 1500;
+const SCENE_OPEN_READY_POLL_INTERVAL_MS = 50;
 
-type RuntimeCommandError = { message?: string; cause?: RuntimeIssueCause };
+type RuntimeCommandError = {
+  message?: string;
+  cause?: RuntimeIssueCause;
+  data?: Record<string, unknown>;
+};
 type TransportProtocol = 'ws' | 'wss';
 
 export interface RuntimeCommandResponse {
@@ -39,18 +44,21 @@ export interface SendRuntimeCommandOptions {
 export class RuntimeCommandExecutionError extends Error {
   issueCause?: RuntimeIssueCause;
   browser?: RuntimeBrowserState;
+  details?: Record<string, unknown>;
 
   constructor(
     message: string,
     options: {
       issueCause?: RuntimeIssueCause;
       browser?: RuntimeBrowserState;
+      details?: Record<string, unknown>;
     } = {},
   ) {
     super(message);
     this.name = 'RuntimeCommandExecutionError';
     this.issueCause = options.issueCause;
     this.browser = options.browser;
+    this.details = options.details;
   }
 }
 
@@ -106,6 +114,10 @@ function getProtocolOrder(
     return ['wss'];
   }
   return ['wss', 'ws'];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function inferRuntimeIssueCause(
@@ -299,6 +311,7 @@ async function trySendRuntimeCommand(
         if (response.error) {
           const message = response.error.message ?? 'Unknown runtime error';
           const explicitCause = response.error.cause;
+          const details = response.error.data;
           traceTransport('runtime_error', {
             method,
             requestId,
@@ -315,6 +328,7 @@ async function trySendRuntimeCommand(
                   explicitCause,
                 ),
                 browser,
+                details,
               }),
             ),
           );
@@ -396,23 +410,20 @@ async function trySendRuntimeCommand(
   });
 }
 
-export async function sendRuntimeCommand({
-  port,
-  method,
-  params,
-  target,
-  timeoutMs = 30000,
-  runtimeSession,
-}: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
+async function sendRuntimeCommandBeforeDeadline(
+  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  deadline: number,
+): Promise<RuntimeCommandResponse> {
+  const { method, params, port, runtimeSession, target } = options;
   const browser = runtimeSession?.browser;
   const protocolOrder = getProtocolOrder(runtimeSession);
   const firstProtocol = protocolOrder[0];
   const fallbackProtocol = protocolOrder[1];
+  const remainingAtStart = Math.max(deadline - Date.now(), 1);
   const firstAttemptTimeout =
     fallbackProtocol && firstProtocol === 'wss'
-      ? Math.min(timeoutMs, FAST_WSS_FALLBACK_TIMEOUT_MS)
-      : timeoutMs;
-  const startedAt = Date.now();
+      ? Math.min(remainingAtStart, FAST_WSS_FALLBACK_TIMEOUT_MS)
+      : remainingAtStart;
 
   try {
     return await trySendRuntimeCommand(
@@ -431,13 +442,12 @@ export async function sendRuntimeCommand({
     if (!fallbackProtocol || fallbackProtocol === firstProtocol) {
       throw error;
     }
-    const elapsedMs = Date.now() - startedAt;
-    const remainingMs = Math.max(timeoutMs - elapsedMs, 1);
+    const remainingMs = Math.max(deadline - Date.now(), 1);
     traceTransport('fallback_protocol', {
       method,
       from: firstProtocol,
       to: fallbackProtocol,
-      elapsedMs,
+      elapsedMs: remainingAtStart - remainingMs,
       remainingMs,
       browserStatus: browser?.status,
       bridgeConnected: browser?.connected ?? false,
@@ -458,4 +468,225 @@ export async function sendRuntimeCommand({
       browser,
     );
   }
+}
+
+function sceneOpenReadinessRequest(
+  method: string,
+  params: unknown,
+  response: RuntimeCommandResponse,
+  previousSceneSessionId: string | null,
+): { path: string; previousSceneSessionId: string | null } | null {
+  if (method !== 'scene_open' || !isRecord(response.result)) {
+    return null;
+  }
+  const result = response.result;
+  if (result.reloading !== true || result.ready === true) {
+    return null;
+  }
+  const request = isRecord(params) ? params : {};
+  const scenePath =
+    typeof result.path === 'string'
+      ? result.path
+      : typeof request.path === 'string'
+        ? request.path
+        : null;
+  if (scenePath == null) {
+    return null;
+  }
+  return {
+    path: scenePath,
+    previousSceneSessionId,
+  };
+}
+
+function sceneWillOpen(method: string): boolean {
+  return method === 'scene_open';
+}
+
+async function captureSceneOpenSessionBaseline(
+  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  deadline: number,
+): Promise<string | null> {
+  if (!sceneWillOpen(options.method)) {
+    return null;
+  }
+  let lastError: unknown = null;
+  while (Date.now() < deadline) {
+    try {
+      const stateResponse = await sendRuntimeCommandBeforeDeadline(
+        {
+          method: 'scene_get_state',
+          params: {},
+          port: options.port,
+          runtimeSession: options.runtimeSession,
+          target: { role: 'editor' },
+        },
+        deadline,
+      );
+      const state = stateResponse.result;
+      return isRecord(state) &&
+        isRecord(state.editor) &&
+        typeof state.editor.sceneSessionId === 'string'
+        ? state.editor.sceneSessionId
+        : null;
+    } catch (error) {
+      lastError = error;
+    }
+    await delayBeforeDeadline(deadline);
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new RuntimeCommandExecutionError(
+        'Editor scene state was unavailable before opening the scene.',
+        {
+          browser: options.runtimeSession?.browser,
+          issueCause: 'browser_not_ready',
+        },
+      );
+}
+
+function editorReadyForOpenedScene(
+  state: unknown,
+  scenePath: string,
+  previousSceneSessionId: string | null,
+): { sceneSessionId: string } | null {
+  if (!isRecord(state) || !isRecord(state.editor)) {
+    return null;
+  }
+  const editor = state.editor;
+  const sceneSessionId = editor.sceneSessionId;
+  if (
+    editor.ready !== true ||
+    (state.activeFile !== scenePath && editor.scenePath !== scenePath) ||
+    typeof sceneSessionId !== 'string' ||
+    sceneSessionId.length === 0 ||
+    (previousSceneSessionId != null &&
+      sceneSessionId === previousSceneSessionId)
+  ) {
+    return null;
+  }
+  return { sceneSessionId };
+}
+
+function delayBeforeDeadline(deadline: number): Promise<void> {
+  const delayMs = Math.min(
+    SCENE_OPEN_READY_POLL_INTERVAL_MS,
+    Math.max(deadline - Date.now(), 0),
+  );
+  return delayMs > 0
+    ? new Promise((resolve) => setTimeout(resolve, delayMs))
+    : Promise.resolve();
+}
+
+async function confirmOpenedSceneReady(
+  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  response: RuntimeCommandResponse,
+  deadline: number,
+  previousSceneSessionId: string | null,
+): Promise<RuntimeCommandResponse> {
+  const readiness = sceneOpenReadinessRequest(
+    options.method,
+    options.params,
+    response,
+    previousSceneSessionId,
+  );
+  if (readiness == null) {
+    return response;
+  }
+
+  let lastWorkspaceState: unknown = null;
+  let lastError: RuntimeCommandExecutionError | null = null;
+  while (Date.now() < deadline) {
+    try {
+      const stateResponse = await sendRuntimeCommandBeforeDeadline(
+        {
+          method: 'scene_get_state',
+          params: {},
+          port: options.port,
+          runtimeSession: options.runtimeSession,
+          target: { role: 'editor' },
+        },
+        deadline,
+      );
+      lastWorkspaceState = stateResponse.result;
+      lastError = null;
+      const readyEditor = editorReadyForOpenedScene(
+        lastWorkspaceState,
+        readiness.path,
+        readiness.previousSceneSessionId,
+      );
+      if (readyEditor != null) {
+        return {
+          ...response,
+          ...(stateResponse._tabId == null
+            ? {}
+            : { _tabId: stateResponse._tabId }),
+          ...(stateResponse._tabGeneration == null
+            ? {}
+            : { _tabGeneration: stateResponse._tabGeneration }),
+          result: {
+            ...(response.result as Record<string, unknown>),
+            ready: true,
+            reloading: false,
+            sceneSessionId: readyEditor.sceneSessionId,
+          },
+        };
+      }
+    } catch (error) {
+      lastError = error instanceof RuntimeCommandExecutionError ? error : null;
+    }
+    await delayBeforeDeadline(deadline);
+  }
+
+  const lastErrorSummary =
+    lastError == null
+      ? null
+      : {
+          cause: lastError.issueCause ?? null,
+          message: lastError.message,
+        };
+  throw new RuntimeCommandExecutionError(
+    `Scene "${readiness.path}" was opened, but the editor did not reconnect to it before the command timeout.`,
+    {
+      browser: options.runtimeSession?.browser,
+      details: {
+        code: 'scene_open_not_ready',
+        opened: true,
+        editorReady: false,
+        lastError: lastErrorSummary,
+        lastWorkspaceState,
+        path: readiness.path,
+        previousSceneSessionId: readiness.previousSceneSessionId,
+        recoverable: true,
+        retryAction: 'scene_get_state',
+      },
+      issueCause:
+        lastWorkspaceState == null
+          ? (lastError?.issueCause ?? 'browser_not_ready')
+          : 'browser_not_ready',
+    },
+  );
+}
+
+export async function sendRuntimeCommand({
+  port,
+  method,
+  params,
+  target,
+  timeoutMs = 30000,
+  runtimeSession,
+}: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
+  const deadline = Date.now() + Math.max(timeoutMs, 1);
+  const options = { method, params, port, runtimeSession, target };
+  const previousSceneSessionId = await captureSceneOpenSessionBaseline(
+    options,
+    deadline,
+  );
+  const response = await sendRuntimeCommandBeforeDeadline(options, deadline);
+  return confirmOpenedSceneReady(
+    options,
+    response,
+    deadline,
+    previousSceneSessionId,
+  );
 }

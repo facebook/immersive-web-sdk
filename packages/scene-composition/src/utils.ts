@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import type { JsonObject, JsonValue, SceneNode, Vec3 } from './types.js';
+import type { JsonObject, JsonValue, SceneNode, Vec2, Vec3 } from './types.js';
 
 export function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -30,6 +30,14 @@ export function isVec3(value: unknown): value is Vec3 {
   return (
     Array.isArray(value) &&
     value.length === 3 &&
+    value.every((entry) => isFiniteNumber(entry))
+  );
+}
+
+export function isVec2(value: unknown): value is Vec2 {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
     value.every((entry) => isFiniteNumber(entry))
   );
 }

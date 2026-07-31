@@ -50,7 +50,6 @@ export type XRFeatureOptions = {
   hitTest?: FeatureFlag;
   planeDetection?: FeatureFlag;
   meshDetection?: FeatureFlag;
-  lightEstimation?: FeatureFlag;
   depthSensing?: DepthSensingFlag;
   /**
    * WebXR Layers. Defaults to optional even if not set, to maximize success.
@@ -129,7 +128,6 @@ export function buildSessionInit(opts: XROptions): XRSessionInit {
     hitTest: 'hit-test',
     planeDetection: 'plane-detection',
     meshDetection: 'mesh-detection',
-    lightEstimation: 'light-estimation',
     depthSensing: 'depth-sensing',
     layers: 'layers',
     unbounded: 'unbounded',
@@ -156,7 +154,6 @@ export function buildSessionInit(opts: XROptions): XRSessionInit {
   push('hitTest', normalizeFlag(f.hitTest));
   push('planeDetection', normalizeFlag(f.planeDetection));
   push('meshDetection', normalizeFlag(f.meshDetection));
-  push('lightEstimation', normalizeFlag(f.lightEstimation));
   push('layers', normalizeFlag(f.layers));
   push('unbounded', normalizeFlag(f.unbounded));
 

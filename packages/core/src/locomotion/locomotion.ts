@@ -5,11 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { EnvironmentType, Locomotor, LocomotorConfig } from '@iwsdk/locomotor';
-import { Types, createComponent } from '../ecs/component.js';
+import { Locomotor, LocomotorConfig } from '@iwsdk/locomotor';
+import { Types } from '../ecs/component.js';
 import { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import { Vector3 } from '../runtime/index.js';
+import { LocomotionEnvironment } from './locomotion-environment.js';
 import {
   ActionLocomotionInputProvider,
   type BrowserLocomotionControls,
@@ -18,34 +19,7 @@ import { SlideSystem } from './slide.js';
 import { TeleportSystem } from './teleport.js';
 import { TurnSystem, TurningMethod } from './turn.js';
 
-/**
- * Marks an entity's object3D hierarchy as walkable environment for the locomotion engine.
- *
- * @remarks
- * - Set {@link EnvironmentType} to `STATIC` for fixed geometry (merged once) or `KINEMATIC` for moving platforms
- *   (matrices streamed each frame via {@link LocomotionSystem.update}).
- * - Attach this component to the environment root you want the player to stand on.
- *
- * @category Locomotion
- * @example
- * ```ts
- * const floor = world.createTransformEntity(gltf.scene);
- * floor.addComponent(LocomotionEnvironment, { type: EnvironmentType.STATIC });
- * ```
- */
-export const LocomotionEnvironment = createComponent(
-  'LocomotionEnvironment',
-  {
-    type: {
-      type: Types.Enum,
-      enum: EnvironmentType,
-      default: EnvironmentType.STATIC,
-    }, // STATIC for fixed meshes, KINEMATIC for moving platforms
-    _envHandle: { type: Types.Float32, default: 0 }, // Engine handle for this environment (internal)
-    _initialized: { type: Types.Boolean, default: false }, // True after registration with Locomotor
-  },
-  'Locomotion environment component that holds the environment mesh group',
-);
+export { LocomotionEnvironment } from './locomotion-environment.js';
 
 /**
  * Physics‑driven locomotion (slide, teleport, turn) backed by the {@link @iwsdk/locomotor!Locomotor} engine.

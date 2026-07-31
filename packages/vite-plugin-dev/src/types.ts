@@ -22,9 +22,7 @@ export interface SEMOptions {
     | 'office_small';
 }
 
-export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex';
-
-export type AiMode = 'agent' | 'oversight' | 'collaborate';
+export type AiMode = 'agent' | 'collaborate';
 
 /**
  * AI agent tooling configuration.
@@ -33,17 +31,16 @@ export type AiMode = 'agent' | 'oversight' | 'collaborate';
 export interface AiOptions {
   /**
    * Usage mode:
-   * - `'agent'`: Headless Playwright, fixed viewport, no DevUI. Normal browser opens for the human.
-   * - `'oversight'`: Visible Playwright, freely resizable, no DevUI. Human watches the agent.
+   * - `'agent'`: Headless Playwright, fixed viewport, no DevUI.
    * - `'collaborate'`: Visible Playwright, freely resizable, DevUI on. Human and agent share the session.
-   * @default 'agent'
+   * @default 'collaborate'
    */
   mode?: AiMode;
 
   /**
    * Screenshot size constraint.
    * - In agent mode: sets the Playwright viewport dimensions directly.
-   * - In oversight/collaborate: screenshots are downscaled to fit within
+   * - In collaborate mode: screenshots are downscaled to fit within
    *   this bounding box, preserving aspect ratio.
    * @default { width: 800, height: 800 }
    */
@@ -52,7 +49,7 @@ export interface AiOptions {
 
 /**
  * Managed IWSDK workspace configuration.
- * Enables the Playwright-managed runtime/editor/split workspace without
+ * Enables the Playwright-managed runtime/editor workspace without
  * requiring an AI mode.
  */
 export interface WorkspaceOptions {
@@ -148,6 +145,20 @@ export interface EmulatorOptions {
  */
 export interface DevPluginOptions {
   /**
+   * Project module whose default export is the AssetManifest passed to
+   * World.create. The managed editor imports the same module in its own realm.
+   * @example './src/assets.ts'
+   */
+  assetManifest?: string;
+
+  /**
+   * System-free module whose default export is the ComponentManifest passed to
+   * World.create. The managed editor imports the same module in its own realm.
+   * @example './src/components.ts'
+   */
+  componentManifest?: string;
+
+  /**
    * XR emulator configuration
    */
   emulator?: EmulatorOptions;
@@ -181,6 +192,8 @@ export type IWERPluginOptions = DevPluginOptions;
  * Internal processed options with all defaults applied
  */
 export interface ProcessedDevOptions {
+  assetManifest?: string;
+  componentManifest?: string;
   device: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1';
   sem?: {
     defaultScene: string;

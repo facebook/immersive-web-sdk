@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { createComponent, Types } from '../ecs/component.js';
 import { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import {
@@ -32,7 +31,10 @@ import {
   ZeroFactor,
 } from '../runtime/index.js';
 import { XRCylinderLayer } from './xr-cylinder-layer.js';
+import { XRLayerState } from './xr-layer-state.js';
 import { XRQuadLayer } from './xr-quad-layer.js';
+
+export { XRLayerState } from './xr-layer-state.js';
 
 const _position = new Vector3();
 const _quaternion = new Quaternion();
@@ -49,31 +51,6 @@ function toRigidTransform(pos: Vector3, quat: Quaternion): XRRigidTransform {
     { x: quat.x, y: quat.y, z: quat.z, w: quat.w },
   );
 }
-
-/**
- * Internal component storing per-entity runtime state for active XR layers.
- * Attached by {@link XRLayerSystem} when an entity qualifies; removed on
- * teardown. Keeping state in a component rather than system-side maps makes
- * the system stateless with respect to entities, which improves HMR behavior
- * and allows runtime MCP tools to inspect layer state.
- *
- * @category Layers
- */
-export const XRLayerState = createComponent(
-  'XRLayerState',
-  {
-    isQuad: { type: Types.Boolean, default: true },
-    mesh: { type: Types.Object, default: null },
-    renderTarget: { type: Types.Object, default: null },
-    fallbackMaterial: { type: Types.Object, default: null },
-    xrLayer: { type: Types.Object, default: null },
-    pixelWidth: { type: Types.Int16, default: 0 },
-    pixelHeight: { type: Types.Int16, default: 0 },
-    stencil: { type: Types.Boolean, default: false },
-    cachedTransform: { type: Types.Object, default: null },
-  },
-  'Internal state for active XR layer entities',
-);
 
 /**
  * XRLayerSystem manages WebXR quad and cylinder composition layers.

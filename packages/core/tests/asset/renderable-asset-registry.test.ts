@@ -1,0 +1,73 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  AssetType,
+  RenderableAssetRegistry,
+} from '../../src/asset/asset-manager.js';
+import {
+  BoxGeometry,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+} from '../../src/runtime/index.js';
+
+describe('RenderableAssetRegistry', () => {
+  it('instantiates parentless Object3D prototypes without reparenting them', async () => {
+    const geometry = new BoxGeometry(2, 4, 6);
+    const material = new MeshStandardMaterial({ color: 0x336699 });
+    const prototype = new Group();
+    prototype.name = 'Procedural cabinet';
+    prototype.add(new Mesh(geometry, material));
+
+    const registry = new RenderableAssetRegistry({ cabinet: prototype });
+    const first = await registry.instantiate('cabinet');
+    const second = await registry.instantiate('cabinet');
+    const firstMesh = first.children[0] as Mesh;
+    const secondMesh = second.children[0] as Mesh;
+
+    expect(first).not.toBe(second);
+    expect(first).not.toBe(prototype);
+    expect(firstMesh.geometry).toBe(geometry);
+    expect(firstMesh.material).toBe(material);
+    expect(secondMesh.geometry).toBe(geometry);
+    expect(secondMesh.material).toBe(material);
+    expect(prototype.parent).toBeNull();
+    expect(registry.list()).toEqual([
+      {
+        bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
+        id: 'cabinet',
+        kind: 'object3d',
+        name: 'Procedural cabinet',
+      },
+    ]);
+  });
+
+  it('rejects prototypes that already belong to another hierarchy', () => {
+    const parent = new Group();
+    const child = new Group();
+    parent.add(child);
+
+    expect(() => new RenderableAssetRegistry({ child })).toThrow(
+      'must not have a parent',
+    );
+  });
+
+  it('exposes only renderable entries from a mixed asset manifest', () => {
+    const registry = new RenderableAssetRegistry({
+      ambience: { type: AssetType.Audio, url: '/ambience.mp3' },
+      room: { name: 'Room', type: AssetType.GLTF, url: '/room.glb' },
+    });
+
+    expect(registry.has('ambience')).toBe(false);
+    expect(registry.has('room')).toBe(true);
+    expect(registry.list()).toEqual([
+      { id: 'room', kind: 'gltf', name: 'Room' },
+    ]);
+  });
+});

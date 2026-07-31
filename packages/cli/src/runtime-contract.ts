@@ -12,11 +12,18 @@ export type JsonSchema = {
   description?: string;
   enum?: string[];
   oneOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+  not?: JsonSchema;
   items?: JsonSchema;
   properties?: Record<string, JsonSchema>;
   required?: string[];
   minimum?: number;
+  exclusiveMinimum?: number;
   maximum?: number;
+  minItems?: number;
+  maxItems?: number;
+  pattern?: string;
+  additionalProperties?: boolean | JsonSchema;
 };
 
 export interface McpConfigTarget {
@@ -193,6 +200,7 @@ const VECTOR3_SCHEMA: JsonSchema = {
 
 const SCENE_TRANSFORM_SCHEMA: JsonSchema = {
   type: 'object',
+  additionalProperties: false,
   description:
     'Scene node transform. position is meters, rotationDeg is Euler degrees, scale is a scalar or [x,y,z].',
   properties: {
@@ -202,24 +210,101 @@ const SCENE_TRANSFORM_SCHEMA: JsonSchema = {
       oneOf: [{ type: 'number' }, VECTOR3_SCHEMA],
       description: 'Uniform scale number or non-uniform [x, y, z] scale',
     },
-    lookAt: VECTOR3_SCHEMA,
-    placeOn: {
-      oneOf: [
-        { type: 'string' },
-        {
-          type: 'object',
-          properties: {
-            target: { type: 'string' },
-            clearance: { type: 'number' },
-            align: { type: 'string', enum: ['center', 'preserve-xz'] },
-          },
-          required: ['target'],
+  },
+};
+
+const SCENE_CONSTRAINTS_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    lookAt: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        target: VECTOR3_SCHEMA,
+        mode: {
+          type: 'string',
+          enum: ['yaw-v1'],
         },
-      ],
-      description:
-        'Place this node on another node by id, using asset bounds when available.',
+      },
+      required: ['target', 'mode'],
     },
   },
+};
+
+const SCENE_CONTENT_SCHEMA: JsonSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: { type: { type: 'string', enum: ['group'] } },
+      required: ['type'],
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        type: { type: 'string', enum: ['asset'] },
+        asset: { type: 'string' },
+        castShadow: { type: 'boolean' },
+        receiveShadow: { type: 'boolean' },
+      },
+      required: ['type', 'asset'],
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        type: { type: 'string', enum: ['instance'] },
+        prefab: { type: 'string' },
+        overrides: { type: 'object' },
+      },
+      required: ['type', 'prefab'],
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        type: { type: 'string', enum: ['pattern'] },
+        prefab: { type: 'string' },
+        distribution: { type: 'object' },
+        overrides: { type: 'object' },
+      },
+      required: ['type', 'prefab', 'distribution'],
+    },
+  ],
+};
+
+const SCENE_NODE_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'Scene node. Content is discriminated as group, asset, instance, or pattern. Renderable assets, including procedural geometry, are declared in the asset manifest; behavior capabilities such as lights are components.',
+  properties: {
+    id: { type: 'string', description: 'Stable scene node id.' },
+    name: { type: 'string', description: 'Optional display name.' },
+    framingRole: {
+      type: 'string',
+      enum: ['content', 'support'],
+      description:
+        'Camera-framing role. Omission behaves as content; support remains rendered but is excluded from content framing.',
+    },
+    content: SCENE_CONTENT_SCHEMA,
+    transform: SCENE_TRANSFORM_SCHEMA,
+    constraints: SCENE_CONSTRAINTS_SCHEMA,
+    components: {
+      type: 'object',
+      description:
+        'Optional native scene component values keyed by component id.',
+    },
+    children: {
+      type: 'array',
+      items: { type: 'object' },
+      description: 'Optional nested scene nodes.',
+    },
+    metadata: { type: 'object' },
+  },
+  required: ['id'],
 };
 
 const SCENE_CAMERA_VIEW_SCHEMA: JsonSchema = {
@@ -241,6 +326,11 @@ const SCENE_CAMERA_VIEW_SCHEMA: JsonSchema = {
 const SCENE_CAMERA_SCHEMA: JsonSchema = {
   type: 'object',
   properties: {
+    viewId: {
+      type: 'string',
+      description:
+        'Stable id of an exact perspective or orthographic view declared in document.authoring.views.',
+    },
     view: SCENE_CAMERA_VIEW_SCHEMA,
     orbitStep: {
       type: 'number',
@@ -259,10 +349,186 @@ const SCENE_CAMERA_SCHEMA: JsonSchema = {
       maximum: 179,
       description: 'Vertical field of view in degrees',
     },
+    projection: {
+      type: 'string',
+      enum: ['perspective', 'orthographic'],
+      description:
+        'Projection for an explicit camera pose. Named built-in views are perspective; saved viewId projections come from the document.',
+    },
+    orthographicHeight: {
+      type: 'number',
+      exclusiveMinimum: 0,
+      description:
+        'Vertical world-space span for an explicit orthographic camera. Kept distinct from screenshot pixel height.',
+    },
   },
 };
 
-export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
+const SCENE_HASH_SCHEMA: JsonSchema = {
+  type: 'string',
+  pattern: '^sha256:[0-9a-f]{64}$',
+  description: 'Canonical sha256:<64 lowercase hex> content hash.',
+};
+
+const SCENE_DOCUMENT_INPUT_SCHEMA: JsonSchema = {
+  type: 'object',
+  description:
+    'Complete closed iwsdk.scene.v1 document. Validate against the exported normative scene schema before sending.',
+};
+
+const SCENE_REVIEW_INPUT_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'Complete closed iwsdk.scene-review.v1 record. Server validation binds hashes, capabilities, required views, lenses, criteria, correction lineage, and persisted capture evidence to the active scene. Waivers are representable but cannot be persisted without a trusted user-approval artifact.',
+  required: [
+    'version',
+    'documentHash',
+    'runtimeHash',
+    'capabilityHash',
+    'sourceHashes',
+    'round',
+    'result',
+    'lenses',
+    'featureResults',
+    'waivers',
+    'stop',
+  ],
+  properties: {
+    version: { type: 'string', enum: ['iwsdk.scene-review.v1'] },
+    documentHash: SCENE_HASH_SCHEMA,
+    runtimeHash: SCENE_HASH_SCHEMA,
+    capabilityHash: SCENE_HASH_SCHEMA,
+    sourceHashes: { type: 'array', items: SCENE_HASH_SCHEMA },
+    round: { type: 'integer', minimum: 0, maximum: 10 },
+    previousReview: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        path: { type: 'string' },
+        reviewSha256: SCENE_HASH_SCHEMA,
+      },
+      required: ['path', 'reviewSha256'],
+    },
+    correction: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        path: { type: 'string' },
+        correctionSha256: SCENE_HASH_SCHEMA,
+      },
+      required: ['path', 'correctionSha256'],
+    },
+    result: {
+      type: 'string',
+      enum: ['pass', 'accepted-with-gaps', 'fail'],
+    },
+    lenses: { type: 'array', items: { type: 'object' } },
+    featureResults: { type: 'array', items: { type: 'object' } },
+    waivers: { type: 'array', items: { type: 'object' } },
+    stop: { type: 'object' },
+  },
+};
+
+const SCENE_REVIEW_CAMERA_INPUT_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    projection: {
+      type: 'string',
+      enum: ['perspective', 'orthographic'],
+    },
+    position: VECTOR3_SCHEMA,
+    target: VECTOR3_SCHEMA,
+    fov: { type: 'number', exclusiveMinimum: 0 },
+    height: { type: 'number', exclusiveMinimum: 0 },
+  },
+  required: ['projection', 'position', 'target'],
+};
+
+const SCENE_BATCH_REVIEW_CAPTURE_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'One compact persisted capture entry returned by scene_capture_review_set.',
+  properties: {
+    lens: {
+      type: 'string',
+      enum: ['layout', 'geometry', 'final'],
+    },
+    id: { type: 'string' },
+    view: { type: 'string' },
+    path: { type: 'string' },
+    screenshotSha256: SCENE_HASH_SCHEMA,
+    width: { type: 'integer', minimum: 1, maximum: 4096 },
+    height: { type: 'integer', minimum: 1, maximum: 4096 },
+    camera: SCENE_REVIEW_CAMERA_INPUT_SCHEMA,
+    rendererEnvironment: { type: 'object' },
+    visibleNodeIds: { type: 'array', items: { type: 'string' } },
+    nodeMaskRegions: {
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        items: { type: 'number' },
+        minItems: 4,
+        maxItems: 4,
+      },
+    },
+  },
+  required: [
+    'lens',
+    'id',
+    'view',
+    'path',
+    'screenshotSha256',
+    'width',
+    'height',
+    'camera',
+    'rendererEnvironment',
+    'visibleNodeIds',
+  ],
+};
+
+const SCENE_REVIEW_EVIDENCE_LINK_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: {
+      type: 'string',
+      description: 'Exact workspace-relative immutable artifact path.',
+    },
+    sha256: SCENE_HASH_SCHEMA,
+  },
+  required: ['path', 'sha256'],
+};
+
+const SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: {
+      type: 'string',
+      description:
+        'Exact declared criterion text, or exact part/contact id, from objectInspection.',
+    },
+    status: { type: 'string', enum: ['pass', 'fail'] },
+    evidenceRefs: {
+      type: 'array',
+      minItems: 1,
+      items: { type: 'string' },
+      description: 'Capture ids from the supplied persisted capture set.',
+    },
+    observation: {
+      type: 'string',
+      pattern: '\\S',
+      description:
+        'Concrete visual observation explaining the status against the declared criterion.',
+    },
+  },
+  required: ['id', 'status', 'evidenceRefs', 'observation'],
+};
+
+const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   // =============================================================================
   // Session Management
   // =============================================================================
@@ -846,7 +1112,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'workspace_get_state',
     description:
-      'Get the managed IWSDK workspace state, including current view, runtime readiness, editor readiness, selected scene path, scene session id, and dirty state.',
+      'Get explicit managed-workspace status for the browser bridge, editor command/viewport readiness, application runtime frame, IWER availability, observable XR session state, selected scene path, scene session id, and dirty state.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -861,7 +1127,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
       properties: {
         view: {
           type: 'string',
-          enum: ['runtime', 'editor', 'split'],
+          enum: ['runtime', 'editor'],
           description: 'Workspace view to show',
         },
       },
@@ -919,6 +1185,43 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'scene_render_file',
+    description:
+      'Validate, compose, and render an IWSDK scene JSON file without opening it in the live editor. Invalid files return structured diagnostics and no PNG; valid files return hashes, render metadata, and PNG image data.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Existing scene file path under public/scenes, ending in .iwsdk.scene.json',
+        },
+        view: {
+          ...SCENE_CAMERA_VIEW_SCHEMA,
+        },
+        viewId: {
+          type: 'string',
+          description:
+            'Stable id of an exact camera declared in document.authoring.views. Use this, not view, for names such as "hero".',
+        },
+        width: { type: 'number', minimum: 1 },
+        height: { type: 'number', minimum: 1 },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'scene_get_state',
+    description:
+      'Get the active scene file, selection, source/composed/runtime hashes, validation diagnostics, dirty or conflict state, runtime readiness, and current render statistics.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
     name: 'scene_create',
     description:
       'Create a new IWSDK scene JSON file under public/scenes and open it in the managed workspace editor by default.',
@@ -944,6 +1247,22 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'scene_get_capabilities',
+    description:
+      'Get a compact canonical hash-bound editor capability summary. Pass full:true only when the complete component schemas and compatibility payload are needed.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        full: {
+          type: 'boolean',
+          description:
+            'Include complete registered component schemas. Defaults to false.',
+        },
+      },
+    },
+  },
+  {
     name: 'scene_list_assets',
     description:
       'List assets available to the native IWSDK scene editor, including ids, names, URIs, and bounds metadata when present.',
@@ -955,6 +1274,59 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           description: 'Optional case-insensitive asset id/name filter',
         },
       },
+    },
+  },
+  {
+    name: 'scene_search_project_assets',
+    description:
+      'Search static .gltf and .glb model files available under the current workspace public directory. This is a project-local provider and is distinct from scene_list_assets.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Optional case-insensitive filter over suggested id, name, URI, and workspace path.',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_import_project_asset',
+    description:
+      'Import one URI returned by scene_search_project_assets into the current scene resources through a hash-checked, preflighted transaction. The import is one undo entry and rejects unknown project paths, duplicate URIs, and id collisions.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        uri: {
+          type: 'string',
+          description:
+            'Exact project URI returned by scene_search_project_assets.',
+        },
+        id: {
+          type: 'string',
+          description:
+            'Optional scene asset id. Defaults to the provider suggested id.',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Optional display name. Defaults to the project filename without its extension.',
+        },
+        bounds: {
+          type: 'object',
+          additionalProperties: false,
+          description: 'Optional model-space bounds in meters.',
+          properties: {
+            min: VECTOR3_SCHEMA,
+            max: VECTOR3_SCHEMA,
+          },
+          required: ['min', 'max'],
+        },
+      },
+      required: ['uri'],
     },
   },
   {
@@ -1026,14 +1398,13 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'scene_add_node',
-    description: 'Add a node to the native scene JSON document.',
+    description:
+      'Add a group, asset, instance, pattern, light, or component-bearing node to the native scene JSON document. Procedural geometry must first be declared as an asset.',
     inputSchema: {
       type: 'object',
       properties: {
         node: {
-          type: 'object',
-          description:
-            'Scene node to add. Must include id. asset must reference a known asset id when present.',
+          ...SCENE_NODE_SCHEMA,
         },
         parentId: {
           type: 'string',
@@ -1081,8 +1452,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'scene_set_transform',
-    description:
-      'Replace the transform for a native scene node. Use scene_place_on and scene_look_at for deterministic placement/orientation helpers.',
+    description: 'Replace the transform for a native scene node.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1093,41 +1463,128 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'scene_set_framing_role',
+    description:
+      'Set a native scene node camera-framing role to content or support as one undoable patch. Use scene_apply_transaction for hash-checked review corrections.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        nodeId: { type: 'string', description: 'Scene node id' },
+        framingRole: {
+          type: 'string',
+          enum: ['content', 'support'],
+          description:
+            'content participates in automatic framing; support remains rendered but is excluded.',
+        },
+      },
+      required: ['nodeId', 'framingRole'],
+    },
+  },
+  {
     name: 'scene_apply_patch',
     description:
-      'Apply one native scene JSON patch operation with undo support. Prefer specific tools for common edits.',
+      'Apply one native scene JSON patch operation with undo support. Replacement and transactions must use their dedicated hash-checked tools.',
     inputSchema: {
       type: 'object',
       properties: {
         patch: {
           type: 'object',
           description:
-            'ScenePatch operation such as addNode, removeNode, moveNode, renameNode, updateTransform, updateComponent, reorderChildren, updateAssetRef, setEditorMetadata, or setNodeMetadata.',
+            'ScenePatch operation such as addNode/removeNode, updateContent/updateConstraints, setEnvironment/setAuthoring, add/update/remove Asset, Material, Prefab, or AuthoringView. Resource references are validated on the resulting document.',
         },
       },
       required: ['patch'],
     },
   },
   {
-    name: 'scene_place_on',
+    name: 'scene_apply_transaction',
     description:
-      'Place a node on another node by using scene asset bounds. Useful for desks, floors, shelves, plinths, and panels.',
+      'Stage ordered scene patches, validate and preflight the complete candidate, then commit them atomically as one undo entry. Any failure leaves the live document unchanged.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
-        nodeId: { type: 'string', description: 'Node being placed' },
-        targetId: { type: 'string', description: 'Support node id' },
-        clearance: {
-          type: 'number',
-          description: 'Optional vertical clearance in meters',
+        patches: {
+          type: 'array',
+          items: { type: 'object' },
+          minItems: 1,
+          description:
+            'Ordered scene patches. Supports node, asset, material, prefab, environment, authoring, and authoring-view operations.',
         },
-        align: {
+        expectedBaseDocumentHash: {
+          oneOf: [SCENE_HASH_SCHEMA, { type: 'null' }],
+          description:
+            'Required optimistic-concurrency hash. Null is accepted only for a blank new scene.',
+        },
+        candidateDocumentHash: {
+          ...SCENE_HASH_SCHEMA,
+          description:
+            'Optional caller-computed integrity assertion. When omitted, the editor computes and returns the canonical candidate hash.',
+        },
+        correction: {
+          type: 'object',
+          additionalProperties: false,
+          description:
+            'Required only after scene_begin_review freezes the draft. Binds one correction to the exact current immutable review and defect.',
+          properties: {
+            kind: {
+              type: 'string',
+              enum: ['scene', 'resource', 'camera', 'contract'],
+            },
+            defectTags: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string' },
+            },
+            reason: { type: 'string' },
+            previousReview: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                path: { type: 'string' },
+                reviewSha256: SCENE_HASH_SCHEMA,
+              },
+              required: ['path', 'reviewSha256'],
+            },
+          },
+          required: ['kind', 'defectTags', 'previousReview'],
+        },
+        ownershipMode: {
           type: 'string',
-          enum: ['center', 'preserve-xz'],
-          description: 'Whether to center x/z on the target or preserve x/z',
+          enum: ['replace-new'],
+          description:
+            'Materialization ownership. merge-under-root is not yet supported.',
         },
       },
-      required: ['nodeId', 'targetId'],
+      required: ['patches', 'expectedBaseDocumentHash'],
+    },
+  },
+  {
+    name: 'scene_replace_document',
+    description:
+      'Atomically replace the complete editor document after the required base-hash concurrency check, any optional candidate-hash integrity assertion, validation, detached resource/runtime preflight, and commit. Creates one undo entry.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        document: SCENE_DOCUMENT_INPUT_SCHEMA,
+        expectedBaseDocumentHash: {
+          oneOf: [SCENE_HASH_SCHEMA, { type: 'null' }],
+          description:
+            'Required optimistic-concurrency hash. Null is accepted only for a blank new scene.',
+        },
+        candidateDocumentHash: {
+          ...SCENE_HASH_SCHEMA,
+          description:
+            'Optional caller-computed integrity assertion. When omitted, the editor computes and returns the canonical document hash.',
+        },
+        ownershipMode: {
+          type: 'string',
+          enum: ['replace-new'],
+        },
+      },
+      required: ['document', 'expectedBaseDocumentHash'],
     },
   },
   {
@@ -1178,6 +1635,51 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'scene_set_preview_visibility',
+    description:
+      'Change editor-only preview visibility without modifying or saving the scene document. Supports recursive hide/show, ghosting, locking, context, solo, reset, and named local arrangements.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        mode: {
+          type: 'string',
+          enum: [
+            'apply-arrangement',
+            'context',
+            'ghost',
+            'hide',
+            'lock',
+            'reset',
+            'save-arrangement',
+            'show',
+            'solo',
+            'uncontext',
+            'unghost',
+            'unlock',
+          ],
+        },
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Scene node ids affected by the preview operation. Solo accepts at most one.',
+        },
+        recursive: {
+          type: 'boolean',
+          description:
+            'Apply the operation to descendants. Defaults to true for hierarchy visibility operations.',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Arrangement name for save-arrangement or apply-arrangement.',
+        },
+      },
+      required: ['mode'],
+    },
+  },
+  {
     name: 'scene_get_logs',
     description: 'Get native scene editor logs.',
     inputSchema: {
@@ -1198,7 +1700,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'scene_set_camera',
     description:
-      'Set the native scene editor camera to a named view or explicit pose.',
+      'Set the native scene editor camera to a built-in view, exact saved authoring viewId, or explicit perspective/orthographic pose.',
     inputSchema: {
       type: 'object',
       properties: SCENE_CAMERA_SCHEMA.properties,
@@ -1207,7 +1709,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'scene_screenshot',
     description:
-      'Capture a native scene editor screenshot. Supports current/top/front/back/left/right/quarter/orbit views and explicit camera poses.',
+      'Capture a native scene editor screenshot. Supports exact saved authoring viewId cameras, current/top/front/back/left/right/quarter/orbit views, and explicit perspective/orthographic poses.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1224,13 +1726,19 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           maximum: 4096,
           description: 'Optional screenshot height in pixels',
         },
+        captureMode: {
+          type: 'string',
+          enum: ['render', 'editor'],
+          description:
+            'render (default) excludes editor-only grid, selection, transform, component-helper, and orientation overlays; editor includes them for UI diagnostics.',
+        },
       },
     },
   },
   {
     name: 'scene_compare_screenshots',
     description:
-      'Capture two native scene editor screenshots and report whether the image payloads match. Useful for checking that named camera views or before/after scene edits produce distinct visual evidence.',
+      'Capture two native scene editor screenshots and report byte identity. This is not a perceptual image comparison.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1238,13 +1746,29 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           type: 'object',
           description:
             'First camera request. Accepts the same fields as scene_screenshot.',
-          properties: SCENE_CAMERA_SCHEMA.properties,
+          properties: {
+            ...SCENE_CAMERA_SCHEMA.properties,
+            captureMode: {
+              type: 'string',
+              enum: ['render', 'editor'],
+              description:
+                'render excludes editor-only overlays; editor includes them.',
+            },
+          },
         },
         second: {
           type: 'object',
           description:
             'Second camera request. Accepts the same fields as scene_screenshot.',
-          properties: SCENE_CAMERA_SCHEMA.properties,
+          properties: {
+            ...SCENE_CAMERA_SCHEMA.properties,
+            captureMode: {
+              type: 'string',
+              enum: ['render', 'editor'],
+              description:
+                'render excludes editor-only overlays; editor includes them.',
+            },
+          },
         },
         width: {
           type: 'number',
@@ -1262,6 +1786,478 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
       required: ['first', 'second'],
     },
   },
+  {
+    name: 'scene_begin_review',
+    description:
+      'Freeze the current saved draft scene as formal review round 0. After this one-way boundary, every scene or camera change requires an adjacent immutable review and authorized correction.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        scenePath: {
+          type: 'string',
+          description:
+            'Scene file path under public/scenes, ending in .iwsdk.scene.json.',
+        },
+        expectedDocumentHash: {
+          ...SCENE_HASH_SCHEMA,
+          description:
+            'Canonical hash returned by scene_save for the exact draft to freeze.',
+        },
+        runtimePreflightReceipt: {
+          ...SCENE_REVIEW_EVIDENCE_LINK_SCHEMA,
+          description:
+            'Exact current passing receipt returned by scene_runtime_preflight.receipt.',
+        },
+      },
+      required: [
+        'scenePath',
+        'expectedDocumentHash',
+        'runtimePreflightReceipt',
+      ],
+    },
+  },
+  {
+    name: 'scene_set_review_lens',
+    description:
+      'Set the editor-only layout, geometry, or final review lens without changing the scene document.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        lens: {
+          type: 'string',
+          enum: ['layout', 'geometry', 'final'],
+        },
+      },
+      required: ['lens'],
+    },
+  },
+  {
+    name: 'scene_capture_review',
+    description:
+      'Capture review evidence bound to document/runtime/capability hashes, exact normalized reviewCamera and resolution, active lens, logs, feature state, visibility metadata, and measured renderer statistics. The server registers the PNG internally; the response omits base64 imageData unless includeImageData:true is explicitly requested.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ...SCENE_CAMERA_SCHEMA.properties,
+        width: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4096,
+        },
+        height: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4096,
+        },
+        featureState: {
+          type: 'object',
+          description:
+            'Caller-provided feature-state metadata recorded with the capture.',
+        },
+        includeImageData: {
+          type: 'boolean',
+          description:
+            'Return the full base64 PNG in imageData. Defaults to false because captureToken is sufficient for persistence.',
+        },
+      },
+      required: ['width', 'height'],
+    },
+  },
+  {
+    name: 'scene_persist_review_capture',
+    description:
+      'Persist a server-issued, session-bound capture returned by scene_capture_review under the active scene review directory. The server resolves captureToken to its registered PNG bytes and trusted capture facts, then writes immutable PNG plus metadata; an exact repeat is idempotent and capture fields cannot be relabeled.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        captureId: {
+          type: 'string',
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$',
+          description: 'Stable evidence id used in the review capture entry.',
+        },
+        captureToken: {
+          ...SCENE_HASH_SCHEMA,
+          description:
+            'Session-bound token returned by scene_capture_review.captureToken.',
+        },
+      },
+      required: ['captureId', 'captureToken'],
+    },
+  },
+  {
+    name: 'scene_measure_image_regions',
+    description:
+      'Measure aligned declared-reference and render-capture regions using linear-sRGB luma percentiles, mean OKLab color, and highlight/shadow footprints. Returns raw diagnostics and deltas, never a universal similarity pass.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        captureToken: {
+          ...SCENE_HASH_SCHEMA,
+          description: 'Trusted token returned by scene_capture_review.',
+        },
+        referenceId: {
+          type: 'string',
+          description:
+            'ID of a hash-bound reference declared in authoring.composition.input.references.',
+        },
+        regions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 64,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string' },
+              referenceRegion: {
+                type: 'array',
+                minItems: 4,
+                maxItems: 4,
+                items: { type: 'number', minimum: 0, maximum: 1 },
+                description: 'Normalized [x, y, width, height].',
+              },
+              renderRegion: {
+                type: 'array',
+                minItems: 4,
+                maxItems: 4,
+                items: { type: 'number', minimum: 0, maximum: 1 },
+                description:
+                  'Aligned normalized render region. Defaults to referenceRegion.',
+              },
+            },
+            required: ['id', 'referenceRegion'],
+          },
+        },
+      },
+      required: ['captureToken', 'referenceId', 'regions'],
+    },
+  },
+  {
+    name: 'scene_capture_review_set',
+    description:
+      'Capture and immutably persist a complete requested set of saved authoring views across review lenses in one call. Lens switching is automatic, PNG bytes stay server-side, and the response contains only compact schema-ready capture metadata for scene_finalize_review.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        width: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Default capture width for the set.',
+        },
+        height: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4096,
+          description: 'Default capture height for the set.',
+        },
+        captures: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 32,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: {
+                type: 'string',
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$',
+              },
+              lens: {
+                type: 'string',
+                enum: ['layout', 'geometry', 'final'],
+              },
+              viewId: {
+                type: 'string',
+                description:
+                  'Exact id from document.authoring.views; arbitrary built-in cameras are not accepted as immutable review evidence.',
+              },
+              width: { type: 'integer', minimum: 1, maximum: 4096 },
+              height: { type: 'integer', minimum: 1, maximum: 4096 },
+              featureState: { type: 'object' },
+            },
+            required: ['id', 'lens', 'viewId'],
+          },
+        },
+      },
+      required: ['width', 'height', 'captures'],
+    },
+  },
+  {
+    name: 'scene_record_object_inspection',
+    description:
+      'Record immutable server-issued inspection evidence for one identity-critical feature. Every required view needs geometry and final captures with the complete subject and declared context visible; form criteria must cite geometry evidence and material response must cite final evidence. Validates persisted capture provenance and complete silhouette, proportions, parts, negative-space, contacts, and material-response coverage. The server derives pass/fail and binds the artifact to current document, runtime, and capability hashes.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        scenePath: {
+          type: 'string',
+          description:
+            'Scene file path under public/scenes, ending in .iwsdk.scene.json.',
+        },
+        expectedDocumentHash: SCENE_HASH_SCHEMA,
+        capabilityHash: SCENE_HASH_SCHEMA,
+        featureId: {
+          type: 'string',
+          description:
+            'Exact id of an identityCritical feature with objectInspection.',
+        },
+        captures: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 32,
+          items: SCENE_BATCH_REVIEW_CAPTURE_SCHEMA,
+        },
+        results: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            silhouette: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+            proportions: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+            parts: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+            negativeSpace: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+            contacts: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+            materialResponse: {
+              type: 'array',
+              items: SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA,
+            },
+          },
+          required: [
+            'silhouette',
+            'proportions',
+            'parts',
+            'negativeSpace',
+            'contacts',
+            'materialResponse',
+          ],
+        },
+      },
+      required: [
+        'scenePath',
+        'expectedDocumentHash',
+        'capabilityHash',
+        'featureId',
+        'captures',
+        'results',
+      ],
+    },
+  },
+  {
+    name: 'scene_finalize_review',
+    description:
+      'Finalize and immutably save a review from batch capture metadata plus human lens and visual judgments. The SDK fills revision/source hashes, evaluates every deterministic criterion, derives the overall result, validates exact evidence, and routes failures to continue-refining; callers cannot guess deterministic statuses or force a passing result.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        round: { type: 'integer', minimum: 0, maximum: 10 },
+        captures: {
+          type: 'array',
+          minItems: 1,
+          items: SCENE_BATCH_REVIEW_CAPTURE_SCHEMA,
+        },
+        lensResults: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              lens: {
+                type: 'string',
+                enum: ['layout', 'geometry', 'final'],
+              },
+              status: {
+                type: 'string',
+                enum: ['pass', 'partial', 'fail', 'not-applicable'],
+              },
+            },
+            required: ['lens', 'status'],
+          },
+        },
+        visualResults: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              feature: { type: 'string' },
+              criterion: { type: 'string' },
+              status: {
+                type: 'string',
+                enum: ['pass', 'partial', 'fail', 'not-applicable'],
+              },
+              evidenceRefs: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              observation: { type: 'string' },
+            },
+            required: ['feature', 'criterion', 'status', 'observation'],
+          },
+        },
+        previousReview: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            path: { type: 'string' },
+            reviewSha256: SCENE_HASH_SCHEMA,
+          },
+          required: ['path', 'reviewSha256'],
+        },
+        correction: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            path: { type: 'string' },
+            correctionSha256: SCENE_HASH_SCHEMA,
+          },
+          required: ['path', 'correctionSha256'],
+        },
+        openDefectTags: { type: 'array', items: { type: 'string' } },
+        stopReason: {
+          type: 'string',
+          enum: [
+            'continue-refining',
+            'round-limit',
+            'repeated-defect',
+            'oscillation',
+            'plateau',
+            'missing-input',
+            'representation-gap',
+          ],
+        },
+      },
+      required: ['round', 'captures', 'lensResults'],
+    },
+  },
+  {
+    name: 'scene_save_review',
+    description:
+      'Validate and immutably persist one complete iwsdk.scene-review.v1 record against the active scene document, capability hash, required review contract, persisted PNG evidence, and adjacent immutable correction lineage. Round 0 is initial; every higher round must link by exact path and SHA-256 to round-1. Exact repeats are idempotent. Waivers are refused until a trusted user-approval artifact exists.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { review: SCENE_REVIEW_INPUT_SCHEMA },
+      required: ['review'],
+    },
+  },
+  {
+    name: 'scene_list_reviews',
+    description:
+      'List validated review record summaries for the active scene. The current flag requires matching document, runtime, capability, schema, and persisted evidence integrity.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: 'scene_get_review',
+    description:
+      'Get one complete immutable review record for the active scene by an exact workspace-relative path returned by scene_list_reviews.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Exact workspace-relative review path returned by scene_list_reviews.',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'scene_runtime_preflight',
+    description:
+      'Before formal review, reload and compare the selected editor scene with the live app runtime, then persist a content-addressed receipt required by scene_begin_review. Separately reports scene binding, camera/framing presentation, warnings, structural counts, and host-browser frame diagnostics. The default response is compact; host measurements are never presented as calibrated Quest performance.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        warmupFrames: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 600,
+          description: 'Frames excluded before measurement. Defaults to 10.',
+        },
+        sampleFrames: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 600,
+          description: 'Measured host-browser frames. Defaults to 60.',
+        },
+        detail: {
+          type: 'string',
+          enum: ['compact', 'full'],
+          description:
+            'Compact response by default; full returns the complete persisted report inline.',
+        },
+      },
+    },
+  },
+  {
+    name: 'scene_publish',
+    description:
+      'Publish the active saved scene against one exact current immutable passing review. Reloads the live app runtime, proves document/runtime hash parity, representative node content, resources, transforms and components, a nonblank canvas, and a clean scene/shader/WebGL/material log window, then persists an immutable runtime-proof report. Refuses dirty, stale, mismatched, waived, or unproven scenes.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        reviewPath: {
+          type: 'string',
+          description:
+            'Exact current immutable review path returned by scene_list_reviews.',
+        },
+        representativeNodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Optional additional authored node ids whose live content, resources, transforms, and components must match. Required review feature nodeRefs are always included.',
+        },
+        detail: {
+          type: 'string',
+          enum: ['compact', 'full'],
+          description:
+            'Compact returns status, hashes, failed checks, warnings, and artifact path. Full also returns the complete persisted proof inline.',
+        },
+      },
+      required: ['reviewPath'],
+    },
+  },
+  {
+    name: 'scene_get_render_stats',
+    description:
+      'Get measured scene structure (world bounds, object/node/mesh/geometry/material counts and visible node ids) plus raw renderer calls, triangles, points, lines, textures, programs, shadow casters, frame-time samples, and renderer environment. Returns available:false when no measurement bridge is installed.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 
   // =============================================================================
   // Framework-Specific Tools (IWSDK or any framework with FRAMEWORK_MCP_RUNTIME)
@@ -1269,7 +2265,7 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'scene_get_runtime_hierarchy',
     description:
-      'Get the live Three.js Object3D hierarchy from the app runtime, including names, UUIDs, and ECS entity indices. Use scene_get_hierarchy for the native scene document in the editor.',
+      'Get the live Three.js Object3D hierarchy from the app runtime, including names, UUIDs, object types, native scene node ids, asset ids, primitive descriptors, and ECS entity indices. Use scene_get_hierarchy for the native scene document in the editor.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1499,6 +2495,33 @@ export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
 ];
 
+export const SCENE_MCP_TOOL_NAMES = [
+  'scene_open',
+  'scene_render_file',
+  'scene_get_state',
+  'scene_get_capabilities',
+  'scene_screenshot',
+  'scene_select',
+  'scene_set_camera',
+  'scene_set_preview_visibility',
+  'scene_measure_image_regions',
+] as const;
+
+const PUBLIC_SCENE_MCP_TOOL_NAME_SET = new Set<string>(SCENE_MCP_TOOL_NAMES);
+const REMOVED_WORKSPACE_MCP_TOOL_NAME_SET = new Set([
+  'workspace_get_state',
+  'workspace_set_view',
+  'workspace_open_scene',
+]);
+
+export const RUNTIME_MCP_TOOLS: McpToolDefinition[] =
+  ALL_RUNTIME_MCP_TOOLS.filter(
+    (tool) =>
+      (!tool.name.startsWith('scene_') ||
+        PUBLIC_SCENE_MCP_TOOL_NAME_SET.has(tool.name)) &&
+      !REMOVED_WORKSPACE_MCP_TOOL_NAME_SET.has(tool.name),
+  );
+
 export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_get_session_status: 'get_session_status',
   xr_accept_session: 'accept_session',
@@ -1519,11 +2542,9 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   browser_screenshot: 'screenshot',
   browser_get_console_logs: 'get_console_logs',
   browser_reload_page: 'reload_page',
-  scene_get_runtime_hierarchy: 'get_scene_hierarchy',
-  scene_get_object_transform: 'get_object_transform',
 };
 
-export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
+const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   xr_get_session_status: ['xr', 'status'],
   xr_accept_session: ['xr', 'enter'],
   xr_end_session: ['xr', 'exit'],
@@ -1548,8 +2569,14 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   workspace_open_scene: ['workspace', 'open-scene'],
   scene_list_files: ['scene', 'files'],
   scene_open: ['scene', 'open'],
+  scene_render_file: ['scene', 'render-file'],
+  scene_get_state: ['scene', 'state'],
   scene_create: ['scene', 'create'],
+  scene_get_capabilities: ['scene', 'capabilities'],
+  scene_set_preview_visibility: ['scene', 'set-preview-visibility'],
   scene_list_assets: ['scene', 'assets'],
+  scene_search_project_assets: ['scene', 'search-project-assets'],
+  scene_import_project_asset: ['scene', 'import-project-asset'],
   scene_list_component_schemas: ['scene', 'component-schemas'],
   scene_get_document: ['scene', 'document'],
   scene_get_hierarchy: ['scene', 'hierarchy'],
@@ -1559,8 +2586,10 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_remove_node: ['scene', 'remove-node'],
   scene_duplicate_node: ['scene', 'duplicate-node'],
   scene_set_transform: ['scene', 'set-transform'],
+  scene_set_framing_role: ['scene', 'set-framing-role'],
   scene_apply_patch: ['scene', 'apply-patch'],
-  scene_place_on: ['scene', 'place-on'],
+  scene_apply_transaction: ['scene', 'apply-transaction'],
+  scene_replace_document: ['scene', 'replace-document'],
   scene_look_at: ['scene', 'look-at'],
   scene_validate: ['scene', 'validate'],
   scene_save: ['scene', 'save'],
@@ -1570,6 +2599,20 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_set_camera: ['scene', 'set-camera'],
   scene_screenshot: ['scene', 'screenshot'],
   scene_compare_screenshots: ['scene', 'compare-screenshots'],
+  scene_begin_review: ['scene', 'begin-review'],
+  scene_set_review_lens: ['scene', 'set-review-lens'],
+  scene_capture_review: ['scene', 'capture-review'],
+  scene_measure_image_regions: ['scene', 'measure-image-regions'],
+  scene_persist_review_capture: ['scene', 'persist-review-capture'],
+  scene_capture_review_set: ['scene', 'capture-review-set'],
+  scene_record_object_inspection: ['scene', 'record-object-inspection'],
+  scene_finalize_review: ['scene', 'finalize-review'],
+  scene_save_review: ['scene', 'save-review'],
+  scene_list_reviews: ['scene', 'reviews'],
+  scene_get_review: ['scene', 'review'],
+  scene_runtime_preflight: ['scene', 'runtime-preflight'],
+  scene_publish: ['scene', 'publish'],
+  scene_get_render_stats: ['scene', 'render-stats'],
   scene_get_runtime_hierarchy: ['scene', 'runtime-hierarchy'],
   scene_get_object_transform: ['scene', 'transform'],
   ecs_pause: ['ecs', 'pause'],
@@ -1585,50 +2628,44 @@ export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
   ecs_diff: ['ecs', 'diff'],
 };
 
+const RUNTIME_MCP_TOOL_NAME_SET = new Set(
+  RUNTIME_MCP_TOOLS.map((tool) => tool.name),
+);
+
+export const RUNTIME_CLI_PATHS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(ALL_RUNTIME_CLI_PATHS).filter(([name]) =>
+    RUNTIME_MCP_TOOL_NAME_SET.has(name),
+  ),
+);
+
 export const SCENE_EDITOR_MCP_TOOL_NAMES = [
-  'scene_list_assets',
-  'scene_list_component_schemas',
-  'scene_get_document',
-  'scene_get_hierarchy',
-  'scene_get_selection',
+  'scene_get_capabilities',
+  'scene_get_state',
   'scene_select',
-  'scene_add_node',
-  'scene_remove_node',
-  'scene_duplicate_node',
-  'scene_set_transform',
-  'scene_apply_patch',
-  'scene_place_on',
-  'scene_look_at',
-  'scene_validate',
-  'scene_save',
-  'scene_undo',
-  'scene_redo',
-  'scene_get_logs',
   'scene_set_camera',
   'scene_screenshot',
-  'scene_compare_screenshots',
+  'scene_set_preview_visibility',
+  'scene_measure_image_regions',
 ] as const;
 
 export const SCENE_FILE_MCP_TOOL_NAMES = [
-  'scene_list_files',
   'scene_open',
-  'scene_create',
+  'scene_render_file',
 ] as const;
 
-export const WORKSPACE_MCP_TOOL_NAMES = [
-  'workspace_get_state',
-  'workspace_set_view',
-  'workspace_open_scene',
-] as const;
+export const PROJECT_ASSET_MCP_TOOL_NAMES = [] as const;
 
-export const APP_RUNTIME_SCENE_MCP_TOOL_NAMES = [
-  'scene_get_runtime_hierarchy',
-  'scene_get_object_transform',
-] as const;
+export const REVIEW_EVIDENCE_MCP_TOOL_NAMES = [] as const;
+
+export const WORKSPACE_MCP_TOOL_NAMES = [] as const;
+
+export const APP_RUNTIME_SCENE_MCP_TOOL_NAMES = [] as const;
 
 const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
   ...SCENE_EDITOR_MCP_TOOL_NAMES,
   ...SCENE_FILE_MCP_TOOL_NAMES,
+  ...PROJECT_ASSET_MCP_TOOL_NAMES,
+  ...REVIEW_EVIDENCE_MCP_TOOL_NAMES,
   ...WORKSPACE_MCP_TOOL_NAMES,
 ]);
 

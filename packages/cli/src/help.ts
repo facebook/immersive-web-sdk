@@ -70,11 +70,14 @@ export function buildRuntimeCommandHelp(
     return [`Unknown ${domain} command "${action}".`];
   }
 
+  const writesScreenshot =
+    operation.mcpName === 'browser_screenshot' ||
+    operation.mcpName === 'scene_screenshot' ||
+    operation.mcpName === 'scene_render_file';
+
   const lines = [
     `Usage: iwsdk ${domain} ${action} [--input-json <json>] [--timeout <ms>] [--raw]${
-      operation.mcpName === 'browser_screenshot'
-        ? ' [--output-file <path>]'
-        : ''
+      writesScreenshot ? ' [--output-file <path>]' : ''
     }`,
     '',
     `Description: ${operation.description}`,
@@ -104,8 +107,10 @@ export function buildRuntimeCommandHelp(
     '  --timeout <ms>',
     '  --raw',
   );
-  if (operation.mcpName === 'browser_screenshot') {
-    lines.push('  --output-file <path>');
+  if (writesScreenshot) {
+    lines.push(
+      '  --output-file <path>   Write the PNG to this path and return screenshotPath; takes precedence over --raw',
+    );
   }
 
   return lines;
@@ -193,7 +198,6 @@ export function usageLines(): string[] {
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',
     '  browser <action>',
-    '  workspace <action>',
     '  scene <action>',
     '  ecs <action>',
   ];

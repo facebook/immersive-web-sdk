@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe('editor bottom diagnostics panel', () => {
-  test('shows console, events, and agent-facing validation tabs without a dedicated assets tab', async () => {
+  test('shows assets and diagnostics as lower-drawer tabs', async () => {
     harness = await createEditorTestHarness('editor-bottom-panel');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
@@ -34,11 +34,19 @@ describe('editor bottom diagnostics panel', () => {
             tabs.map((tab) => tab.getAttribute('data-bottom-tab')),
           ),
       )
-      .toEqual(['console', 'events', 'validation']);
-    await expect
-      .poll(() => editor.page.locator('[data-bottom-tab="assets"]').count())
-      .toBe(0);
+      .toEqual(['assets', 'console', 'validation']);
 
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('#editor-bottom-panel')
+          .getAttribute('data-active-tab'),
+      )
+      .toBe('assets');
+    await expect
+      .poll(() => editor.page.locator('#assets-panel').isVisible())
+      .toBe(true);
+    await editor.page.locator('[data-bottom-tab="console"]').click();
     await expect
       .poll(() =>
         editor.page
@@ -61,23 +69,6 @@ describe('editor bottom diagnostics panel', () => {
     await expect
       .poll(() => editor.page.locator('#bottom-panel-content').textContent())
       .toContain('Selected 1 node(s)');
-
-    await editor.page.locator('[data-bottom-tab="events"]').click();
-    await expect
-      .poll(() =>
-        editor.page
-          .locator('#editor-bottom-panel')
-          .getAttribute('data-active-tab'),
-      )
-      .toBe('events');
-    await expect
-      .poll(() =>
-        editor.page.locator('[data-diagnostic-event="scene_select"]').count(),
-      )
-      .toBeGreaterThan(0);
-    await expect
-      .poll(() => editor.page.locator('#bottom-panel-content').textContent())
-      .toContain('scene_select');
 
     await editor.page.locator('[data-bottom-tab="validation"]').click();
     await expect
@@ -102,11 +93,35 @@ describe('editor bottom diagnostics panel', () => {
       )
       .toBe(true);
 
-    await editor.page.locator('[data-bottom-tab="events"]').click();
+    const invalidResult = await dispatchSceneTool(
+      editor.page,
+      'scene_add_node',
+      {
+        node: {
+          components: { MissingComponent: {} },
+          id: 'invalid-node',
+        },
+      },
+    );
+    expect(invalidResult).toMatchObject({ valid: false });
+    await expect
+      .poll(() => editor.page.locator('#bottom-panel-content').textContent())
+      .toContain(
+        'Fix: Register "MissingComponent" in the application component manifest',
+      );
+    const issue = editor.page.locator(
+      '[data-validation-node-id="invalid-node"]',
+    );
+    await expect.poll(() => issue.count()).toBe(1);
+    await issue.click();
     await expect
       .poll(() =>
-        editor.page.locator('[data-diagnostic-event="scene_validate"]').count(),
+        editor.page.evaluate(() => (window as any).__IWSDK_EDITOR_SELECTION),
       )
-      .toBeGreaterThan(0);
+      .toEqual(['invalid-node']);
+
+    await expect
+      .poll(() => editor.page.locator('[data-bottom-tab="events"]').count())
+      .toBe(0);
   }, 45000);
 });

@@ -30,7 +30,7 @@ describe('editor outliner context actions', () => {
 
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
-        asset: 'vase',
+        content: { asset: 'vase', type: 'asset' },
         id: 'vase-1',
         transform: { position: [1, 0, 0] },
       },

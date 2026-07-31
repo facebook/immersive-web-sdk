@@ -22,93 +22,90 @@ afterEach(async () => {
   harness = undefined;
 });
 
-describe('editor metadata inspector', () => {
-  test('commits node metadata on focusout, rejects invalid payloads, and reloads saved metadata', async () => {
+describe('editor metadata authoring boundary', () => {
+  test('keeps untyped metadata out of the human inspector while retaining file authoring', async () => {
     harness = await createEditorTestHarness('editor-metadata-inspector');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
     await selectNode(editor.page, 'table-1');
 
-    let metadataField = await openMetadataEditor(editor);
-    await expect.poll(() => metadataField.inputValue()).toBe('{}');
-
-    await metadataField.fill(
-      JSON.stringify(
-        {
-          note: 'intentional support object',
-          validation: { allowFloating: true },
+    await expect
+      .poll(() => editor.page.locator('.metadata-editor').count())
+      .toBe(0);
+    await expect
+      .poll(() => editor.page.locator('[data-node-metadata]').count())
+      .toBe(0);
+    await dispatchSceneTool(editor.page, 'scene_apply_patch', {
+      patch: {
+        nodeId: 'table-1',
+        op: 'setNodeMetadata',
+        value: {
+          'iwsdk.note': 'intentional support object',
+          'iwsdk.validation': { allowFloating: true },
         },
-        null,
-        2,
-      ),
-    );
-    await editor.page.locator('[data-node-title-edit]').focus();
+      },
+    });
     await expect
       .poll(() => readNodeMetadata(editor))
       .toEqual({
-        note: 'intentional support object',
-        validation: { allowFloating: true },
+        'iwsdk.note': 'intentional support object',
+        'iwsdk.validation': { allowFloating: true },
       });
-
-    metadataField = await openMetadataEditor(editor);
-    await metadataField.fill('[]');
-    await editor.page.locator('[data-node-title-edit]').focus();
-    await expect
-      .poll(() => editor.page.locator('#metadata-editor-message').textContent())
-      .toContain('Node metadata must be a JSON object');
-    await expect
-      .poll(() => readNodeMetadata(editor))
-      .toEqual({
-        note: 'intentional support object',
-        validation: { allowFloating: true },
-      });
-
-    await metadataField.fill(
-      JSON.stringify(
-        { note: 'saved from inspector', role: 'support' },
-        null,
-        2,
-      ),
-    );
-    await editor.page.locator('[data-node-title-edit]').focus();
+    await expectEditorSettled(editor);
+    await dispatchSceneTool(editor.page, 'scene_apply_patch', {
+      patch: {
+        nodeId: 'table-1',
+        op: 'setNodeMetadata',
+        value: { 'iwsdk.note': 'saved from file', 'iwsdk.role': 'support' },
+      },
+    });
     await expect
       .poll(() => readNodeMetadata(editor))
       .toEqual({
-        note: 'saved from inspector',
-        role: 'support',
+        'iwsdk.note': 'saved from file',
+        'iwsdk.role': 'support',
       });
+    await expectEditorSettled(editor);
 
     await expect(
       dispatchSceneTool(editor.page, 'scene_save'),
     ).resolves.toMatchObject({ dirty: false });
     const savedScene = await harness.readScene();
     expect(savedScene.nodes[0].metadata).toEqual({
-      note: 'saved from inspector',
-      role: 'support',
+      'iwsdk.note': 'saved from file',
+      'iwsdk.role': 'support',
     });
 
     const reloadedEditor = await harness.openEditor();
     await expectRealWebGLViewport(reloadedEditor);
     await selectNode(reloadedEditor.page, 'table-1');
-    const reloadedMetadataField = await openMetadataEditor(reloadedEditor);
     await expect
-      .poll(() => reloadedMetadataField.inputValue())
-      .toContain('"saved from inspector"');
+      .poll(() => reloadedEditor.page.locator('.metadata-editor').count())
+      .toBe(0);
+    await expect
+      .poll(() => readNodeMetadata(reloadedEditor))
+      .toEqual({
+        'iwsdk.note': 'saved from file',
+        'iwsdk.role': 'support',
+      });
   }, 45000);
 });
-
-async function openMetadataEditor(editor: EditorPageContext) {
-  const details = editor.page.locator('.metadata-editor');
-  await details.evaluate((element) => {
-    if (element instanceof HTMLDetailsElement) {
-      element.open = true;
-    }
-  });
-  return details.locator('[data-node-metadata]');
-}
 
 async function readNodeMetadata(editor: EditorPageContext): Promise<any> {
   return editor.page.evaluate(
     () => (window as any).IWSDK_SCENE_EDITOR.session.document.nodes[0].metadata,
   );
+}
+
+async function expectEditorSettled(editor: EditorPageContext): Promise<void> {
+  await expect
+    .poll(() =>
+      editor.page.evaluate(() => ({
+        conflict: Boolean(
+          document.querySelector('#scene-save-conflict-dialog'),
+        ),
+        dirty: (window as any).IWSDK_SCENE_EDITOR.session.isDirty,
+      })),
+    )
+    .toEqual({ conflict: false, dirty: false });
 }

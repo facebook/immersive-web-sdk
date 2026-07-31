@@ -132,21 +132,42 @@ export async function handleRuntimeOperation(
       ? withBrowserStatus(rawResult.result ?? rawResult, session)
       : (rawResult.result ?? rawResult);
 
-  if (options.raw) {
-    return createRawOutput(result);
+  const isScreenshotOperation =
+    operation.mcpName === 'browser_screenshot' ||
+    operation.mcpName === 'scene_screenshot' ||
+    operation.mcpName === 'scene_render_file';
+  const hasExplicitScreenshotPath = typeof options.outputFile === 'string';
+  if (options.outputFile === true) {
+    throw new Error('--output-file requires a path');
   }
 
+  // An explicit output path is an instruction to persist the PNG. Honor it
+  // even when --raw is also present, instead of silently printing base64 and
+  // ignoring the requested file.
   if (
-    (operation.mcpName === 'browser_screenshot' ||
-      operation.mcpName === 'scene_screenshot') &&
-    isScreenshotResult(result)
+    isScreenshotOperation &&
+    isScreenshotResult(result) &&
+    (hasExplicitScreenshotPath || !options.raw)
   ) {
     const screenshotPath = await saveScreenshot(result, options.outputFile);
+    if (operation.mcpName === 'scene_render_file') {
+      const { imageData: _imageData, ...metadata } = result;
+      return createSuccess({
+        workspaceRoot,
+        operation: operation.id,
+        result: metadata,
+        screenshotPath,
+      });
+    }
     return createSuccess({
       workspaceRoot,
       operation: operation.id,
       screenshotPath,
     });
+  }
+
+  if (options.raw) {
+    return createRawOutput(result);
   }
 
   return createSuccess({

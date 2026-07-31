@@ -8,11 +8,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  executablePath: vi.fn(() => '/missing/playwright/headless-shell'),
+  executablePath: vi.fn(() => '/installed/playwright/chromium'),
   existsSync: vi.fn(
-    (filePath: string) => filePath === '/usr/bin/google-chrome-stable',
+    (filePath: string) => filePath === '/installed/playwright/chromium',
   ),
   launch: vi.fn(),
+  launchPersistentContext: vi.fn(),
   platform: vi.fn(() => 'linux'),
 }));
 
@@ -36,6 +37,7 @@ vi.mock('playwright', () => ({
   chromium: {
     executablePath: mocks.executablePath,
     launch: mocks.launch,
+    launchPersistentContext: mocks.launchPersistentContext,
   },
 }));
 
@@ -44,64 +46,26 @@ describe('launchManagedBrowser', () => {
     vi.resetModules();
     vi.restoreAllMocks();
     mocks.executablePath.mockReset();
-    mocks.executablePath.mockReturnValue('/missing/playwright/headless-shell');
+    mocks.executablePath.mockReturnValue('/installed/playwright/chromium');
     mocks.existsSync.mockReset();
     mocks.existsSync.mockImplementation(
-      (filePath: string) => filePath === '/usr/bin/google-chrome-stable',
+      (filePath: string) => filePath === '/installed/playwright/chromium',
     );
     mocks.launch.mockReset();
+    mocks.launchPersistentContext.mockReset();
     mocks.platform.mockReset();
     mocks.platform.mockReturnValue('linux');
+    delete process.env.IWSDK_CHROME_EXECUTABLE;
     delete process.env.IWSDK_GPU;
   });
 
-  test('uses system Chrome directly when Playwright headless shell is missing', async () => {
+  test('always uses Playwright Chromium even when a system executable is configured', async () => {
     vi.resetModules();
+    process.env.IWSDK_CHROME_EXECUTABLE = '/approved/Google Chrome';
     process.env.IWSDK_GPU = 'swiftshader';
-    const page = createMockPage();
-    const { browser, context } = createMockBrowser(page);
-    mocks.launch.mockResolvedValueOnce(browser);
-
-    const { launchManagedBrowser } = await import('../src/headless-browser.js');
-
-    const managedBrowser = await launchManagedBrowser(
-      'http://127.0.0.1:5173',
-      true,
-      false,
-      { height: 800, width: 800 },
-    );
-
-    expect(mocks.launch).toHaveBeenCalledTimes(1);
-    expect(mocks.launch.mock.calls[0]?.[0]).toMatchObject({
-      executablePath: '/usr/bin/google-chrome-stable',
-      headless: true,
-    });
-    expect(mocks.launch.mock.calls[0]?.[0]?.args).toContain('--no-sandbox');
-    expect(page.goto).toHaveBeenCalledWith('http://127.0.0.1:5173', {
-      waitUntil: 'commit',
-    });
-
-    await managedBrowser.close();
-    expect(context.close).toHaveBeenCalledTimes(1);
-    expect(browser.close).toHaveBeenCalledTimes(1);
-  });
-
-  test('retries with system Chrome when Playwright launch unexpectedly fails', async () => {
-    vi.resetModules();
-    process.env.IWSDK_GPU = 'swiftshader';
-    mocks.executablePath.mockReturnValue(
-      '/installed/playwright/headless-shell',
-    );
-    mocks.existsSync.mockImplementation(
-      (filePath: string) =>
-        filePath === '/installed/playwright/headless-shell' ||
-        filePath === '/usr/bin/google-chrome-stable',
-    );
     const page = createMockPage();
     const { browser } = createMockBrowser(page);
-    mocks.launch
-      .mockRejectedValueOnce(new Error('Chromium launch failed'))
-      .mockResolvedValueOnce(browser);
+    mocks.launch.mockResolvedValueOnce(browser);
 
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
 
@@ -110,18 +74,36 @@ describe('launchManagedBrowser', () => {
       width: 800,
     });
 
-    expect(mocks.launch).toHaveBeenCalledTimes(2);
+    expect(mocks.executablePath).toHaveBeenCalled();
+    expect(mocks.existsSync).toHaveBeenCalledTimes(1);
+    expect(mocks.existsSync).toHaveBeenCalledWith(
+      '/installed/playwright/chromium',
+    );
+    expect(mocks.launch).toHaveBeenCalledTimes(1);
+    expect(mocks.launchPersistentContext).not.toHaveBeenCalled();
     expect(mocks.launch.mock.calls[0]?.[0]).toMatchObject({
       headless: true,
     });
     expect(mocks.launch.mock.calls[0]?.[0]).not.toHaveProperty(
       'executablePath',
     );
-    expect(mocks.launch.mock.calls[1]?.[0]).toMatchObject({
-      executablePath: '/usr/bin/google-chrome-stable',
-      headless: true,
-    });
-    expect(mocks.launch.mock.calls[1]?.[0]?.args).toContain('--no-sandbox');
+    expect(mocks.launch.mock.calls[0]?.[0]?.args).not.toContain('--no-sandbox');
+  });
+
+  test('does not retry with system Chrome when Playwright launch fails', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    mocks.launch.mockRejectedValueOnce(new Error('Playwright Chromium failed'));
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await expect(
+      launchManagedBrowser('http://127.0.0.1:5173', true, false),
+    ).rejects.toThrow('Playwright Chromium failed');
+    expect(mocks.launch).toHaveBeenCalledTimes(1);
+    expect(mocks.launch.mock.calls[0]?.[0]).not.toHaveProperty(
+      'executablePath',
+    );
   });
 
   test('exposes a managed workspace view switch hook for screenshot targeting', async () => {
@@ -148,13 +130,14 @@ describe('launchManagedBrowser', () => {
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';
     const page = createMockPage();
-    const { browser } = createMockBrowser(page);
-    mocks.launch.mockResolvedValueOnce(browser);
+    const { context } = createMockBrowser(page);
+    context.pages.mockReturnValue([page]);
+    mocks.launchPersistentContext.mockResolvedValueOnce(context);
 
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
 
     await launchManagedBrowser(
-      'http://127.0.0.1:5173/__iwsdk/workspace',
+      'http://127.0.0.1:5173/',
       false,
       false,
       null,
@@ -163,6 +146,22 @@ describe('launchManagedBrowser', () => {
       null,
       'workspace',
     );
+
+    expect(mocks.launch).not.toHaveBeenCalled();
+    expect(mocks.launchPersistentContext).toHaveBeenCalledWith(
+      '',
+      expect.objectContaining({
+        args: expect.arrayContaining(['--app=http://127.0.0.1:5173/']),
+        headless: false,
+        ignoreDefaultArgs: ['about:blank'],
+        ignoreHTTPSErrors: true,
+        viewport: null,
+      }),
+    );
+    expect(context.newPage).not.toHaveBeenCalled();
+    expect(page.goto).toHaveBeenCalledWith('http://127.0.0.1:5173/', {
+      waitUntil: 'commit',
+    });
 
     expect(page.waitForFunction).toHaveBeenCalledWith(
       expect.any(Function),
@@ -200,7 +199,8 @@ describe('launchManagedBrowser', () => {
     const page = createMockPage();
     page.waitForFunction.mockRejectedValueOnce(new Error('not ready'));
     const { browser, context } = createMockBrowser(page);
-    mocks.launch.mockResolvedValueOnce(browser);
+    context.pages.mockReturnValue([page]);
+    mocks.launchPersistentContext.mockResolvedValueOnce(context);
 
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
 
@@ -229,7 +229,8 @@ describe('launchManagedBrowser', () => {
     const { browser, context } = createMockBrowser(page);
     context.close.mockRejectedValueOnce(new Error('context cleanup failed'));
     browser.close.mockRejectedValueOnce(new Error('browser cleanup failed'));
-    mocks.launch.mockResolvedValueOnce(browser);
+    context.pages.mockReturnValue([page]);
+    mocks.launchPersistentContext.mockResolvedValueOnce(context);
 
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
 
@@ -260,7 +261,7 @@ describe('launchManagedBrowser', () => {
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
 
     await launchManagedBrowser(
-      'http://127.0.0.1:5173/__iwsdk/workspace',
+      'http://127.0.0.1:5173/',
       true,
       false,
       { height: 800, width: 800 },
@@ -273,9 +274,14 @@ describe('launchManagedBrowser', () => {
           '/__iwsdk/workspace/scenes',
           '/__iwsdk/editor/document',
         ],
+        topLevelPathnames: ['/'],
         token: 'managed-token',
       },
     );
+
+    expect(page.goto).toHaveBeenCalledWith('http://127.0.0.1:5173/', {
+      waitUntil: 'commit',
+    });
 
     expect(browser.newContext).toHaveBeenCalledWith({
       ignoreHTTPSErrors: true,
@@ -301,6 +307,24 @@ describe('launchManagedBrowser', () => {
       },
     });
 
+    const topLevelRoot = createMockRoute('http://127.0.0.1:5173/', {
+      navigation: true,
+    });
+    await handler(topLevelRoot);
+    expect(topLevelRoot.continue).toHaveBeenCalledWith({
+      headers: {
+        accept: 'text/html',
+        'x-iwsdk-managed-workspace': 'managed-token',
+      },
+    });
+
+    const iframeRoot = createMockRoute('http://127.0.0.1:5173/', {
+      navigation: true,
+      parentFrame: {},
+    });
+    await handler(iframeRoot);
+    expect(iframeRoot.continue).toHaveBeenCalledWith();
+
     for (const requestUrl of [
       'http://127.0.0.1:5173/models/controller.glb',
       'http://127.0.0.1:5174/__iwsdk/workspace',
@@ -315,8 +339,10 @@ describe('launchManagedBrowser', () => {
 
 function createMockBrowser(page: ReturnType<typeof createMockPage>) {
   const context = {
+    browser: vi.fn(),
     close: vi.fn(),
     newPage: vi.fn().mockResolvedValue(page),
+    pages: vi.fn(() => [] as ReturnType<typeof createMockPage>[]),
     route: vi.fn(),
   };
   const browser = {
@@ -324,14 +350,22 @@ function createMockBrowser(page: ReturnType<typeof createMockPage>) {
     newContext: vi.fn().mockResolvedValue(context),
     on: vi.fn(),
   };
+  context.browser.mockReturnValue(browser);
   return { browser, context };
 }
 
-function createMockRoute(url: string) {
+function createMockRoute(
+  url: string,
+  options: { navigation?: boolean; parentFrame?: object | null } = {},
+) {
   return {
     continue: vi.fn(),
     request: vi.fn(() => ({
+      frame: vi.fn(() => ({
+        parentFrame: vi.fn(() => options.parentFrame ?? null),
+      })),
       headers: vi.fn(() => ({ accept: 'text/html' })),
+      isNavigationRequest: vi.fn(() => options.navigation === true),
       url: vi.fn(() => url),
     })),
   };

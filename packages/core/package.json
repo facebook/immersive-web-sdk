@@ -5,6 +5,24 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "lighting": [
+        "dist/lighting/index.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./lighting": {
+      "types": "./dist/lighting/index.d.ts",
+      "import": "./dist/lighting/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],
@@ -21,6 +39,7 @@
     "dist/init/**",
     "dist/input/**",
     "dist/layers/**",
+    "dist/lighting/**",
     "dist/level/**",
     "dist/locomotion/**",
     "dist/mcp/**",
@@ -74,7 +93,7 @@
     "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
   },
   "devDependencies": {
-    "vitest": "^4.0.0",
-    "@vitest/coverage-v8": "^4.0.0"
+    "vitest": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10"
   }
 }

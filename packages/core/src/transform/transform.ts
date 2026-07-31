@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Types, createComponent } from '../ecs/component.js';
 import { Entity, NullEntity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import { LevelTag } from '../level/index.js';
@@ -13,31 +12,9 @@ import { Quaternion, Vector3, Euler } from '../runtime/three.js';
 import { SyncedEuler } from './synced-euler.js';
 import { SyncedQuaternion } from './synced-quaternion.js';
 import { SyncedVector3 } from './synced-vector3.js';
+import { Transform } from './transform-component.js';
 
-/**
- * 3D transform component that binds an entity to a Three.js Object3D.
- *
- * @remarks
- * - The {@link TransformSystem} wires Object3D.position/quaternion/scale to
- *   component views for zero‑copy updates and parenting.
- * - Default values are `NaN` so an existing Object3D keeps its initial transform
- *   unless a value is explicitly written by code or GLXF.
- * - Set `parent` to reparent under another entity. When unset, entities are
- *   automatically parented under the active level root (or scene if persistent).
- *
- * @category Scene
- * @hideineditor
- */
-export const Transform = createComponent(
-  'Transform',
-  {
-    position: { type: Types.Vec3, default: [NaN, NaN, NaN] }, // Local position [x,y,z]; NaN preserves Object3D value
-    orientation: { type: Types.Vec4, default: [NaN, NaN, NaN, NaN] }, // Local rotation quaternion [x,y,z,w]; NaN preserves
-    scale: { type: Types.Vec3, default: [NaN, NaN, NaN] }, // Local scale [x,y,z]; NaN preserves
-    parent: { type: Types.Entity, default: undefined as any }, // Parent entity for hierarchy (defaults to level root)
-  },
-  'Component for 3D transformation (position, rotation, scale)',
-);
+export { Transform } from './transform-component.js';
 
 function attachToEntity(entity: Entity): void {
   const object3D = entity.object3D;

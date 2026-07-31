@@ -416,4 +416,89 @@ describe('createRelayHandler', () => {
     });
     expect(relay.pendingCount()).toBe(0);
   });
+
+  test('replays a role-targeted request to an editor that reconnects after navigation', () => {
+    vi.useFakeTimers();
+    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
+    const command = createMockWs();
+    const oldEditor = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, oldEditor]);
+    relay.registerBrowserClient(oldEditor, {
+      pageId: 'workspace',
+      role: 'editor',
+      sceneSessionId: 'scene-old',
+      tabGeneration: 1,
+    });
+
+    const request = JSON.stringify({
+      id: 'after-create',
+      method: 'scene_get_document',
+      params: {},
+      target: { role: 'editor' },
+    });
+    relay.onMessage(command, request, clients);
+    expect(oldEditor.send).toHaveBeenCalledWith(request);
+
+    relay.unregisterClient(oldEditor);
+    clients.delete(oldEditor);
+    expect(command.send).not.toHaveBeenCalled();
+    expect(relay.pendingCount()).toBe(1);
+
+    const newEditor = createMockWs();
+    clients.add(newEditor);
+    relay.registerBrowserClient(newEditor, {
+      pageId: 'workspace',
+      role: 'editor',
+      sceneSessionId: 'scene-new',
+      tabGeneration: 2,
+    });
+    expect(newEditor.send).toHaveBeenCalledWith(request);
+
+    const response = JSON.stringify({
+      id: 'after-create',
+      result: { documentHash: 'sha256:new' },
+    });
+    relay.onMessage(newEditor, response, clients);
+    expect(command.send).toHaveBeenCalledWith(response);
+    expect(relay.pendingCount()).toBe(0);
+    vi.useRealTimers();
+  });
+
+  test('waits briefly for a missing role-only target but not a stale exact target', () => {
+    vi.useFakeTimers();
+    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
+    const command = createMockWs();
+    const clients = new Set<RelayWebSocket>([command]);
+    const request = JSON.stringify({
+      id: 'editor-coming-back',
+      method: 'scene_get_document',
+      params: {},
+      target: { role: 'editor' },
+    });
+    relay.onMessage(command, request, clients);
+    expect(command.send).not.toHaveBeenCalled();
+    expect(relay.pendingCount()).toBe(1);
+
+    const editor = createMockWs();
+    clients.add(editor);
+    relay.registerBrowserClient(editor, {
+      pageId: 'workspace',
+      role: 'editor',
+      tabGeneration: 2,
+    });
+    expect(editor.send).toHaveBeenCalledWith(request);
+
+    const stale = JSON.stringify({
+      id: 'stale-exact-editor',
+      method: 'scene_get_document',
+      params: {},
+      target: { role: 'editor', sceneSessionId: 'gone' },
+    });
+    relay.onMessage(command, stale, clients);
+    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
+      id: 'stale-exact-editor',
+      error: { code: -32004 },
+    });
+    vi.useRealTimers();
+  });
 });

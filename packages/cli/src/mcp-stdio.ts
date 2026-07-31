@@ -157,10 +157,12 @@ function createErrorContent(
   options: {
     cause?: string;
     browser?: RuntimeSession['browser'] | null;
+    details?: Record<string, unknown>;
   } = {},
 ): McpTextContent[] {
   const payload = {
     message,
+    ...(options.details ?? {}),
     ...(options.cause ? { cause: options.cause } : {}),
     ...(options.browser !== undefined ? { browser: options.browser } : {}),
   };
@@ -275,18 +277,35 @@ export async function startRuntimeMcpStdioServer({
           : rawResponse;
       const result = normalizedResponse.result ?? normalizedResponse;
       if (
-        (name === 'browser_screenshot' || name === 'scene_screenshot') &&
+        (name === 'browser_screenshot' ||
+          name === 'scene_screenshot' ||
+          name === 'scene_render_file') &&
         isRecord(result) &&
         typeof result.imageData === 'string' &&
         typeof result.mimeType === 'string'
       ) {
-        const content: McpImageContent[] = [
-          {
-            type: 'image',
-            data: result.imageData,
-            mimeType: result.mimeType,
-          },
-        ];
+        const image: McpImageContent = {
+          type: 'image',
+          data: result.imageData,
+          mimeType: result.mimeType,
+        };
+        if (name === 'scene_render_file') {
+          const { imageData: _imageData, ...metadata } = result;
+          const content: Array<McpTextContent | McpImageContent> = [
+            { type: 'text', text: JSON.stringify(metadata, null, 2) },
+            image,
+          ];
+          if (normalizedResponse._tabId != null) {
+            content.push(
+              createTabMetadataText(
+                normalizedResponse._tabId,
+                normalizedResponse._tabGeneration,
+              ),
+            );
+          }
+          return { content };
+        }
+        const content: McpImageContent[] = [image];
         return { content };
       }
 
@@ -306,6 +325,7 @@ export async function startRuntimeMcpStdioServer({
           content: createErrorContent(message, {
             cause: error.issueCause,
             browser: error.browser ?? null,
+            details: error.details,
           }),
           isError: true,
         };
