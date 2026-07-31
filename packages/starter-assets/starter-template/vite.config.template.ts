@@ -17,13 +17,16 @@ export default defineConfig({
   plugins: [
     ...(useMkcert ? [mkcert()] : []),
     iwsdkDev({
+      assetManifest: './src/assets.ts',
+      componentManifest: './src/components.ts',
       emulator: {
         device: 'metaQuest3',
         /* @template:if mode='ar' */
         environment: 'living_room',
         /* @template:end */
         /* @template:if mode='browser' */
-        // Browser starters exercise IWSDK's native non-XR input path.
+        // Browser starters exercise IWSDK's native non-XR input path. The
+        // managed editor uses its own command bridge and does not require IWER.
         iwer: false,
         /* @template:else */
         // IWER is injected during `dev` by default. Real headset browsers are
@@ -34,7 +37,7 @@ export default defineConfig({
       /* @template:if mode='browser' */
       workspace: { enabled: true },
       /* @template:else */
-      ai: { mode: 'agent' },
+      ai: {},
       /* @template:end */
       verbose: true,
     }),
@@ -43,7 +46,9 @@ export default defineConfig({
     }),
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
   ],
-  server: { host: '0.0.0.0', port: 8081, open: true },
+  // The IWSDK plugin launches the configured managed browser. Disable Vite's
+  // independent opener so it does not create a second unmanaged tab.
+  server: { host: '0.0.0.0', port: 8081, open: false },
   build: {
     outDir: 'dist',
     sourcemap: process.env.NODE_ENV !== 'production',

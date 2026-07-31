@@ -53,7 +53,8 @@ npx iwsdk xr status
 ## Inspect And Debug
 
 ```bash
-npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}'
+npx iwsdk scene state --raw
+npx iwsdk scene render-file --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' --output-file artifacts/main.png
 npx iwsdk ecs components
 npx iwsdk ecs systems
 npx iwsdk ecs snapshot --label before
@@ -62,12 +63,13 @@ npx iwsdk ecs snapshot --label after
 npx iwsdk ecs diff --from before --to after
 ```
 
-For declarative scene composition, prefer the native editor tools when the MCP
-runtime exposes them: `scene_list_assets`, `scene_add_node`,
-`scene_set_transform`, `scene_place_on`, `scene_look_at`, `scene_set_camera`,
-`scene_screenshot`, `scene_compare_screenshots`, `scene_validate`, and
-`scene_save`. Use current/top/front/side or quarter screenshots before saving
-when alignment or on-surface placement matters; use `scene_screenshot` with
+For declarative scene composition, create and edit scene JSON files directly. Use
+`scene_render_file` to validate, compose imports, and render them. Open an existing
+root with `scene_open`, inspect consolidated live state with `scene_get_state`, and
+use `scene_select`, `scene_set_camera`, `scene_screenshot`,
+`scene_set_preview_visibility`, and `scene_measure_image_regions` for live editor
+observation. Use current/top/front/side or quarter screenshots when alignment or
+on-surface placement matters; use `scene_screenshot` with
 `{"view":"orbit","orbitStep":N}` for deterministic orbit angles.
 
 For XR interactions:

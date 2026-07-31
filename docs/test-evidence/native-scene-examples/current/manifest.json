@@ -1,6 +1,6 @@
 {
   "artifactRoot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current",
-  "generatedAt": "2026-07-08T22:37:57.028Z",
+  "generatedAt": "2026-07-25T09:43:06.981Z",
   "performanceThresholds": {
     "appCanvasReadyMs": 30000,
     "appRuntimeReadyMs": 60000,
@@ -16,14 +16,14 @@
         "uniqueColors": 32
       },
       "editor": {
-        "meshCount": 61,
+        "meshCount": 66,
         "nodeObjectCount": 6,
         "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 299,
-        "editorWorldReadyMs": 228,
-        "totalMs": 3714
+        "appRuntimeReadyMs": 462,
+        "editorWorldReadyMs": 1224,
+        "totalMs": 10717
       },
       "target": "audio"
     },
@@ -38,9 +38,9 @@
         "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 68,
-        "editorWorldReadyMs": 232,
-        "totalMs": 3496
+        "appRuntimeReadyMs": 177,
+        "editorWorldReadyMs": 1102,
+        "totalMs": 9665
       },
       "target": "grab"
     },
@@ -50,14 +50,14 @@
         "uniqueColors": 32
       },
       "editor": {
-        "meshCount": 42,
+        "meshCount": 41,
         "nodeObjectCount": 5,
         "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 81,
-        "editorWorldReadyMs": 286,
-        "totalMs": 3592
+        "appRuntimeReadyMs": 156,
+        "editorWorldReadyMs": 2446,
+        "totalMs": 10689
       },
       "target": "physics"
     }

@@ -6,38 +6,24 @@
  */
 
 import {
-  AssetManifest,
-  AssetType,
+  /* @template:if mode='browser' */
+  /* @template:else */
   AssetManager,
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
-  /* @template:if mode='browser' */
-  /* @template:else */
   SessionMode,
-  /* @template:end */
   SRGBColorSpace,
+  /* @template:end */
   World,
 } from '@iwsdk/core';
+import assets from './assets.js';
+import components from './components.js';
 /* @template:if mode='browser' */
-import { BrowserMouseLookSystem } from './mouselook.js';
 /* @template:else */
 import { PanelSystem } from './panel.js';
-/* @template:end */
 import { RobotSystem } from './robot.js';
-
-const assets: AssetManifest = {
-  chimeSound: {
-    url: './audio/chime.mp3',
-    type: AssetType.Audio,
-    priority: 'background',
-  },
-  webxr: {
-    url: './textures/webxr.png',
-    type: AssetType.Texture,
-    priority: 'critical',
-  },
-};
+/* @template:end */
 
 let sceneLevel = './scenes/vr.iwsdk.scene.json';
 /* @template:if mode='ar' */
@@ -49,14 +35,15 @@ sceneLevel = './scenes/browser.iwsdk.scene.json';
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,
+  components,
   /* @template:if mode='browser' */
   xr: false,
   render: {
     near: 0.001,
     far: 200,
     camera: {
-      position: [0, 1.6, 0],
-      lookAt: [0, 1.4, -1.8],
+      position: [0, 1.6, 3],
+      lookAt: [0, 1, 0],
     },
   },
   input: {
@@ -85,6 +72,8 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   camera.lookAt(0, 1.1, -1.8);
   /* @template:end */
 
+  /* @template:if mode='browser' */
+  /* @template:else */
   const webxrLogoTexture = AssetManager.getTexture('webxr')!;
   webxrLogoTexture.colorSpace = SRGBColorSpace;
   const logoBanner = new Mesh(
@@ -99,9 +88,6 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   logoBanner.rotateY(Math.PI);
 
   world.registerSystem(RobotSystem);
-  /* @template:if mode='browser' */
-  world.registerSystem(BrowserMouseLookSystem);
-  /* @template:else */
   world.registerSystem(PanelSystem);
   /* @template:end */
 });

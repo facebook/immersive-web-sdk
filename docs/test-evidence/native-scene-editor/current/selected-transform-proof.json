@@ -2,15 +2,18 @@
   "assetLoads": [
     {
       "assetId": "table",
-      "loadedAt": 1783129507922,
+      "loadedAt": 1784935027479,
       "status": "loaded",
       "url": "/assets/table.gltf"
     }
   ],
   "canvasHeight": 720,
   "canvasWidth": 1280,
+  "cameraHeight": null,
   "cameraLookAt": [0, 0.25, 0],
   "cameraPosition": [1.2422, 2.4238, 3.7265],
+  "cameraProjection": "perspective",
+  "cameraViewId": null,
   "contributions": {
     "count": 0,
     "items": [],
@@ -27,6 +30,7 @@
       "viewport.overlay": 0
     }
   },
+  "documentHash": "sha256:420845d93f33a2e3e2767fffa1e96fe92a51e2c98584174d2462f38d08d52831",
   "layout": {
     "canvas": {
       "bottom": 720,
@@ -212,8 +216,8 @@
       "zIndex": "4"
     },
     "toolbar": {
-      "bottom": 30,
-      "height": 30,
+      "bottom": 31,
+      "height": 31,
       "left": 250,
       "pointerEvents": "auto",
       "position": "absolute",
@@ -243,11 +247,15 @@
   "objectHierarchy": [
     {
       "assetId": "table",
+      "contentType": "model",
       "fallback": null,
       "helperType": null,
       "localPosition": [0, 0, 0],
       "nodeId": "table-1",
       "parentNodeId": null,
+      "primitiveType": null,
+      "runtimeHash": "sha256:420845d93f33a2e3e2767fffa1e96fe92a51e2c98584174d2462f38d08d52831",
+      "sourceNodeId": "table-1",
       "worldPosition": [0, 0, 0]
     }
   ],
@@ -280,6 +288,75 @@
     "webgl": true
   },
   "renderer": "iwsdk-webgl",
+  "rendererCamera": {
+    "isOrthographicCamera": false,
+    "isPerspectiveCamera": true,
+    "type": "PerspectiveCamera"
+  },
+  "renderStats": {
+    "available": true,
+    "calls": 16,
+    "frameTimeSamplesMs": [
+      5, 0.2, 7, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 2.3, 0.1, 0.1, 0.2, 0.2, 0.1,
+      0.2, 0.2, 0.2, 0.3, 0, 0.2, 0.1, 0.1, 0.2, 0.1, 0, 0, 0.2, 0, 0.2, 0.1,
+      0.1, 0.1, 0.1, 0, 0.1, 1.7, 3.5, 0.2, 1.7, 0.2, 1.6
+    ],
+    "lines": 62,
+    "environment": {
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+      "devicePixelRatio": 1,
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+      "renderer": "IWSDK WebGL"
+    },
+    "geometryCount": 1,
+    "points": 0,
+    "programs": 6,
+    "materialCount": 1,
+    "meshCount": 1,
+    "nodeCount": 1,
+    "objectCount": 3,
+    "shadowCasters": 1,
+    "textures": 2,
+    "triangles": 236,
+    "visibleNodeIds": ["table-1"],
+    "worldBounds": {
+      "max": [1, 0.5, 1],
+      "min": [-1, 0, -1],
+      "size": [2, 0.5, 2]
+    }
+  },
+  "referenceMode": "hidden",
+  "rendererGlobals": {
+    "background": null,
+    "clearAlpha": 1,
+    "clearColor": "#101418",
+    "exposure": 1,
+    "fog": null,
+    "shadows": false,
+    "toneMapping": 0
+  },
+  "resourceState": {
+    "cache": [
+      {
+        "assetId": "table",
+        "error": null,
+        "loadedAt": 1784935027479,
+        "status": "loaded",
+        "url": "/assets/table.gltf"
+      }
+    ],
+    "proof": [
+      {
+        "assetId": "table",
+        "loadedAt": 1784935027479,
+        "status": "loaded",
+        "url": "/assets/table.gltf"
+      }
+    ],
+    "staged": null
+  },
+  "reviewLens": "final",
+  "runtimeHash": "sha256:420845d93f33a2e3e2767fffa1e96fe92a51e2c98584174d2462f38d08d52831",
   "hoverBounds": null,
   "selectionBounds": {
     "centerDistance": 0,
@@ -303,6 +380,7 @@
     "materialCount": 1,
     "meshCount": 1,
     "nodeId": "table-1",
+    "primitiveType": null,
     "objectCount": 3,
     "ready": true
   },

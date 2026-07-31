@@ -324,9 +324,9 @@ npx iwsdk dev logs           # View recorded background server logs
 npx iwsdk dev open           # Open in browser
 ```
 
-Generated apps use `iwsdkDev({ ai: { mode: 'agent' } })`, which launches a
-managed headless Playwright Chromium, registers the MCP WebSocket endpoint, and
-records runtime state. Use `npx iwsdk dev status` for the resolved `localUrl`;
+Generated apps use `iwsdkDev({ ai: {} })`, which launches the visible managed
+Playwright runtime/editor workspace in collaborate mode, registers the MCP
+WebSocket endpoint, and records runtime state. Use `npx iwsdk dev status` for the resolved `localUrl`;
 the generated starter template defaults to `https://localhost:8081/`, but
 examples or existing apps may use another Vite port.
 
@@ -430,34 +430,48 @@ iwsdk xr       status | enter | exit | get-transform | set-transform |
                get-gamepad-state | set-gamepad-state |
                get-device-state | set-device-state
 iwsdk browser  screenshot | logs | reload
-iwsdk scene    hierarchy | runtime-hierarchy | transform
+iwsdk scene    open | render-file | state | capabilities | select |
+               set-camera | screenshot | set-preview-visibility |
+               measure-image-regions
 iwsdk ecs      pause | resume | step | query | find | systems |
                components | toggle-system | set-component | snapshot | diff
 ```
 
-### Scene Inspection
-
-```bash
-npx iwsdk scene runtime-hierarchy
-npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}'
-npx iwsdk scene transform --input-json '{"uuid":"<uuid>"}'
-```
-
-`scene hierarchy` inspects the native editor document and returns scene node
-IDs. Use `scene runtime-hierarchy` when you need live Object3D UUIDs for
-`scene transform`.
-
 ### Native Scene Composition Tools
 
-When MCP tools are available, use the native editor-targeted scene composition
-tools instead of direct scene-file edits for declarative placement:
+Scene files are now the authoring API. Create and edit existing
+`public/scenes/*.iwsdk.scene.json` files directly; the managed editor watches the
+active root and every imported module. Valid changes replace the preview atomically.
+Invalid files keep the last valid preview and report diagnostics. Unsaved human edits
+produce a conflict instead of being overwritten.
 
-`scene_list_assets`, `scene_get_document`, `scene_get_hierarchy`,
-`scene_get_selection`, `scene_select`, `scene_add_node`, `scene_remove_node`,
-`scene_duplicate_node`, `scene_set_transform`, `scene_apply_patch`,
-`scene_place_on`, `scene_look_at`, `scene_validate`, `scene_save`,
-`scene_undo`, `scene_redo`, `scene_get_logs`, `scene_set_camera`, and
-`scene_screenshot`, and `scene_compare_screenshots`.
+The public scene tool surface is exactly:
+
+`scene_open`, `scene_render_file`, `scene_get_state`,
+`scene_get_capabilities`, `scene_screenshot`, `scene_select`,
+`scene_set_camera`, `scene_set_preview_visibility`, and
+`scene_measure_image_regions`.
+
+`scene_render_file` is the detached validate-and-render operation. It resolves module
+imports, validates the composed document, and returns hashes, render metadata, and a
+PNG. If validation or materialization fails it returns diagnostics and no PNG.
+`scene_open` opens an existing file only; create new files with normal filesystem
+tools.
+
+Use top-level `imports` to compose standalone v1 module files. Imported nodes and
+resources receive deterministic `<import-id>/<local-id>` namespaces, the import
+wrapper carries its transform, relative asset URIs rebase from the module, and the
+root retains global environment/authoring ownership. This lets independent agents
+author and render distinct module files in parallel before the root composes them.
+
+`scene_get_state` reports the active file, selection, source/composed/runtime hashes,
+validation diagnostics, dirty/conflict state, runtime readiness, and render stats.
+Use `scene_set_preview_visibility` for temporary recursive hide/show, solo, ghost,
+context, and lock arrangements without modifying the scene.
+
+Keep review orchestration, evidence, comparisons, and stopping decisions in normal
+task files outside the editor. The editor supplies authoritative screenshots, hashes,
+camera state, diagnostics, image-region measurements, and render statistics.
 
 For visual verification, call `scene_set_camera` or `scene_screenshot` with
 named views such as `current`, `top`, `front`, `back`, `left`, `right`,
@@ -465,6 +479,17 @@ named views such as `current`, `top`, `front`, `back`, `left`, `right`,
 deterministic 45-degree increments around the scene. Use multiple angles before
 saving when checking symmetry, alignment, and whether objects are actually
 resting on a surface.
+
+Renderable scene nodes use discriminated `content`. Model content references
+an entry in `resources.assets`; primitive content contains box, sphere,
+cylinder, cone, plane, capsule, extrude, tube, lathe, torus, or rounded-box
+geometry and references an entry in `resources.materials`. Materials support
+standard PBR or basic shading, `#RRGGBB` colors, roughness, metalness, opacity,
+emissive color, face side, and flat shading. A node may set
+`framingRole: "support"` so rendered infrastructure remains in raw `worldBounds`
+but is excluded from content-only `framingBounds` and automatic scene framing;
+omission means `content`. Add or edit nodes, materials, and resources directly in the
+owning root or module file, then call `scene_render_file` before opening the root.
 
 ### ECS Inspection
 
@@ -494,10 +519,16 @@ Only the two most recent distinct snapshot labels are retained.
 ### Browser Tools
 
 ```bash
-npx iwsdk browser screenshot    # Writes a PNG and returns screenshotPath
+npx iwsdk browser screenshot --output-file artifacts/runtime.png
+npx iwsdk scene screenshot --input-json '{"view":"quarter"}' --output-file artifacts/scene.png
 npx iwsdk browser logs           # App console logs
 npx iwsdk browser reload         # Reload page
 ```
+
+Both screenshot commands write a PNG and return `screenshotPath`. An explicit
+`--output-file` takes precedence over `--raw`, avoiding a large base64 payload on
+stdout. Native scene screenshots default to an overlay-free `captureMode: "render"`;
+request `captureMode: "editor"` only for editor UI diagnostics.
 
 ---
 
@@ -613,11 +644,13 @@ assets.
 
 ## 11. Bundled AI Skills
 
-The generated Claude config recipe bundles 7 Claude Code skill files at
-`packages/starter-assets/claude-injections/skills/`:
+The generated Claude config recipe bundles 8 Claude Code skills from
+`packages/starter-assets/claude-injections/skills/`. The portable scene
+composer is also emitted to `.agents/skills/` by the Codex recipe:
 
 | Skill | Purpose |
 |-------|---------|
+| `iwsdk-scene-composer` | Text/image/hybrid to editable native scene composition |
 | `iwsdk-planner` | Project planning and architecture |
 | `iwsdk-grab` | Grab interaction implementation |
 | `iwsdk-ray` | Ray interaction implementation |

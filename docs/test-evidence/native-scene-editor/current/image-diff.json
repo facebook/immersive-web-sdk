@@ -4,10 +4,11 @@
       "fov": 35,
       "lookAt": [0, 0, 0],
       "position": [0, 8, 0],
+      "projection": "perspective",
       "view": "top"
     },
-    "hash": "88d12ae0eb211d06740cf91bd3a28279ddfc607a095e2bc4d000001f2fc821a3",
-    "imageDataLength": 7844
+    "hash": "de21895720cdba16a9a61c031fe620a7eb8f9c65bc02273b9be895e47c92bd48",
+    "imageDataLength": 5840
   },
   "matches": false,
   "second": {
@@ -15,9 +16,10 @@
       "fov": 35,
       "lookAt": [0, 0, 0],
       "position": [0, 2, 8],
+      "projection": "perspective",
       "view": "front"
     },
-    "hash": "d6e11aad27f3f1aae7287cd562b4bc0013cb8bbb7a4b30212c0dc06ae094cb93",
-    "imageDataLength": 13164
+    "hash": "82694ad1d169471dbeeb3b0359cfdc6f6a036d0673979655b4654cbf55acc2bd",
+    "imageDataLength": 4736
   }
 }

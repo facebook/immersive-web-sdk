@@ -8,7 +8,7 @@
 
 import { spawn } from 'child_process';
 import { createRequire } from 'module';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import path from 'path';
 import { format as formatWithPrettier } from 'prettier';
@@ -323,17 +323,21 @@ async function proveAppPage({ baseUrl, pageContext, screenshotPath, target }) {
   );
   await page.waitForTimeout(1000);
 
-  const hierarchy = await dispatch(page, 'get_scene_hierarchy', {
-    maxChildren: 100,
-    maxDepth: 10,
-  });
+  const hierarchy = await waitForHierarchyNames(page, target.names);
   const hierarchyNames = new Set(flattenHierarchyNames(hierarchy));
   for (const name of target.names) {
     if (!hierarchyNames.has(name)) {
+      const diagnostics = [
+        ...pageContext.consoleErrors,
+        ...pageContext.badResponses,
+        ...pageContext.failedRequests,
+      ]
+        .slice(-10)
+        .join(' | ');
       throw new Error(
         `app hierarchy missing "${name}"; found ${Array.from(hierarchyNames)
           .slice(0, 20)
-          .join(', ')}`,
+          .join(', ')}${diagnostics ? `; diagnostics: ${diagnostics}` : ''}`,
       );
     }
   }
@@ -394,6 +398,31 @@ async function proveAppPage({ baseUrl, pageContext, screenshotPath, target }) {
   };
 }
 
+async function waitForHierarchyNames(page, expectedNames, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let hierarchy = null;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      hierarchy = await dispatch(page, 'get_scene_hierarchy', {
+        maxChildren: 100,
+        maxDepth: 10,
+      });
+      const names = new Set(flattenHierarchyNames(hierarchy));
+      if (expectedNames.every((name) => names.has(name))) {
+        return hierarchy;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await page.waitForTimeout(100);
+  }
+  if (lastError != null) {
+    throw lastError;
+  }
+  return hierarchy;
+}
+
 async function waitForAppRuntime(pageContext, screenshotPath) {
   try {
     await pageContext.page.waitForFunction(
@@ -445,7 +474,8 @@ async function proveEditorPage({
     window.IWSDK_SCENE_EDITOR_TEST_HOOKS.getProof(),
   );
   const sceneDocument = await page.evaluate(() => ({
-    assetCount: window.IWSDK_SCENE_EDITOR.session.document.assets.length,
+    assetCount:
+      window.IWSDK_SCENE_EDITOR.session.document.resources?.assets?.length ?? 0,
     nodeCount: window.IWSDK_SCENE_EDITOR.session.document.nodes.length,
   }));
 
@@ -723,6 +753,7 @@ function startDevServer(cwd, port) {
       '--',
       '--host',
       '127.0.0.1',
+      '--force',
       '--port',
       String(port),
       '--strictPort',
@@ -823,35 +854,7 @@ async function getFreePort() {
 }
 
 async function launchChromium() {
-  try {
-    return await chromium.launch({ headless: true });
-  } catch (error) {
-    const executablePath = findSystemChromium();
-    if (executablePath == null) {
-      throw error;
-    }
-    return chromium.launch({
-      args: ['--no-sandbox'],
-      executablePath,
-      headless: true,
-    });
-  }
-}
-
-function findSystemChromium() {
-  const candidates =
-    process.platform === 'darwin'
-      ? [
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        ]
-      : [
-          '/usr/bin/google-chrome',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium',
-          '/usr/bin/chromium-browser',
-        ];
-  return candidates.find((candidate) => existsSync(candidate));
+  return chromium.launch({ headless: true });
 }
 
 function sleep(ms) {

@@ -24,20 +24,21 @@ xr_get_session_status → if not sessionActive → xr_accept_session
 
 ### Step 2: Locate the target
 
-Find the object by name in the live runtime hierarchy. Use `scene_get_runtime_hierarchy` and match against the name from `$ARGUMENTS`.
+Find the live entity by name or grabbable component, then query its component data.
 
 ```
-scene_get_runtime_hierarchy → find node matching the target name
+ecs_find_entities({namePattern: target}) → ecs_query_entity(entityIndex)
 ```
 
-If the object is not found, report the available named objects and stop.
+If the object is not found, search `OneHandGrabbable` and `TwoHandsGrabbable`
+entities, report the available matches, and stop.
 
 ### Step 3: Get its transform
 
-Get the object's world position using its UUID from step 2.
+Read the object's Transform position from the queried entity.
 
 ```
-scene_get_object_transform(uuid) → use positionRelativeToXROrigin
+ecs_query_entity(entityIndex) → Transform.position
 ```
 
 ### Step 4: Animate controller to target

@@ -1,5 +1,11 @@
 {
   "hierarchy": [
-    { "id": "table-1", "asset": "table", "childCount": 0, "children": [] }
+    {
+      "id": "table-1",
+      "contentType": "model",
+      "asset": "table",
+      "childCount": 0,
+      "children": []
+    }
   ]
 }

@@ -6,7 +6,6 @@
  */
 
 import {
-  AssetManifest,
   Color,
   CylinderGeometry,
   DistanceGrabbable,
@@ -28,9 +27,8 @@ import {
 } from '@iwsdk/core';
 import * as horizonKit from '@pmndrs/uikit-horizon';
 import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
+import assets from './assets.js';
 import { SettingsSystem } from './panel.js';
-
-const assets: AssetManifest = {};
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,

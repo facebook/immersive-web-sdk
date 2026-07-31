@@ -38,6 +38,7 @@ const MIGRATED_SCENES = [
       'Spinner',
     ],
     id: 'audio',
+    componentManifest: './src/components.ts',
     scene: 'examples/audio/public/scenes/audio.iwsdk.scene.json',
     source: 'examples/audio/src/index.ts',
     sourceLevelText: './scenes/audio.iwsdk.scene.json',
@@ -86,6 +87,7 @@ const MIGRATED_SCENES = [
       'ScreenSpace',
     ],
     id: 'starter-vr',
+    componentManifest: './src/components.ts',
     scene:
       'packages/starter-assets/starter-template/public/scenes/vr.iwsdk.scene.json',
     source: 'packages/starter-assets/starter-template/src/index.template.ts',
@@ -104,6 +106,7 @@ const MIGRATED_SCENES = [
       'ScreenSpace',
     ],
     id: 'starter-ar',
+    componentManifest: './src/components.ts',
     scene:
       'packages/starter-assets/starter-template/public/scenes/ar.iwsdk.scene.json',
     source: 'packages/starter-assets/starter-template/src/index.template.ts',
@@ -276,7 +279,9 @@ function assertGeneratedStarterScenes({
       catalogById,
       expectedAssetIds: file.endsWith('-ar.iwsdk.scene.json')
         ? ['plant-sansevieria', 'robot']
-        : ['environment-desk', 'plant-sansevieria', 'robot'],
+        : file.endsWith('-vr.iwsdk.scene.json')
+          ? ['environment-desk', 'plant-sansevieria', 'robot']
+          : [],
       failures,
       relativePath: `${GENERATED_STARTER_ASSET_DIR}/${file}`,
       validateSceneDocument,
@@ -306,41 +311,33 @@ function assertSceneDocument({
     }
   }
 
-  const sceneAssets = new Map(
-    (document.assets ?? []).map((asset) => [asset.id, asset]),
-  );
-  const missingAssets = setDifference(expectedAssetIds, sceneAssets);
-  for (const assetId of missingAssets) {
-    failures.push(`${relativePath} is missing asset "${assetId}"`);
+  if (document.resources?.assets != null) {
+    failures.push(
+      `${relativePath} still embeds obsolete resources.assets metadata`,
+    );
   }
 
-  for (const [assetId, sceneAsset] of sceneAssets) {
+  const referencedAssetIds = new Set(
+    flattenNodes(document.nodes ?? [])
+      .filter((node) => node.content?.type === 'asset')
+      .map((node) => node.content.asset),
+  );
+  const missingAssets = setDifference(expectedAssetIds, referencedAssetIds);
+  for (const assetId of missingAssets) {
+    failures.push(`${relativePath} does not reference asset "${assetId}"`);
+  }
+
+  for (const assetId of expectedAssetIds) {
     const catalogAsset = catalogById.get(assetId);
     if (catalogAsset == null) {
       failures.push(
-        `${relativePath} references unknown catalog asset "${assetId}"`,
+        `${relativePath} expects unknown shared catalog asset "${assetId}"`,
       );
       continue;
     }
 
-    if (sceneAsset.uri !== catalogAsset.publicPath) {
-      failures.push(
-        `${relativePath} asset "${assetId}" uses "${sceneAsset.uri}", expected "${catalogAsset.publicPath}"`,
-      );
-    }
-
     if (catalogAsset.bounds == null) {
       failures.push(`catalog asset "${assetId}" is missing bounds metadata`);
-    } else if (sceneAsset.bounds == null) {
-      failures.push(
-        `${relativePath} asset "${assetId}" is missing bounds metadata from the shared catalog`,
-      );
-    } else if (
-      JSON.stringify(sceneAsset.bounds) !== JSON.stringify(catalogAsset.bounds)
-    ) {
-      failures.push(
-        `${relativePath} asset "${assetId}" bounds do not match the shared catalog`,
-      );
     }
   }
 
@@ -380,6 +377,29 @@ function assertMigratedScene({
   if (!sourceText.includes(sceneTarget.sourceLevelText)) {
     failures.push(
       `${sceneTarget.source} does not load ${sceneTarget.sourceLevelText}`,
+    );
+  }
+
+  if (!sourceText.includes("from './assets.js'")) {
+    failures.push(
+      `${sceneTarget.source} does not import the shared runtime/editor asset manifest`,
+    );
+  }
+
+  const viteConfigText = readRelative(sceneTarget.viteConfig);
+  if (!viteConfigText.includes("assetManifest: './src/assets.ts'")) {
+    failures.push(
+      `${sceneTarget.viteConfig} does not expose ./src/assets.ts to the editor`,
+    );
+  }
+  if (
+    sceneTarget.componentManifest != null &&
+    !viteConfigText.includes(
+      `componentManifest: '${sceneTarget.componentManifest}'`,
+    )
+  ) {
+    failures.push(
+      `${sceneTarget.viteConfig} does not expose ${sceneTarget.componentManifest} to the editor`,
     );
   }
 

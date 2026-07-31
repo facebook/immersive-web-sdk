@@ -4,26 +4,14 @@ outline: [2, 4]
 
 # Chapter 9: Native Scene Editor
 
-IWSDK projects can load authored scene JSON directly. The native scene editor is
-the visual workflow for placing assets, setting transforms, assigning components,
-and saving those changes back to `public/scenes/*.iwsdk.scene.json`.
+IWSDK loads authored scene JSON directly. Scene files are the authoring source; the
+managed editor is the live visual surface for selection, transforms, hierarchy,
+components, screenshots, and human fine adjustment.
 
-## What You'll Build
+## Runtime Loading
 
-By the end of this chapter, you'll be able to:
-
-- Use the managed workspace for runtime, editor, and split views
-- Inspect the runtime scene hierarchy
-- Place assets from the project asset catalog
-- Edit transforms and component properties
-- Save a scene JSON file and reload it in the app
-- Use the same workflow from agent tools when MCP is available
-
-## Scene JSON In The Runtime
-
-Scene JSON is a declarative layer for authored content. Runtime code still owns
-systems, procedural behavior, networking, and any interaction that is easier to
-express imperatively.
+Keep scene files under `public/scenes/` and load one through the normal World level
+pipeline:
 
 ```ts
 import { SessionMode, World } from '@iwsdk/core';
@@ -35,90 +23,142 @@ const world = await World.create(document.getElementById('scene')!, {
 });
 ```
 
-Keep scene files under `public/scenes/` so the dev server can serve them with a
-stable URL.
+Runtime code still owns systems, interaction, networking, and procedural behavior.
+Use scene JSON for declarative resources, hierarchy, transforms, materials, lights,
+environment, and typed components.
 
-If your app already has a validated scene document in memory, load it through
-the same level pipeline:
+## Scene Format
 
-```ts
-await world.loadSceneDocument(sceneDocument);
+Use `iwsdk.scene.v1` only:
+
+```json
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "resources": {
+    "materials": [
+      {
+        "id": "paint",
+        "model": "standard",
+        "baseColor": "#5f7f62",
+        "roughness": 0.72,
+        "metalness": 0
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "table",
+      "content": {
+        "type": "primitive",
+        "geometry": { "type": "box", "size": [1.2, 0.08, 0.7] },
+        "material": "paint"
+      },
+      "transform": { "position": [0, 0.76, 0] }
+    }
+  ]
+}
 ```
 
-For existing projects, use the
-[Native Scene Migration](./09-native-scene-migration.md) checklist to replace
-old generated level output with scene JSON and shared catalog assets.
+Resources are separate from nodes so models, materials, and prefabs can be reused.
+Renderable infrastructure may set `framingRole: "support"`; it remains visible but
+does not expand content-only automatic framing.
 
-## Opening The Editor
+## Modular Composition
 
-Start the development server from your project:
+Roots can compose standalone module files:
+
+```json
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "imports": [
+    {
+      "id": "reading-nook",
+      "src": "./modules/reading-nook.iwsdk.scene.json",
+      "transform": { "position": [2, 0, -1] }
+    }
+  ],
+  "resources": {},
+  "nodes": []
+}
+```
+
+Each module is a valid standalone v1 document. Resolution is recursive and ordered.
+Imported nodes and resources receive `<import-id>/<local-id>` namespaces. The import
+entry becomes a transform wrapper, and relative asset URIs resolve from the module
+file. The root owns environment, metadata, and authoring globals.
+
+This layout lets independent agents author distinct module files in parallel. Render
+each module before importing it, then validate and render the root to catch scale,
+contact, lighting, and camera issues across modules.
+
+## Managed Editor
+
+The managed Playwright browser opens at the clean origin root and defaults to Runtime.
+Switch between Runtime and Editor with the two visible controls. External browsers
+receive the application only; the managed browser owns the editor wrapper.
+
+The editor watches the active root and every resolved module:
+
+- valid file changes replace the preview atomically;
+- invalid changes keep the previous valid render and show diagnostics;
+- unsaved human changes produce a conflict instead of being overwritten;
+- runtime reload is deferred while Editor is visible and applied when Runtime is
+  selected.
+
+Create and edit scene files with normal filesystem tools. `scene_open` never invents
+or creates a missing document.
+
+## Agent Tools
+
+The complete public scene MCP surface is:
+
+```text
+scene_open
+scene_render_file
+scene_get_state
+scene_get_capabilities
+scene_screenshot
+scene_select
+scene_set_camera
+scene_set_preview_visibility
+scene_measure_image_regions
+```
+
+`scene_render_file` validates, resolves imports, materializes, and renders a file
+without changing the active editor. Invalid input returns diagnostics and no PNG.
+Valid input returns dependency information, source/composed/runtime hashes, render
+statistics, camera metadata, and PNG bytes.
+
+`scene_get_state` consolidates the active file, selection, hashes, validation,
+dirty/conflict status, runtime readiness, runtime errors, and render statistics.
+Hierarchy and resources are already present in the files and are not duplicated in a
+separate observation API.
+
+Document mutation tools are not exposed. Agents edit files directly; humans use the
+editor controls.
+
+Equivalent CLI examples:
 
 ```bash
-npm run dev
+npx iwsdk scene render-file \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
+  --output-file artifacts/main.png
+npx iwsdk scene open \
+  --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
+npx iwsdk scene state --raw
 ```
 
-When AI tooling is enabled, IWSDK opens a Playwright-managed workspace at
-`/__iwsdk/workspace`. That workspace owns the runtime, editor, and split views.
-Normal browser tabs stay on the runtime app; opening the workspace or legacy
-editor URL in a normal browser redirects back to the app.
+## Visual Review
 
-For manual editor work today, use a headed managed mode such as
-`ai: { mode: 'collaborate' }`. Use the workspace view switcher to move between
-Runtime, Editor, and Split. Agents use `workspace_get_state`,
-`workspace_set_view`, `scene_list_files`, `scene_open`, and `scene_create`
-instead of constructing long editor URLs.
+Use exact saved or canonical camera views. `captureMode: "render"` removes editor
+overlays; `captureMode: "editor"` is for UI diagnostics. Preview visibility can solo,
+ghost, hide, show, or lock objects without changing document hashes.
+Canonical review views include `top`, `front`, `back`, `left`, `right`, `quarter`,
+and deterministic `orbit` steps.
 
-## Editing Workflow
-
-1. Open or create a scene file under `public/scenes/`.
-2. Pick an object from the viewport or outliner.
-3. Adjust position, rotation, and scale with the transform controls.
-4. Add or edit IWSDK component data in the inspector.
-5. Save the scene JSON.
-6. Reload the app page and verify the scene appears as expected.
-
-Use descriptive node ids. Stable ids make it much easier for runtime code,
-tests, and agent tools to find the intended entity.
-
-## Agentic Scene Composition
-
-When MCP tools are connected, agents should use the editor-targeted scene tools
-instead of editing scene files blindly. A typical loop is:
-
-1. Call `workspace_get_state`.
-2. Use `scene_list_files`, `scene_open`, or `scene_create` to choose the scene.
-3. Capture screenshots from front, side, top, and quarter views.
-4. Inspect the hierarchy and asset catalog.
-5. Apply scene patches through the scene composition tools.
-6. Save the scene.
-7. Switch to runtime or split view and compare screenshots before finishing.
-
-Multiple camera angles matter because one oblique view can hide floating,
-alignment, and symmetry errors.
-
-The native scene composition tool surface includes `workspace_get_state`,
-`workspace_set_view`, `scene_list_files`, `scene_open`, `scene_create`,
-`scene_list_assets`, `scene_get_document`, `scene_get_hierarchy`,
-`scene_add_node`, `scene_set_transform`, `scene_apply_patch`, `scene_place_on`,
-`scene_look_at`, `scene_validate`, `scene_save`, `scene_set_camera`, and
-`scene_screenshot`. Use `scene_set_camera` or `scene_screenshot` with current,
-top, front, back, left, right, quarter, and orbit views, or with an explicit
-camera position and look-at target, before saving.
-
-## Choosing Scene JSON Or Code
-
-Use scene JSON for authored placement:
-
-- furniture, props, lights, anchors, and static layout
-- component defaults that designers or agents should tune visually
-- stable authored scenes that need two-way editing
-
-Use code for runtime behavior:
-
-- procedural generation
-- animation and game logic
-- API-driven content
-- custom systems and performance-sensitive loops
-
-This split keeps the authored scene editable while preserving the full
-expressiveness of IWSDK code.
+Keep review orchestration and evidence in ordinary task files. The editor supplies
+authoritative screenshots, hashes, camera state, diagnostics, region measurements,
+and render statistics. Verify the live application runtime separately before
+shipping; there is no editor review or publish gate.

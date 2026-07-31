@@ -9,12 +9,12 @@
     "transformCommitMs": 10000
   },
   "timings": {
-    "appInitialReadyMs": 1089,
-    "editorStartupMs": 487,
-    "transformCommitMs": 10,
-    "compareScreenshotsMs": 28.100000143051147,
-    "explicitScreenshotPairMs": 39.89999985694885,
-    "namedScreenshotBatchMs": 119,
-    "singleScreenshotCaptureMs": 46.89999985694885
+    "appInitialReadyMs": 1037,
+    "editorStartupMs": 446,
+    "transformCommitMs": 20,
+    "compareScreenshotsMs": 31.19999998807907,
+    "explicitScreenshotPairMs": 38.5,
+    "namedScreenshotBatchMs": 135.09999999403954,
+    "singleScreenshotCaptureMs": 34.29999998211861
   }
 }

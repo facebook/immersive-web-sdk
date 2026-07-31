@@ -8,8 +8,11 @@ This file configures Claude Code for IWSDK (Immersive Web SDK) project developme
 my-iwsdk-project/
 ├── src/
 │   ├── index.ts              # World.create() entry point
+│   ├── assets.ts             # Shared runtime/editor asset manifest
+│   ├── components.ts         # Shared runtime/editor component manifest
+│   ├── scene-assets/         # Optional procedural Object3D modules
 │   ├── systems/              # Custom systems
-│   └── components/           # Custom components
+│   └── components/           # System-free component declarations
 ├── public/
 │   ├── scenes/               # Native IWSDK scene JSON
 │   ├── iwsdk-assets/         # Shared catalog assets served by Vite
@@ -20,7 +23,9 @@ my-iwsdk-project/
 └── vite.config.ts
 ```
 
-**Convention:** One system per file, with its related components. No barrel `index.ts` files.
+**Convention:** Keep component declarations in system-free modules, list them in
+`src/components.ts` with `defineComponents`, and put systems in separate files. The
+runtime and editor must import the same manifest. No barrel `index.ts` files.
 
 ---
 
@@ -31,17 +36,26 @@ loads it with `World.create(..., { level: './scenes/<name>.iwsdk.scene.json' })`
 
 ### Rules
 
-- Use scene JSON for static composition: environment roots, placed catalog
-  assets, UI panels, lights, grabbable objects, physics bodies, and audio
-  emitters.
+- Use scene JSON for static composition: root components, placed manifest assets,
+  groups, prefabs, patterns, lights, UI panels, and behavior components.
+- Keep glTF URLs, procedural geometry, and materials in `src/assets.ts` and optional
+  `src/scene-assets/*.scene-asset.ts` modules. Configure that module with
+  `iwsdkDev({ assetManifest: './src/assets.ts' })` and pass the same default export
+  to `World.create({ assets })`.
+- Keep custom component declarations in system-free modules. Export their complete
+  manifest from `src/components.ts` with `defineComponents`, configure it with
+  `iwsdkDev({ componentManifest: './src/components.ts' })`, and pass the same export
+  to `World.create({ components })`. Scene JSON stores raw component props and never
+  embeds component schemas.
 - Use TypeScript/JavaScript runtime entity creation when entities depend on
-  runtime state, variable counts, procedural generation, animation logic, or app
-  systems.
-- Use the IWSDK native editor route (`/__iwsdk/editor`) and scene MCP tools for
-  visual inspection, multi-angle screenshots, transforms, validation, and saving.
-- Prefer shared catalog paths such as
-  `/iwsdk-assets/robot/robot.gltf` instead of copying model files into each
-  project.
+  runtime state, variable counts, animation logic, or app systems. Static
+  procedural forms should be parentless manifest `Object3D` prototypes so the
+  runtime and editor can both instantiate them.
+- In the Playwright-managed browser, use the clean localhost root and switch from
+  Runtime to Editor. Create and edit v1 scene files directly; scene tools validate,
+  render, observe, select, and control previews but do not save document edits.
+- Scene JSON references stable manifest IDs only. It never declares URLs, geometry,
+  materials, `resources.assets`, or model/primitive content kinds.
 
 ---
 
@@ -168,9 +182,10 @@ update() {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 new GLTFLoader().loadAsync(url);
 
-// ✅ GOOD - Declare in AssetManifest passed to World.create({ assets })
+// ✅ GOOD - Keep the shared manifest in src/assets.ts
+import assets from './assets.js';
 const world = await World.create(container, {
-  assets: { myModel: { url: './models/scene.glb', type: AssetType.GLTF } },
+  assets,
 });
 const gltf = AssetManager.getGLTF('myModel');
 // `getGLTF` returns a fresh clone of `scene`/`scenes` per call, so it's
@@ -178,7 +193,7 @@ const gltf = AssetManager.getGLTF('myModel');
 // if you intentionally want the cached instance.
 
 // ✅ GOOD - For runtime loading
-await AssetManager.loadGLTF(url, 'myModel');
+await AssetManager.loadGLTF(url, 'runtimeOnlyModel');
 ```
 
 #### DON'T use scene.add() — use createTransformEntity
@@ -287,6 +302,20 @@ Use the iwsdk-project-code-reviewer agent to review my code
 
 ## Skills Available
 
+### `/iwsdk-scene-composer`
+
+**Compose an editable native IWSDK scene from text, images, or both**
+
+Use when:
+
+- Creating a static scene from a written description
+- Reconstructing a concept image, sketch, screenshot, or photograph as 3D
+  scene geometry
+- Composing architecture, environments, props, vegetation, vehicles, or figures
+  with typed resources, primitives, prefabs, and deterministic patterns
+- Iteratively matching a scene to reference art through multi-angle editor
+  screenshots and runtime verification
+
 ### `/iwsdk-planner`
 
 **IWSDK experience pipeline and planning guide**
@@ -351,6 +380,10 @@ Use when:
 
 When planning any new feature or system, ALWAYS invoke `/iwsdk-planner` first. For a new experience built from an idea, follow its full phased pipeline; for a contained feature, use its Quick Planning checklist. Its `references/api-reference.md` is the API ground truth for grounding and review.
 
+For contained static scene composition, invoke `/iwsdk-scene-composer`
+directly. Add `/iwsdk-planner` only when the request also introduces a new app
+or multi-system runtime behavior.
+
 ---
 
 ## MCP Tools Available
@@ -376,12 +409,12 @@ WebXR emulator control for testing without a headset. Starter projects expose th
 
 **Session**
 
-| Tool                    | Purpose                                 |
-| ----------------------- | --------------------------------------- |
-| `xr_get_session_status` | Check IWER connection (**call first!**) |
-| `xr_accept_session`     | Enter XR mode                           |
-| `xr_end_session`        | Exit XR mode                            |
-| `browser_reload_page`   | Reload browser to reset state           |
+| Tool                    | Purpose                            |
+| ----------------------- | ---------------------------------- |
+| `xr_get_session_status` | Check IWER state before XR actions |
+| `xr_accept_session`     | Enter XR mode                      |
+| `xr_end_session`        | Exit XR mode                       |
+| `browser_reload_page`   | Reload browser to reset state      |
 
 **Device Control**
 
@@ -406,13 +439,19 @@ WebXR emulator control for testing without a headset. Starter projects expose th
 | `browser_screenshot`       | Screenshot the browser (returns image inline)           |
 | `browser_get_console_logs` | Browser console logs with level/pattern/count filtering |
 
-**Scene Inspection** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
+**Scene Authoring And Observation**
 
-| Tool                          | Purpose                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `scene_get_hierarchy`         | Native editor document tree with stable scene node ids                                     |
-| `scene_get_runtime_hierarchy` | Live Three.js tree with names, UUIDs, and entity indices                                   |
-| `scene_get_object_transform`  | Local + global transforms; includes position relative to XR origin (use with `xr_look_at`) |
+| Tool                           | Purpose                                                               |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `scene_render_file`            | Validate, compose imports, and render one scene file                  |
+| `scene_get_state`              | Active file, selection, hashes, diagnostics, runtime, and render data |
+| `scene_select`                 | Set the live editor selection context                                 |
+| `scene_set_camera`             | Set a canonical or exact saved editor camera                          |
+| `scene_screenshot`             | Capture the active scene with authoritative camera/hash metadata      |
+| `scene_set_preview_visibility` | Apply temporary solo, ghost, hide, show, context, or lock state       |
+
+Create and edit scene JSON files directly. The editor watches valid root/module
+changes and keeps the last valid render when a file is invalid.
 
 **ECS Debugging** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
 
@@ -437,17 +476,15 @@ WebXR emulator control for testing without a headset. Starter projects expose th
 - **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
 - **Diff state changes:** `ecs_snapshot({"label":"before"})` → trigger action → `ecs_snapshot({"label":"after"})` → `ecs_diff({"from":"before","to":"after"})`
 - **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system({"name":"SystemName","paused":true})` to pause one system while others run
-- **Look at an object:** `scene_get_runtime_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
+- **Look at a runtime entity:** `ecs_find_entities` → `ecs_query_entity` → use its Transform position with `xr_look_at`
 
-**Connection check — always call first:**
+**Use the status check that matches the task:**
 
-```
-mcp__iwsdk-runtime__xr_get_session_status
-```
+- Native scene/editor work: `mcp__iwsdk-runtime__scene_get_state`
+- XR device or session work: `mcp__iwsdk-runtime__xr_get_session_status`
+- Dev-server readiness: `npx iwsdk dev status`
 
-If your tool environment lazily loads MCP schemas, hydrate the `mcp__iwsdk-runtime__*` tool definitions first. If MCP tools are still deferred, use the CLI (`npx iwsdk xr status`) for the same check.
-
-If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
+The editor can be fully ready when IWER is unavailable. Do not infer server or editor readiness from XR availability.
 
 **Troubleshooting:**
 
@@ -465,7 +502,7 @@ Tools for Meta Quest device management and Meta's 3D asset library. All tools ar
 | -------------------- | ----------------------------------------------------------------------------------------------- |
 | `meta_assets_search` | Search Meta's 3D model library by text description. Returns GLB/FBX download URLs and previews. |
 
-Use `meta_assets_search` to find ready-made 3D models (e.g., "spaceship", "office chair", "fantasy sword"). Download the GLB URL to `public/gltf/` and add it to your `AssetManifest`.
+Use `meta_assets_search` to find ready-made 3D models (e.g., "spaceship", "office chair", "fantasy sword"). Download the GLB to `public/gltf/` and register it in `src/assets.ts`.
 
 **Device Management** (requires a connected Quest via USB or WiFi ADB)
 
@@ -727,21 +764,13 @@ npx tsc --noEmit
 
 Type errors will prevent systems from initializing properly, but may not show errors in the browser console. Always type check after writing code and before testing.
 
-**BEFORE starting a dev server, ALWAYS check if one is already running:**
-
-```
-mcp__iwsdk-runtime__xr_get_session_status
-```
-
-If your tool environment lazily loads MCP schemas, hydrate the `mcp__iwsdk-runtime__*` tool definitions first. If MCP tools are still deferred, use `npx iwsdk xr status` instead.
-
-If this returns a successful connection, the dev server is already running. Do NOT start another one.
+**Before starting a dev server, run `npx iwsdk dev status`.** XR emulation is optional and is not a server-readiness signal.
 
 1. **Type check first:** `npx tsc --noEmit` - fix any errors before proceeding
-2. Check IWER status first: `mcp__iwsdk-runtime__xr_get_session_status` (or `npx iwsdk xr status` if MCP schemas are still deferred)
-3. If not connected, start the CLI-managed dev server: `npm run dev`
-4. If you need the resolved runtime URL or port, run `npx iwsdk dev status`
-5. Enter XR: `mcp__iwsdk-runtime__xr_accept_session`
+2. Check the dev server: `npx iwsdk dev status`
+3. If it is not running, start it with `npm run dev`
+4. For editor work, call `mcp__iwsdk-runtime__scene_get_state`
+5. For XR testing only, call `mcp__iwsdk-runtime__xr_get_session_status`, then `mcp__iwsdk-runtime__xr_accept_session`
 6. Test interactions with controller tools
 
 ### Debugging Missing Features
@@ -750,7 +779,7 @@ If something isn't appearing or working but no errors show in console:
 
 1. **Don't use level filter for console logs** — call `mcp__iwsdk-runtime__browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
 2. **Run type check** — `npx tsc --noEmit` often reveals issues that don't appear as runtime errors
-3. **Check runtime hierarchy** — use `mcp__iwsdk-runtime__scene_get_runtime_hierarchy` to verify live entities exist and find entity indices
+3. **Check runtime entities** — use `mcp__iwsdk-runtime__ecs_find_entities` to verify live entities exist and find entity indices
 4. **Reload and check logs immediately** — some errors only appear during initialization
 5. **Inspect ECS state** — use `mcp__iwsdk-runtime__ecs_find_entities` to check if entities have expected components, then `mcp__iwsdk-runtime__ecs_query_entity` to read their values
 6. **Diff before/after** — take `mcp__iwsdk-runtime__ecs_snapshot` before and after an action to see exactly what changed (or didn't)

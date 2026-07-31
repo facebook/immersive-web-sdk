@@ -17,12 +17,13 @@ export default defineConfig({
   plugins: [
     ...(useMkcert ? [mkcert()] : []),
     iwsdkDev({
+      assetManifest: './src/assets.ts',
       emulator: {
         device: 'metaQuest3',
         activation: 'always',
         injectOnBuild: true,
       },
-      ai: { mode: 'agent', screenshotSize: { width: 500, height: 500 } },
+      ai: { screenshotSize: { width: 500, height: 500 } },
       verbose: true,
     }),
     iwsdkExampleAssets({

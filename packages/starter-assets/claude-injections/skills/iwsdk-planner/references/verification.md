@@ -5,9 +5,8 @@ equivalents exist for every command but several names differ: `xr enter` =
 `xr_accept_session`, `xr status` = `xr_get_session_status`, `ecs find` =
 `ecs_find_entities`, `ecs query` = `ecs_query_entity`, `browser logs` =
 `browser_get_console_logs`, `browser reload` = `browser_reload_page`,
-`scene hierarchy` = `scene_get_hierarchy` (native editor document) and
-`scene runtime-hierarchy` = `scene_get_runtime_hierarchy` (live Object3D tree);
-the rest map 1:1
+`scene state` = `scene_get_state`, and `scene render-file` =
+`scene_render_file`; the rest map 1:1
 (`xr_select` → `xr select`, `ecs_pause` → `ecs pause`, …). Use MCP tools only
 if your harness clearly has them connected. The sibling `iwsdk-grab` /
 `iwsdk-ray` / `iwsdk-debug` / `iwsdk-ui` skills cover the same runtime
@@ -66,8 +65,7 @@ force). It starts with the dev server; no manual browser setup.
 ```bash
 npx iwsdk ecs find --input-json '{"withComponents":["OneHandGrabbable"]}'
 npx iwsdk ecs query --input-json '{"entityIndex":3}'          # full entity dump
-npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}' # Object3D tree → uuids
-npx iwsdk scene transform --input-json '{"uuid":"<uuid>"}'     # use positionRelativeToXROrigin
+npx iwsdk scene state --raw                                      # active scene/runtime state
 npx iwsdk ecs components                                       # component registry
 npx iwsdk ecs systems                                          # system registry
 ```

@@ -71,11 +71,10 @@ managed workspace".
 
 2. Managed Playwright browser
    - Owns the workspace.
-   - Can show runtime, editor, or split view.
+   - Can show runtime or editor view.
    - Is the only browser allowed to mutate scene files through the native scene
      editor.
-   - Can be headless for autonomous agents or headed for human oversight and
-     collaboration.
+   - Can be headless for autonomous agents or headed for collaboration.
 
 3. Agent
    - Talks to the managed workspace through MCP/CLI tools.
@@ -136,9 +135,9 @@ decide which session receives a command.
 7. Developer saves. The server writes the selected scene JSON file.
 8. Developer switches to runtime or reloads the app to verify.
 
-### Semi-Manual Watched-Agent Journey
+### Collaborative Journey
 
-1. Developer starts the dev server with `ai.mode = "oversight"` or
+1. Developer starts the dev server with the default
    `ai.mode = "collaborate"`.
 2. Managed Playwright workspace is visible.
 3. Agent calls workspace/scene tools to open a scene and switch to editor view.
@@ -150,7 +149,7 @@ decide which session receives a command.
 
 ### Autonomous Agent Journey
 
-1. Developer starts dev server with default `ai.mode = "agent"` or equivalent.
+1. Developer starts the dev server with explicit `ai.mode = "agent"`.
 2. Managed Playwright workspace runs headlessly.
 3. Agent calls `workspace_get_state`.
 4. Agent opens an existing scene or creates one via tools. It must not depend on
@@ -280,7 +279,7 @@ scene file selection and creation.
 {
   "version": "iwsdk.scene.v1",
   "units": "meters",
-  "assets": [],
+  "resources": {},
   "nodes": []
 }
 ```
@@ -450,11 +449,9 @@ flows without implying that the human must use a normal browser for editor work.
 
 ### Implementation Tasks
 
-- Keep current AI modes:
+- Keep two AI modes:
+  - `collaborate` (default): managed workspace headed with manual controls.
   - `agent`: managed workspace headless.
-  - `oversight`: managed workspace headed, DevUI off.
-  - `collaborate`: managed workspace headed, DevUI or relevant manual controls
-    on.
 - Add a workspace-only launch option if product scope allows:
 
 ```ts
@@ -476,20 +473,20 @@ iwsdk workspace open
   available. It must not mount editor UI in the normal browser.
 - Document recommended usage:
   - Manual editor: managed workspace headed.
-  - Watched agent: oversight/collaborate.
+  - Human and agent collaboration: collaborate.
   - Autonomous: agent/headless.
 
 ### Testing Plan
 
 - Unit tests for option normalization:
   - `ai.mode = agent` creates headless workspace config.
-  - `ai.mode = oversight` creates headed workspace config.
-  - `ai.mode = collaborate` creates headed shared workspace config.
+  - omitted `ai.mode` and `ai.mode = collaborate` create headed shared
+    workspace config.
   - workspace-only config launches workspace without AI tool assumptions.
 - E2E tests:
-  - Agent mode starts headless workspace.
-  - Oversight/collaborate start visible workspace and suppress duplicate
-    `server.open` runtime browser where intended.
+  - Agent mode starts a headless workspace.
+  - Collaborate mode starts a visible workspace and suppresses duplicate
+    `server.open` runtime browsers.
   - Normal browser app still opens/works when configured.
 - Docs test:
   - AI modes and native editor docs agree on which browser owns editor mode.

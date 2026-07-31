@@ -429,7 +429,7 @@ entity.addComponent(PhysicsShape, {
 PhysicsShapeType.Sphere; // dimensions[0] = radius
 PhysicsShapeType.Box; // dimensions = [width, height, depth]
 PhysicsShapeType.Cylinder; // dimensions[0] = radius, dimensions[1] = height
-PhysicsShapeType.Capsules; // dimensions[0] = radius, dimensions[1] = height
+PhysicsShapeType.Capsules; // dimensions[0] = radius, dimensions[1] = total height (>= 2 * radius)
 PhysicsShapeType.ConvexHull; // Convex wrapper around mesh
 PhysicsShapeType.TriMesh; // Exact mesh geometry (expensive)
 PhysicsShapeType.Auto; // Auto-detect from Three.js geometry

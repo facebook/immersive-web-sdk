@@ -23,26 +23,15 @@ const CONTRACT_PATH = path.join(
 );
 const DOC_TARGETS = ['docs/public/skill.md', 'docs/public/go.md'];
 const REQUIRED_AGENT_GUIDE_TOOLS = [
-  'scene_list_assets',
-  'scene_get_document',
-  'scene_get_hierarchy',
-  'scene_get_selection',
+  'scene_open',
+  'scene_render_file',
+  'scene_get_state',
+  'scene_get_capabilities',
   'scene_select',
-  'scene_add_node',
-  'scene_remove_node',
-  'scene_duplicate_node',
-  'scene_set_transform',
-  'scene_apply_patch',
-  'scene_place_on',
-  'scene_look_at',
-  'scene_validate',
-  'scene_save',
-  'scene_undo',
-  'scene_redo',
-  'scene_get_logs',
   'scene_set_camera',
   'scene_screenshot',
-  'scene_compare_screenshots',
+  'scene_set_preview_visibility',
+  'scene_measure_image_regions',
 ];
 
 function extractMatches(text, regex) {
@@ -68,8 +57,12 @@ function lineNumberFor(text, offset) {
 
 function loadContractTools() {
   const source = readFileSync(CONTRACT_PATH, 'utf8');
+  const array =
+    /export\s+const\s+SCENE_MCP_TOOL_NAMES\s*=\s*\[([\s\S]*?)\]\s+as\s+const/.exec(
+      source,
+    )?.[1] ?? '';
   return new Set(
-    extractMatches(source, /name:\s*['"](scene_[a-z0-9_]+)['"]/g).map(
+    extractMatches(array, /['"](scene_[a-z0-9_]+)['"]/g).map(
       (match) => match.name,
     ),
   );

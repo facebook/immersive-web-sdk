@@ -108,6 +108,7 @@ entity.addComponent(PhysicsShape, {
 PhysicsShapeType.Sphere; // dimensions[0] = radius
 PhysicsShapeType.Box; // dimensions = [width, height, depth]
 PhysicsShapeType.Cylinder; // dimensions[0] = radius, dimensions[1] = height
+PhysicsShapeType.Capsules; // dimensions[0] = radius, dimensions[1] = total height (>= 2 * radius)
 PhysicsShapeType.ConvexHull; // Convex wrapper around mesh vertices (dimensions ignored)
 PhysicsShapeType.TriMesh; // Exact mesh triangles (dimensions ignored). Expensive; use for static only.
 PhysicsShapeType.Auto; // Auto-detect from Three.js geometry type
@@ -122,9 +123,13 @@ The `dimensions` property is a `Vec3` (`[x, y, z]`) whose meaning changes depend
 | `Sphere`     | radius          | _(unused)_      | _(unused)_      | `[0.5, 0, 0]` -- sphere r=0.5   |
 | `Box`        | width           | height          | depth           | `[1, 2, 0.5]` -- 1×2×0.5 box    |
 | `Cylinder`   | radius          | height          | _(unused)_      | `[0.3, 1.5, 0]` -- r=0.3, h=1.5 |
+| `Capsules`   | radius          | total height    | _(unused)_      | `[0.3, 1.5, 0]` -- r=0.3, h=1.5 |
 | `ConvexHull` | _(ignored)_     | _(ignored)_     | _(ignored)_     | Computed from mesh vertices     |
-| `TriMesh`    | _(ignored)_     | _(ignored)_     | _(ignored)_     | Computed from mesh triangles    |
-| `Auto`       | _(ignored)_     | _(ignored)_     | _(ignored)_     | Auto-detected from geometry     |
+
+Capsule total height is measured end to end and must be at least twice its
+radius. A total height equal to the diameter produces a sphere-length capsule.
+| `TriMesh` | _(ignored)_ | _(ignored)_ | _(ignored)_ | Computed from mesh triangles |
+| `Auto` | _(ignored)_ | _(ignored)_ | _(ignored)_ | Auto-detected from geometry |
 
 For `ConvexHull`, `TriMesh`, and `Auto`, the dimensions array is not used -- the shape is derived directly from the entity's Three.js geometry.
 

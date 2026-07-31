@@ -1,38 +1,38 @@
 {
-  "checkedAt": "2026-07-08T22:37:44.885Z",
+  "checkedAt": "2026-07-25T07:02:47.376Z",
   "command": "pnpm test:native-scene-starter-evidence",
   "files": [
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app.png",
-      "sha256": "a43d65181bea6fe5c341fc9274e4c49b15495c76a36644bf42a0fb25b905a0ad"
+      "sha256": "273a1583608427b3bd3150d678df0bc1ad549ca4b38f6097a1d23274cb44c9e1"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/editor.png",
-      "sha256": "ac3fecbf35fa01d0e236ecd19ec1e8b804b72a239cd9fd2a1f2bcd49b8c43100"
+      "sha256": "45bf4ec035edf99f2a9e0ae116b4ab120a9e00ca7d98d2394708da626285286c"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app-after-reload.png",
-      "sha256": "db42d5491e55e08f519e1edaa03d8d37542763fa367780835879774b9a2062b8"
+      "sha256": "3dad4e3cf695762fd05239d7d603dc94c9d9143d26add55e671da6c325830086"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/proof.json",
-      "sha256": "5c60242cb8cc6c1cdcc2c09394d38908718dc335ed16741872154cd04db01da3"
+      "sha256": "a23be5b53cae6e0d8315d9675a69fd7882cd5622ad9b3a37ab21b3aaa3f8e425"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app.png",
-      "sha256": "9f0dbf1dee9f1f3c4a189e10c5d7f61a06f8a74ca64368505d4a9f9b86416d0a"
+      "sha256": "eaa8333052f511d191cb9dd9f94800b5a22bcf068b16e354e73deb0d819694ea"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/editor.png",
-      "sha256": "f2d44d83745126f3df6efe2a0d6702404c6ac05e8f0e3e9209486be55a96257f"
+      "sha256": "ca4dfa7ae0937a3b45ad1b4143a60b06038aac34329e7f3bd8ef4b92bde51d09"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app-after-reload.png",
-      "sha256": "b9f4ec5ca8923f5eb6e08050fea39c387f5b387d5f35ddcc0101a0158d7b4eb9"
+      "sha256": "625596f356192152dbe0de2da29a3ac4e00dea54a1818207003a852da3df783f"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/proof.json",
-      "sha256": "7efd5a0213f6777e558782888fc0a0fc187cef5f029341bdb69c5fbeeed718dd"
+      "sha256": "2ca5ee31d8f0df5aba3248e2f73d42db83db182e5e9a7d89952c2b46aa85ee9a"
     }
   ],
   "targets": ["generated-vr", "generated-ar"]

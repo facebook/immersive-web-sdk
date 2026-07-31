@@ -8,7 +8,6 @@
 
 import { spawn } from 'child_process';
 import { createRequire } from 'module';
-import { existsSync } from 'fs';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -479,35 +478,7 @@ async function getFreePort() {
 }
 
 async function launchChromium() {
-  try {
-    return await chromium.launch({ headless: true });
-  } catch (error) {
-    const executablePath = findSystemChromium();
-    if (executablePath == null) {
-      throw error;
-    }
-    return chromium.launch({
-      args: ['--no-sandbox'],
-      executablePath,
-      headless: true,
-    });
-  }
-}
-
-function findSystemChromium() {
-  const candidates =
-    process.platform === 'darwin'
-      ? [
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        ]
-      : [
-          '/usr/bin/google-chrome',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium',
-          '/usr/bin/chromium-browser',
-        ];
-  return candidates.find((candidate) => existsSync(candidate));
+  return chromium.launch({ headless: true });
 }
 
 function sleep(ms) {

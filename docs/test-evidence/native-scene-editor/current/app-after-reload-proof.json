@@ -6,22 +6,22 @@
     {
       "components": ["LevelTag", "PanelUI", "Transform", "Visibility"],
       "id": "table-1",
-      "index": 11,
+      "index": 12,
       "panelUI": {
         "config": "updated-panel.json",
         "maxHeight": 1,
         "maxWidth": 2
       },
       "position": [0.35, 0, -0.2],
-      "transformParentIndex": 1
+      "transformParentIndex": 11
     },
     {
       "components": ["LevelTag", "Transform"],
       "id": "vase-1",
-      "index": 12,
+      "index": 13,
       "panelUI": null,
       "position": [0.4, 0.6, 0.2],
-      "transformParentIndex": 1
+      "transformParentIndex": 11
     }
   ],
   "nodeCount": 2,

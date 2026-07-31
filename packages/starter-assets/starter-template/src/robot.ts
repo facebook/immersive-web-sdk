@@ -5,15 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  AudioUtils,
-  createComponent,
-  createSystem,
-  Pressed,
-  Vector3,
-} from '@iwsdk/core';
-
-export const Robot = createComponent('Robot', {});
+import { AudioUtils, createSystem, Pressed, Vector3 } from '@iwsdk/core';
+import { Robot } from './robot-component.js';
 
 export class RobotSystem extends createSystem({
   robot: { required: [Robot] },
@@ -32,9 +25,13 @@ export class RobotSystem extends createSystem({
 
   update() {
     this.queries.robot.entities.forEach((entity) => {
-      this.player.head.getWorldPosition(this.lookAtTarget);
       const spinnerObject = entity.object3D!;
-      spinnerObject.getWorldPosition(this.vec3);
+      this.player.head.updateWorldMatrix(true, false);
+      spinnerObject.updateWorldMatrix(true, false);
+      const headMatrix = this.player.head.matrixWorld.elements;
+      const spinnerMatrix = spinnerObject.matrixWorld.elements;
+      this.lookAtTarget.set(headMatrix[12], headMatrix[13], headMatrix[14]);
+      this.vec3.set(spinnerMatrix[12], spinnerMatrix[13], spinnerMatrix[14]);
       this.lookAtTarget.y = this.vec3.y;
       spinnerObject.lookAt(this.lookAtTarget);
     });

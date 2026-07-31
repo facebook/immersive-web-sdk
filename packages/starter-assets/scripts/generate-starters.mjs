@@ -104,6 +104,20 @@ function readTemplate() {
   );
 }
 
+function readAssetsTemplate() {
+  return fs.readFileSync(
+    path.join(STARTER_DIR, 'src/assets.template.ts'),
+    'utf8',
+  );
+}
+
+function readComponentsTemplate() {
+  return fs.readFileSync(
+    path.join(STARTER_DIR, 'src/components.template.ts'),
+    'utf8',
+  );
+}
+
 function applyTemplateBlocks(source, { mode }) {
   const directive =
     /(?:\/\*|<!--)\s*@template:(if\s+mode='(ar|vr|browser)'|else|end)\s*(?:\*\/|-->)/g;
@@ -209,7 +223,19 @@ async function transpileDir(srcRoot, outRoot) {
     const buf = await fsp.readFile(cur, 'utf8');
     if (isTs) {
       const result = sucraseTransform(buf, { transforms: ['typescript'] });
-      await fsp.writeFile(outPath, result.code);
+      const code =
+        base === 'vite.config.ts'
+          ? result.code
+              .replace(
+                "assetManifest: './src/assets.ts'",
+                "assetManifest: './src/assets.js'",
+              )
+              .replace(
+                "componentManifest: './src/components.ts'",
+                "componentManifest: './src/components.js'",
+              )
+          : result.code;
+      await fsp.writeFile(outPath, code);
     } else if (isHtml) {
       const fixed = buf.replace(
         /(src\s*=\s*["]?[^"']*?)\.(ts|tsx)(["]?)/g,
@@ -293,6 +319,14 @@ async function generateTsVariant(v) {
   const indexDst = path.join(dest, 'src', 'index.ts');
   await ensureDir(path.dirname(indexDst));
   await fsp.writeFile(indexDst, composed);
+  await fsp.writeFile(
+    path.join(dest, 'src', 'assets.ts'),
+    applyTemplateBlocks(readAssetsTemplate(), { mode }),
+  );
+  await fsp.writeFile(
+    path.join(dest, 'src', 'components.ts'),
+    applyTemplateBlocks(readComponentsTemplate(), { mode }),
+  );
   // Remove original variant-specific index files and template
   const dir = path.join(dest, 'src');
   const entries = await fsp.readdir(dir).catch(() => []);
@@ -302,22 +336,37 @@ async function generateTsVariant(v) {
       .map((n) => removeIfExists(path.join(dir, n))),
   );
   await removeIfExists(path.join(dest, 'src', 'index.template.ts'));
+  await removeIfExists(path.join(dest, 'src', 'assets.template.ts'));
+  await removeIfExists(path.join(dest, 'src', 'components.template.ts'));
+  const sceneDir = path.join(dest, 'public', 'scenes');
+  for (const sceneMode of ['ar', 'browser', 'vr']) {
+    if (sceneMode !== mode) {
+      await removeIfExists(
+        path.join(sceneDir, `${sceneMode}.iwsdk.scene.json`),
+      );
+    }
+  }
   if (mode === 'browser') {
     await removeIfExists(path.join(dest, 'src', 'panel.ts'));
+    await removeIfExists(path.join(dest, 'src', 'mouselook.ts'));
+    await removeIfExists(path.join(dest, 'src', 'robot.ts'));
+    await removeIfExists(path.join(dest, 'src', 'robot-component.ts'));
+    await removeIfExists(path.join(dest, 'ui', 'welcome.uikitml'));
+    await removeIfExists(path.join(dest, 'public', 'audio'));
+    await removeIfExists(path.join(dest, 'public', 'textures'));
   } else {
     await removeIfExists(path.join(dest, 'src', 'mouselook.ts'));
-    await removeIfExists(
-      path.join(dest, 'public', 'scenes', 'browser.iwsdk.scene.json'),
+  }
+  if (mode !== 'browser') {
+    const welcomePath = path.join(dest, 'ui', 'welcome.uikitml');
+    const welcomeTemplate = await fsp.readFile(welcomePath, 'utf8');
+    await fsp.writeFile(
+      welcomePath,
+      applyTemplateBlocks(welcomeTemplate, { mode })
+        .replace(/^[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n'),
     );
   }
-  const welcomePath = path.join(dest, 'ui', 'welcome.uikitml');
-  const welcomeTemplate = await fsp.readFile(welcomePath, 'utf8');
-  await fsp.writeFile(
-    welcomePath,
-    applyTemplateBlocks(welcomeTemplate, { mode })
-      .replace(/^[ \t]+$/gm, '')
-      .replace(/\n{3,}/g, '\n\n'),
-  );
   await cleanTsconfig(dest);
   try {
     const readmePath = path.join(dest, 'README.md');

@@ -13,101 +13,121 @@
       "PhysicsShape": 5,
       "RayInteractable": 4
     },
-    "hierarchyNameCount": 35,
+    "hierarchyNameCount": 36,
     "performance": {
-      "gotoMs": 332,
-      "runtimeReadyMs": 81,
-      "canvasReadyMs": 3,
-      "screenshotCaptureMs": 125
+      "gotoMs": 4197,
+      "runtimeReadyMs": 156,
+      "canvasReadyMs": 17,
+      "screenshotCaptureMs": 183
     },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
-      "sampledPixels": 97,
+      "sampledPixels": 74,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:49639/",
+  "baseUrl": "http://127.0.0.1:51822/",
   "editor": {
     "performance": {
-      "gotoMs": 146,
-      "worldReadyMs": 286,
-      "screenshotCaptureMs": 125
+      "gotoMs": 336,
+      "worldReadyMs": 2446,
+      "screenshotCaptureMs": 140
     },
     "sceneDocument": { "assetCount": 3, "nodeCount": 2 },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
-      "sampledPixels": 250,
+      "sampledPixels": 193,
       "uniqueColors": 32
     },
     "viewport": {
       "assetLoads": [
         {
           "assetId": "environment-desk",
-          "loadedAt": 1783550276361,
+          "loadedAt": 1784972570381,
           "status": "loaded",
           "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
         },
         {
           "assetId": "robot",
-          "loadedAt": 1783550276246,
+          "loadedAt": 1784972570551,
           "status": "loaded",
           "url": "/iwsdk-assets/robot/robot.gltf"
         },
         {
           "assetId": "plant-sansevieria",
-          "loadedAt": 1783550276217,
+          "loadedAt": 1784972570748,
           "status": "loaded",
           "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
         }
       ],
-      "meshCount": 42,
+      "meshCount": 41,
       "nodeObjectCount": 5,
       "objectHierarchy": [
         {
           "assetId": "environment-desk",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
         {
           "assetId": null,
-          "fallback": "no-gltf-asset",
+          "contentType": "group",
+          "fallback": null,
           "helperType": null,
           "localPosition": [0, 0, 0],
           "nodeId": "spawnable-objects",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "sourceNodeId": "spawnable-objects",
           "worldPosition": [0, 0, 0]
         },
         {
           "assetId": "robot",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, 0.9455, 2],
           "nodeId": "robot",
           "parentNodeId": "spawnable-objects",
+          "primitiveType": null,
+          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "sourceNodeId": "robot",
           "worldPosition": [0, 0.9455, 2]
         },
         {
           "assetId": "plant-sansevieria",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [-1, 1.4114, 1.5066],
           "nodeId": "plant",
           "parentNodeId": "spawnable-objects",
+          "primitiveType": null,
+          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "sourceNodeId": "plant",
           "worldPosition": [-1, 1.4114, 1.5066]
         },
         {
           "assetId": "robot",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [1, 0.8207, 0.9333],
           "nodeId": "robot-one-hand",
           "parentNodeId": "spawnable-objects",
+          "primitiveType": null,
+          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "sourceNodeId": "robot-one-hand",
           "worldPosition": [1, 0.8207, 0.9333]
         }
       ],
@@ -118,15 +138,15 @@
   },
   "performance": {
     "app": {
-      "gotoMs": 332,
-      "runtimeReadyMs": 81,
-      "canvasReadyMs": 3,
-      "screenshotCaptureMs": 125
+      "gotoMs": 4197,
+      "runtimeReadyMs": 156,
+      "canvasReadyMs": 17,
+      "screenshotCaptureMs": 183
     },
     "editor": {
-      "gotoMs": 146,
-      "worldReadyMs": 286,
-      "screenshotCaptureMs": 125
+      "gotoMs": 336,
+      "worldReadyMs": 2446,
+      "screenshotCaptureMs": 140
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -136,7 +156,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 3592
+    "totalMs": 10689
   },
   "scene": "public/scenes/physics.iwsdk.scene.json",
   "target": "physics"

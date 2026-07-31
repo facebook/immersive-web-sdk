@@ -25,7 +25,7 @@ export default defineConfig({
       emulator: {
         device: 'metaQuest3',
       },
-      ai: {}, // enables AI in agent mode with defaults
+      ai: {}, // enables the visible collaborate workspace by default
       verbose: true, // shows startup details (optional, helpful for first run)
     }),
   ],
@@ -46,9 +46,9 @@ Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which l
 
 When the server starts, several things happen automatically:
 
-1. Your normal browser opens with the app (for manual development)
-2. A headless Playwright browser launches in the background (for the AI agent)
-3. Canonical project-local MCP configs are synced for the configured AI tools
+1. A visible Playwright workspace opens at the clean application URL
+2. Runtime and editor views share that one managed browser session
+3. Canonical project-local MCP configs are synchronized
 4. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
 
 If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx iwsdk dev status`. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
@@ -75,36 +75,36 @@ In environments that lazily load MCP tool schemas, discovery is not the same as 
 
 ### Cursor
 
-Cursor reads from `.cursor/mcp.json`. Set `tools` to include `'cursor'`:
+Cursor reads from `.cursor/mcp.json`.
 
-```typescript
-ai: { tools: ['cursor'] },
+```bash
+npx iwsdk adapter sync --tools cursor
 ```
 
 ### GitHub Copilot
 
 Copilot reads from `.vscode/mcp.json`:
 
-```typescript
-ai: { tools: ['copilot'] },
+```bash
+npx iwsdk adapter sync --tools copilot
 ```
 
 ### Codex
 
 Codex reads from `.codex/config.toml`:
 
-```typescript
-ai: { tools: ['codex'] },
+```bash
+npx iwsdk adapter sync --tools codex
 ```
 
-You can also list multiple tools if you use more than one:
+You can select multiple adapters if you use more than one tool:
 
-```typescript
-ai: { tools: ['claude', 'cursor'] },
+```bash
+npx iwsdk adapter sync --tools claude,cursor
 ```
 
-::: tip Important: tools default
-By default, `tools` is set to `['claude']`, which means only `.mcp.json` (for Claude) is generated. If you use Cursor, Copilot, or Codex, you must add them to the `tools` array — otherwise no config file will be generated for your tool and it won't discover the MCP server.
+::: tip Adapter default
+`npx iwsdk adapter sync` writes every supported adapter. Use `--tools` only when you want to limit the generated configs.
 :::
 
 ## First Interaction
@@ -115,7 +115,7 @@ Once your AI tool is connected, try these prompts:
 
 > "Take a screenshot of the current scene."
 
-The agent will call `browser_screenshot` and show you what the headless browser sees.
+The agent will call `browser_screenshot` and show you what the managed browser sees.
 
 **Accept the XR session:**
 
@@ -142,6 +142,6 @@ ai: {
 
 ## What's Next
 
-- [Modes](./modes) — Learn about oversight and collaborate modes
-- [MCP Tools Reference](./mcp-tools) — See all 52 tools available to the agent
+- [Modes](./modes) — Learn about collaborate and agent modes
+- [MCP Tools Reference](./mcp-tools) — See all 39 tools available to the agent
 - [Workflows](./workflows) — Common agent workflow patterns

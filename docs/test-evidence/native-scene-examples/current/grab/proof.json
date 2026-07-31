@@ -12,51 +12,51 @@
       "RayInteractable": 5,
       "TwoHandsGrabbable": 1
     },
-    "hierarchyNameCount": 35,
+    "hierarchyNameCount": 36,
     "performance": {
-      "gotoMs": 262,
-      "runtimeReadyMs": 68,
-      "canvasReadyMs": 47,
-      "screenshotCaptureMs": 112
+      "gotoMs": 3714,
+      "runtimeReadyMs": 177,
+      "canvasReadyMs": 12,
+      "screenshotCaptureMs": 153
     },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
-      "sampledPixels": 82,
+      "sampledPixels": 56,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:49515/",
+  "baseUrl": "http://127.0.0.1:51724/",
   "editor": {
     "performance": {
-      "gotoMs": 152,
-      "worldReadyMs": 232,
-      "screenshotCaptureMs": 135
+      "gotoMs": 329,
+      "worldReadyMs": 1102,
+      "screenshotCaptureMs": 182
     },
     "sceneDocument": { "assetCount": 3, "nodeCount": 5 },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
-      "sampledPixels": 250,
+      "sampledPixels": 193,
       "uniqueColors": 32
     },
     "viewport": {
       "assetLoads": [
         {
           "assetId": "environment-desk",
-          "loadedAt": 1783550272647,
+          "loadedAt": 1784972560088,
           "status": "loaded",
           "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
         },
         {
           "assetId": "robot",
-          "loadedAt": 1783550272709,
+          "loadedAt": 1784972560138,
           "status": "loaded",
           "url": "/iwsdk-assets/robot/robot.gltf"
         },
         {
           "assetId": "plant-sansevieria",
-          "loadedAt": 1783550272522,
+          "loadedAt": 1784972560160,
           "status": "loaded",
           "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
         }
@@ -66,47 +66,67 @@
       "objectHierarchy": [
         {
           "assetId": "environment-desk",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
         {
           "assetId": "robot",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, 0.95, -2],
           "nodeId": "robot-distance-grab",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "sourceNodeId": "robot-distance-grab",
           "worldPosition": [0, 0.95, -2]
         },
         {
           "assetId": "plant-sansevieria",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0.65, 0.95, -1.65],
           "nodeId": "plant-one-hand",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "sourceNodeId": "plant-one-hand",
           "worldPosition": [0.65, 0.95, -1.65]
         },
         {
           "assetId": "plant-sansevieria",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [1.05, 0.95, -1.65],
           "nodeId": "plant-two-hands",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "sourceNodeId": "plant-two-hands",
           "worldPosition": [1.05, 0.95, -1.65]
         },
         {
           "assetId": "robot",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [-0.7, 0.95, -1.65],
           "nodeId": "robot-rotate-only",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "sourceNodeId": "robot-rotate-only",
           "worldPosition": [-0.7, 0.95, -1.65]
         }
       ],
@@ -117,15 +137,15 @@
   },
   "performance": {
     "app": {
-      "gotoMs": 262,
-      "runtimeReadyMs": 68,
-      "canvasReadyMs": 47,
-      "screenshotCaptureMs": 112
+      "gotoMs": 3714,
+      "runtimeReadyMs": 177,
+      "canvasReadyMs": 12,
+      "screenshotCaptureMs": 153
     },
     "editor": {
-      "gotoMs": 152,
-      "worldReadyMs": 232,
-      "screenshotCaptureMs": 135
+      "gotoMs": 329,
+      "worldReadyMs": 1102,
+      "screenshotCaptureMs": 182
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -135,7 +155,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 3496
+    "totalMs": 9665
   },
   "scene": "public/scenes/grab.iwsdk.scene.json",
   "target": "grab"

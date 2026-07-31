@@ -1,0 +1,4 @@
+interface:
+  display_name: 'IWSDK Scene Composer'
+  short_description: 'Compose editable IWSDK scenes from text or images'
+  default_prompt: 'Use $iwsdk-scene-composer to compose this request as an editable, validated IWSDK scene.'

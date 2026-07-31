@@ -2,21 +2,24 @@
   "assetLoads": [
     {
       "assetId": "table",
-      "loadedAt": 1783129512934,
+      "loadedAt": 1784935033028,
       "status": "loaded",
       "url": "/assets/table.gltf"
     },
     {
       "assetId": "vase",
-      "loadedAt": 1783129512944,
+      "loadedAt": 1784935033033,
       "status": "loaded",
       "url": "/assets/vase.gltf"
     }
   ],
   "canvasHeight": 720,
   "canvasWidth": 1280,
+  "cameraHeight": null,
   "cameraLookAt": [0, 0, 0],
   "cameraPosition": [4, 3, 4],
+  "cameraProjection": "perspective",
+  "cameraViewId": null,
   "contributions": {
     "count": 0,
     "items": [],
@@ -33,6 +36,7 @@
       "viewport.overlay": 0
     }
   },
+  "documentHash": "sha256:2ad55d7fb0a37413b03e761179f93dcd3e4c49049bd8167c1fbd121d0888cf40",
   "layout": {
     "canvas": {
       "bottom": 720,
@@ -196,8 +200,8 @@
       "zIndex": "4"
     },
     "toolbar": {
-      "bottom": 30,
-      "height": 30,
+      "bottom": 31,
+      "height": 31,
       "left": 250,
       "pointerEvents": "auto",
       "position": "absolute",
@@ -227,20 +231,28 @@
   "objectHierarchy": [
     {
       "assetId": "table",
+      "contentType": "model",
       "fallback": null,
       "helperType": null,
       "localPosition": [0.35, 0, -0.2],
       "nodeId": "table-1",
       "parentNodeId": null,
+      "primitiveType": null,
+      "runtimeHash": "sha256:2ad55d7fb0a37413b03e761179f93dcd3e4c49049bd8167c1fbd121d0888cf40",
+      "sourceNodeId": "table-1",
       "worldPosition": [0.35, 0, -0.2]
     },
     {
       "assetId": "vase",
+      "contentType": "model",
       "fallback": null,
       "helperType": null,
       "localPosition": [0.4, 0.6, 0.2],
       "nodeId": "vase-1",
       "parentNodeId": null,
+      "primitiveType": null,
+      "runtimeHash": "sha256:2ad55d7fb0a37413b03e761179f93dcd3e4c49049bd8167c1fbd121d0888cf40",
+      "sourceNodeId": "vase-1",
       "worldPosition": [0.4, 0.6, 0.2]
     }
   ],
@@ -273,6 +285,84 @@
     "webgl": true
   },
   "renderer": "iwsdk-webgl",
+  "rendererCamera": {
+    "isOrthographicCamera": false,
+    "isPerspectiveCamera": true,
+    "type": "PerspectiveCamera"
+  },
+  "renderStats": {
+    "available": true,
+    "calls": 3,
+    "frameTimeSamplesMs": [3.9, 0.1, 0.1, 5.3, 0.2, 0.2],
+    "lines": 50,
+    "environment": {
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+      "devicePixelRatio": 1,
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+      "renderer": "IWSDK WebGL"
+    },
+    "geometryCount": 2,
+    "points": 0,
+    "programs": 4,
+    "materialCount": 2,
+    "meshCount": 2,
+    "nodeCount": 2,
+    "objectCount": 6,
+    "shadowCasters": 2,
+    "textures": 2,
+    "triangles": 24,
+    "visibleNodeIds": ["table-1", "vase-1"],
+    "worldBounds": {
+      "max": [2.0471, 1, 1.4971],
+      "min": [-1.3471, 0, -1.8971],
+      "size": [3.3941, 1, 3.3941]
+    }
+  },
+  "referenceMode": "hidden",
+  "rendererGlobals": {
+    "background": null,
+    "clearAlpha": 1,
+    "clearColor": "#101418",
+    "exposure": 1,
+    "fog": null,
+    "shadows": false,
+    "toneMapping": 0
+  },
+  "resourceState": {
+    "cache": [
+      {
+        "assetId": "table",
+        "error": null,
+        "loadedAt": 1784935033028,
+        "status": "loaded",
+        "url": "/assets/table.gltf"
+      },
+      {
+        "assetId": "vase",
+        "error": null,
+        "loadedAt": 1784935033033,
+        "status": "loaded",
+        "url": "/assets/vase.gltf"
+      }
+    ],
+    "proof": [
+      {
+        "assetId": "table",
+        "loadedAt": 1784935033028,
+        "status": "loaded",
+        "url": "/assets/table.gltf"
+      },
+      {
+        "assetId": "vase",
+        "loadedAt": 1784935033033,
+        "status": "loaded",
+        "url": "/assets/vase.gltf"
+      }
+    ],
+    "staged": null
+  },
+  "reviewLens": "final",
+  "runtimeHash": "sha256:2ad55d7fb0a37413b03e761179f93dcd3e4c49049bd8167c1fbd121d0888cf40",
   "hoverBounds": null,
   "selectionBounds": null,
   "selectedRuntime": {
@@ -286,6 +376,7 @@
     "materialCount": 0,
     "meshCount": 0,
     "nodeId": null,
+    "primitiveType": null,
     "objectCount": 0,
     "ready": false
   },

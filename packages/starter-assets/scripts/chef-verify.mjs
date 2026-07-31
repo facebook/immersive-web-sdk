@@ -18,6 +18,27 @@ const ROOT = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT, 'dist');
 const RECIPES_DIR = path.join(ROOT, 'dist', 'recipes');
 
+const REQUIRED_RECIPE_EDITS = {
+  'base-claude-config.recipe.json': [
+    '.claude/skills/iwsdk-scene-composer/SKILL.md',
+    '.claude/skills/iwsdk-scene-composer/agents/openai.yaml',
+    '.claude/skills/iwsdk-scene-composer/references/composition-patterns.md',
+    '.claude/skills/iwsdk-scene-composer/references/image-intake.md',
+    '.claude/skills/iwsdk-scene-composer/references/review-and-stop.md',
+    '.claude/skills/iwsdk-scene-composer/references/scene-format.md',
+    '.claude/skills/iwsdk-scene-composer/references/text-intake.md',
+  ],
+  'base-codex-config.recipe.json': [
+    '.agents/skills/iwsdk-scene-composer/SKILL.md',
+    '.agents/skills/iwsdk-scene-composer/agents/openai.yaml',
+    '.agents/skills/iwsdk-scene-composer/references/composition-patterns.md',
+    '.agents/skills/iwsdk-scene-composer/references/image-intake.md',
+    '.agents/skills/iwsdk-scene-composer/references/review-and-stop.md',
+    '.agents/skills/iwsdk-scene-composer/references/scene-format.md',
+    '.agents/skills/iwsdk-scene-composer/references/text-intake.md',
+  ],
+};
+
 const MIME_TYPES = {
   '.css': 'text/css',
   '.gltf': 'model/gltf+json',
@@ -121,6 +142,11 @@ async function main() {
         distServer.baseUrl,
       );
       try {
+        for (const requiredEdit of REQUIRED_RECIPE_EDITS[f] || []) {
+          if (recipe.edits?.[requiredEdit] == null) {
+            throw new Error(`missing required edit ${requiredEdit}`);
+          }
+        }
         const result = await buildProject([recipe], undefined, {
           allowUrl: true,
         });

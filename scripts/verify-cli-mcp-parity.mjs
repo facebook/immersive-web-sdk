@@ -29,6 +29,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -55,7 +56,6 @@ const DEFAULT_INSTALL_RETRIES = 2;
 const DEFAULT_DEV_TIMEOUT_MS = 120000;
 const NUMBER_TOLERANCE = 2e-2;
 const TAB_CHANGE_WARNING = 'WARNING: Active browser tab changed';
-const INVALID_UUID = '00000000-0000-0000-0000-000000000000';
 const HARNESS_RUNTIME_ENV = {
   IWSDK_DISABLE_MKCERT: '1',
   IWSDK_RUNTIME_TRACE: '1',
@@ -65,6 +65,7 @@ const NODE_BINARY = 'node';
 let normalizationWorkspaceRoots = [];
 let runtimeContract = null;
 let runtimeTransport = null;
+const reservedParityPorts = new Set();
 
 async function loadRuntimeContract() {
   if (runtimeContract) {
@@ -624,6 +625,9 @@ async function prepareExampleClone(targetRoot, packageName) {
   const packageJsonPath = path.join(targetRoot, 'package.json');
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
   packageJson.name = packageName;
+  // Keep temporary parity runtimes isolated from existing Vite dev servers.
+  packageJson.scripts['dev:runtime'] =
+    `vite --port ${await reserveAvailablePort()} --strictPort`;
   rewriteFileDependencies(packageJson.dependencies);
   rewriteFileDependencies(packageJson.devDependencies);
   await writeFile(
@@ -631,6 +635,30 @@ async function prepareExampleClone(targetRoot, packageName) {
     JSON.stringify(packageJson, null, 2) + '\n',
     'utf8',
   );
+}
+
+async function reserveAvailablePort() {
+  while (true) {
+    const port = await new Promise((resolve, reject) => {
+      const server = createServer();
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        if (address == null || typeof address === 'string') {
+          server.close();
+          reject(new Error('Failed to reserve a parity dev-server port'));
+          return;
+        }
+        server.close((error) =>
+          error == null ? resolve(address.port) : reject(error),
+        );
+      });
+    });
+    if (!reservedParityPorts.has(port)) {
+      reservedParityPorts.add(port);
+      return port;
+    }
+  }
 }
 
 async function installWorkspace(workspaceRoot, label) {
@@ -683,23 +711,6 @@ async function waitFor(predicate, label, timeoutMs = 30000) {
 async function warmBrowser(workspaceRoot, label) {
   console.log(`[${label}] warming managed browser`);
   await waitForBrowserCommandReady(workspaceRoot, label);
-  const viewOutcome = await callCliToolOutcome(
-    workspaceRoot,
-    'workspace_set_view',
-    { view: 'runtime' },
-  );
-  assert(
-    viewOutcome.ok,
-    `[${label}] workspace_set_view failed: ${JSON.stringify(viewOutcome.error)}`,
-  );
-  await waitFor(async () => {
-    const state = await callCliToolOutcome(
-      workspaceRoot,
-      'workspace_get_state',
-      {},
-    );
-    return state.ok && state.result.runtime?.ready === true;
-  }, `${label} runtime workspace view`);
   await runBrowserWarmup({
     runAttempt: async () => {
       const outcome = await callCliToolOutcome(
@@ -806,16 +817,11 @@ const SMOKE_STEPS = [
     expectTabMetadata: true,
   },
   {
-    name: 'scene_get_runtime_hierarchy',
-    args: () => ({ maxDepth: 1 }),
+    name: 'scene_get_state',
+    args: () => ({}),
     expectTabMetadata: true,
   },
   { name: 'browser_screenshot', args: () => ({ target: 'runtime' }) },
-  {
-    name: 'scene_get_object_transform',
-    args: () => ({ uuid: INVALID_UUID }),
-    expectError: true,
-  },
   { name: 'browser_reload_page', args: () => ({}) },
 ];
 

@@ -6,8 +6,6 @@
  */
 
 import {
-  AssetManifest,
-  AssetType,
   PanelUI,
   PokeInteractable,
   RayInteractable,
@@ -17,20 +15,8 @@ import {
 } from '@iwsdk/core';
 import * as horizonKit from '@pmndrs/uikit-horizon';
 import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
+import assets from './assets.js';
 import { SettingsSystem } from './panel.js';
-
-const assets: AssetManifest = {
-  switchSound: {
-    url: './audio/switch.mp3',
-    type: AssetType.Audio,
-    priority: 'background',
-  },
-  webxrLogo: {
-    url: './textures/webxr.jpg',
-    type: AssetType.Texture,
-    priority: 'critical',
-  },
-};
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,

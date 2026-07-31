@@ -474,24 +474,45 @@ through `World.create({ level })`:
 
 ```json
 {
-  "id": "dynamic-box",
-  "asset": "box",
-  "transform": { "position": [0, 1, -1] },
-  "components": {
-    "PhysicsBody": { "state": "DYNAMIC" },
-    "PhysicsShape": {
-      "shape": "Box",
-      "dimensions": [1, 1, 1],
-      "density": 1,
-      "friction": 0.5,
-      "restitution": 0
-    },
-    "PhysicsManipulation": {
-      "force": [0, 10, 0],
-      "linearVelocity": [0, 0, 0],
-      "angularVelocity": [0, 0, 0]
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "resources": {
+    "materials": [
+      {
+        "id": "dynamic-box-material",
+        "model": "standard",
+        "baseColor": "#4f7fc8",
+        "roughness": 0.65,
+        "metalness": 0
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "dynamic-box",
+      "content": {
+        "type": "primitive",
+        "geometry": { "type": "box", "size": [1, 1, 1] },
+        "material": "dynamic-box-material"
+      },
+      "transform": { "position": [0, 1, -1] },
+      "components": {
+        "PhysicsBody": { "state": "DYNAMIC" },
+        "PhysicsShape": {
+          "shape": "Box",
+          "dimensions": [1, 1, 1],
+          "density": 1,
+          "friction": 0.5,
+          "restitution": 0
+        },
+        "PhysicsManipulation": {
+          "force": [0, 10, 0],
+          "linearVelocity": [0, 0, 0],
+          "angularVelocity": [0, 0, 0]
+        }
+      }
     }
-  }
+  ]
 }
 ```
 

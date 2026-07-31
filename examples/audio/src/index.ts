@@ -5,32 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { AssetManifest, AssetType, SessionMode, World } from '@iwsdk/core';
+import { SessionMode, World } from '@iwsdk/core';
 import * as horizonKit from '@pmndrs/uikit-horizon';
 import { LogInIcon, RectangleGogglesIcon } from '@pmndrs/uikit-lucide';
+import assets from './assets.js';
+import components from './components.js';
 import { SettingsSystem } from './panel.js';
 import { SpinSystem } from './spin.js';
 
-const assets: AssetManifest = {
-  switchSound: {
-    url: './audio/switch.mp3',
-    type: AssetType.Audio,
-    priority: 'background',
-  },
-  song: {
-    url: './audio/beepboop.mp3',
-    type: AssetType.Audio,
-    priority: 'background',
-  },
-  webxrLogo: {
-    url: './textures/webxr.jpg',
-    type: AssetType.Texture,
-    priority: 'critical',
-  },
-};
-
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
   assets,
+  components,
   xr: {
     sessionMode: SessionMode.ImmersiveVR,
     features: {

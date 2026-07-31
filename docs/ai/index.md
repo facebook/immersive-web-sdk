@@ -11,7 +11,7 @@ IWSDK is built from the ground up for AI-assisted immersive web development. AI 
 When you enable AI in your Vite config and start the app through the `iwsdk` CLI, the stack sets up three things automatically:
 
 1. **[Playwright](https://playwright.dev/) Browser** — A managed Chromium instance that loads your app and provides screenshots and console capture for the AI agent.
-2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 52 tools for controlling the emulated XR runtime, composing native scenes, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
+2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 39 tools for controlling the emulated XR runtime, composing native scenes, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
 3. **MCP Config Files** — `iwsdk adapter sync` writes workspace-based config files (for example `.mcp.json` for Claude) so your AI tool discovers that server on startup.
 
 ```text
@@ -48,17 +48,18 @@ The runtime-first adapter sync can also register optional MCP servers alongside 
 
 These appear automatically in the generated MCP config files when the corresponding packages are present in `node_modules`.
 
-## Three Modes
+## Two Modes
 
-IWSDK supports three usage modes, each optimized for a different workflow:
+IWSDK supports two usage modes built on the same managed runtime/editor workspace:
 
-| Mode            | Description                             | Playwright               | DevUI | Browser                   |
-| --------------- | --------------------------------------- | ------------------------ | ----- | ------------------------- |
-| **Agent**       | AI works autonomously in the background | Headless, fixed viewport | Off   | Normal browser opens      |
-| **Oversight**   | You watch the AI work in real time      | Visible, resizable       | Off   | Playwright is the browser |
-| **Collaborate** | You and the AI share the same session   | Visible, resizable       | On    | Playwright is the browser |
+| Mode            | Description                             | Playwright               | DevUI |
+| --------------- | --------------------------------------- | ------------------------ | ----- |
+| **Collaborate** | You and the AI share the same workspace | Visible, resizable       | On    |
+| **Agent**       | AI works autonomously in the background | Headless, fixed viewport | Off   |
 
-Agent mode is the default — the AI operates in a headless browser optimized for screenshots while you develop in your normal browser. Switch to oversight or collaborate when you need visibility or hands-on interaction with the agent's session.
+Collaborate mode is the default. It opens one visible managed browser containing
+the runtime preview and editor, so the dev server does not also open a separate
+normal-browser window. Select agent mode explicitly for unattended headless work.
 
 See [Modes](./modes) for the full deep dive.
 
@@ -78,6 +79,6 @@ See [MCP Tools Reference](./mcp-tools) for the complete list.
 ## Next Steps
 
 - [Getting Started](./getting-started) — Set up AI in 5 minutes
-- [Modes](./modes) — Understand agent, oversight, and collaborate
-- [MCP Tools Reference](./mcp-tools) — All 52 tools documented
+- [Modes](./modes) — Understand collaborate and agent modes
+- [MCP Tools Reference](./mcp-tools) — All 39 tools documented
 - [Workflows](./workflows) — Practical agent workflow patterns

@@ -37,7 +37,7 @@ features:
     link: /ai/modes
     linkText: Learn more
   - title: 🛠️ Powerful AI Tooling
-    details: Full XR emulation control, native scene composition, scene graph inspection, and ECS-level debugging. 52 tools covering everything from input simulation to saved scene edits.
+    details: Full XR emulation control, native scene composition, scene graph inspection, and ECS-level debugging. 39 tools covering everything from input simulation to scene-file validation and runtime inspection.
     link: /ai/mcp-tools
     linkText: Learn more
 ---

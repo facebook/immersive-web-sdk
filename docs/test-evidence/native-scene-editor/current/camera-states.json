@@ -1,110 +1,119 @@
 {
   "screenshots": [
     {
-      "hash": "5fe9f02ba451d7b902f7abe8a72e993f44a63bc093656a50c2404cc1b181af67",
-      "imageDataLength": 20436,
+      "hash": "68a2003a2b990fb2f80f210aea6d34b709c69bc11068621ac4d16d9311c630d1",
+      "imageDataLength": 6468,
       "mimeType": "image/png",
       "view": "right",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [8, 2, 0],
+        "projection": "perspective",
         "view": "right"
       }
     },
     {
-      "hash": "bab36e4b5ddc9b5e096bd28dae0d16dd321b5dc221f699dd85acd47f8bbd2ae9",
-      "imageDataLength": 9772,
+      "hash": "158c4cb0cce5cfa4bef6e8efbb9dc4b81a94ae58aa937fa8e06f41a1d34b3a49",
+      "imageDataLength": 7100,
       "mimeType": "image/png",
       "view": "top",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [0, 8, 0],
+        "projection": "perspective",
         "view": "top"
       }
     },
     {
-      "hash": "b540e4c2f7805fab92a674a4d3a49a3d520e4eaca3e7ac1605d324cdb1ac9b94",
-      "imageDataLength": 20256,
+      "hash": "45ee8ecbe345fe617b9cc68e4069353ec2d3d506458da31b1b974a59d2c7e7d7",
+      "imageDataLength": 6336,
       "mimeType": "image/png",
       "view": "front",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [0, 2, 8],
+        "projection": "perspective",
         "view": "front"
       }
     },
     {
-      "hash": "e5dcc16b34f57287c0810644410ce5165cd0e1a37de928adece96a21ce47a89c",
-      "imageDataLength": 20636,
+      "hash": "15e3fa156ba0c44b36f8a95a587f8055d65cc233f7fb3be345bea37f0afc845e",
+      "imageDataLength": 6696,
       "mimeType": "image/png",
       "view": "back",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [0, 2, -8],
+        "projection": "perspective",
         "view": "back"
       }
     },
     {
-      "hash": "2237b12cc49dea4c25e170433aff8bf7800d2aea72ac3a27e7258271f15b5a1b",
-      "imageDataLength": 20392,
+      "hash": "16b4786ddcdd422728105a040753956e1a0098ee0506d14353e846bcdf9e00ee",
+      "imageDataLength": 6228,
       "mimeType": "image/png",
       "view": "left",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [-8, 2, 0],
+        "projection": "perspective",
         "view": "left"
       }
     },
     {
-      "hash": "5fe9f02ba451d7b902f7abe8a72e993f44a63bc093656a50c2404cc1b181af67",
-      "imageDataLength": 20436,
+      "hash": "68a2003a2b990fb2f80f210aea6d34b709c69bc11068621ac4d16d9311c630d1",
+      "imageDataLength": 6468,
       "mimeType": "image/png",
       "view": "right",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [8, 2, 0],
+        "projection": "perspective",
         "view": "right"
       }
     },
     {
-      "hash": "89b2dabcb3bb15a53c346ca9fffb3c662122c871b6db6f3251d62af7be2686b6",
-      "imageDataLength": 34652,
+      "hash": "117d2f7e803a8b92a1fcc4ac7218efbddf7da6e2f2e3332f0a1ef7afcc559b5e",
+      "imageDataLength": 6304,
       "mimeType": "image/png",
       "view": "quarter",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [4, 3, 4],
+        "projection": "perspective",
         "view": "quarter"
       }
     },
     {
-      "hash": "33eff37d152fa9315d3d9c5690b2bccfa937f1870df786dbdc8ecf46b9a6dedc",
-      "imageDataLength": 35072,
+      "hash": "97c8c925a4eb0a9bdbf989983ac96d1128e94eccc88b06bd88d833480486e8f6",
+      "imageDataLength": 6352,
       "mimeType": "image/png",
       "view": "orbit",
       "camera": {
         "fov": 50,
         "lookAt": [0, 0, 0],
         "position": [-4.0022, 3, 4.0022],
+        "projection": "perspective",
         "view": "orbit"
       }
     },
     {
-      "hash": "cc9ab1c4b592e593a39b5b55791e56b1cdb0a0de48cd60efb90ceda17c62c14e",
-      "imageDataLength": 38124,
+      "hash": "f1b754640e66030645963a77a4a0dea31d3899a31c6e042f6232f49c13d103eb",
+      "imageDataLength": 8196,
       "mimeType": "image/png",
       "view": "custom",
       "camera": {
         "fov": 35,
         "lookAt": [0, 0.5, 0],
         "position": [3, 4, 5],
+        "projection": "perspective",
         "view": "custom"
       }
     }

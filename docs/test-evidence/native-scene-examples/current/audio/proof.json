@@ -10,104 +10,128 @@
       "PanelUI": 1,
       "RayInteractable": 4
     },
-    "hierarchyNameCount": 35,
+    "hierarchyNameCount": 36,
     "performance": {
-      "gotoMs": 268,
-      "runtimeReadyMs": 299,
-      "canvasReadyMs": 2,
-      "screenshotCaptureMs": 120
+      "gotoMs": 4829,
+      "runtimeReadyMs": 462,
+      "canvasReadyMs": 4,
+      "screenshotCaptureMs": 163
     },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
-      "sampledPixels": 129,
+      "sampledPixels": 95,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:49439/",
+  "baseUrl": "http://127.0.0.1:51631/",
   "editor": {
     "performance": {
-      "gotoMs": 139,
-      "worldReadyMs": 228,
-      "screenshotCaptureMs": 157
+      "gotoMs": 404,
+      "worldReadyMs": 1224,
+      "screenshotCaptureMs": 136
     },
     "sceneDocument": { "assetCount": 2, "nodeCount": 6 },
     "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
     "screenshotStats": {
       "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
-      "sampledPixels": 250,
+      "sampledPixels": 193,
       "uniqueColors": 32
     },
     "viewport": {
       "assetLoads": [
         {
           "assetId": "environment-desk",
-          "loadedAt": 1783550268889,
+          "loadedAt": 1784972550816,
           "status": "loaded",
           "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
         },
         {
           "assetId": "robot",
-          "loadedAt": 1783550269039,
+          "loadedAt": 1784972550867,
           "status": "loaded",
           "url": "/iwsdk-assets/robot/robot.gltf"
         }
       ],
-      "meshCount": 61,
+      "meshCount": 66,
       "nodeObjectCount": 6,
       "objectHierarchy": [
         {
           "assetId": null,
+          "contentType": "group",
           "fallback": "environment-light-helper",
           "helperType": "environment-light",
           "localPosition": [0, 0, 0],
           "nodeId": "level",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "level",
           "worldPosition": [0, 0, 0]
         },
         {
           "assetId": "environment-desk",
+          "contentType": "model",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
         {
           "assetId": "robot",
-          "fallback": null,
-          "helperType": null,
+          "contentType": "model",
+          "fallback": "audio-source-helper",
+          "helperType": "audio-source",
           "localPosition": [0, 0.95, -1.8],
           "nodeId": "robot-center",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "robot-center",
           "worldPosition": [0, 0.95, -1.8]
         },
         {
           "assetId": "robot",
-          "fallback": null,
-          "helperType": null,
+          "contentType": "model",
+          "fallback": "audio-source-helper",
+          "helperType": "audio-source",
           "localPosition": [-0.5, 0.95, -1.8],
           "nodeId": "robot-left",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "robot-left",
           "worldPosition": [-0.5, 0.95, -1.8]
         },
         {
           "assetId": "robot",
-          "fallback": null,
-          "helperType": null,
+          "contentType": "model",
+          "fallback": "audio-source-helper",
+          "helperType": "audio-source",
           "localPosition": [0.5, 0.95, -1.8],
           "nodeId": "robot-right",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "robot-right",
           "worldPosition": [0.5, 0.95, -1.8]
         },
         {
           "assetId": null,
-          "fallback": "no-gltf-asset",
+          "contentType": null,
+          "fallback": null,
           "helperType": null,
           "localPosition": [0, 1.6, -2.2],
           "nodeId": "welcome-panel",
           "parentNodeId": null,
+          "primitiveType": null,
+          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "sourceNodeId": "welcome-panel",
           "worldPosition": [0, 1.6, -2.2]
         }
       ],
@@ -118,15 +142,15 @@
   },
   "performance": {
     "app": {
-      "gotoMs": 268,
-      "runtimeReadyMs": 299,
-      "canvasReadyMs": 2,
-      "screenshotCaptureMs": 120
+      "gotoMs": 4829,
+      "runtimeReadyMs": 462,
+      "canvasReadyMs": 4,
+      "screenshotCaptureMs": 163
     },
     "editor": {
-      "gotoMs": 139,
-      "worldReadyMs": 228,
-      "screenshotCaptureMs": 157
+      "gotoMs": 404,
+      "worldReadyMs": 1224,
+      "screenshotCaptureMs": 136
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -136,7 +160,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 3714
+    "totalMs": 10717
   },
   "scene": "public/scenes/audio.iwsdk.scene.json",
   "target": "audio"

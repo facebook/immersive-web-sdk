@@ -24,18 +24,19 @@ xr_get_session_status → if not sessionActive → xr_accept_session
 
 ### Step 2: Locate the target
 
-**For scene objects:** Find by name using `scene_get_runtime_hierarchy`, then get the UUID.
+**For scene objects:** Find a live entity by name or interaction component, then
+query its component data.
 
 ```
-scene_get_runtime_hierarchy → find node matching target name
+ecs_find_entities({namePattern: target}) → ecs_query_entity(entityIndex)
 ```
 
 **For UI elements:** UI buttons/elements are children of PanelUI entities and may not have names by default. To locate precisely:
 
 1. Read the UIKITML source file to find the element's `id` (e.g., `<button id="xr-button">`)
 2. Find the system or code that loads the panel via `PanelDocument`
-3. Add `.name = "element-id"` on the Object3D returned by `getElementById()` — this is harmless and makes it discoverable
-4. Reload, then find it by name in `scene_get_runtime_hierarchy`
+3. Add an application-level test hook or stable ECS tag for the element
+4. Reload, then query that stable runtime identity
 
 If the element already has a name in the hierarchy, skip straight to getting its transform.
 
@@ -43,10 +44,11 @@ If the object is not found, report the available named objects and stop.
 
 ### Step 3: Get its transform
 
-Get the target's world position using its UUID from step 2.
+Read the target's Transform position from the queried entity or application test
+hook from step 2.
 
 ```
-scene_get_object_transform(uuid) → use positionRelativeToXROrigin
+ecs_query_entity(entityIndex) → Transform.position
 ```
 
 ### Step 4: Aim the controller

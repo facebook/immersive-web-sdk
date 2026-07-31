@@ -1,53 +1,70 @@
 {
   "version": "iwsdk.scene.v1",
   "units": "meters",
-  "assets": [
-    {
-      "id": "environment-desk",
-      "name": "Environment Desk",
-      "type": "gltf",
-      "uri": "/iwsdk-assets/environment-desk/environmentDesk.gltf",
-      "bounds": {
-        "min": [-862.1762084960938, -704.1123046875, -423.6421203613281],
-        "max": [862.17626953125, 871.5792236328125, 117.95475769042969]
-      }
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [
+        0.2423,
+        0.6172,
+        0.8308,
+        1
+      ],
+      "equator": [
+        0.6584,
+        0.7084,
+        0.7913,
+        1
+      ],
+      "ground": [
+        0.807,
+        0.7758,
+        0.7454,
+        1
+      ],
+      "intensity": 1
     },
-    {
-      "id": "plant-sansevieria",
-      "name": "Plant Sansevieria",
-      "type": "gltf",
-      "uri": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf",
-      "bounds": {
-        "min": [-0.14591170847415924, -0.0010799765586853027, -0.18947772681713104],
-        "max": [0.14463400840759277, 0.4789590835571289, 0.13743270933628082]
-      }
-    },
-    {
-      "id": "robot",
-      "name": "Robot",
-      "type": "gltf",
-      "uri": "/iwsdk-assets/robot/robot.gltf",
-      "bounds": {
-        "min": [-29.710256576538086, -22.996440887451172, -73.18901824951172],
-        "max": [29.710256576538086, 68.02915954589844, 28.88426399230957]
-      }
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [
+        0.6902,
+        0.749,
+        0.7843,
+        1
+      ],
+      "equator": [
+        0.6584,
+        0.7084,
+        0.7913,
+        1
+      ],
+      "ground": [
+        0.807,
+        0.7758,
+        0.7454,
+        1
+      ],
+      "intensity": 1
     }
-  ],
-  "componentSchemas": [
-    {
-      "id": "Robot",
-      "source": "app",
-      "fields": {}
-    }
-  ],
+  },
+  "resources": {},
   "nodes": [
     {
       "id": "environment",
       "name": "Environment",
-      "asset": "environment-desk",
+      "content": {
+        "type": "asset",
+        "asset": "environment-desk"
+      },
       "transform": {
-        "position": [0, -0.106921583, 0],
-        "rotationDeg": [0, 180, 0]
+        "position": [
+          0,
+          -0.106921583,
+          0
+        ],
+        "rotationDeg": [
+          0,
+          180,
+          0
+        ]
       },
       "components": {
         "LocomotionEnvironment": {}
@@ -56,9 +73,16 @@
     {
       "id": "plant-sansevieria",
       "name": "Plant Sansevieria",
-      "asset": "plant-sansevieria",
+      "content": {
+        "type": "asset",
+        "asset": "plant-sansevieria"
+      },
       "transform": {
-        "position": [1.2, 0.85, -1.8]
+        "position": [
+          1.2,
+          0.85,
+          -1.8
+        ]
       },
       "components": {
         "RayInteractable": {},
@@ -70,9 +94,16 @@
     {
       "id": "robot",
       "name": "Robot",
-      "asset": "robot",
+      "content": {
+        "type": "asset",
+        "asset": "robot"
+      },
       "transform": {
-        "position": [-1.2, 0.95, -1.8],
+        "position": [
+          -1.2,
+          0.95,
+          -1.8
+        ],
         "scale": 0.5
       },
       "components": {
@@ -89,8 +120,16 @@
       "id": "welcome-panel",
       "name": "Welcome Panel",
       "transform": {
-        "position": [0, 1.6, -2],
-        "scale": [1.8, 1, 1]
+        "position": [
+          0,
+          1.6,
+          -2
+        ],
+        "scale": [
+          1.8,
+          1,
+          1
+        ]
       },
       "components": {
         "PanelUI": {

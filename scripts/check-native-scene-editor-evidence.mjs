@@ -6,7 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import path from 'path';
@@ -397,7 +396,11 @@ function assertSceneDocument(assert, label, scene) {
   assert(isObject(scene), `${label} must be an object`);
   assert(scene.version === 'iwsdk.scene.v1', `${label} must be iwsdk.scene.v1`);
   assert(scene.units === 'meters', `${label} must use meters`);
-  assert(Array.isArray(scene.assets), `${label} must include assets`);
+  assert(isObject(scene.resources), `${label} must include resources`);
+  assert(
+    Array.isArray(scene.resources?.assets),
+    `${label} resources must include assets`,
+  );
   assert(Array.isArray(scene.nodes), `${label} must include nodes`);
 }
 
@@ -731,7 +734,7 @@ function buildManifest(evidenceDir, checks) {
 
   return {
     browser: {
-      chromeVersion: getChromeVersion(),
+      engine: 'playwright-chromium',
     },
     commandLog: {
       argv: process.argv.slice(2),
@@ -790,32 +793,6 @@ function getPackageVersions() {
       return [name, pkg.version ?? null];
     }),
   );
-}
-
-function getChromeVersion() {
-  const candidates =
-    process.platform === 'darwin'
-      ? [
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        ]
-      : [
-          'google-chrome',
-          'google-chrome-stable',
-          'chromium',
-          'chromium-browser',
-        ];
-
-  for (const command of candidates) {
-    const result = spawnSync(command, ['--version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (result.status === 0) {
-      return (result.stdout || result.stderr).trim();
-    }
-  }
-  return null;
 }
 
 function printFailures(failures) {

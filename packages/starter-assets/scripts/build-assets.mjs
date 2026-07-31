@@ -19,6 +19,7 @@ const PKG_ROOT = path.resolve(__dirname, '..');
 const VARIANTS_SRC = path.join(PKG_ROOT, 'variants-src');
 const DIST_ROOT = path.join(PKG_ROOT, 'dist');
 const DIST_ASSETS = path.join(DIST_ROOT, 'assets');
+const CODEX_SKILL_NAMES = ['iwsdk-scene-composer'];
 
 const VARIANT_RE = /^starter-(vr|ar|browser)-manual-(ts|js)$/;
 
@@ -610,6 +611,21 @@ async function generateCodexConfigRecipe(version) {
     '',
   ].join('\n');
   edits['.codex/config.toml'] = { lines: tomlContent.split(/\r?\n/) };
+
+  const skillsRoot = path.join(PKG_ROOT, 'claude-injections', 'skills');
+  for (const skillName of CODEX_SKILL_NAMES) {
+    const skillRoot = path.join(skillsRoot, skillName);
+    if (!fs.existsSync(skillRoot)) {
+      throw new Error(`Codex skill source is missing: ${skillRoot}`);
+    }
+    for (const rel of await readAllFiles(skillRoot)) {
+      const content = await fsp.readFile(path.join(skillRoot, rel), 'utf8');
+      const outputPath = path
+        .join('.agents', 'skills', skillName, rel)
+        .replaceAll('\\', '/');
+      edits[outputPath] = { lines: content.split(/\r?\n/) };
+    }
+  }
 
   return { name: 'base-codex-config', version, edits };
 }

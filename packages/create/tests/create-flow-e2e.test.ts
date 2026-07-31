@@ -6,10 +6,10 @@
  */
 
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
@@ -399,6 +399,9 @@ describe('create-iwsdk scene flow E2E', () => {
             `${target}.iwsdk.scene.json`,
           );
           const scene = JSON.parse(await readFile(sceneFile, 'utf8'));
+          const generatedScenes = (
+            await readdir(path.join(appRoot, 'public', 'scenes'))
+          ).filter((file) => file.endsWith('.iwsdk.scene.json'));
           const viteConfig = await readFile(
             path.join(
               appRoot,
@@ -410,13 +413,6 @@ describe('create-iwsdk scene flow E2E', () => {
             path.join(appRoot, 'src', `index.${language}`),
             'utf8',
           );
-          const mouseLookSource =
-            target === 'browser'
-              ? await readFile(
-                  path.join(appRoot, 'src', `mouselook.${language}`),
-                  'utf8',
-                )
-              : undefined;
 
           expect(packageJson.devDependencies).toHaveProperty(
             '@iwsdk/vite-plugin-dev',
@@ -428,13 +424,29 @@ describe('create-iwsdk scene flow E2E', () => {
             units: 'meters',
             version: 'iwsdk.scene.v1',
           });
+          expect(generatedScenes).toEqual([`${target}.iwsdk.scene.json`]);
           expect(source).toContain(`./scenes/${target}.iwsdk.scene.json`);
+          if (target === 'browser') {
+            expect(viteConfig).toContain('workspace: { enabled: true }');
+          } else {
+            expect(viteConfig).toContain('ai: {}');
+            expect(viteConfig).not.toContain("mode: 'agent'");
+          }
           assertGeneratedSettings(source, viteConfig, result.stdout, target);
-          if (mouseLookSource != null) {
-            expect(mouseLookSource).toContain('stopImmediatePropagation');
-            expect(mouseLookSource).toMatch(
-              /addEventListener\(['"]pointerdown['"], onPointerDown, true\)/,
-            );
+          if (target === 'browser') {
+            expect(scene).toMatchObject({ nodes: [], resources: {} });
+            for (const demoPath of [
+              path.join('src', `mouselook.${language}`),
+              path.join('src', `robot.${language}`),
+              path.join('src', `panel.${language}`),
+              path.join('ui', 'welcome.uikitml'),
+              path.join('public', 'audio'),
+              path.join('public', 'textures'),
+            ]) {
+              await expect(
+                stat(path.join(appRoot, demoPath)),
+              ).rejects.toMatchObject({ code: 'ENOENT' });
+            }
           }
           expect(viteConfig).toContain('iwsdkDev');
           expect(viteConfig).not.toMatch(
@@ -471,7 +483,10 @@ describe('create-iwsdk scene flow E2E', () => {
           expect(editorShell.statusCode).toBe(200);
           expect(editorShell.body).toContain('IWSDK Scene Editor');
           expect(editorShell.body).toContain(
-            `/__iwsdk/editor/document?scene=public/scenes/${target}.iwsdk.scene.json`,
+            'documentUrl: "/__iwsdk/editor/document"',
+          );
+          expect(editorShell.body).not.toContain(
+            `scene=public/scenes/${target}.iwsdk.scene.json`,
           );
         }
       }
@@ -685,6 +700,19 @@ describe('create-iwsdk scene flow E2E', () => {
             });
             await stat(path.join(appRoot, 'node_modules'));
 
+            if (language === 'ts') {
+              const typecheck = await runCommand(
+                'npx',
+                ['tsc', '--noEmit'],
+                appRoot,
+                { timeoutMs: 180000 },
+              );
+              expect(
+                typecheck.exitCode,
+                typecheck.stderr + typecheck.stdout,
+              ).toBe(0);
+            }
+
             const build = await runCommand('npm', ['run', 'build'], appRoot, {
               timeoutMs: 180000,
             });
@@ -740,17 +768,42 @@ describe('create-iwsdk scene flow E2E', () => {
                 expect(runtimeSession.aiMode).toBeUndefined();
                 expect(runtimeSession.browser).toMatchObject({
                   commandReady: false,
-                  connected: false,
-                  status: 'waiting_for_connection',
+                  connected: true,
+                  status: 'connected',
                 });
+                if (language === 'ts') {
+                  const workspaceStatus = await runCommand(
+                    'npx',
+                    ['iwsdk', 'dev', 'status'],
+                    appRoot,
+                    { timeoutMs: 60000 },
+                  );
+                  expect(
+                    workspaceStatus.exitCode,
+                    workspaceStatus.stderr + workspaceStatus.stdout,
+                  ).toBe(0);
+                  expect(JSON.parse(workspaceStatus.stdout)).toMatchObject({
+                    data: {
+                      state: {
+                        session: {
+                          browser: {
+                            connected: true,
+                            status: 'connected',
+                          },
+                        },
+                      },
+                    },
+                  });
+                }
               } else {
-                expect(runtimeSession.aiMode).toBe('agent');
+                expect(runtimeSession.aiMode).toBe('collaborate');
               }
 
               if (language === 'ts') {
                 await smokeGeneratedAppEditorFlow({
                   appRoot,
                   baseUrl,
+                  language,
                   target,
                   scenePath,
                 });
@@ -771,11 +824,13 @@ describe('create-iwsdk scene flow E2E', () => {
 async function smokeGeneratedAppEditorFlow({
   appRoot,
   baseUrl,
+  language,
   target,
   scenePath,
 }: {
   appRoot: string;
   baseUrl: string;
+  language: 'js' | 'ts';
   target: ExperienceTarget;
   scenePath: string;
 }) {
@@ -785,6 +840,8 @@ async function smokeGeneratedAppEditorFlow({
     await readFile(path.join(appRoot, scenePath), 'utf8'),
   ) as { assets?: unknown[]; nodes?: unknown[] };
   const expectedNodeCount = (originalScene.nodes?.length ?? 0) + 1;
+  const addedNodeId =
+    target === 'browser' ? 'scaffold-added-group' : 'scaffold-added-plant';
   const assetIds = getSceneAssetIds(originalScene);
   const evidenceDir =
     CREATE_E2E_EVIDENCE_DIR == null
@@ -806,11 +863,22 @@ async function smokeGeneratedAppEditorFlow({
 
   try {
     await appPage.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
-    await appPage.waitForFunction(
-      () => Boolean((window as any).FRAMEWORK_MCP_RUNTIME),
-      undefined,
-      { timeout: 90000 },
-    );
+    try {
+      await appPage.waitForFunction(
+        () => Boolean((window as any).FRAMEWORK_MCP_RUNTIME),
+        undefined,
+        { timeout: 30000 },
+      );
+    } catch (error) {
+      throw new Error(
+        `generated ${target}/${language} runtime did not initialize\n${JSON.stringify(
+          appDiagnostics.snapshot(),
+          null,
+          2,
+        )}`,
+        { cause: error },
+      );
+    }
     await appPage.waitForFunction(
       () => document.querySelectorAll('canvas').length > 0,
       undefined,
@@ -820,25 +888,29 @@ async function smokeGeneratedAppEditorFlow({
       appPage,
       evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
     );
-    const renderDeadline = Date.now() + 30000;
-    while (
-      appScreenshotStats.uniqueColors <= 8 &&
-      Date.now() < renderDeadline
-    ) {
-      await appPage.waitForTimeout(250);
-      appScreenshotStats = await getPageScreenshotStats(
-        appPage,
-        evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
-      );
+    if (target !== 'browser') {
+      const renderDeadline = Date.now() + 30000;
+      while (
+        appScreenshotStats.uniqueColors <= 8 &&
+        Date.now() < renderDeadline
+      ) {
+        await appPage.waitForTimeout(250);
+        appScreenshotStats = await getPageScreenshotStats(
+          appPage,
+          evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
+        );
+      }
+      expect(
+        appScreenshotStats.uniqueColors,
+        `generated ${target} app should render a nonblank frame\n${JSON.stringify(
+          appDiagnostics.snapshot(),
+          null,
+          2,
+        )}`,
+      ).toBeGreaterThan(8);
+    } else {
+      expect(appScreenshotStats.sampledPixels).toBeGreaterThan(0);
     }
-    expect(
-      appScreenshotStats.uniqueColors,
-      `generated ${target} app should render a nonblank frame\n${JSON.stringify(
-        appDiagnostics.snapshot(),
-        null,
-        2,
-      )}`,
-    ).toBeGreaterThan(8);
 
     await editorPage.goto(`${baseUrl}/__iwsdk/editor?scene=${scenePath}`, {
       waitUntil: 'domcontentloaded',
@@ -875,24 +947,30 @@ async function smokeGeneratedAppEditorFlow({
     );
     expect(editorScreenshotStats.uniqueColors).toBeGreaterThan(8);
 
-    const toolResult = await editorPage.evaluate(async () => {
+    const toolResult = await editorPage.evaluate(async (experienceTarget) => {
       const runtime = (window as any).IWSDK_SCENE_EDITOR.runtime;
+      const node =
+        experienceTarget === 'browser'
+          ? {
+              content: { type: 'group' },
+              id: 'scaffold-added-group',
+              name: 'Scaffold Added Group',
+            }
+          : {
+              content: {
+                asset: 'plant-sansevieria',
+                type: 'asset',
+              },
+              id: 'scaffold-added-plant',
+              name: 'Scaffold Added Plant',
+              transform: {
+                position: [0.25, 0.2, -1.25],
+                rotationDeg: [0, 20, 0],
+                scale: 1.1,
+              },
+            };
       await runtime.dispatch('scene_add_node', {
-        node: {
-          asset: 'plant-sansevieria',
-          id: 'scaffold-added-plant',
-          metadata: {
-            validation: {
-              allowFloating: true,
-            },
-          },
-          name: 'Scaffold Added Plant',
-          transform: {
-            position: [0.25, 0.2, -1.25],
-            rotationDeg: [0, 20, 0],
-            scale: 1.1,
-          },
-        },
+        node,
       });
       await runtime.dispatch('scene_set_camera', { view: 'top' });
       const screenshots = [];
@@ -909,7 +987,7 @@ async function smokeGeneratedAppEditorFlow({
       const saved = await runtime.dispatch('scene_save', {});
       const documentResult = await runtime.dispatch('scene_get_document', {});
       return { documentResult, saved, screenshots, validation };
-    });
+    }, target);
 
     expect(toolResult.saved).toMatchObject({
       dirty: false,
@@ -919,9 +997,7 @@ async function smokeGeneratedAppEditorFlow({
       (toolResult.documentResult as { document: { nodes: unknown[] } }).document
         .nodes,
     ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'scaffold-added-plant' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ id: addedNodeId })]),
     );
     expect(
       (
@@ -976,9 +1052,7 @@ async function smokeGeneratedAppEditorFlow({
       return response.json();
     }, scenePublicUrl);
     expect(appScene.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'scaffold-added-plant' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ id: addedNodeId })]),
     );
 
     const savedScene = JSON.parse(
@@ -986,13 +1060,21 @@ async function smokeGeneratedAppEditorFlow({
     );
     expect(savedScene.nodes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          asset: 'plant-sansevieria',
-          id: 'scaffold-added-plant',
-          transform: expect.objectContaining({
-            position: [0.25, 0.2, -1.25],
-          }),
-        }),
+        target === 'browser'
+          ? expect.objectContaining({
+              content: { type: 'group' },
+              id: addedNodeId,
+            })
+          : expect.objectContaining({
+              content: {
+                asset: 'plant-sansevieria',
+                type: 'asset',
+              },
+              id: addedNodeId,
+              transform: expect.objectContaining({
+                position: [0.25, 0.2, -1.25],
+              }),
+            }),
       ]),
     );
     const savedComponentIds = getSceneComponentIds(savedScene);
@@ -1016,7 +1098,11 @@ async function smokeGeneratedAppEditorFlow({
         ? undefined
         : path.join(evidenceDir, 'app-after-reload.png'),
     );
-    expect(appAfterReloadScreenshotStats.uniqueColors).toBeGreaterThan(8);
+    if (target === 'browser') {
+      expect(appAfterReloadScreenshotStats.sampledPixels).toBeGreaterThan(0);
+    } else {
+      expect(appAfterReloadScreenshotStats.uniqueColors).toBeGreaterThan(8);
+    }
 
     const appSnapshot = appDiagnostics.snapshot();
     const editorSnapshot = editorDiagnostics.snapshot();
@@ -1723,16 +1809,16 @@ async function waitForRuntimeComponentCount(
   return lastCount;
 }
 
-function getSceneAssetIds(scene: { assets?: unknown[] }): string[] {
+function getSceneAssetIds(scene: { nodes?: unknown[] }): string[] {
   return Array.from(
     new Set(
-      (scene.assets ?? [])
-        .map((asset) =>
-          typeof asset === 'object' &&
-          asset != null &&
-          'id' in asset &&
-          typeof asset.id === 'string'
-            ? asset.id
+      flattenSceneNodes(scene.nodes ?? [])
+        .map((node) =>
+          typeof node?.content === 'object' &&
+          node.content != null &&
+          node.content.type === 'asset' &&
+          typeof node.content.asset === 'string'
+            ? node.content.asset
             : undefined,
         )
         .filter((assetId): assetId is string => assetId != null),
@@ -1779,33 +1865,9 @@ function stripComponentPrefix(componentName: string): string {
 }
 
 async function launchChromium() {
-  try {
-    return await chromium.launch({ headless: true });
-  } catch (error) {
-    const executablePath = findSystemChromium();
-    if (executablePath == null) {
-      throw error;
-    }
-    return chromium.launch({
-      args: ['--no-sandbox'],
-      executablePath,
-      headless: true,
-    });
-  }
-}
-
-function findSystemChromium(): string | undefined {
-  const candidates =
-    process.platform === 'darwin'
-      ? [
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        ]
-      : [
-          '/usr/bin/google-chrome',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium',
-          '/usr/bin/chromium-browser',
-        ];
-  return candidates.find((candidate) => existsSync(candidate));
+  return chromium.launch({
+    args: ['--enable-webgl', '--use-angle=metal'],
+    channel: 'chromium',
+    headless: true,
+  });
 }

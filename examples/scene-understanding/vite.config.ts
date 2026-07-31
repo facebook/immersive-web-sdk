@@ -20,7 +20,7 @@ export default defineConfig({
         activation: 'always',
         injectOnBuild: true,
       },
-      ai: { mode: 'agent', screenshotSize: { width: 500, height: 500 } },
+      ai: { screenshotSize: { width: 500, height: 500 } },
       verbose: true,
     }),
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
