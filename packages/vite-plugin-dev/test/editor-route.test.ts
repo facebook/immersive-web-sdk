@@ -635,6 +635,48 @@ describe('native editor route middleware', () => {
     expect(response.body).toContain('window.__IWSDK_EDITOR_CONFIG =');
   });
 
+  test('serves development over cached self-signed HTTPS by default', async () => {
+    const plugin = iwsdkDev();
+    const cacheDir = path.join(tempRoot, 'vite-cache');
+    const userConfig: {
+      cacheDir: string;
+      root: string;
+      server?: { https?: { cert?: string; key?: string } };
+    } = { cacheDir, root: tempRoot };
+
+    await plugin.config?.(userConfig as never, {
+      command: 'serve',
+      mode: 'development',
+    });
+
+    expect(userConfig.server?.https?.cert).toContain('BEGIN CERTIFICATE');
+    expect(userConfig.server?.https?.key).toContain('BEGIN RSA PRIVATE KEY');
+    await vi.waitFor(async () => {
+      await expect(
+        readFile(path.join(cacheDir, 'iwsdk-https', '_cert.pem'), 'utf8'),
+      ).resolves.toContain('BEGIN CERTIFICATE');
+    });
+  });
+
+  test('preserves explicit HTTP and custom HTTPS configuration', async () => {
+    const httpPlugin = iwsdkDev({ https: false });
+    const httpConfig: { server?: { https?: unknown } } = {};
+    await httpPlugin.config?.(httpConfig as never, {
+      command: 'serve',
+      mode: 'development',
+    });
+    expect(httpConfig.server?.https).toBeUndefined();
+
+    const customHttps = { cert: 'custom-cert', key: 'custom-key' };
+    const customPlugin = iwsdkDev();
+    const customConfig = { server: { https: customHttps } };
+    await customPlugin.config?.(customConfig as never, {
+      command: 'serve',
+      mode: 'development',
+    });
+    expect(customConfig.server.https).toBe(customHttps);
+  });
+
   test('every auto-opened managed workspace suppresses Vite auto-open', () => {
     const plugin = iwsdkDev({ workspace: { enabled: true } });
     const userConfig: { server?: { open?: boolean } } = {};
@@ -651,18 +693,44 @@ describe('native editor route middleware', () => {
 
   test('keeps the TTF generator worker out of Vite dependency optimization', () => {
     const plugin = iwsdkDev();
-    const userConfig: { optimizeDeps?: { exclude?: string[] } } = {
-      optimizeDeps: { exclude: ['existing-dependency'] },
+    const userConfig: {
+      optimizeDeps?: { exclude?: string[]; include?: string[] };
+    } = {
+      optimizeDeps: {
+        exclude: ['existing-exclusion'],
+        include: ['existing-inclusion'],
+      },
     };
 
     plugin.config?.(userConfig as never, {} as never);
 
     expect(userConfig.optimizeDeps?.exclude).toEqual(
+      expect.arrayContaining(['existing-exclusion', '@zappar/msdf-generator']),
+    );
+    expect(userConfig.optimizeDeps?.include).toEqual(
       expect.arrayContaining([
-        'existing-dependency',
-        '@zappar/msdf-generator',
+        'existing-inclusion',
+        '@iwsdk/scene-composition',
+        'three-viewport-gizmo',
+        'three/examples/jsm/controls/OrbitControls.js',
+        'three/examples/jsm/controls/TransformControls.js',
       ]),
     );
+  });
+
+  test('deduplicates Three.js without replacing user resolution settings', () => {
+    const plugin = iwsdkDev();
+    const userConfig: { resolve?: { dedupe?: string[] } } = {
+      resolve: { dedupe: ['existing-dependency'] },
+    };
+
+    plugin.config?.(userConfig as never, {} as never);
+    plugin.config?.(userConfig as never, {} as never);
+
+    expect(userConfig.resolve?.dedupe).toEqual([
+      'existing-dependency',
+      'three',
+    ]);
   });
 
   test('does not launch a workspace for AI disabled with IWER', () => {
@@ -983,6 +1051,56 @@ describe('native editor route middleware', () => {
         }),
       ],
     });
+  });
+
+  test('lists public project files within the requested schema constraints', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    const audioRoot = path.join(tempRoot, 'public', 'audio');
+    await mkdir(path.join(audioRoot, 'nested'), { recursive: true });
+    await mkdir(path.join(tempRoot, 'public', 'textures'), { recursive: true });
+    await writeFile(path.join(audioRoot, 'voice.mp3'), 'mp3', 'utf8');
+    await writeFile(
+      path.join(audioRoot, 'nested', 'ambient.wav'),
+      'wav',
+      'utf8',
+    );
+    await writeFile(path.join(audioRoot, 'notes.txt'), 'text', 'utf8');
+    await writeFile(
+      path.join(tempRoot, 'public', 'textures', 'sky.png'),
+      'png',
+      'utf8',
+    );
+
+    const listed = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/files?subfolder=audio&fileTypes=.mp3,.wav',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(listed.statusCode).toBe(200);
+    expect(JSON.parse(listed.body)).toEqual({
+      files: [
+        { path: './audio/nested/ambient.wav', size: 3 },
+        { path: './audio/voice.mp3', size: 3 },
+      ],
+    });
+
+    const outside = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/files?subfolder=..',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(outside.statusCode).toBe(400);
+
+    const unmanaged = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/files?subfolder=audio',
+    );
+    expect(unmanaged.statusCode).toBe(403);
   });
 
   test('rejects scene-file mutations through the managed list endpoint', async () => {

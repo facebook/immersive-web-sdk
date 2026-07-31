@@ -1,0 +1,55 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "resources": {},
+  "components": {
+    "IBLTexture": {
+      "src": "venice-sunset"
+    },
+    "DomeTexture": {
+      "src": "venice-sunset"
+    }
+  },
+  "nodes": [
+    {
+      "id": "anchor",
+      "name": "Anchor",
+      "content": {
+        "type": "asset",
+        "asset": "scene-understanding-anchor"
+      },
+      "transform": {
+        "position": [0, 1, -1]
+      },
+      "components": {
+        "RayInteractable": {},
+        "DistanceGrabbable": {
+          "movementMode": "MoveFromTarget"
+        },
+        "XRAnchor": {}
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "content": {
+        "type": "asset",
+        "asset": "scene-understanding-welcome-panel"
+      },
+      "transform": {
+        "position": [0, 1.5, -1.4],
+        "scale": 0.4
+      },
+      "components": {
+        "RayInteractable": {},
+        "PokeInteractable": {},
+        "ScreenSpace": {
+          "top": "20px",
+          "left": "20px",
+          "height": "50%",
+          "width": "25vw"
+        }
+      }
+    }
+  ]
+}

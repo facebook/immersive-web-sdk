@@ -1,0 +1,116 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.2423, 0.6172, 0.8308, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  },
+  "resources": {},
+  "nodes": [
+    {
+      "id": "grid",
+      "name": "Grid",
+      "content": {
+        "type": "asset",
+        "asset": "layers-grid"
+      }
+    },
+    {
+      "id": "floor",
+      "name": "Floor",
+      "content": {
+        "type": "asset",
+        "asset": "layers-floor"
+      },
+      "transform": {
+        "position": [0, -0.01, 0],
+        "rotationDeg": [-90, 0, 0]
+      }
+    },
+    {
+      "id": "pillar-left",
+      "name": "Pillar Left",
+      "content": {
+        "type": "asset",
+        "asset": "layers-pillar"
+      },
+      "transform": {
+        "position": [-2, 1, -3]
+      }
+    },
+    {
+      "id": "pillar-right",
+      "name": "Pillar Right",
+      "content": {
+        "type": "asset",
+        "asset": "layers-pillar"
+      },
+      "transform": {
+        "position": [2, 1, -3]
+      }
+    },
+    {
+      "id": "orb",
+      "name": "Orb",
+      "content": {
+        "type": "asset",
+        "asset": "layers-orb"
+      },
+      "transform": {
+        "position": [0, 0.4, -3]
+      }
+    },
+    {
+      "id": "quad-layer-anchor",
+      "name": "Quad Layer Anchor",
+      "content": {
+        "type": "group"
+      },
+      "transform": {
+        "position": [-0.8, 1.5, -2]
+      }
+    },
+    {
+      "id": "cylinder-layer-anchor",
+      "name": "Cylinder Layer Anchor",
+      "content": {
+        "type": "group"
+      },
+      "transform": {
+        "position": [0.8, 1.5, -2]
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "content": {
+        "type": "asset",
+        "asset": "layers-welcome-panel"
+      },
+      "components": {
+        "PokeInteractable": {},
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "height": "50%",
+          "left": "20px",
+          "top": "20px",
+          "width": "25vw"
+        }
+      },
+      "transform": {
+        "position": [0, 2.4, -3],
+        "scale": 0.4
+      }
+    }
+  ]
+}

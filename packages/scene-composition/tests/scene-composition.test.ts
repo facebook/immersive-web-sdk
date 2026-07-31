@@ -71,6 +71,21 @@ const TEST_COMPONENT_CATALOG = createSceneComponentCatalog([
   MARKER_SCHEMA,
   DIRECTIONAL_LIGHT_SCHEMA,
 ]);
+const LINK_COMPONENT_CATALOG = createSceneComponentCatalog([
+  ...Object.values(TEST_COMPONENT_CATALOG),
+  {
+    id: 'LinkedResource',
+    source: 'app' as const,
+    fields: {
+      source: { type: 'FilePath' as const },
+      target: {
+        required: true,
+        type: 'Object' as const,
+        widget: 'entity' as const,
+      },
+    },
+  },
+]);
 
 const TEST_ASSET_BOUNDS: Record<
   string,
@@ -268,12 +283,10 @@ function makeScene(): SceneDocument {
       ],
     },
     environment: {
-      background: { type: 'color', color: '#cbd5c1' },
       fog: { type: 'linear', near: 10, far: 30 },
       toneMapping: 'aces',
       exposure: 1,
       shadows: true,
-      ar: { background: 'transparent', lights: 'combined' },
     },
     nodes: [
       {
@@ -442,6 +455,55 @@ describe('@iwsdk/scene-composition v1', () => {
     );
   });
 
+  it('warns when required file and entity links are empty or unresolved', () => {
+    const scene = makeScene();
+    scene.nodes[1].components!.LinkedResource = {
+      source: '',
+      target: null,
+    };
+
+    const empty = validateSceneDocument(scene, {
+      componentCatalog: LINK_COMPONENT_CATALOG,
+    });
+    expect(empty.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'required',
+          path: '$.nodes[1].components.LinkedResource.source',
+        }),
+        expect.objectContaining({
+          code: 'required',
+          path: '$.nodes[1].components.LinkedResource.target',
+        }),
+      ]),
+    );
+
+    scene.nodes[1].components!.LinkedResource = {
+      source: '/audio/chime.mp3',
+      target: { id: 'missing', type: 'node' },
+    };
+    expect(
+      validateSceneDocument(scene, {
+        componentCatalog: LINK_COMPONENT_CATALOG,
+      }).issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'reference',
+        path: '$.nodes[1].components.LinkedResource.target',
+      }),
+    );
+
+    scene.nodes[1].components!.LinkedResource.target = {
+      target: 'head',
+      type: 'player-space',
+    };
+    expect(
+      validateSceneDocument(scene, {
+        componentCatalog: LINK_COMPONENT_CATALOG,
+      }),
+    ).toEqual({ issues: [], valid: true });
+  });
+
   it('validates the complete closed authoring and runtime contract', () => {
     expect(validateSceneDocument(makeScene())).toEqual({
       valid: true,
@@ -470,6 +532,23 @@ describe('@iwsdk/scene-composition v1', () => {
     expect(validateSceneDocument(unknownNode).issues).toContainEqual(
       expect.objectContaining({ path: '$.nodes[0].asset', code: 'schema' }),
     );
+
+    for (const [field, value] of [
+      ['background', { color: '#112233', type: 'color' }],
+      ['imageBasedLighting', { type: 'room' }],
+      ['ar', { background: 'transparent' }],
+    ] as const) {
+      const invalidEnvironment = makeScene() as SceneDocument & {
+        environment: Record<string, unknown>;
+      };
+      invalidEnvironment.environment = { [field]: value };
+      expect(validateSceneDocument(invalidEnvironment).issues).toContainEqual(
+        expect.objectContaining({
+          code: 'schema',
+          path: `$.environment.${field}`,
+        }),
+      );
+    }
   });
 
   it('validates, serializes, and hashes optional node framing roles', () => {
@@ -1498,6 +1577,80 @@ describe('@iwsdk/scene-composition v1', () => {
     expect(history.document).toEqual(scene);
   });
 
+  it('authors persistent player-space components with reversible patches', () => {
+    const scene = makeScene();
+    const history = new SceneCommandHistory(scene);
+
+    history.apply({
+      component: 'PlayerMarker',
+      op: 'updatePlayerComponent',
+      target: 'left-target-ray',
+      value: { enabled: true },
+    });
+    expect(history.document.player?.leftTargetRay?.components).toEqual({
+      PlayerMarker: { enabled: true },
+    });
+    history.undo();
+    expect(history.document).toEqual(scene);
+    history.redo();
+    history.apply({
+      component: 'PlayerMarker',
+      op: 'updatePlayerComponent',
+      target: 'left-target-ray',
+    });
+    expect(history.document.player).toBeUndefined();
+  });
+
+  it('parents authored nodes to fixed player spaces and authors player placement', () => {
+    const scene = makeScene();
+    const history = new SceneCommandHistory(scene);
+
+    history.apply({
+      nodeId: 'table',
+      op: 'moveNode',
+      parent: { target: 'left-grip', type: 'player-space' },
+      preserveWorldTransform: true,
+    });
+    expect(
+      history.document.nodes.find((node) => node.id === 'table'),
+    ).toMatchObject({
+      parent: { target: 'left-grip', type: 'player-space' },
+    });
+    history.apply({
+      op: 'updatePlayerTransform',
+      target: 'player',
+      transform: { position: [2, 0, -3] },
+    });
+    expect(history.document.player?.transform).toEqual({
+      position: [2, 0, -3],
+    });
+    history.undo();
+    history.undo();
+    expect(history.document).toEqual(scene);
+
+    const invalid = clone(scene);
+    invalid.nodes[0].children = [
+      {
+        id: 'nested-player-child',
+        parent: { target: 'head', type: 'player-space' },
+      },
+    ];
+    expect(validateSceneDocument(invalid).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'conflict',
+        path: '$.nodes[0].children[0].parent',
+      }),
+    );
+
+    expect(() =>
+      history.apply({
+        op: 'updatePlayerTransform',
+        target: 'left-grip',
+        transform: { position: [0, 0, 0] },
+      } as never),
+    ).toThrow('only supports Player Space');
+  });
+
   it('updates framing roles atomically and restores omission through undo', () => {
     const scene = makeScene();
     const originalHash = hashSceneDocument(scene);
@@ -1561,7 +1714,7 @@ describe('@iwsdk/scene-composition v1', () => {
       },
       {
         op: 'setEnvironment',
-        environment: { background: { type: 'transparent' }, exposure: 1.25 },
+        environment: { exposure: 1.25, shadows: false },
       },
       {
         op: 'addAuthoringView',
@@ -1594,6 +1747,12 @@ describe('@iwsdk/scene-composition v1', () => {
 
   it('rewrites every authoring node reference during an atomic rename', () => {
     const scene = makeScene();
+    scene.nodes[2].components = {
+      LinkedResource: {
+        source: '/audio/chime.mp3',
+        target: { id: 'table', type: 'node' },
+      },
+    };
     const feature = scene.authoring!.composition!.features[0];
     feature.identityCritical = true;
     feature.objectInspection = {
@@ -1636,6 +1795,9 @@ describe('@iwsdk/scene-composition v1', () => {
       context: { includeNodeRefs: ['table-renamed'] },
     });
     expect(renamed.authoring?.nodeAnnotations?.[0].node).toBe('table-renamed');
+    expect(renamed.nodes[2].components?.LinkedResource).toMatchObject({
+      target: { id: 'table-renamed', type: 'node' },
+    });
     expect(validateSceneDocument(renamed)).toEqual({ valid: true, issues: [] });
   });
 
@@ -1882,12 +2044,7 @@ describe('@iwsdk/scene-composition v1', () => {
   it('validates bounded studio lighting and environment settings', () => {
     const scene = makeScene();
     scene.environment = {
-      background: {
-        bottomColor: '#eeeeee',
-        topColor: '#ffffff',
-        type: 'gradient',
-      },
-      imageBasedLighting: { intensity: 0.72, sigma: 0.04, type: 'room' },
+      fog: { color: '#eeeeee', density: 0.04, type: 'exponential' },
       shadowMapType: 'pcf-soft',
       shadows: true,
     };
@@ -1901,14 +2058,17 @@ describe('@iwsdk/scene-composition v1', () => {
     };
     expect(validateSceneDocument(scene)).toEqual({ valid: true, issues: [] });
 
-    scene.environment!.imageBasedLighting!.sigma = 0.12;
+    scene.environment!.fog = {
+      color: '#eeeeee',
+      density: 0,
+      type: 'exponential',
+    };
     expect(validateSceneDocument(scene).issues).toContainEqual(
       expect.objectContaining({
-        path: '$.environment.imageBasedLighting.sigma',
+        path: '$.environment.fog.density',
         code: 'schema',
       }),
     );
-    scene.environment!.imageBasedLighting!.sigma = 0.04;
   });
 
   it('generates deterministic periodic maps with resolution-invariant normals', () => {
@@ -1953,7 +2113,6 @@ describe('@iwsdk/scene-composition v1', () => {
         'scatter',
         'explicit',
       ],
-      imageBasedLightingTypes: [],
       shadowMapTypes: [],
       componentSchemaHashes: {
         DirectionalLight: directionalLightHash,

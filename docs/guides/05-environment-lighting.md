@@ -24,7 +24,10 @@ Good lighting transforms your scene from looking like a technical demo to a prof
 
 ## Setup Lighting
 
-IWSDK uses **Image-Based Lighting (IBL)** as the default lighting approach. This provides realistic lighting by using environment images to illuminate your entire scene, creating natural-looking reflections and ambient lighting that makes materials appear convincing.
+IWSDK uses **Image-Based Lighting (IBL)** as its primary environment-lighting
+approach. This provides realistic lighting by using environment images to
+illuminate your entire scene, creating natural-looking reflections and ambient
+lighting that makes materials appear convincing.
 
 Environment lighting components get attached to the **level root entity** - think of it as the main container for your scene:
 
@@ -90,28 +93,29 @@ The Three.js materials you're already using (`MeshStandardMaterial`) automatical
 
 ### Traditional Light Sources
 
-Traditional lighting is not explicitly supported by IWSDK, but you can use Three.js lights by disabling default lighting and adding your own light sources:
+IWSDK supports authored ambient, hemisphere, directional, point, spot, and
+rect-area light components. Add them to scene nodes in the editor or in native
+scene JSON:
 
-```javascript
-import { DirectionalLight, AmbientLight } from '@iwsdk/core';
-
-World.create(document.getElementById('scene-container'), {
-  // ... other options
-  render: {
-    defaultLighting: false, // Disable IWSDK's default IBL
-  },
-}).then((world) => {
-  // Add traditional Three.js lights directly to the scene
-  const directionalLight = new DirectionalLight(0xffffff, 1);
-  directionalLight.position.set(5, 5, 5);
-  world.scene.add(directionalLight);
-
-  const ambientLight = new AmbientLight(0x404040, 0.4);
-  world.scene.add(ambientLight);
-});
+```json
+{
+  "id": "key-light",
+  "transform": { "rotationDeg": [-35, 25, 0] },
+  "components": {
+    "DirectionalLight": {
+      "color": [1, 0.95, 0.88, 1],
+      "intensity": 3,
+      "castShadow": true
+    }
+  }
+}
 ```
 
-For more information on traditional lighting, see the [Three.js lighting documentation](https://threejs.org/manual/?q=ligh#en/lights).
+Environment setup is fully explicit: if the level root has no
+`DomeGradient`/`DomeTexture`, IWSDK renders no authored background; if it has
+no `IBLGradient`/`IBLTexture`, IWSDK supplies no image-based lighting. Starter
+scenes include both gradient components, and you can remove either one
+independently.
 
 ## Setup Background
 

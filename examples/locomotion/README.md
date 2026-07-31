@@ -86,8 +86,8 @@ const assets = {
 
 WebXR requires HTTPS for all features to work properly. This example includes:
 
-- Automatic HTTPS certificate generation via `vite-plugin-mkcert`
-- Self-signed certificates for local development
+- Automatic, cached self-signed HTTPS certificates from the IWSDK dev plugin
+- No certificate-authority installation or trust-store changes
 - Proper CORS configuration for asset loading
 
 ### Testing on Devices
@@ -101,6 +101,9 @@ hostname -I             # Linux
 # Access from VR headset
 https://YOUR_LOCAL_IP:<PORT>
 ```
+
+Accept the headset browser's certificate warning when prompted. The managed
+desktop browser accepts the local certificate automatically.
 
 ## 🛠 Customization
 

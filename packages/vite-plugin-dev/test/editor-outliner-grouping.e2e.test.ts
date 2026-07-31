@@ -82,7 +82,7 @@ describe('editor outliner grouping', () => {
     await expect.poll(() => selectedNodeIds(editor)).toEqual(['group-1']);
     await expect
       .poll(() => outlinerNodeIds(editor))
-      .toEqual(['table-1', 'group-1', 'vase-1', 'vase-2']);
+      .toEqual(['group-1', 'vase-1', 'vase-2', 'table-1']);
     const groupDisclosure = editor.page.locator(
       '[data-node-id="group-1"] [data-outliner-disclosure]',
     );
@@ -96,7 +96,7 @@ describe('editor outliner grouping', () => {
     await groupDisclosure.click();
     await expect
       .poll(() => outlinerNodeIds(editor))
-      .toEqual(['table-1', 'group-1']);
+      .toEqual(['group-1', 'table-1']);
     await expect.poll(() => selectedNodeIds(editor)).toEqual(['group-1']);
     await expect
       .poll(() =>
@@ -108,7 +108,7 @@ describe('editor outliner grouping', () => {
     await editor.page.locator('[data-node-id="group-1"]').press('ArrowRight');
     await expect
       .poll(() => outlinerNodeIds(editor))
-      .toEqual(['table-1', 'group-1', 'vase-1', 'vase-2']);
+      .toEqual(['group-1', 'vase-1', 'vase-2', 'table-1']);
     await expect
       .poll(() => runtimeParents(editor))
       .toMatchObject({

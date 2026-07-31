@@ -271,8 +271,8 @@ export class ScreenSpaceUISystem extends createSystem({
    * Returns pixel values from `window.getComputedStyle`.
    *
    * @remarks
-   * `ScreenSpace` declares `'auto'` as the default for both axes, but on a
-   * floating helper `<div>` the browser resolves an unconstrained `auto`
+   * Older scene documents may explicitly declare `'auto'`. On a floating
+   * helper `<div>` the browser resolves an unconstrained `auto`
    * dimension to `0px`. A `0px` target collapses {@link
    * UIKitDocument.setTargetDimensions} and the panel retains its intrinsic
    * world-space size inside camera space, blowing the UI up to most of the

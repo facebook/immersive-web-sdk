@@ -77,7 +77,8 @@ export interface SceneComponentFieldSchema {
   description?: string;
   label?: string;
   help?: string;
-  widget?: 'slider' | 'color' | 'vector' | 'text' | 'select';
+  widget?: 'slider' | 'color' | 'vector' | 'text' | 'select' | 'entity';
+  required?: boolean;
   step?: number;
   enum?: Record<string, string>;
   fileTypes?: string;
@@ -93,6 +94,10 @@ export interface SceneComponentSchema {
   description?: string;
   fields: Record<string, SceneComponentFieldSchema>;
   source?: 'iwsdk' | 'app' | 'scene';
+  editor?: {
+    hidden?: boolean;
+    intrinsic?: boolean;
+  };
 }
 
 /** Application-owned component schemas supplied separately from scene JSON. */
@@ -459,9 +464,17 @@ export type SceneNodeContent =
 
 export type SceneNodeFramingRole = 'content' | 'support';
 
+/** Persistent player-rig space used as the parent of a top-level scene node. */
+export interface ScenePlayerSpaceParent {
+  type: 'player-space';
+  target: ScenePlayerTarget;
+}
+
 export interface SceneNode {
   id: string;
   name?: string;
+  /** Authored runtime visibility. Omitted means visible. */
+  visible?: boolean;
   /** Camera framing includes content by default and excludes support nodes. */
   framingRole?: SceneNodeFramingRole;
   content?: SceneNodeContent;
@@ -470,6 +483,8 @@ export interface SceneNode {
   components?: Record<string, SceneComponentValue>;
   children?: SceneNode[];
   metadata?: JsonObject;
+  /** Optional persistent player-space parent. Only valid on top-level nodes. */
+  parent?: ScenePlayerSpaceParent;
 }
 
 export interface ScenePrefab {
@@ -481,37 +496,49 @@ export interface SceneResources {
   prefabs?: ScenePrefab[];
 }
 
-export type SceneBackground =
-  | { type: 'color'; color: SceneColor }
-  | {
-      type: 'gradient';
-      topColor: SceneColor;
-      bottomColor: SceneColor;
-      exponent?: number;
-    }
-  | { type: 'transparent' };
+export type ScenePlayerTarget =
+  | 'player'
+  | 'camera'
+  | 'head'
+  | 'left-target-ray'
+  | 'right-target-ray'
+  | 'left-grip'
+  | 'right-grip';
+
+/** Stable authored reference to an ECS entity in or around a scene. */
+export type SceneEntityReference =
+  | { type: 'node'; id: string }
+  | ScenePlayerSpaceParent
+  | { type: 'level-root' };
+
+export interface SceneBuiltinEntity {
+  components?: Record<string, SceneComponentValue>;
+  /** @deprecated Tracked-space transforms are retained for file compatibility but ignored. */
+  transform?: SceneTransform;
+}
+
+/** Components authored onto persistent runtime player-rig entities. */
+export interface ScenePlayerRig extends SceneBuiltinEntity {
+  /** Authored virtual-environment placement of the persistent player origin. */
+  transform?: SceneTransform;
+  camera?: SceneBuiltinEntity;
+  head?: SceneBuiltinEntity;
+  leftTargetRay?: SceneBuiltinEntity;
+  rightTargetRay?: SceneBuiltinEntity;
+  leftGrip?: SceneBuiltinEntity;
+  rightGrip?: SceneBuiltinEntity;
+}
+
 export type SceneFog =
   | { type: 'linear'; color?: SceneColor; near: number; far: number }
   | { type: 'exponential'; color?: SceneColor; density: number };
 
-export interface SceneRoomImageBasedLighting {
-  type: 'room';
-  intensity?: number;
-  sigma?: number;
-}
-
 export interface SceneEnvironment {
-  background?: SceneBackground;
   fog?: SceneFog;
   toneMapping?: 'none' | 'linear' | 'reinhard' | 'cineon' | 'aces';
   exposure?: number;
   shadows?: boolean;
   shadowMapType?: 'basic' | 'pcf' | 'pcf-soft';
-  imageBasedLighting?: SceneRoomImageBasedLighting;
-  ar?: {
-    background: 'transparent' | 'environment';
-    lights: 'authored' | 'estimated' | 'combined';
-  };
 }
 
 export type SceneInputKind = 'text' | 'image' | 'hybrid';
@@ -730,6 +757,8 @@ export interface SceneDocument {
   imports?: SceneImport[];
   /** Components applied to the runtime level-root entity. */
   components?: Record<string, SceneComponentValue>;
+  /** Components applied to persistent runtime player-space entities. */
+  player?: ScenePlayerRig;
   metadata?: JsonObject;
   authoring?: SceneAuthoring;
   resources: SceneResources;
@@ -755,7 +784,6 @@ export interface SceneCapabilitySnapshot {
   sceneVersions: string[];
   nodeContentTypes: SceneNodeContent['type'][];
   patternTypes: ScenePatternDistribution['type'][];
-  imageBasedLightingTypes: SceneRoomImageBasedLighting['type'][];
   shadowMapTypes: NonNullable<SceneEnvironment['shadowMapType']>[];
   componentSchemaHashes: Record<string, Sha256>;
   limits?: {
@@ -872,11 +900,13 @@ export type ScenePatch =
       op: 'moveNode';
       nodeId: string;
       parentId?: string | null;
+      parent?: ScenePlayerSpaceParent;
       index?: number;
       preserveWorldTransform?: boolean;
     }
   | { op: 'renameNode'; nodeId: string; newNodeId: string }
   | { op: 'updateTransform'; nodeId: string; transform?: SceneTransform }
+  | { op: 'updateVisibility'; nodeId: string; visible?: boolean }
   | {
       op: 'updateFramingRole';
       nodeId: string;
@@ -892,6 +922,17 @@ export type ScenePatch =
       op: 'updateRootComponent';
       component: string;
       value?: SceneComponentValue;
+    }
+  | {
+      op: 'updatePlayerComponent';
+      target: ScenePlayerTarget;
+      component: string;
+      value?: SceneComponentValue;
+    }
+  | {
+      op: 'updatePlayerTransform';
+      target: 'player';
+      transform?: SceneTransform;
     }
   | { op: 'reorderChildren'; childIds: string[]; parentId?: string | null }
   | { op: 'updateContent'; content?: SceneNodeContent; nodeId: string }

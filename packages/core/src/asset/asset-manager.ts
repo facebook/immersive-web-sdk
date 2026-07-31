@@ -10,8 +10,15 @@ import { clone as cloneObject3D } from 'three/examples/jsm/utils/SkeletonUtils.j
 import type { World } from '../ecs/world.js';
 import {
   Box3,
+  BoxGeometry,
+  BufferGeometry,
+  CapsuleGeometry,
+  CylinderGeometry,
   LoadingManager,
+  Mesh,
+  MeshStandardMaterial,
   Object3D,
+  SphereGeometry,
   Texture,
   WebGLRenderer,
 } from '../runtime/index.js';
@@ -81,7 +88,7 @@ export interface AssetManifest {
 
 export interface RenderableAssetInfo {
   id: string;
-  kind: 'gltf' | 'object3d';
+  kind: 'gltf' | 'primitive' | 'procedural';
   name: string;
   bounds?: {
     min: [number, number, number];
@@ -91,9 +98,28 @@ export interface RenderableAssetInfo {
 
 /** Asset metadata exposed to authoring tools. */
 export interface AuthoringAssetInfo extends Omit<RenderableAssetInfo, 'kind'> {
-  kind: 'gltf' | 'object3d' | 'uikitml';
+  kind: 'gltf' | 'primitive' | 'procedural' | 'uikitml';
   url?: string;
 }
+
+const BUILTIN_PRIMITIVE_ASSETS: AssetManifest = Object.freeze({
+  'primitive-box': createPrimitivePrototype(
+    'Box',
+    new BoxGeometry(0.5, 0.5, 0.5),
+  ),
+  'primitive-capsule': createPrimitivePrototype(
+    'Capsule',
+    new CapsuleGeometry(0.2, 0.5, 4, 12),
+  ),
+  'primitive-cylinder': createPrimitivePrototype(
+    'Cylinder',
+    new CylinderGeometry(0.25, 0.25, 0.6, 24),
+  ),
+  'primitive-sphere': createPrimitivePrototype(
+    'Sphere',
+    new SphereGeometry(0.3, 24, 16),
+  ),
+});
 
 export interface AssetRegistryOptions {
   instantiateUIKitML?: (assetId: string) => Promise<Object3D>;
@@ -113,8 +139,8 @@ export class RenderableAssetRegistry {
     manifest: AssetManifest = {},
     private readonly options: AssetRegistryOptions = {},
   ) {
-    this.manifest = manifest;
-    for (const [id, entry] of Object.entries(manifest)) {
+    this.manifest = { ...BUILTIN_PRIMITIVE_ASSETS, ...manifest };
+    for (const [id, entry] of Object.entries(this.manifest)) {
       if (isObject3DManifestEntry(entry) && entry.parent != null) {
         throw new Error(
           `Renderable asset prototype "${id}" must not have a parent`,
@@ -148,7 +174,7 @@ export class RenderableAssetRegistry {
       return undefined;
     }
     if (isObject3DManifestEntry(entry)) {
-      return 'object3d';
+      return isPrimitivePrototype(entry) ? 'primitive' : 'procedural';
     }
     if (entry.type === AssetType.GLTF) {
       return 'gltf';
@@ -166,7 +192,7 @@ export class RenderableAssetRegistry {
         result.push({
           bounds: boundsForPrototype(entry),
           id,
-          kind: 'object3d',
+          kind: isPrimitivePrototype(entry) ? 'primitive' : 'procedural',
           name: entry.name || id,
         });
       } else if (entry.type === AssetType.GLTF) {
@@ -424,6 +450,27 @@ export class AssetManager {
 
 function isObject3DManifestEntry(entry: AssetManifestEntry): entry is Object3D {
   return (entry as Object3D | undefined)?.isObject3D === true;
+}
+
+function createPrimitivePrototype(
+  name: string,
+  geometry: BufferGeometry,
+): Mesh {
+  const prototype = new Mesh(
+    geometry,
+    new MeshStandardMaterial({
+      color: 0x91a4ba,
+      metalness: 0.05,
+      roughness: 0.72,
+    }),
+  );
+  prototype.name = name;
+  prototype.userData.iwsdkAssetKind = 'primitive';
+  return prototype;
+}
+
+function isPrimitivePrototype(entry: Object3D): boolean {
+  return entry.userData.iwsdkAssetKind === 'primitive';
 }
 
 function isRenderableManifestEntry(

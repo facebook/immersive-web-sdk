@@ -5,26 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  Color,
-  CylinderGeometry,
-  DistanceGrabbable,
-  FrontSide,
-  Mesh,
-  MeshStandardMaterial,
-  PhysicsBody,
-  PhysicsManipulation,
-  PhysicsShape,
-  PhysicsShapeType,
-  PhysicsState,
-  PokeInteractable,
-  RayInteractable,
-  ScreenSpace,
-  SessionMode,
-  SphereGeometry,
-  UIKitMLAsset,
-  World,
-} from '@iwsdk/core';
+import { SessionMode, UIKitMLAsset, World } from '@iwsdk/core';
 import assets from './assets.js';
 import { configureWelcomePanel } from './panel.js';
 
@@ -41,64 +22,12 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     physics: true,
     spatialUI: true,
   },
-}).then(async (world) => {
-  const { scene, camera } = world;
-  camera.position.set(5, 2, 5);
-  camera.rotateY(Math.PI / 4);
+}).then((world) => {
+  world.camera.position.set(5, 2, 5);
+  world.camera.rotateY(Math.PI / 4);
 
-  scene.background = new Color(0x808080);
-
-  const body = new Mesh(
-    new SphereGeometry(0.2),
-    new MeshStandardMaterial({
-      side: FrontSide,
-      color: new Color(Math.random(), Math.random(), Math.random()),
-    }),
+  configureWelcomePanel(
+    world,
+    world.requireSceneObject<UIKitMLAsset>('welcome-panel'),
   );
-  body.position.set(-1, 1.5, 0.5);
-  scene.add(body);
-  const entity = world.createTransformEntity(body);
-  entity.addComponent(PhysicsShape, {
-    shape: PhysicsShapeType.Sphere,
-    dimensions: [0.2, 0.2, 0.2],
-  });
-  entity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  entity.addComponent(PhysicsManipulation, { force: [0.1, 0.1, -0.1] });
-
-  const cylinderRadius = 0.15;
-  const cylinderHeight = 0.4;
-  const cylinder = new Mesh(
-    new CylinderGeometry(cylinderRadius, cylinderRadius, cylinderHeight),
-    new MeshStandardMaterial({
-      side: FrontSide,
-      color: new Color(Math.random(), Math.random(), Math.random()),
-    }),
-  );
-  cylinder.position.set(-0.5, 1.5, 0.5);
-  scene.add(cylinder);
-  const cylinderEntity = world.createTransformEntity(cylinder);
-  cylinderEntity.addComponent(PhysicsShape, {
-    shape: PhysicsShapeType.Cylinder,
-    dimensions: [cylinderRadius, cylinderHeight, 0],
-  });
-  cylinderEntity.addComponent(PhysicsBody, { state: PhysicsState.Dynamic });
-  cylinderEntity.addComponent(DistanceGrabbable);
-
-  const panel = await world.assets.instantiate<UIKitMLAsset>(
-    'physics-welcome-panel',
-  );
-  const panelEntity = world
-    .createTransformEntity(panel)
-    .addComponent(RayInteractable)
-    .addComponent(PokeInteractable)
-    .addComponent(ScreenSpace, {
-      top: '20px',
-      left: '20px',
-      height: '50%',
-      width: '25vw',
-    });
-  panelEntity.object3D!.position.set(0, 1.5, -1.4);
-  panelEntity.object3D!.scale.setScalar(0.145);
-
-  configureWelcomePanel(world, panel);
 });

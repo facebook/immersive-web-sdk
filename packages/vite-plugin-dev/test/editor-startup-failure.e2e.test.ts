@@ -33,6 +33,7 @@ describe('editor startup failure diagnostics', () => {
 
     const context = await harness.browser.newContext({
       extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
+      ignoreHTTPSErrors: true,
     });
     const page = await context.newPage();
     const consoleErrors: string[] = [];

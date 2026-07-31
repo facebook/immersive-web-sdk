@@ -30,7 +30,7 @@ Entity 12                      Object3D
 - `Scene` and `PerspectiveCamera` initialization
 - Render loop (`renderer.setAnimationLoop`)
 - Transform synchronization between ECS ↔ Three.js
-- Default lighting environment and PMREM
+- Environment systems for authored dome and IBL components
 - Input raycasting and XR session management
 
 **You Focus On:**
@@ -56,7 +56,9 @@ Here's how ECS and Three.js work together in IWSDK:
 import { World, Mesh, BoxGeometry, MeshStandardMaterial } from '@iwsdk/core';
 
 // 1) IWSDK creates renderer, scene, camera automatically
-const world = await World.create(container);
+const world = await World.create(container, {
+  level: '/scenes/main.iwsdk.scene.json',
+});
 
 // 2) Create a mesh using Three.js classes
 const geometry = new BoxGeometry(1, 1, 1);

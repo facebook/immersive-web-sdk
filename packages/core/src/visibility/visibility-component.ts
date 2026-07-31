@@ -5,14 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { setComponentEditorMetadata } from '../ecs/component-editor-metadata.js';
 import { Types, createComponent } from '../ecs/component.js';
 
-export const Visibility = createComponent(
-  'Visibility',
-  {
-    isVisible: { type: Types.Boolean, default: true },
-  },
-  'Component to control if an entity object is visible',
-  // @ts-ignore - 4th argument is editor metadata consumed by tooling.
-  { hideInEditor: true },
+export const Visibility = setComponentEditorMetadata(
+  createComponent(
+    'Visibility',
+    {
+      isVisible: { type: Types.Boolean, default: true },
+    },
+    'Component to control if an entity object is visible',
+  ),
+  { hidden: true, intrinsic: true },
 );

@@ -53,7 +53,7 @@ npx iwsdk dev status
 ```
 
 ::: warning HTTPS Required
-Notice that the URL uses **HTTPS** (not HTTP). This is required for WebXR to work - browsers only allow WebXR on secure origins. Vite automatically generates a self-signed certificate for local development.
+Notice that the URL uses **HTTPS** (not HTTP). This is required for WebXR to work - browsers only allow WebXR on secure origins. IWSDK generates and caches an untrusted development certificate without installing a certificate authority or changing your operating-system trust store. The managed browser accepts it automatically; a physical headset shows its normal certificate warning, which you should accept to continue.
 :::
 
 Your development server is now running and ready for testing!

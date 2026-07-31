@@ -32,7 +32,6 @@ const MIGRATED_SCENES = [
       'DomeGradient',
       'IBLGradient',
       'LocomotionEnvironment',
-      'PanelUI',
       'RayInteractable',
       'ScreenSpace',
       'Spinner',
@@ -45,9 +44,63 @@ const MIGRATED_SCENES = [
     viteConfig: 'examples/audio/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
+    assetIds: ['environment-desk'],
+    components: [
+      'AudioSource',
+      'DomeGradient',
+      'IBLGradient',
+      'LocomotionEnvironment',
+      'OneHandGrabbable',
+      'PhysicsBody',
+      'PhysicsShape',
+      'RayInteractable',
+    ],
+    id: 'browser-first',
+    scene:
+      'examples/browser-first/public/scenes/browser-first.iwsdk.scene.json',
+    source: 'examples/browser-first/src/index.ts',
+    sourceLevelText: './scenes/browser-first.iwsdk.scene.json',
+    viteConfig: 'examples/browser-first/vite.config.ts',
+  },
+  {
+    assetIds: ['plant-sansevieria', 'robot'],
+    components: [
+      'DepthOccludable',
+      'DistanceGrabbable',
+      'IBLGradient',
+      'PokeInteractable',
+      'RayInteractable',
+      'ScreenSpace',
+      'XRAnchor',
+    ],
+    id: 'depth-occlusion',
+    scene:
+      'examples/depth-occlusion/public/scenes/depth-occlusion.iwsdk.scene.json',
+    source: 'examples/depth-occlusion/src/index.ts',
+    sourceLevelText: './scenes/depth-occlusion.iwsdk.scene.json',
+    viteConfig: 'examples/depth-occlusion/vite.config.ts',
+  },
+  {
+    assetIds: ['plant-sansevieria'],
+    components: [
+      'EnvironmentRaycastTarget',
+      'IBLGradient',
+      'RayInteractable',
+      'ScreenSpace',
+    ],
+    id: 'environment-raycast',
+    scene:
+      'examples/environment-raycast/public/scenes/environment-raycast.iwsdk.scene.json',
+    source: 'examples/environment-raycast/src/index.ts',
+    sourceLevelText: './scenes/environment-raycast.iwsdk.scene.json',
+    viteConfig: 'examples/environment-raycast/vite.config.ts',
+  },
+  {
+    assetIds: ['environment-desk'],
     components: [
       'DistanceGrabbable',
+      'DomeGradient',
+      'IBLGradient',
       'LocomotionEnvironment',
       'OneHandGrabbable',
       'RayInteractable',
@@ -60,9 +113,40 @@ const MIGRATED_SCENES = [
     viteConfig: 'examples/grab/vite.config.ts',
   },
   {
+    assetIds: [],
+    components: ['DomeGradient', 'IBLGradient'],
+    id: 'layers',
+    scene: 'examples/layers/public/scenes/layers.iwsdk.scene.json',
+    source: 'examples/layers/src/index.ts',
+    sourceLevelText: './scenes/layers.iwsdk.scene.json',
+    viteConfig: 'examples/layers/vite.config.ts',
+  },
+  {
+    assetIds: ['environment-desk'],
+    components: [
+      'AudioSource',
+      'DomeGradient',
+      'Elevator',
+      'IBLGradient',
+      'LocomotionEnvironment',
+      'LocomotionSettingsPanel',
+      'PokeInteractable',
+      'RayInteractable',
+      'ScreenSpace',
+    ],
+    id: 'locomotion',
+    componentManifest: './src/components.ts',
+    scene: 'examples/locomotion/public/scenes/locomotion.iwsdk.scene.json',
+    source: 'examples/locomotion/src/index.ts',
+    sourceLevelText: './scenes/locomotion.iwsdk.scene.json',
+    viteConfig: 'examples/locomotion/vite.config.ts',
+  },
+  {
     assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
     components: [
       'DistanceGrabbable',
+      'DomeGradient',
+      'IBLGradient',
       'LocomotionEnvironment',
       'OneHandGrabbable',
       'PhysicsBody',
@@ -76,18 +160,57 @@ const MIGRATED_SCENES = [
     viteConfig: 'examples/physics/vite.config.ts',
   },
   {
+    assetIds: ['environment-desk', 'robot'],
+    components: [
+      'AudioSource',
+      'DomeGradient',
+      'IBLGradient',
+      'LocomotionEnvironment',
+      'PokeInteractable',
+      'RayInteractable',
+      'Robot',
+      'ScreenSpace',
+    ],
+    id: 'poke',
+    componentManifest: './src/components.ts',
+    scene: 'examples/poke/public/scenes/poke.iwsdk.scene.json',
+    source: 'examples/poke/src/index.ts',
+    sourceLevelText: './scenes/poke.iwsdk.scene.json',
+    viteConfig: 'examples/poke/vite.config.ts',
+  },
+  {
+    assetIds: [],
+    components: [
+      'DistanceGrabbable',
+      'DomeTexture',
+      'IBLTexture',
+      'PokeInteractable',
+      'RayInteractable',
+      'ScreenSpace',
+      'XRAnchor',
+    ],
+    id: 'scene-understanding',
+    scene:
+      'examples/scene-understanding/public/scenes/scene-understanding.iwsdk.scene.json',
+    source: 'examples/scene-understanding/src/index.ts',
+    sourceLevelText: './scenes/scene-understanding.iwsdk.scene.json',
+    viteConfig: 'examples/scene-understanding/vite.config.ts',
+  },
+  {
     assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
     components: [
       'AudioSource',
       'DistanceGrabbable',
+      'DomeGradient',
+      'IBLGradient',
       'LocomotionEnvironment',
-      'PanelUI',
       'RayInteractable',
       'Robot',
       'ScreenSpace',
     ],
     id: 'starter-vr',
     componentManifest: './src/components.ts',
+    manifestAssetIds: ['welcome-panel'],
     scene:
       'packages/starter-assets/starter-template/public/scenes/vr.iwsdk.scene.json',
     source: 'packages/starter-assets/starter-template/src/index.template.ts',
@@ -100,13 +223,15 @@ const MIGRATED_SCENES = [
     components: [
       'AudioSource',
       'DistanceGrabbable',
-      'PanelUI',
+      'DomeGradient',
+      'IBLGradient',
       'RayInteractable',
       'Robot',
       'ScreenSpace',
     ],
     id: 'starter-ar',
     componentManifest: './src/components.ts',
+    manifestAssetIds: ['welcome-panel'],
     scene:
       'packages/starter-assets/starter-template/public/scenes/ar.iwsdk.scene.json',
     source: 'packages/starter-assets/starter-template/src/index.template.ts',
@@ -134,7 +259,7 @@ const SHARED_ASSET_VITE_CONFIGS = [
     file: 'examples/environment-raycast/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
+    assetIds: ['environment-desk'],
     file: 'examples/grab/vite.config.ts',
   },
   {
@@ -212,6 +337,60 @@ function assertViteConfigUsesAssets(failures, file, assetIds) {
   }
 }
 
+function assertManifestLocalAssetFiles(failures, sceneTarget) {
+  const sourceMarker = '/src/';
+  const markerIndex = sceneTarget.source.indexOf(sourceMarker);
+  if (markerIndex < 0) {
+    failures.push(
+      `${sceneTarget.source} is not under an app src directory; cannot resolve its asset manifest`,
+    );
+    return;
+  }
+
+  const appRoot = sceneTarget.source.slice(0, markerIndex);
+  const manifestPath = [
+    `${appRoot}/src/assets.ts`,
+    `${appRoot}/src/assets.template.ts`,
+  ].find(fileExists);
+  if (manifestPath == null) {
+    failures.push(`asset manifest is missing under ${appRoot}/src`);
+    return;
+  }
+
+  const manifestText = readRelative(manifestPath);
+  for (const assetId of sceneTarget.manifestAssetIds ?? []) {
+    if (
+      !manifestText.includes(`'${assetId}'`) &&
+      !manifestText.includes(`"${assetId}"`)
+    ) {
+      failures.push(
+        `${manifestPath} does not declare required manifest asset "${assetId}"`,
+      );
+    }
+  }
+  const urlPattern = /\burl:\s*(['"])([^'"]+)\1/g;
+  for (const match of manifestText.matchAll(urlPattern)) {
+    const url = match[2];
+    if (
+      url.startsWith('/iwsdk-assets/') ||
+      (!url.startsWith('/') && !url.startsWith('./'))
+    ) {
+      continue;
+    }
+
+    const publicPath = path.posix.join(
+      appRoot,
+      'public',
+      url.replace(/^\.\//, '').replace(/^\//, ''),
+    );
+    if (!fileExists(publicPath)) {
+      failures.push(
+        `${manifestPath} references missing local asset "${url}" (${publicPath})`,
+      );
+    }
+  }
+}
+
 function assertNoRemovedSourceDirs(failures) {
   for (const relativePath of REMOVED_AUTHORED_DIRS) {
     if (fileExists(relativePath)) {
@@ -262,7 +441,11 @@ function assertGeneratedStarterScenes({
   )
     .filter((file) => file.endsWith('.iwsdk.scene.json'))
     .sort();
-  const expectedSuffixes = ['-ar.iwsdk.scene.json', '-vr.iwsdk.scene.json'];
+  const expectedSuffixes = [
+    '-ar.iwsdk.scene.json',
+    '-browser.iwsdk.scene.json',
+    '-vr.iwsdk.scene.json',
+  ];
 
   for (const suffix of expectedSuffixes) {
     if (!generatedScenes.some((file) => file.endsWith(suffix))) {
@@ -275,17 +458,39 @@ function assertGeneratedStarterScenes({
   }
 
   for (const file of generatedScenes) {
-    assertSceneDocument({
+    const hasWelcomePanel =
+      file.endsWith('-ar.iwsdk.scene.json') ||
+      file.endsWith('-vr.iwsdk.scene.json');
+    const catalogAssetIds = file.endsWith('-ar.iwsdk.scene.json')
+      ? ['plant-sansevieria', 'robot']
+      : file.endsWith('-vr.iwsdk.scene.json')
+        ? ['environment-desk', 'plant-sansevieria', 'robot']
+        : [];
+    const document = assertSceneDocument({
       catalogById,
-      expectedAssetIds: file.endsWith('-ar.iwsdk.scene.json')
-        ? ['plant-sansevieria', 'robot']
-        : file.endsWith('-vr.iwsdk.scene.json')
-          ? ['environment-desk', 'plant-sansevieria', 'robot']
-          : [],
+      catalogAssetIds,
+      expectedAssetIds: [
+        ...catalogAssetIds,
+        ...(hasWelcomePanel ? ['welcome-panel'] : []),
+      ],
       failures,
       relativePath: `${GENERATED_STARTER_ASSET_DIR}/${file}`,
       validateSceneDocument,
     });
+    if (document != null) {
+      const rootComponents = new Set(
+        Object.keys(document.components ?? {}).map((componentId) =>
+          componentId.split('.').at(-1),
+        ),
+      );
+      for (const component of ['DomeGradient', 'IBLGradient']) {
+        if (!rootComponents.has(component)) {
+          failures.push(
+            `${GENERATED_STARTER_ASSET_DIR}/${file} must explicitly author ${component} on the level root`,
+          );
+        }
+      }
+    }
   }
 
   return generatedScenes.length;
@@ -293,6 +498,7 @@ function assertGeneratedStarterScenes({
 
 function assertSceneDocument({
   catalogById,
+  catalogAssetIds = expectedAssetIds,
   expectedAssetIds,
   failures,
   relativePath,
@@ -327,7 +533,7 @@ function assertSceneDocument({
     failures.push(`${relativePath} does not reference asset "${assetId}"`);
   }
 
-  for (const assetId of expectedAssetIds) {
+  for (const assetId of catalogAssetIds) {
     const catalogAsset = catalogById.get(assetId);
     if (catalogAsset == null) {
       failures.push(
@@ -352,7 +558,11 @@ function assertMigratedScene({
 }) {
   const document = assertSceneDocument({
     catalogById,
-    expectedAssetIds: sceneTarget.assetIds,
+    catalogAssetIds: sceneTarget.assetIds,
+    expectedAssetIds: [
+      ...sceneTarget.assetIds,
+      ...(sceneTarget.manifestAssetIds ?? []),
+    ],
     failures,
     relativePath: sceneTarget.scene,
     validateSceneDocument,
@@ -361,9 +571,14 @@ function assertMigratedScene({
     return;
   }
 
+  assertManifestLocalAssetFiles(failures, sceneTarget);
+
   const nodes = flattenNodes(document.nodes ?? []);
   const componentNames = new Set(
-    nodes.flatMap((node) => Object.keys(node.components ?? {})),
+    [
+      ...Object.keys(document.components ?? {}),
+      ...nodes.flatMap((node) => Object.keys(node.components ?? {})),
+    ].map((componentId) => componentId.split('.').at(-1)),
   );
   for (const component of sceneTarget.components) {
     if (!componentNames.has(component)) {
@@ -403,11 +618,13 @@ function assertMigratedScene({
     );
   }
 
-  assertViteConfigUsesAssets(
-    failures,
-    sceneTarget.viteConfig,
-    sceneTarget.assetIds,
-  );
+  if (sceneTarget.assetIds.length > 0) {
+    assertViteConfigUsesAssets(
+      failures,
+      sceneTarget.viteConfig,
+      sceneTarget.assetIds,
+    );
+  }
 }
 
 async function main() {

@@ -2552,7 +2552,16 @@ export const SCENE_MCP_TOOL_NAMES = [
   'scene_measure_image_regions',
 ] as const;
 
-const PUBLIC_SCENE_MCP_TOOL_NAME_SET = new Set<string>(SCENE_MCP_TOOL_NAMES);
+export const APP_RUNTIME_SCENE_MCP_TOOL_NAMES = [
+  'scene_get_render_stats',
+  'scene_get_runtime_hierarchy',
+  'scene_get_object_transform',
+] as const;
+
+const PUBLIC_SCENE_MCP_TOOL_NAME_SET = new Set<string>([
+  ...SCENE_MCP_TOOL_NAMES,
+  ...APP_RUNTIME_SCENE_MCP_TOOL_NAMES,
+]);
 const REMOVED_WORKSPACE_MCP_TOOL_NAME_SET = new Set([
   'workspace_get_state',
   'workspace_set_view',
@@ -2587,6 +2596,9 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   browser_screenshot: 'screenshot',
   browser_get_console_logs: 'get_console_logs',
   browser_reload_page: 'reload_page',
+  scene_get_render_stats: 'get_render_stats',
+  scene_get_runtime_hierarchy: 'get_scene_hierarchy',
+  scene_get_object_transform: 'get_object_transform',
 };
 
 const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
@@ -2708,8 +2720,6 @@ export const REVIEW_EVIDENCE_MCP_TOOL_NAMES = [] as const;
 
 export const WORKSPACE_MCP_TOOL_NAMES = [] as const;
 
-export const APP_RUNTIME_SCENE_MCP_TOOL_NAMES = [] as const;
-
 const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
   ...SCENE_EDITOR_MCP_TOOL_NAMES,
   ...SCENE_FILE_MCP_TOOL_NAMES,
@@ -2760,6 +2770,24 @@ export function resolveRuntimeOperationRequest(
   operation: RuntimeOperationDefinition,
   params: unknown,
 ): { params: unknown; target?: RuntimePageTarget } {
+  const required = operation.inputSchema.required ?? [];
+  if (required.length > 0) {
+    if (!isRecord(params)) {
+      throw new Error(
+        `${operation.mcpName} requires an object with parameter${required.length === 1 ? '' : 's'}: ${required.join(', ')}`,
+      );
+    }
+
+    const missing = required.filter(
+      (name) => !Object.prototype.hasOwnProperty.call(params, name),
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `${operation.mcpName} requires parameter${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   if (
     operation.mcpName === 'browser_screenshot' &&
     isRecord(params) &&

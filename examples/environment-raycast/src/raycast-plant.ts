@@ -8,11 +8,8 @@
 import {
   AssetManager,
   createSystem,
-  Entity,
   EnvironmentRaycastTarget,
-  Object3D,
   Quaternion,
-  RaycastSpace,
   Vector3,
 } from '@iwsdk/core';
 
@@ -26,51 +23,33 @@ import {
 export class RaycastPlantSystem extends createSystem({
   raycastTargets: { required: [EnvironmentRaycastTarget] },
 }) {
-  private previewPlant: Object3D | null = null;
-  private previewEntity: Entity | null = null;
-
-  init() {
-    // Create preview plant that follows raycast
-    const plantGltf = AssetManager.getGLTF('plantSansevieria');
-    if (!plantGltf) {
-      console.warn('[RaycastPlantSystem] plantSansevieria asset not loaded');
-      return;
-    }
-
-    this.previewPlant = plantGltf.scene;
-    this.scene.add(this.previewPlant);
-
-    // Create an entity with EnvironmentRaycastTarget to track raycast hits
-    this.previewEntity = this.world.createTransformEntity(this.previewPlant);
-    this.previewEntity.addComponent(EnvironmentRaycastTarget, {
-      space: RaycastSpace.Right,
-      maxDistance: 10,
-    });
-  }
-
   update() {
     // Check for trigger press on right hand to spawn a plant
     const rightGamepad = this.input.gamepads.right;
     const triggerPressed = rightGamepad?.getSelectStart() ?? false;
 
-    // Spawn on trigger press - use the current hit result from the preview entity
-    if (triggerPressed && this.previewEntity && this.previewPlant) {
-      const xrHitTestResult = this.previewEntity.getValue(
+    if (!triggerPressed) {
+      return;
+    }
+
+    this.queries.raycastTargets.entities.forEach((previewEntity) => {
+      const previewPlant = previewEntity.object3D;
+      const xrHitTestResult = previewEntity.getValue(
         EnvironmentRaycastTarget,
         'xrHitTestResult',
       ) as XRHitTestResult | undefined;
 
-      if (xrHitTestResult && this.previewPlant.visible) {
-        // Clone the current position and orientation from the preview plant
-        const position = this.previewPlant.position.clone();
-        const quaternion = this.previewPlant.quaternion.clone();
-        this.spawnPlantAt(position, quaternion);
+      if (xrHitTestResult && previewPlant?.visible) {
+        this.spawnPlantAt(
+          previewPlant.position.clone(),
+          previewPlant.quaternion.clone(),
+        );
       }
-    }
+    });
   }
 
   private spawnPlantAt(position: Vector3, quaternion: Quaternion) {
-    const plantGltf = AssetManager.getGLTF('plantSansevieria');
+    const plantGltf = AssetManager.getGLTF('plant-sansevieria');
     if (!plantGltf) {
       return;
     }
@@ -79,9 +58,7 @@ export class RaycastPlantSystem extends createSystem({
     newPlant.position.copy(position);
     newPlant.quaternion.copy(quaternion);
 
-    this.scene.add(newPlant);
-
-    // Create entity for the spawned plant (no raycast component - it's permanent)
+    // Permanent plants remain runtime-spawned; the preview itself is authored.
     this.world.createTransformEntity(newPlant);
   }
 }

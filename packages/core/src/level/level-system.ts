@@ -10,17 +10,11 @@ import type {
   ScenePerspectiveView,
 } from '@iwsdk/scene-composition';
 import { signal } from '@preact/signals-core';
-import { Types } from '../ecs/component.js';
 import type { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import type { World } from '../ecs/world.js';
-import {
-  DomeGradient,
-  DomeTexture,
-  IBLGradient,
-  IBLTexture,
-} from '../environment/index.js';
 import { Vector3 } from '../runtime/index.js';
+import { applyScenePlayerRig } from './level-player-rig.js';
 import { LevelRoot } from './level-root.js';
 import {
   applySceneEnvironment,
@@ -29,6 +23,8 @@ import {
   type SceneEnvironmentState,
 } from './level-scene-environment.js';
 import {
+  activateScenePlayerAttachments,
+  createSceneEntityReferenceResolver,
   SceneJSONImporter,
   type SceneJSONLoadResult,
 } from './level-scene-json-importer.js';
@@ -44,16 +40,10 @@ import { LevelTag } from './level-tag.js';
  * - Loads native scene JSON documents or native scene JSON URLs.
  * @category Scene
  */
-export class LevelSystem extends createSystem(
-  {
-    // All entities that belong to a level (will be destroyed on level change)
-    levelEntities: { required: [LevelTag] },
-  },
-  {
-    /** Attach a default gradient dome on level roots when none provided. */
-    defaultLighting: { type: Types.Boolean, default: true },
-  },
-) {
+export class LevelSystem extends createSystem({
+  // All entities that belong to a level (will be destroyed on level change)
+  levelEntities: { required: [LevelTag] },
+}) {
   private loading = false;
   /** Renderer state that predates the currently committed level. */
   private activeEnvironmentBase: SceneEnvironmentState | undefined;
@@ -164,7 +154,19 @@ export class LevelSystem extends createSystem(
           );
         }
 
+        applyScenePlayerRig(this.world, nativeResult?.document.player, {
+          resolveEntityReference:
+            nativeResult == null
+              ? undefined
+              : createSceneEntityReferenceResolver(
+                  this.world,
+                  newRoot,
+                  nativeResult.nodes,
+                ),
+        });
+
         disposeLevelEntities(previousEntities);
+        activateScenePlayerAttachments(nativeResult);
         newRoot.object3D!.visible = true;
         this.world.activeLevelId = nextLevelId;
         this.world.activeLevel!.value = newRoot;
@@ -173,27 +175,6 @@ export class LevelSystem extends createSystem(
         }
         this.activeEnvironmentBase = nextEnvironmentBase;
 
-        // Attach default lighting only after the staged level is committed.
-        try {
-          if (this.config.defaultLighting.value) {
-            const hasDome =
-              newRoot.hasComponent(DomeTexture) ||
-              newRoot.hasComponent(DomeGradient);
-            const hasIBL =
-              newRoot.hasComponent(IBLTexture) ||
-              newRoot.hasComponent(IBLGradient);
-            const hasAuthoredRootComponents =
-              nativeResult?.document.components != null;
-            if (!hasAuthoredRootComponents && !hasDome) {
-              newRoot.addComponent(DomeGradient);
-            }
-            if (!hasAuthoredRootComponents && !hasIBL) {
-              newRoot.addComponent(IBLGradient);
-            }
-          }
-        } catch (error) {
-          console.warn('[LevelSystem] defaultLighting setup failed:', error);
-        }
         this.loading = false;
         resolveLoad?.();
       })

@@ -159,6 +159,18 @@ describe('file-first scene authoring', () => {
         page.locator('html').getAttribute('data-iwsdk-workspace-view'),
       )
       .toBe('runtime');
+    await Promise.all([
+      page.waitForEvent('load'),
+      page.locator('[data-workspace-reload-button]').click(),
+    ]);
+    await page.waitForFunction(
+      () => (window as any).__IWSDK_SCENE_EDITOR_READY === true,
+    );
+    await expect
+      .poll(() =>
+        page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+      )
+      .toBe('runtime');
 
     await page.locator('[data-workspace-view-button="editor"]').click();
     await page.waitForURL(/\/#editor\/editor-smoke\.iwsdk\.scene\.json$/u);
@@ -178,6 +190,23 @@ describe('file-first scene authoring', () => {
     await expect
       .poll(() => page.locator('.scene-picker-dialog').count())
       .toBe(0);
+    await Promise.all([
+      page.waitForEvent('load'),
+      page.locator('[data-workspace-reload-button]').click(),
+    ]);
+    await page.waitForFunction(
+      () =>
+        (window as any).__IWSDK_SCENE_EDITOR_READY === true &&
+        (window as any).IWSDK_SCENE_EDITOR?.session != null,
+    );
+    expect(new URL(page.url()).hash).toBe(
+      '#editor/editor-smoke.iwsdk.scene.json',
+    );
+    await expect
+      .poll(() =>
+        page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+      )
+      .toBe('editor');
 
     await page.locator('[data-workspace-view-button="runtime"]').click();
     await expect.poll(() => new URL(page.url()).hash).toBe('');

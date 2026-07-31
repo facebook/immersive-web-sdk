@@ -7,6 +7,7 @@
 
 import { hashSceneComponentSchema } from '@iwsdk/scene-composition';
 import { describe, expect, it } from 'vitest';
+import { setComponentEditorMetadata } from '../../src/ecs/component-editor-metadata.js';
 import {
   componentCatalogFromComponents,
   defineComponents,
@@ -39,6 +40,11 @@ const ManifestCatalogTest = createComponent(
     _runtimeHandle: { type: Types.Object, default: undefined },
   },
   'Manifest catalog test component',
+);
+
+const IntrinsicCatalogTest = setComponentEditorMetadata(
+  createComponent('IntrinsicCatalogTest', {}),
+  { hidden: true, intrinsic: true },
 );
 
 describe('component manifests', () => {
@@ -109,6 +115,15 @@ describe('component manifests', () => {
     expect(schema).toBeDefined();
     expect(hashSceneComponentSchema(presentationVariant)).toBe(
       hashSceneComponentSchema(schema),
+    );
+  });
+
+  it('publishes non-structural editor metadata from component identity', () => {
+    const schema = sceneComponentSchemaFromComponent(IntrinsicCatalogTest);
+
+    expect(schema.editor).toEqual({ hidden: true, intrinsic: true });
+    expect(hashSceneComponentSchema(schema)).toBe(
+      hashSceneComponentSchema({ ...schema, editor: undefined }),
     );
   });
 

@@ -39,10 +39,12 @@ function createContext({
   pressedKeys = [],
   downKeys = [],
   gamepad,
+  xrGamepad,
 }: {
   pressedKeys?: string[];
   downKeys?: string[];
   gamepad?: any;
+  xrGamepad?: any;
 } = {}) {
   const pressed = new Set(pressedKeys);
   const down = new Set(downKeys);
@@ -57,7 +59,7 @@ function createContext({
     xr: {
       gamepads: {
         left: undefined,
-        right: undefined,
+        right: xrGamepad,
       },
     },
   } as any;
@@ -122,6 +124,30 @@ describe('InputActionManager', () => {
       y: 0.25,
     });
     expect(actions.getButtonDown(InputActions.LocomotionJump)).toBe(true);
+  });
+
+  it('maps the right XR A button to the locomotion jump action', () => {
+    const actions = new InputActionManager();
+    const getButtonDown = vi.fn((componentId: string) => {
+      return componentId === 'a-button';
+    });
+
+    actions.update(
+      createContext({
+        xrGamepad: {
+          getAxesValues: () => ({ x: 0, y: 0 }),
+          getButtonPressed: () => false,
+          getButtonDown,
+          getButtonUp: () => false,
+          getAxesState: () => 0,
+          getAxesEnteringState: () => false,
+          getAxesLeavingState: () => false,
+        },
+      }),
+    );
+
+    expect(actions.getButtonDown(InputActions.LocomotionJump)).toBe(true);
+    expect(getButtonDown).toHaveBeenCalledWith('a-button');
   });
 
   it('tracks axis entering edges for turn actions', () => {

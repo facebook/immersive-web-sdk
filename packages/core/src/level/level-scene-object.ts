@@ -240,7 +240,7 @@ async function lowerNode(
   const object = await createDirectContentObject(context, node);
   context.createdObjects.add(object);
   object.name = node.name ?? id;
-  object.visible = override?.visible ?? true;
+  object.visible = override?.visible ?? sceneNodeVisible(node);
   applyLoweredTransform(object, node.transform, options.prefixMatrix);
   markSceneObject(
     object,
@@ -389,7 +389,8 @@ async function lowerPatternContent(
       instances.name = `${lowered.id}:instances`;
       instances.castShadow = template.castShadow;
       instances.receiveShadow = template.receiveShadow;
-      instances.visible = content.overrides?.[root.id]?.visible ?? true;
+      instances.visible =
+        content.overrides?.[root.id]?.visible ?? sceneNodeVisible(root);
       instances.userData.iwsdkSceneFramingRole =
         root.framingRole ?? framingRole ?? 'content';
       const localMatrix = sceneTransformMatrix(root.transform);
@@ -579,6 +580,16 @@ function scaleToVec3(scale: SceneScale | undefined): Vec3 {
     return [1, 1, 1];
   }
   return typeof scale === 'number' ? [scale, scale, scale] : scale;
+}
+
+function sceneNodeVisible(node: SceneNode): boolean {
+  if (typeof node.visible === 'boolean') {
+    return node.visible;
+  }
+  const legacy =
+    node.components?.Visibility ??
+    node.components?.['com.iwsdk.components.Visibility'];
+  return legacy?.isVisible !== false;
 }
 
 function degreesToRadians(degrees: number): number {

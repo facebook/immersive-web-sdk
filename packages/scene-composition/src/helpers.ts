@@ -18,6 +18,7 @@ import type {
   SceneBounds,
   SceneDocument,
   SceneNode,
+  ScenePlayerTarget,
   ScenePrefabNodeOverride,
   SceneSnapOptions,
   SceneScale,
@@ -240,17 +241,25 @@ export function resolveReparentTransform(
   document: SceneDocument,
   nodeId: string,
   parentId: string | null,
+  parentTarget?: ScenePlayerTarget,
 ): SceneTransform {
   const location = findRequiredNodeLocation(document, nodeId);
-  if (location.parent?.id === parentId) {
+  const currentParentTarget =
+    location.parent == null ? location.node.parent?.target : undefined;
+  if (
+    location.parent?.id === parentId &&
+    currentParentTarget === parentTarget
+  ) {
     return location.node.transform ?? {};
   }
 
   const nodeWorldTransform = getNodeWorldTransform(document, nodeId);
   const nextParentWorldTransform =
-    parentId == null
-      ? identityWorldTransform()
-      : getNodeWorldTransform(document, parentId);
+    parentId != null
+      ? getNodeWorldTransform(document, parentId)
+      : parentTarget == null
+        ? identityWorldTransform()
+        : getPlayerTargetWorldTransform(document, parentTarget);
   const nextLocalLinear = multiplyMat3(
     invertMat3(nextParentWorldTransform.linear),
     nodeWorldTransform.linear,
@@ -298,16 +307,55 @@ function getParentWorldTransform(
   nodeId: string,
 ): ResolvedWorldTransform {
   const path = getRequiredNodePath(document.nodes, nodeId);
-  return combineNodeWorldTransforms(path.slice(0, -1));
+  return combineNodeWorldTransforms(
+    path.slice(0, -1),
+    getRootNodeParentWorldTransform(document, path[0]),
+  );
 }
 
 function getNodeWorldTransform(
   document: SceneDocument,
   nodeId: string,
 ): ResolvedWorldTransform {
+  const path = getRequiredNodePath(document.nodes, nodeId);
   return combineNodeWorldTransforms(
-    getRequiredNodePath(document.nodes, nodeId),
+    path,
+    getRootNodeParentWorldTransform(document, path[0]),
   );
+}
+
+function getRootNodeParentWorldTransform(
+  document: SceneDocument,
+  root: SceneNode | undefined,
+): ResolvedWorldTransform {
+  return root?.parent?.type === 'player-space'
+    ? getPlayerTargetWorldTransform(document, root.parent.target)
+    : identityWorldTransform();
+}
+
+function getPlayerTargetWorldTransform(
+  document: SceneDocument,
+  target: ScenePlayerTarget,
+): ResolvedWorldTransform {
+  const player = transformWorldTransform(document.player?.transform);
+  if (target === 'player') {
+    return player;
+  }
+  // Tracked spaces have runtime-supplied poses, not authored local transforms.
+  // Their only stable authored transform ancestor is Player Space itself.
+  return player;
+}
+
+function transformWorldTransform(
+  transform: SceneTransform | undefined,
+): ResolvedWorldTransform {
+  return {
+    linear: composeLinearTransform(
+      transform?.rotationDeg ?? [0, 0, 0],
+      scaleToVec3(transform?.scale),
+    ),
+    position: transform?.position ?? [0, 0, 0],
+  };
 }
 
 function getRequiredNodePath(nodes: SceneNode[], nodeId: string): SceneNode[] {
@@ -341,6 +389,7 @@ function getNodePath(
 
 function combineNodeWorldTransforms(
   nodes: SceneNode[],
+  initial = identityWorldTransform(),
 ): ResolvedWorldTransform {
   return nodes.reduce<ResolvedWorldTransform>((worldTransform, node) => {
     const position = node.transform?.position ?? [0, 0, 0];
@@ -354,7 +403,7 @@ function combineNodeWorldTransforms(
         transformVec3(worldTransform.linear, position),
       ),
     };
-  }, identityWorldTransform());
+  }, initial);
 }
 
 function worldPointToLocal(

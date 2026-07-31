@@ -141,6 +141,27 @@ export interface EmulatorOptions {
 }
 
 /**
+ * Options for IWSDK's cached, untrusted development certificate.
+ */
+export interface DevelopmentHttpsOptions {
+  /**
+   * Directory used to cache the generated certificate. Relative paths are
+   * resolved from the Vite project root.
+   * @default '<vite cacheDir>/iwsdk-https'
+   */
+  certDir?: string;
+
+  /** Additional DNS names to include in the certificate. */
+  domains?: string[];
+
+  /** Certificate common name. */
+  name?: string;
+
+  /** Certificate lifetime in days. */
+  ttlDays?: number;
+}
+
+/**
  * Main plugin options interface
  */
 export interface DevPluginOptions {
@@ -177,6 +198,19 @@ export interface DevPluginOptions {
    * mode.
    */
   workspace?: WorkspaceOptions;
+
+  /**
+   * Configure the cached, self-signed HTTPS certificate used by the Vite dev
+   * server. IWSDK enables it by default so WebXR is available on physical
+   * headsets without installing a local certificate authority. The managed
+   * Playwright browser accepts the certificate automatically; headset browsers
+   * show their normal one-time warning.
+   *
+   * Set this to `false` to opt into HTTP. A `server.https` value supplied to
+   * Vite takes precedence, so projects can also provide their own certificate.
+   * @default true
+   */
+  https?: boolean | DevelopmentHttpsOptions;
 
   /**
    * Enable verbose logging

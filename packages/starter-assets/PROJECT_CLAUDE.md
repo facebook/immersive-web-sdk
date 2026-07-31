@@ -300,6 +300,17 @@ Use the iwsdk-project-code-reviewer agent to review my code
 
 ## Skills Available
 
+### `/iwsdk-migrate-0-5`
+
+**Migrate an IWSDK 0.4.x application to IWSDK 0.5.0**
+
+Use when:
+
+- Upgrading an existing 0.4.x project to the 0.5 release
+- Replacing GLXF or Meta Spatial Editor with native IWSDK scenes
+- Removing legacy Vite plugins or generated UIKitML JSON
+- Diagnosing behavior or build regressions introduced at the 0.5 boundary
+
 ### `/iwsdk-scene-composer`
 
 **Compose an editable native IWSDK scene from text, images, or both**

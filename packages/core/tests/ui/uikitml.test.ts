@@ -8,12 +8,12 @@
 import { StyleSheet, TTFLoader } from '@pmndrs/uikit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CacheManager } from '../../src/asset/cache-manager.js';
+import { UIKitMLAsset } from '../../src/ui/uikitml-asset.js';
 import {
   loadUIKitMLAsset,
   loadUIKitMLComponent,
   parseUIKitMLSource,
 } from '../../src/ui/uikitml.js';
-import { UIKitMLAsset } from '../../src/ui/uikitml-asset.js';
 
 const FONT_SOURCE = `
 <style>

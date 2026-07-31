@@ -36,12 +36,14 @@ import {
   Object3D,
   PerspectiveCamera,
   Scene,
+  Vector3,
   WebGLRenderer,
 } from '../runtime/index.js';
 // See note above on LevelTag — import Transform directly from its leaf
 // module to avoid cycling back through '../ecs/index.js' via the transform
 // barrel.
 import { Transform } from '../transform/transform.js';
+import { Visibility } from '../visibility/visibility-component.js';
 import { Entity } from './entity.js';
 
 export enum VisibilityState {
@@ -126,6 +128,10 @@ export class World extends ElicsWorld {
   private worldCleanupFuncs: Array<() => void> = [];
   /** Guards {@link World.destroy} so a second call is a no-op. */
   private destroyed = false;
+  private authoredPlayerPosition?: Vector3;
+  private authoredPlayerPositionListeners = new Set<
+    (position: Vector3) => void
+  >();
   /** Per-frame XR callbacks registered via {@link World.onXRFrame}. */
   private xrFrameCallbacks = new Set<OnXRFrameCallback>();
 
@@ -208,12 +214,31 @@ export class World extends ElicsWorld {
     return super.createEntity() as Entity;
   }
 
+  /** @internal Publish scene-authored player placement to locomotion owners. */
+  setAuthoredPlayerPosition(position: Vector3): void {
+    this.authoredPlayerPosition ??= new Vector3();
+    this.authoredPlayerPosition.copy(position);
+    for (const listener of this.authoredPlayerPositionListeners) {
+      listener(this.authoredPlayerPosition);
+    }
+  }
+
+  /** @internal Reconcile a locomotion owner with scene-authored placement. */
+  onAuthoredPlayerPosition(listener: (position: Vector3) => void): () => void {
+    this.authoredPlayerPositionListeners.add(listener);
+    if (this.authoredPlayerPosition != null) {
+      listener(this.authoredPlayerPosition);
+    }
+    return () => this.authoredPlayerPositionListeners.delete(listener);
+  }
+
   createTransformEntity(
     object?: Object3D,
     parentOrOptions?: Entity | { parent?: Entity; persistent?: boolean },
   ): Entity {
     const entity = super.createEntity() as Entity;
     const obj = object ?? new Object3D();
+    const initialVisible = obj.visible;
     // Cast to pointer-events-capable Object3D event map for downstream typing
     entity.object3D = obj as unknown as Object3D<
       Object3DEventMap & PointerEventsMap
@@ -254,6 +279,7 @@ export class World extends ElicsWorld {
     }
 
     entity.addComponent(Transform, { parent });
+    entity.addComponent(Visibility, { isVisible: initialVisible });
 
     // Tag entity with current level, unless persistent
     if (!persistent) {
@@ -264,16 +290,25 @@ export class World extends ElicsWorld {
 
   /** Find an authored scene object by its stable scene node id. */
   getSceneObject<T extends Object3D = Object3D>(nodeId: string): T | undefined {
-    const root = this.activeLevel?.value?.object3D;
-    if (!root) {
-      return undefined;
-    }
     let result: Object3D | undefined;
-    root.traverse((object) => {
-      if (!result && object.userData.iwsdkSceneNodeId === nodeId) {
-        result = object;
+    for (const root of [
+      this.activeLevel?.value?.object3D,
+      this.playerEntity?.object3D,
+    ]) {
+      if (root == null) {
+        continue;
       }
-    });
+      root.traverse((object) => {
+        if (
+          !result &&
+          object.userData.iwsdkSceneNodeId === nodeId &&
+          (object.userData.iwsdkSceneLevelId == null ||
+            object.userData.iwsdkSceneLevelId === this.activeLevelId)
+        ) {
+          result = object;
+        }
+      });
+    }
     return result as T | undefined;
   }
 

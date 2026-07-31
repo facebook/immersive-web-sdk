@@ -17,6 +17,7 @@ import {
   writeFile,
 } from 'fs/promises';
 import { createServer, type Server } from 'http';
+import { get as httpsGet } from 'https';
 import { createRequire } from 'module';
 import { AddressInfo } from 'net';
 import os from 'os';
@@ -733,7 +734,7 @@ describe('create-iwsdk scene flow E2E', () => {
             );
 
             try {
-              const baseUrl = `http://127.0.0.1:${port}`;
+              const baseUrl = `https://127.0.0.1:${port}`;
               const appPage = await waitForHttpOk(`${baseUrl}/`, devServer);
               expect(await appPage.text()).toContain('scene-container');
 
@@ -764,7 +765,7 @@ describe('create-iwsdk scene flow E2E', () => {
               if (target === 'browser') {
                 expect(runtimeSession.aiMode).toBeUndefined();
                 expect(runtimeSession.browser).toMatchObject({
-                  commandReady: false,
+                  commandReady: true,
                   connected: true,
                   status: 'connected',
                 });
@@ -840,6 +841,9 @@ async function smokeGeneratedAppEditorFlow({
   const addedNodeId =
     target === 'browser' ? 'scaffold-added-group' : 'scaffold-added-plant';
   const assetIds = getSceneAssetIds(originalScene);
+  const sharedAssetIds = assetIds.filter((assetId) =>
+    ['environment-desk', 'plant-sansevieria', 'robot'].includes(assetId),
+  );
   const evidenceDir =
     CREATE_E2E_EVIDENCE_DIR == null
       ? undefined
@@ -849,17 +853,20 @@ async function smokeGeneratedAppEditorFlow({
   }
 
   const appPage = await browser.newPage({
+    ignoreHTTPSErrors: true,
     viewport: { height: 720, width: 960 },
   });
   const editorPage = await browser.newPage({
     extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
+    ignoreHTTPSErrors: true,
     viewport: { height: 720, width: 960 },
   });
-  const appDiagnostics = collectPageDiagnostics(appPage, assetIds);
-  const editorDiagnostics = collectPageDiagnostics(editorPage, assetIds);
+  const appDiagnostics = collectPageDiagnostics(appPage, sharedAssetIds);
+  const editorDiagnostics = collectPageDiagnostics(editorPage, sharedAssetIds);
 
   try {
     await appPage.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
+    expect(await appPage.evaluate(() => window.isSecureContext)).toBe(true);
     try {
       await appPage.waitForFunction(
         () => Boolean((window as any).FRAMEWORK_MCP_RUNTIME),
@@ -912,6 +919,7 @@ async function smokeGeneratedAppEditorFlow({
     await editorPage.goto(`${baseUrl}/__iwsdk/editor?scene=${scenePath}`, {
       waitUntil: 'domcontentloaded',
     });
+    expect(await editorPage.evaluate(() => window.isSecureContext)).toBe(true);
     await editorPage.waitForFunction(
       () => Boolean((window as any).IWSDK_SCENE_EDITOR),
       undefined,
@@ -1117,8 +1125,8 @@ async function smokeGeneratedAppEditorFlow({
     expect(filterIgnorableBadResponses(editorSnapshot.badResponses)).toEqual(
       [],
     );
-    assertAssetResponses(appSnapshot.assetResponses, assetIds);
-    assertAssetResponses(editorSnapshot.assetResponses, assetIds);
+    assertAssetResponses(appSnapshot.assetResponses, sharedAssetIds);
+    assertAssetResponses(editorSnapshot.assetResponses, sharedAssetIds);
 
     if (evidenceDir != null) {
       await writeFile(
@@ -1415,7 +1423,6 @@ function startLongRunningCommand(command: string, args: string[], cwd: string) {
     env: {
       ...process.env,
       BROWSER: 'none',
-      IWSDK_DISABLE_MKCERT: '1',
       NO_COLOR: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -1473,7 +1480,7 @@ async function waitForHttpOk(
       );
     }
     try {
-      const response = await fetch(url, { cache: 'no-store', headers });
+      const response = await fetchDevelopmentUrl(url, headers);
       if (response.ok) {
         return response;
       }
@@ -1488,6 +1495,59 @@ async function waitForHttpOk(
       lastError instanceof Error ? lastError.message : String(lastError)
     }\n${processHandle.output()}`,
   );
+}
+
+function fetchDevelopmentUrl(
+  url: string,
+  headers?: Record<string, string>,
+  redirectsRemaining = 5,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = httpsGet(
+      url,
+      {
+        headers,
+        // Mirrors a developer accepting the expected self-signed certificate
+        // warning without weakening trust for any other test traffic.
+        rejectUnauthorized: false,
+      },
+      (response) => {
+        if (
+          response.statusCode != null &&
+          response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          response.headers.location != null &&
+          redirectsRemaining > 0
+        ) {
+          response.resume();
+          resolve(
+            fetchDevelopmentUrl(
+              new URL(response.headers.location, url).href,
+              headers,
+              redirectsRemaining - 1,
+            ),
+          );
+          return;
+        }
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('error', reject);
+        response.on('end', () => {
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              headers: response.headers as HeadersInit,
+              status: response.statusCode ?? 500,
+              statusText: response.statusMessage,
+            }),
+          );
+        });
+      },
+    );
+    request.on('error', reject);
+    request.setTimeout(5000, () => {
+      request.destroy(new Error(`Timed out fetching ${url}`));
+    });
+  });
 }
 
 async function waitForManagedBrowserLaunch(

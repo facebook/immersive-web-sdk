@@ -5,7 +5,26 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { type AssetManifest, AssetType } from '@iwsdk/core';
+import {
+  type AssetManifest,
+  AssetType,
+  CylinderGeometry,
+  Mesh,
+  MeshStandardMaterial,
+  SphereGeometry,
+} from '@iwsdk/core';
+
+const dynamicSphere = new Mesh(
+  new SphereGeometry(0.2),
+  new MeshStandardMaterial({ color: 0xa78bfa }),
+);
+dynamicSphere.name = 'Dynamic Sphere';
+
+const dynamicCylinder = new Mesh(
+  new CylinderGeometry(0.15, 0.15, 0.4),
+  new MeshStandardMaterial({ color: 0x38bdf8 }),
+);
+dynamicCylinder.name = 'Dynamic Cylinder';
 
 const assets = {
   'environment-desk': {
@@ -28,11 +47,8 @@ const assets = {
     type: AssetType.UIKitML,
     url: '/ui/welcome.uikitml',
   },
-  'physics-settings-panel': {
-    name: 'Physics Settings Panel',
-    type: AssetType.UIKitML,
-    url: '/ui/settings.uikitml',
-  },
+  'physics-dynamic-sphere': dynamicSphere,
+  'physics-dynamic-cylinder': dynamicCylinder,
 } satisfies AssetManifest;
 
 export default assets;

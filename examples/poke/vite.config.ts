@@ -8,14 +8,12 @@
 import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { defineConfig } from 'vite';
-import mkcert from 'vite-plugin-mkcert';
-
-const useMkcert = process.env.IWSDK_DISABLE_MKCERT !== '1';
 
 export default defineConfig({
   plugins: [
-    ...(useMkcert ? [mkcert()] : []),
     iwsdkDev({
+      assetManifest: './src/assets.ts',
+      componentManifest: './src/components.ts',
       emulator: {
         device: 'metaQuest3',
         activation: 'always',

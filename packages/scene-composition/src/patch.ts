@@ -11,6 +11,7 @@ import type {
   PatchResult,
   SceneAuthoring,
   SceneAuthoringView,
+  SceneBuiltinEntity,
   SceneComponentValue,
   SceneDocument,
   SceneEnvironment,
@@ -19,6 +20,8 @@ import type {
   SceneNodeContent,
   SceneNodeFramingRole,
   ScenePatch,
+  ScenePlayerSpaceParent,
+  ScenePlayerTarget,
   ScenePrefab,
   SceneTransform,
 } from './types.js';
@@ -162,11 +165,14 @@ function applyPatchInPlace(
         patch.parentId ?? null,
         patch.index,
         patch.preserveWorldTransform === true,
+        patch.parent,
       );
     case 'renameNode':
       return renameNode(document, patch.nodeId, patch.newNodeId);
     case 'updateTransform':
       return updateTransform(document, patch.nodeId, patch.transform);
+    case 'updateVisibility':
+      return updateVisibility(document, patch.nodeId, patch.visible);
     case 'updateFramingRole':
       return updateFramingRole(document, patch.nodeId, patch.framingRole);
     case 'updateComponent':
@@ -178,6 +184,15 @@ function applyPatchInPlace(
       );
     case 'updateRootComponent':
       return updateRootComponent(document, patch.component, patch.value);
+    case 'updatePlayerComponent':
+      return updatePlayerComponent(
+        document,
+        patch.target,
+        patch.component,
+        patch.value,
+      );
+    case 'updatePlayerTransform':
+      return updatePlayerTransform(document, patch.target, patch.transform);
     case 'reorderChildren':
       return reorderChildren(document, patch.parentId ?? null, patch.childIds);
     case 'updateContent':
@@ -232,6 +247,12 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
     case 'moveNode':
       assertNonEmptyStringField(value.nodeId, 'nodeId');
       assertOptionalParentId(value.parentId);
+      if (value.parent !== undefined) {
+        assertPlayerSpaceParent(value.parent);
+      }
+      if (value.parentId != null && value.parent != null) {
+        throw new Error('moveNode cannot set both parentId and parent');
+      }
       assertOptionalIndex(value.index);
       assertOptionalBoolean(
         value.preserveWorldTransform,
@@ -247,6 +268,10 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
       if (value.transform !== undefined) {
         assertPlainObjectField(value.transform, 'transform');
       }
+      return;
+    case 'updateVisibility':
+      assertNonEmptyStringField(value.nodeId, 'nodeId');
+      assertOptionalBoolean(value.visible, 'visible');
       return;
     case 'updateFramingRole':
       assertNonEmptyStringField(value.nodeId, 'nodeId');
@@ -269,6 +294,21 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
       assertNonEmptyStringField(value.component, 'component');
       if (value.value !== undefined && !isJsonValue(value.value)) {
         throw new Error('value must be JSON serializable');
+      }
+      return;
+    case 'updatePlayerComponent':
+      assertPlayerTarget(value.target);
+      assertNonEmptyStringField(value.component, 'component');
+      if (value.value !== undefined && !isJsonValue(value.value)) {
+        throw new Error('value must be JSON serializable');
+      }
+      return;
+    case 'updatePlayerTransform':
+      if (value.target !== 'player') {
+        throw new Error('updatePlayerTransform only supports Player Space');
+      }
+      if (value.transform !== undefined) {
+        assertPlainObjectField(value.transform, 'transform');
       }
       return;
     case 'reorderChildren':
@@ -338,7 +378,10 @@ function assertValidScenePatch(value: unknown): asserts value is ScenePatch {
   }
 }
 
-function assertPlainObjectField(value: unknown, fieldName: string) {
+function assertPlainObjectField(
+  value: unknown,
+  fieldName: string,
+): asserts value is Record<string, unknown> {
   if (!isPlainObject(value)) {
     throw new Error(`${fieldName} must be an object`);
   }
@@ -354,6 +397,34 @@ function assertOptionalParentId(value: unknown) {
   if (value !== undefined && value !== null && typeof value !== 'string') {
     throw new Error('parentId must be a string or null');
   }
+}
+
+function assertPlayerTarget(
+  value: unknown,
+): asserts value is ScenePlayerTarget {
+  if (
+    ![
+      'player',
+      'camera',
+      'head',
+      'left-target-ray',
+      'right-target-ray',
+      'left-grip',
+      'right-grip',
+    ].includes(String(value))
+  ) {
+    throw new Error('target must name a built-in player space');
+  }
+}
+
+function assertPlayerSpaceParent(
+  value: unknown,
+): asserts value is ScenePlayerSpaceParent {
+  assertPlainObjectField(value, 'parent');
+  if (value.type !== 'player-space') {
+    throw new Error('parent.type must be "player-space"');
+  }
+  assertPlayerTarget(value.target);
 }
 
 function assertOptionalIndex(value: unknown) {
@@ -412,6 +483,7 @@ function moveNode(
   parentId: string | null,
   index?: number,
   preserveWorldTransform = false,
+  parent?: ScenePlayerSpaceParent,
 ): ScenePatch {
   if (parentId === nodeId) {
     throw new Error(`Cannot move node "${nodeId}" under itself`);
@@ -436,9 +508,13 @@ function moveNode(
   }
 
   const preservedTransform = preserveWorldTransform
-    ? resolveReparentTransform(document, nodeId, parentId)
+    ? resolveReparentTransform(document, nodeId, parentId, parent?.target)
     : undefined;
   const previousParentId = source.parent?.id ?? null;
+  const previousParent =
+    source.parent == null && source.node.parent != null
+      ? deepClone(source.node.parent)
+      : undefined;
   const previousIndex = source.index;
   const [node] = source.siblings.splice(source.index, 1);
   if (preservedTransform != null) {
@@ -450,6 +526,11 @@ function moveNode(
   }
   if (source.parent != null && source.siblings.length === 0) {
     delete source.parent.children;
+  }
+  if (parentId != null || parent == null) {
+    delete node.parent;
+  } else {
+    node.parent = deepClone(parent);
   }
   const destination = getSiblings(document, parentId, { create: true });
   const insertionIndex = Math.min(
@@ -463,6 +544,7 @@ function moveNode(
     nodeId,
     op: 'moveNode',
     parentId: previousParentId,
+    ...(previousParent == null ? {} : { parent: previousParent }),
     preserveWorldTransform,
   };
 }
@@ -504,10 +586,27 @@ function rewriteNodeReferences(
 ) {
   const visit = (nodes: SceneNode[]) => {
     for (const entry of nodes) {
+      rewriteComponentEntityReferences(entry.components, previousId, nextId);
       visit(entry.children ?? []);
     }
   };
   visit(document.nodes);
+  rewriteComponentEntityReferences(document.components, previousId, nextId);
+  for (const descriptor of [
+    document.player,
+    document.player?.camera,
+    document.player?.head,
+    document.player?.leftTargetRay,
+    document.player?.rightTargetRay,
+    document.player?.leftGrip,
+    document.player?.rightGrip,
+  ]) {
+    rewriteComponentEntityReferences(
+      descriptor?.components,
+      previousId,
+      nextId,
+    );
+  }
 
   const composition = document.authoring?.composition;
   composition?.features.forEach((feature) => {
@@ -553,6 +652,28 @@ function rewriteNodeReferences(
   });
 }
 
+function rewriteComponentEntityReferences(
+  components: Record<string, unknown> | undefined,
+  previousId: string,
+  nextId: string,
+) {
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value == null || typeof value !== 'object') {
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    if (record.type === 'node' && record.id === previousId) {
+      record.id = nextId;
+    }
+    Object.values(record).forEach(visit);
+  };
+  Object.values(components ?? {}).forEach(visit);
+}
+
 function replaceIds(ids: string[], previousId: string, nextId: string) {
   return ids.map((id) => (id === previousId ? nextId : id));
 }
@@ -576,6 +697,46 @@ function updateTransform(
     op: 'updateTransform',
     transform: previous,
   };
+}
+
+function updateVisibility(
+  document: SceneDocument,
+  nodeId: string,
+  visible: boolean | undefined,
+): ScenePatch {
+  const node = getRequiredNode(document, nodeId);
+  const previous = node.visible;
+
+  // Visible is the default and is omitted from canonical scene JSON.
+  if (visible === undefined || visible) {
+    delete node.visible;
+  } else {
+    node.visible = false;
+  }
+  removeLegacyVisibilityComponent(node);
+
+  return {
+    nodeId,
+    op: 'updateVisibility',
+    visible: previous,
+  };
+}
+
+function removeLegacyVisibilityComponent(node: SceneNode): void {
+  if (node.components == null) {
+    return;
+  }
+  for (const componentName of Object.keys(node.components)) {
+    if (
+      componentName === 'Visibility' ||
+      componentName === 'com.iwsdk.components.Visibility'
+    ) {
+      delete node.components[componentName];
+    }
+  }
+  if (Object.keys(node.components).length === 0) {
+    delete node.components;
+  }
 }
 
 function updateFramingRole(
@@ -645,6 +806,98 @@ function updateRootComponent(
     component,
     op: 'updateRootComponent',
     value: previous === undefined ? undefined : deepClone(previous),
+  };
+}
+
+function updatePlayerComponent(
+  document: SceneDocument,
+  target: ScenePlayerTarget,
+  component: string,
+  value: SceneComponentValue | undefined,
+): ScenePatch {
+  const { descriptor, targetKey } = getPlayerDescriptor(document, target);
+  const previous = descriptor.components?.[component];
+  descriptor.components ??= {};
+  if (value === undefined) {
+    delete descriptor.components[component];
+    if (Object.keys(descriptor.components).length === 0) {
+      delete descriptor.components;
+    }
+  } else {
+    descriptor.components[component] = deepClone(value);
+  }
+
+  pruneEmptyPlayerDescriptor(document, targetKey, descriptor);
+  return {
+    component,
+    op: 'updatePlayerComponent',
+    target,
+    value: previous === undefined ? undefined : deepClone(previous),
+  };
+}
+
+type PlayerDescriptorKey =
+  | 'camera'
+  | 'head'
+  | 'leftTargetRay'
+  | 'rightTargetRay'
+  | 'leftGrip'
+  | 'rightGrip';
+
+function getPlayerDescriptor(
+  document: SceneDocument,
+  target: ScenePlayerTarget,
+): { descriptor: SceneBuiltinEntity; targetKey: PlayerDescriptorKey | null } {
+  document.player ??= {};
+  const targetKeys: Record<
+    Exclude<ScenePlayerTarget, 'player'>,
+    PlayerDescriptorKey
+  > = {
+    camera: 'camera',
+    head: 'head',
+    'left-target-ray': 'leftTargetRay',
+    'right-target-ray': 'rightTargetRay',
+    'left-grip': 'leftGrip',
+    'right-grip': 'rightGrip',
+  };
+  const targetKey = target === 'player' ? null : targetKeys[target];
+  return {
+    descriptor:
+      targetKey == null ? document.player : (document.player[targetKey] ??= {}),
+    targetKey,
+  };
+}
+
+function pruneEmptyPlayerDescriptor(
+  document: SceneDocument,
+  targetKey: PlayerDescriptorKey | null,
+  descriptor: SceneBuiltinEntity,
+) {
+  if (targetKey != null && Object.keys(descriptor).length === 0) {
+    delete document.player?.[targetKey];
+  }
+  if (document.player != null && Object.keys(document.player).length === 0) {
+    delete document.player;
+  }
+}
+
+function updatePlayerTransform(
+  document: SceneDocument,
+  target: 'player',
+  transform: SceneTransform | undefined,
+): ScenePatch {
+  document.player ??= {};
+  const previous = document.player.transform;
+  if (transform === undefined) {
+    delete document.player.transform;
+  } else {
+    document.player.transform = deepClone(transform);
+  }
+  pruneEmptyPlayerDescriptor(document, null, document.player);
+  return {
+    op: 'updatePlayerTransform',
+    target,
+    transform: previous === undefined ? undefined : deepClone(previous),
   };
 }
 

@@ -54,6 +54,16 @@ This runs:
 - `starter:sync` - Generates the desktop, VR, and AR TypeScript/JavaScript variants
 - `build-assets.mjs` - Creates `dist/assets/` and `dist/recipes/`
 
+## Release migration skills
+
+Every minor or major IWSDK release must add a versioned migration skill under
+`claude-injections/skills/iwsdk-migrate-<major>-<minor>/SKILL.md`. Compare the
+release candidate against the preceding public npm release, separate required
+compatibility work from optional modernization, and include live runtime/editor
+verification. Register the skill in `claude-injections/settings.json`,
+`CODEX_SKILL_NAMES`, and `PROJECT_CLAUDE.md`. Keep published migration skills
+versioned so later releases do not erase the instructions for an older boundary.
+
 ## License
 
 MIT © Meta Platforms, Inc.

@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 describe('editor outliner reorder', () => {
-  test('moves scene graph siblings through the context menu and preserves order after save and reload', async () => {
+  test('sorts the outliner by id without changing document order', async () => {
     harness = await createEditorTestHarness('editor-outliner-reorder');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
@@ -30,44 +30,35 @@ describe('editor outliner reorder', () => {
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
         content: { asset: 'vase', type: 'asset' },
-        id: 'vase-1',
+        id: 'z-vase',
         transform: { position: [1, 0, 0] },
       },
     });
     await dispatchSceneTool(editor.page, 'scene_add_node', {
       node: {
         content: { asset: 'vase', type: 'asset' },
-        id: 'vase-2',
+        id: 'a-vase',
         transform: { position: [2, 0, 0] },
       },
     });
     await expect
       .poll(() => rootNodeIds(editor))
-      .toEqual(['table-1', 'vase-1', 'vase-2']);
+      .toEqual(['table-1', 'z-vase', 'a-vase']);
     await expect
       .poll(() => outlinerNodeIds(editor))
-      .toEqual(['table-1', 'vase-1', 'vase-2']);
+      .toEqual(['a-vase', 'table-1', 'z-vase']);
 
-    await openNodeContextMenu(editor, 'vase-2');
-    await editor.page.locator('[data-scene-graph-action="move-up"]').click();
-    await expect
-      .poll(() => rootNodeIds(editor))
-      .toEqual(['table-1', 'vase-2', 'vase-1']);
-    await expect
-      .poll(() => outlinerNodeIds(editor))
-      .toEqual(['table-1', 'vase-2', 'vase-1']);
-
-    await openNodeContextMenu(editor, 'vase-2');
-    await editor.page.locator('[data-scene-graph-action="move-up"]').click();
-    await expect
-      .poll(() => rootNodeIds(editor))
-      .toEqual(['vase-2', 'table-1', 'vase-1']);
-    await openNodeContextMenu(editor, 'vase-2');
+    await openNodeContextMenu(editor, 'a-vase');
     await expect
       .poll(() =>
-        editor.page.locator('[data-scene-graph-action="move-up"]').isDisabled(),
+        editor.page.locator('[data-scene-graph-action="move-up"]').count(),
       )
-      .toBe(true);
+      .toBe(0);
+    await expect
+      .poll(() =>
+        editor.page.locator('[data-scene-graph-action="move-down"]').count(),
+      )
+      .toBe(0);
     await expect
       .poll(() =>
         editor.page.evaluate(() => ({
@@ -84,19 +75,19 @@ describe('editor outliner reorder', () => {
     ).resolves.toMatchObject({ dirty: false });
     const savedScene = await harness.readScene();
     expect(savedScene.nodes.map((node: { id: string }) => node.id)).toEqual([
-      'vase-2',
       'table-1',
-      'vase-1',
+      'z-vase',
+      'a-vase',
     ]);
 
     const reloadedEditor = await harness.openEditor();
     await expectRealWebGLViewport(reloadedEditor);
     await expect
       .poll(() => rootNodeIds(reloadedEditor))
-      .toEqual(['vase-2', 'table-1', 'vase-1']);
+      .toEqual(['table-1', 'z-vase', 'a-vase']);
     await expect
       .poll(() => outlinerNodeIds(reloadedEditor))
-      .toEqual(['vase-2', 'table-1', 'vase-1']);
+      .toEqual(['a-vase', 'table-1', 'z-vase']);
   }, 45000);
 });
 

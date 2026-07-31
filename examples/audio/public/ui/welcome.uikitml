@@ -59,10 +59,15 @@
   }
 
   .button {
+    justify-content: flex-start;
     margin-left: 24px;
     margin-right: 24px;
     margin-top: 16px;
     margin-bottom: 24px;
+  }
+
+  .button-label {
+    transform-translate-y: 1px;
   }
 
 </style>
@@ -77,12 +82,12 @@
     <ButtonIcon>
       <RectangleGoggles></RectangleGoggles>
     </ButtonIcon>
-    Enter XR
+    <ButtonLabel class="button-label">Enter XR</ButtonLabel>
   </Button>
   <Button id="exit-button" class="button" style="display: none">
     <ButtonIcon>
       <LogIn></LogIn>
     </ButtonIcon>
-    Exit to Browser
+    <ButtonLabel class="button-label">Exit to Browser</ButtonLabel>
   </Button>
 </Panel>

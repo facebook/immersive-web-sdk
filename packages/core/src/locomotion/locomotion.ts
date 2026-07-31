@@ -78,8 +78,31 @@ export class LocomotionSystem extends createSystem(
   private slideSystem?: SlideSystem;
   private turnSystem!: TurnSystem;
   private microGestureControlsEnabled = false;
+  private requestedPlayerPosition?: Vector3;
+
+  /** Place the locomotion origin at an authored virtual-environment position. */
+  setPlayerPosition(position: Vector3): void {
+    this.requestedPlayerPosition ??= new Vector3();
+    this.requestedPlayerPosition.copy(position);
+    this.config.initialPlayerPosition.value = position.toArray();
+    this.player.position.copy(position);
+    if (this.locomotor?.isInitialized()) {
+      this.locomotor.teleport(position);
+    }
+  }
 
   init() {
+    // Apply the configured starting position synchronously. Native scene
+    // loading captures the current player transform as its restoration
+    // baseline, while the locomotor finishes initializing asynchronously.
+    this.player.position.fromArray(
+      this.config.initialPlayerPosition.value as number[],
+    );
+    this.cleanupFuncs.push(
+      this.world.onAuthoredPlayerPosition((position) => {
+        this.setPlayerPosition(position);
+      }),
+    );
     this.inputProvider = new ActionLocomotionInputProvider(this.world);
     this.inputProvider.enableBrowserControls(
       this.config.browserControls.value as BrowserLocomotionControls,
@@ -155,9 +178,11 @@ export class LocomotionSystem extends createSystem(
   private async initLocomotor(): Promise<void> {
     // Create Locomotor with configuration
     const locomotorConfig: LocomotorConfig = {
-      initialPlayerPosition: new Vector3().fromArray(
-        this.config.initialPlayerPosition.value as number[],
-      ),
+      initialPlayerPosition:
+        this.requestedPlayerPosition?.clone() ??
+        new Vector3().fromArray(
+          this.config.initialPlayerPosition.value as number[],
+        ),
       rayGravity: this.config.rayGravity.value as number,
       maxDropDistance: this.config.maxDropDistance.value as number,
       jumpHeight: this.config.jumpHeight.value as number,
@@ -167,6 +192,10 @@ export class LocomotionSystem extends createSystem(
 
     this.locomotor = new Locomotor(locomotorConfig);
     await this.locomotor.initialize();
+    if (this.requestedPlayerPosition != null) {
+      this.locomotor.teleport(this.requestedPlayerPosition);
+      this.player.position.copy(this.requestedPlayerPosition);
+    }
 
     // Register subsystems with locomotor
     this.world.registerSystem(TeleportSystem, {

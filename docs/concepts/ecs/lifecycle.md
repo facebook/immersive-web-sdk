@@ -13,7 +13,8 @@ When you call `World.create(container, options)` IWSDK:
 1. Constructs a `World` instance and registers core components/systems: `Transform`, `Visibility`, `TransformSystem`, `VisibilitySystem`.
 2. Creates Three.js objects: `Scene`, `PerspectiveCamera`, `WebGLRenderer`; enables WebXR.
 3. Wraps the Scene in an entity (`world.sceneEntity`) and initializes an `activeLevel` entity beneath it.
-4. Sets up default lighting unless disabled (gradient environment + background).
+4. Loads the authored level environment. Dome, IBL, and light components are
+   explicit scene data; IWSDK does not inject missing lighting.
 5. Creates `XRInputManager`; wires `player` (XROrigin) and `input` into the world.
 6. Registers core feature systems (always‑on UI, Audio; optional Locomotion/Grabbing) with explicit priorities.
 7. Initializes `AssetManager`.

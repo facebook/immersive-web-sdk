@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'vitest';
 import {
+  APP_RUNTIME_SCENE_MCP_TOOL_NAMES,
   RUNTIME_MCP_TOOLS,
   SCENE_MCP_TOOL_NAMES,
   getRuntimeOperationByToolName,
@@ -14,13 +15,15 @@ import {
 } from '../src/runtime-contract.js';
 
 describe('runtime contract scene tools', () => {
-  test('exposes exactly the file-first scene surface', () => {
+  test('exposes the file-first and app-runtime inspection surfaces', () => {
     const sceneTools = RUNTIME_MCP_TOOLS.map((tool) => tool.name).filter(
       (name) => name.startsWith('scene_'),
     );
 
-    expect(new Set(sceneTools)).toEqual(new Set(SCENE_MCP_TOOL_NAMES));
-    expect(sceneTools).toHaveLength(9);
+    expect(new Set(sceneTools)).toEqual(
+      new Set([...SCENE_MCP_TOOL_NAMES, ...APP_RUNTIME_SCENE_MCP_TOOL_NAMES]),
+    );
+    expect(sceneTools).toHaveLength(12);
     expect(
       RUNTIME_MCP_TOOLS.some((tool) => tool.name.startsWith('workspace_')),
     ).toBe(false);
@@ -33,6 +36,30 @@ describe('runtime contract scene tools', () => {
         target: { role: 'editor' },
         wsMethod: toolName,
       });
+    }
+  });
+
+  test('routes runtime inspection tools to the application page', () => {
+    expect(
+      getRuntimeOperationByToolName('scene_get_render_stats'),
+    ).toMatchObject({
+      cliPath: ['scene', 'render-stats'],
+      wsMethod: 'get_render_stats',
+    });
+    expect(
+      getRuntimeOperationByToolName('scene_get_runtime_hierarchy'),
+    ).toMatchObject({
+      cliPath: ['scene', 'runtime-hierarchy'],
+      wsMethod: 'get_scene_hierarchy',
+    });
+    expect(
+      getRuntimeOperationByToolName('scene_get_object_transform'),
+    ).toMatchObject({
+      cliPath: ['scene', 'transform'],
+      wsMethod: 'get_object_transform',
+    });
+    for (const toolName of APP_RUNTIME_SCENE_MCP_TOOL_NAMES) {
+      expect(getRuntimeOperationByToolName(toolName)?.target).toBeUndefined();
     }
   });
 
@@ -94,6 +121,32 @@ describe('runtime contract scene tools', () => {
     ).toThrow(
       'browser_screenshot does not accept parameters; it always captures the application runtime',
     );
+  });
+
+  test('rejects runtime requests that omit required parameters', () => {
+    const operation = getRuntimeOperationByToolName('xr_set_gamepad_state');
+
+    expect(() =>
+      resolveRuntimeOperationRequest(operation!, {
+        handedness: 'right',
+        buttonIndex: 3,
+      }),
+    ).toThrow('xr_set_gamepad_state requires parameter: device');
+    expect(() => resolveRuntimeOperationRequest(operation!, [])).toThrow(
+      'xr_set_gamepad_state requires an object with parameter: device',
+    );
+    expect(
+      resolveRuntimeOperationRequest(operation!, {
+        device: 'controller-right',
+        buttons: [{ index: 3, value: 1 }],
+      }),
+    ).toEqual({
+      params: {
+        device: 'controller-right',
+        buttons: [{ index: 3, value: 1 }],
+      },
+      target: undefined,
+    });
   });
 
   test('exposes isolated UIKitML rendering as an editor-targeted image tool', () => {

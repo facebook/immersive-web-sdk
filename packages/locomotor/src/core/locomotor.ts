@@ -331,6 +331,12 @@ export class Locomotor {
       return;
     }
 
+    // Keep the public pose authoritative immediately. Worker responses arrive
+    // asynchronously; without this, consumers can render one or more frames at
+    // the pre-teleport position after an authored player placement is applied.
+    this.position.copy(position);
+    this.targetPosition.copy(position);
+
     if (this.useWorker && this.worker) {
       this.requestArr[0] = MessageType.Teleport;
       position.toArray(this.requestArr, 1);

@@ -1,47 +1,93 @@
 <style>
-  .panel-container {
-    align-items: flex-start;
-    padding: 2;
-    width: 50;
-    display: flex;
-    flex-direction: column;
-    background-color: #09090b;
-    border-color: #27272a;
-    border-width: 0.15;
-    border-radius: 3;
+  @font-face {
+    font-family: "DM Sans";
+    src: url("https://fonts.gstatic.com/s/dmsans/v17/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAopxhTg.ttf");
+    font-weight: 400;
+  }
+
+  @font-face {
+    font-family: "DM Sans";
+    src: url("https://fonts.gstatic.com/s/dmsans/v17/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAkJxhTg.ttf");
+    font-weight: 500;
+  }
+
+  @font-face {
+    font-family: "DM Sans";
+    src: url("https://fonts.gstatic.com/s/dmsans/v17/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwARZthTg.ttf");
+    font-weight: 700;
   }
 
   .heading {
-    font-size: 4;
-    font-weight: medium;
-    color: #fafafa;
-    text-align: left;
+    height: 48px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 24px;
+    letter-spacing: -0.5px;
+    color: #272727;
+  }
+
+  .heading:dark {
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .sub-heading {
-    font-size: 2;
-    color: #a1a1aa;
-    text-align: left;
-    margin-top: 0.3;
-  }
-  
-  #xr-button {
+    color: #272727;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 18px;
     width: 100%;
-    padding: 1.5;
-    margin-top: 2;
-    background-color: #fafafa;
-    color: #09090b;
-    border-radius: 1.5;
-    border-width: 0.1;
-    border-color: #e4e4e7;
-    font-size: 2.5;
-    font-weight: medium;
-    text-align: center;
-    cursor: pointer;
+    margin-top: 10px;
   }
+
+  .sub-heading:dark {
+    color: rgba(255, 255, 255, 0.90);
+  }
+
+  .panel-root {
+    flex-direction: column;
+    font-family: "DM Sans";
+    width: 344px;
+  }
+
+  .panel-content {
+    align-items: center;
+    flex-direction: column;
+    padding-top: 16px;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .button {
+    justify-content: flex-start;
+    margin-left: 24px;
+    margin-right: 24px;
+    margin-top: 16px;
+    margin-bottom: 24px;
+  }
+
+  .button-label {
+    transform-translate-y: 1px;
+  }
+
 </style>
-<div class="panel-container">
-  <span class="heading"> Environment Raycast </span>
-  <span class="sub-heading"> Cast rays against the environment mesh to detect surfaces and place objects in the scene.</span>
-  <button id="xr-button">Enter XR</button>
-</div>
+<Panel class="panel-root">
+  <div class="panel-content">
+    <div class="heading"> Environment Raycast </div>
+    <Divider></Divider>
+    <div class="sub-heading"> Cast rays against the environment mesh to detect surfaces and place
+      objects in the scene.</div>
+  </div>
+  <Button id="xr-button" class="button">
+    <ButtonIcon>
+      <RectangleGoggles></RectangleGoggles>
+    </ButtonIcon>
+    <ButtonLabel class="button-label">Enter XR</ButtonLabel>
+  </Button>
+  <Button id="exit-button" class="button" style="display: none">
+    <ButtonIcon>
+      <LogIn></LogIn>
+    </ButtonIcon>
+    <ButtonLabel class="button-label">Exit to Browser</ButtonLabel>
+  </Button>
+</Panel>

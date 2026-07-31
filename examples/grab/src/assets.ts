@@ -13,15 +13,35 @@ const assets = {
     type: AssetType.GLTF,
     url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
   },
-  'plant-sansevieria': {
-    name: 'Plant Sansevieria',
+  earth: {
+    name: 'Earth',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
+    url: '/gltf/original-grab/earth.glb',
   },
-  robot: {
-    name: 'Robot',
+  'chichen-itza': {
+    name: 'Chichen Itza',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/robot/robot.gltf',
+    url: '/gltf/original-grab/chichen_itza.glb',
+  },
+  'eiffel-tower': {
+    name: 'Eiffel Tower',
+    type: AssetType.GLTF,
+    url: '/gltf/original-grab/eiffel_tower.glb',
+  },
+  'opera-house': {
+    name: 'Sydney Opera House',
+    type: AssetType.GLTF,
+    url: '/gltf/original-grab/opera_house.glb',
+  },
+  pin: {
+    name: 'Map Pin',
+    type: AssetType.GLTF,
+    url: '/gltf/original-grab/pin.glb',
+  },
+  pyramid: {
+    name: 'Pyramid',
+    type: AssetType.GLTF,
+    url: '/gltf/original-grab/pyramid.glb',
   },
   'grab-welcome-panel': {
     name: 'Grab Welcome Panel',

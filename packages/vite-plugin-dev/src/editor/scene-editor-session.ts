@@ -479,7 +479,6 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       componentSchemaHashes: Object.fromEntries(
         componentSchemas.map((schema) => [schema.id, schema.schemaHash]),
       ),
-      imageBasedLightingTypes: ['room'],
       limits: {
         maxNodes: MAX_SCENE_NODES,
         maxPatternExpansion: MAX_SCENE_PATTERN_EXPANSION,
@@ -507,7 +506,6 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       assetPolicies: ['manifest-assets'],
       nodeContentKinds: ['group', 'asset', 'instance', 'pattern'],
       resourceKinds: ['prefab'],
-      imageBasedLightingKinds: ['room'],
       shadowMapKinds: ['basic', 'pcf', 'pcf-soft'],
       patternDistributionKinds: [
         'linear',
@@ -527,6 +525,8 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
         'updateFramingRole',
         'updateComponent',
         'updateRootComponent',
+        'updatePlayerComponent',
+        'updatePlayerTransform',
         'reorderChildren',
         'updateContent',
         'updateConstraints',
@@ -737,8 +737,15 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       );
     }
     this.applyPatch(patch);
-    if (patch.op === 'updateComponent' || patch.op === 'updateRootComponent') {
-      const validation = this.validate();
+    if (
+      patch.op === 'updateComponent' ||
+      patch.op === 'updateRootComponent' ||
+      patch.op === 'updatePlayerComponent' ||
+      patch.op === 'updatePlayerTransform'
+    ) {
+      const validation = this.validate(this.document, {
+        validateComponentLinks: false,
+      });
       if (!validation.valid) {
         this.history.undo();
         this.updateDirtyState();
@@ -970,12 +977,16 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
     return this.mutationResult('nodeOriented', { nodeId, target, transform });
   }
 
-  private validate(document: SceneDocument = this.document) {
+  private validate(
+    document: SceneDocument = this.document,
+    options: { validateComponentLinks?: boolean } = {},
+  ) {
     const validationOptions = {
       ...(this.componentCatalog == null
         ? {}
         : { componentCatalog: this.componentCatalog }),
       validateAuthoringWorkflow: false,
+      validateComponentLinks: options.validateComponentLinks !== false,
     };
     const base = validateSceneDocument(document, validationOptions);
     const schemaIssues: SceneEditorValidationIssue[] = [

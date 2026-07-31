@@ -6,6 +6,7 @@
  */
 
 import type { AnySchema, Component } from 'elics';
+import { getComponentEditorMetadata } from '../ecs/component-editor-metadata.js';
 import { ComponentRegistry, Types } from '../ecs/component.js';
 import type { Entity } from '../ecs/entity.js';
 import type { World } from '../ecs/world.js';
@@ -21,6 +22,7 @@ const LEVEL_COMPONENT_ALIASES: Record<string, string> = {
 export interface LevelComponentApplyOptions {
   allowUnprefixedComponents?: boolean;
   nodeId?: string;
+  resolveEntityReference?: (reference: unknown) => Entity | undefined;
   strict?: boolean;
 }
 
@@ -53,11 +55,19 @@ export class LevelComponentApplier {
         const componentProps = this.mapComponentDataToProps(
           component,
           componentData,
+          options,
         );
         if (!component.bitmask) {
           world.registerComponent(component);
         }
-        entity.addComponent(component, componentProps);
+        if (
+          entity.hasComponent(component) &&
+          getComponentEditorMetadata(component)?.intrinsic === true
+        ) {
+          this.updateComponent(entity, component, componentProps);
+        } else {
+          entity.addComponent(component, componentProps);
+        }
       } else if (options.strict) {
         throw new Error(
           withSceneComponentContext(
@@ -77,9 +87,60 @@ export class LevelComponentApplier {
     });
   }
 
+  static removeComponents(
+    entity: Entity,
+    components: Record<string, unknown> | undefined,
+  ): void {
+    if (components == null) {
+      return;
+    }
+    const allComponents = ComponentRegistry.getAllComponents();
+    for (const componentName of Object.keys(components)) {
+      const targetId = normalizeComponentId(
+        stripComponentPrefix(componentName),
+      );
+      const component = allComponents.find((entry) => entry.id === targetId);
+      if (component && entity.hasComponent(component)) {
+        if (getComponentEditorMetadata(component)?.intrinsic === true) {
+          if (component.id === 'Visibility') {
+            (entity as any).setValue(component, 'isVisible', true);
+          }
+        } else {
+          entity.removeComponent(component);
+        }
+      }
+    }
+  }
+
+  private static updateComponent(
+    entity: Entity,
+    component: Component<AnySchema>,
+    props: Record<string, unknown>,
+  ): void {
+    for (const [key, value] of Object.entries(props)) {
+      const field = component.schema[key];
+      if (field == null) {
+        continue;
+      }
+      if (
+        field.type === Types.Vec2 ||
+        field.type === Types.Vec3 ||
+        field.type === Types.Vec4 ||
+        field.type === Types.Color
+      ) {
+        if (Array.isArray(value)) {
+          (entity as any).getVectorView(component, key).set(value);
+        }
+        continue;
+      }
+      (entity as any).setValue(component, key, value);
+    }
+  }
+
   private static mapComponentDataToProps(
     component: Component<AnySchema>,
     componentData: unknown,
+    options: LevelComponentApplyOptions,
   ): Record<string, unknown> {
     if (!isRecord(componentData)) {
       return {};
@@ -87,12 +148,33 @@ export class LevelComponentApplier {
 
     const props: Record<string, unknown> = {};
     Object.entries(componentData).forEach(([key, fieldData]) => {
-      if (!component.schema[key]) {
+      const field = component.schema[key] as
+        | Record<string, unknown>
+        | undefined;
+      if (!field) {
         return;
       }
 
       if (isRecord(fieldData)) {
-        if (component.schema[key].type === Types.Enum && 'alias' in fieldData) {
+        if (
+          (field.type === Types.Entity || field.widget === 'entity') &&
+          isSceneEntityReference(fieldData)
+        ) {
+          const referencedEntity = options.resolveEntityReference?.(fieldData);
+          if (referencedEntity == null) {
+            if (options.strict) {
+              throw new Error(
+                `Unable to resolve entity reference ${JSON.stringify(fieldData)}`,
+              );
+            }
+            props[key] = fieldData;
+          } else {
+            props[key] =
+              field.type === Types.Entity
+                ? referencedEntity
+                : referencedEntity.object3D;
+          }
+        } else if (field.type === Types.Enum && 'alias' in fieldData) {
           props[key] = fieldData.alias;
         } else if ('value' in fieldData) {
           props[key] = fieldData.value;
@@ -126,7 +208,11 @@ export class LevelComponentApplier {
       return;
     }
 
-    const props = this.mapComponentDataToProps(PanelUI, resolvedPanelComponent);
+    const props = this.mapComponentDataToProps(
+      PanelUI,
+      resolvedPanelComponent,
+      options,
+    );
     if (typeof props.config !== 'string' || props.config.length === 0) {
       return;
     }
@@ -138,6 +224,14 @@ export class LevelComponentApplier {
       config: props.config,
     });
   }
+}
+
+function isSceneEntityReference(value: Record<string, unknown>): boolean {
+  return (
+    (value.type === 'node' && typeof value.id === 'string') ||
+    (value.type === 'player-space' && typeof value.target === 'string') ||
+    value.type === 'level-root'
+  );
 }
 
 function canUseUnprefixedComponents(

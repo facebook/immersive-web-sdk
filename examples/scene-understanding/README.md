@@ -215,8 +215,8 @@ entity.addComponent(XRAnchor);
 
 WebXR requires HTTPS for all features to work properly. This example includes:
 
-- Automatic HTTPS certificate generation via `vite-plugin-mkcert`
-- Self-signed certificates for local development
+- Automatic, cached self-signed HTTPS certificates from the IWSDK dev plugin
+- No certificate-authority installation or trust-store changes
 - Proper CORS configuration for asset loading
 
 ### Testing on Devices

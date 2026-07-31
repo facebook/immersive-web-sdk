@@ -49,6 +49,9 @@
     "prettier": "^3.0.3"
   },
   "devDependencies": {
+    "@iwsdk/cli": "workspace:*",
+    "@iwsdk/scene-composition": "workspace:*",
+    "@iwsdk/starter-assets": "workspace:*",
     "@types/prompts": "^2.4.9",
     "@types/semver": "^7.5.8",
     "@types/cross-spawn": "^6.0.6",

@@ -5,21 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  CapsuleGeometry,
-  Mesh,
-  MeshStandardMaterial,
-  createSystem,
-} from '@iwsdk/core';
+import { createSystem, Mesh } from '@iwsdk/core';
 
 const RADIANS_PER_PIXEL = 0.0025;
 const PITCH_LIMIT = Math.PI / 2 - 0.01;
 const RIGHT_BUTTON = 2;
 const EYE_HEIGHT = 1.6;
-const TPS_DISTANCE = 2.5;
-const AVATAR_RADIUS = 0.3;
-const AVATAR_LENGTH = 1.0;
-const AVATAR_CENTER_Y = AVATAR_RADIUS + AVATAR_LENGTH / 2;
+const TPS_DISTANCE = 2.1;
+const TPS_FOV = 70;
+const TPS_TARGET_HEIGHT = 0.8;
+const TPS_BASE_ELEVATION = (Math.PI * 8) / 45;
+const TPS_MIN_ELEVATION = -Math.PI / 18;
+const TPS_MAX_ELEVATION = (Math.PI * 4) / 9;
 
 type ViewMode = 'fps' | 'tps';
 
@@ -27,16 +24,11 @@ export class BrowserMouseLookSystem extends createSystem({}) {
   private locked = false;
   private pitch = 0;
   private mode: ViewMode = 'fps';
-  private avatar!: Mesh;
+  private firstPersonFov = 50;
 
   init(): void {
-    this.avatar = new Mesh(
-      new CapsuleGeometry(AVATAR_RADIUS, AVATAR_LENGTH, 4, 12),
-      new MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.6 }),
-    );
-    this.avatar.position.set(0, AVATAR_CENTER_Y, 0);
-    this.avatar.visible = false;
-    this.player.add(this.avatar);
+    this.firstPersonFov = this.camera.fov;
+    this.setAvatarVisible(false);
     this.applyCameraPose();
 
     const canvas = this.renderer.domElement as HTMLCanvasElement;
@@ -89,29 +81,38 @@ export class BrowserMouseLookSystem extends createSystem({}) {
       if (document.pointerLockElement === canvas) {
         document.exitPointerLock();
       }
-      this.avatar.removeFromParent();
+      this.setAvatarVisible(false);
     });
   }
 
   toggleMode(): void {
     this.mode = this.mode === 'fps' ? 'tps' : 'fps';
-    this.avatar.visible = this.mode === 'tps';
+    this.setAvatarVisible(this.mode === 'tps');
     this.applyCameraPose();
+  }
+
+  private setAvatarVisible(visible: boolean): void {
+    this.world.requireSceneObject<Mesh>('player-avatar').visible = visible;
   }
 
   private applyCameraPose(): void {
     if (this.mode === 'fps') {
+      this.camera.fov = this.firstPersonFov;
       this.camera.position.set(0, EYE_HEIGHT, 0);
       this.camera.rotation.set(this.pitch, 0, 0);
     } else {
-      const sin = Math.sin(this.pitch);
-      const cos = Math.cos(this.pitch);
+      this.camera.fov = TPS_FOV;
+      const elevation = Math.max(
+        TPS_MIN_ELEVATION,
+        Math.min(TPS_MAX_ELEVATION, TPS_BASE_ELEVATION - this.pitch),
+      );
       this.camera.position.set(
         0,
-        EYE_HEIGHT - TPS_DISTANCE * sin,
-        TPS_DISTANCE * cos,
+        TPS_TARGET_HEIGHT + TPS_DISTANCE * Math.sin(elevation),
+        TPS_DISTANCE * Math.cos(elevation),
       );
-      this.camera.rotation.set(this.pitch, 0, 0);
+      this.camera.rotation.set(-elevation, 0, 0);
     }
+    this.camera.updateProjectionMatrix();
   }
 }

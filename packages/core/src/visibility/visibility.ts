@@ -13,14 +13,13 @@ export { Visibility } from './visibility-component.js';
 
 function attachToEntity(entity: Entity): void {
   const object3D = entity.object3D;
-  if (!object3D) {
+  if (!object3D || (object3D as any).__visibilityAttached) {
     return;
   }
+  (object3D as any).__visibilityAttached = true;
 
   Object.defineProperty(object3D, 'visible', {
-    get: () => {
-      return entity.getValue(Visibility, 'isVisible');
-    },
+    get: () => Boolean(Visibility.data.isVisible[entity.index]),
     set: (value: boolean) => {
       entity.setValue(Visibility, 'isVisible', value);
     },
@@ -31,15 +30,18 @@ function attachToEntity(entity: Entity): void {
 
 function detachFromEntity(entity: Entity): void {
   const object3D = entity.object3D;
-  if (!object3D) {
+  if (!object3D || !(object3D as any).__visibilityAttached) {
     return;
   }
+  const visible = Boolean(Visibility.data.isVisible[entity.index]);
 
   Object.defineProperty(object3D, 'visible', {
-    value: object3D.visible,
+    value: visible,
+    writable: true,
     enumerable: true,
     configurable: true,
   });
+  delete (object3D as any).__visibilityAttached;
 }
 
 export class VisibilitySystem extends createSystem({

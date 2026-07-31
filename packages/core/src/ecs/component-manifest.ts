@@ -12,6 +12,7 @@ import {
   type SceneComponentFieldSchema,
   type SceneComponentSchema,
 } from '@iwsdk/scene-composition';
+import { getComponentEditorMetadata } from './component-editor-metadata.js';
 import { ComponentRegistry, type AnyComponent } from './component.js';
 
 export type ComponentManifest<
@@ -57,6 +58,7 @@ export function sceneComponentSchemaFromComponent(
   component: AnyComponent,
   options: ComponentCatalogOptions = {},
 ): SceneComponentSchema {
+  const editor = getComponentEditorMetadata(component);
   const fields: Record<string, SceneComponentFieldSchema> = {};
   for (const [fieldName, source] of Object.entries(component.schema)) {
     const field = source as Record<string, unknown>;
@@ -70,6 +72,7 @@ export function sceneComponentSchemaFromComponent(
       ...(typeof field.label === 'string' ? { label: field.label } : {}),
       ...(typeof field.help === 'string' ? { help: field.help } : {}),
       ...(isComponentWidget(field.widget) ? { widget: field.widget } : {}),
+      ...(field.required === true ? { required: true } : {}),
       ...(typeof field.step === 'number' && Number.isFinite(field.step)
         ? { step: field.step }
         : {}),
@@ -98,6 +101,7 @@ export function sceneComponentSchemaFromComponent(
       : { description: component.description }),
     fields,
     source: options.source ?? 'app',
+    ...(editor == null ? {} : { editor: { ...editor } }),
   };
 }
 
@@ -152,7 +156,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 function isComponentWidget(
   value: unknown,
 ): value is NonNullable<SceneComponentFieldSchema['widget']> {
-  return ['slider', 'color', 'vector', 'text', 'select'].includes(
+  return ['slider', 'color', 'vector', 'text', 'select', 'entity'].includes(
     String(value),
   );
 }

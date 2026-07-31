@@ -9,22 +9,23 @@ import {
   AmbientLight,
   BoxGeometry,
   DirectionalLight,
-  GridHelper,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   OrthographicCamera,
-  PlaneGeometry,
   Scene,
   SessionMode,
   Shape,
   ShapeGeometry,
   SphereGeometry,
   TorusGeometry,
+  UIKitMLAsset,
   World,
   XRCylinderLayer,
   XRQuadLayer,
 } from '@iwsdk/core';
+import assets from './assets.js';
+import { configureWelcomePanel } from './panel.js';
 
 // ---------------------------------------------------------------------------
 // Helper: create a star Shape
@@ -142,51 +143,28 @@ cylScene.add(sphere);
 // ---------------------------------------------------------------------------
 
 World.create(document.getElementById('scene-container') as HTMLDivElement, {
+  assets,
+  level: './scenes/layers.iwsdk.scene.json',
   xr: {
     sessionMode: SessionMode.ImmersiveVR,
     features: { layers: true },
   },
+  features: {
+    spatialUI: true,
+  },
 }).then((world) => {
   world.camera.position.set(0, 1.5, 0);
+  const orb = world.requireSceneObject<Mesh>('orb');
 
-  // --- Main scene content (rendered in the projection layer) ---
-  const grid = new GridHelper(10, 10, 0x888888, 0x444444);
-  world.scene.add(grid);
-
-  const floor = new Mesh(
-    new PlaneGeometry(10, 10),
-    new MeshBasicMaterial({ color: 0x333333 }),
+  configureWelcomePanel(
+    world,
+    world.requireSceneObject<UIKitMLAsset>('welcome-panel'),
   );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.01;
-  world.scene.add(floor);
-
-  const pillar1 = new Mesh(
-    new BoxGeometry(0.3, 2, 0.3),
-    new MeshBasicMaterial({ color: 0xcc8844 }),
-  );
-  pillar1.position.set(-2, 1, -3);
-  world.scene.add(pillar1);
-
-  const pillar2 = new Mesh(
-    new BoxGeometry(0.3, 2, 0.3),
-    new MeshBasicMaterial({ color: 0xcc8844 }),
-  );
-  pillar2.position.set(2, 1, -3);
-  world.scene.add(pillar2);
-
-  const orb = new Mesh(
-    new SphereGeometry(0.4, 32, 32),
-    new MeshBasicMaterial({ color: 0xffaa00 }),
-  );
-  orb.position.set(0, 0.4, -3);
-  world.scene.add(orb);
 
   const startTime = performance.now();
 
   // --- Quad layer: star-shaped floating panel ---
-  const quadEntity = world.createTransformEntity();
-  quadEntity.object3D!.position.set(-0.8, 1.5, -2);
+  const quadEntity = world.requireSceneEntity('quad-layer-anchor');
   quadEntity.addComponent(XRQuadLayer, {
     width: 1.0,
     height: 1.0,
@@ -204,8 +182,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   });
 
   // --- Cylinder layer: rounded-corner curved panel ---
-  const cylEntity = world.createTransformEntity();
-  cylEntity.object3D!.position.set(0.8, 1.5, -2);
+  const cylEntity = world.requireSceneEntity('cylinder-layer-anchor');
   cylEntity.addComponent(XRCylinderLayer, {
     radius: 2.0,
     centralAngle: Math.PI / 3,

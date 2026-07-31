@@ -18,7 +18,13 @@ export const FollowBehavior = {
 export const Follower = createComponent(
   'Follower',
   {
-    target: { type: Types.Object, default: undefined },
+    target: {
+      type: Types.Object,
+      default: undefined,
+      widget: 'entity',
+      required: true,
+      help: 'Drag an authored or built-in scene entity here',
+    },
     offsetPosition: { type: Types.Vec3, default: [0, 0, 0] },
     behavior: {
       type: Types.Enum,

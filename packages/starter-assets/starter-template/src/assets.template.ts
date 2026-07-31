@@ -46,6 +46,11 @@ const assets = {
     type: AssetType.Audio,
     priority: 'background',
   },
+  'welcome-panel': {
+    url: './ui/welcome.uikitml',
+    type: AssetType.UIKitML,
+    name: 'Welcome Panel',
+  },
   webxr: {
     url: './textures/webxr.png',
     type: AssetType.Texture,

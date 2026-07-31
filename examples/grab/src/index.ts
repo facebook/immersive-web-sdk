@@ -5,14 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  PokeInteractable,
-  RayInteractable,
-  ScreenSpace,
-  SessionMode,
-  UIKitMLAsset,
-  World,
-} from '@iwsdk/core';
+import { SessionMode, UIKitMLAsset, World } from '@iwsdk/core';
 import assets from './assets.js';
 import { configureWelcomePanel } from './panel.js';
 
@@ -30,24 +23,12 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
     locomotion: true,
     spatialUI: true,
   },
-}).then(async (world) => {
+}).then((world) => {
   const { camera } = world;
   camera.position.set(0, 1.3, 0);
 
-  const panel =
-    await world.assets.instantiate<UIKitMLAsset>('grab-welcome-panel');
-  const panelEntity = world
-    .createTransformEntity(panel)
-    .addComponent(RayInteractable)
-    .addComponent(PokeInteractable)
-    .addComponent(ScreenSpace, {
-      top: '20px',
-      left: '20px',
-      height: '50%',
-      width: '25vw',
-    });
-  panelEntity.object3D!.position.set(0, 1.5, -1.4);
-  panelEntity.object3D!.scale.setScalar(0.145);
-
-  configureWelcomePanel(world, panel);
+  configureWelcomePanel(
+    world,
+    world.requireSceneObject<UIKitMLAsset>('welcome-panel'),
+  );
 });

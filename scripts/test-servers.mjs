@@ -24,7 +24,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { spawn, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -93,16 +93,40 @@ function unlinkPgid(dir) {
  */
 function isOurProcessGroup(pgid, expectedCwd) {
   let cwd;
-  try {
-    cwd = readlinkSync(`/proc/${pgid}/cwd`);
-  } catch {
-    return false;
+  if (process.platform === 'linux') {
+    try {
+      cwd = readlinkSync(`/proc/${pgid}/cwd`);
+    } catch {
+      return false;
+    }
+  } else {
+    try {
+      const output = execFileSync(
+        'lsof',
+        ['-a', '-p', String(pgid), '-d', 'cwd', '-Fn'],
+        { encoding: 'utf8' },
+      );
+      cwd = output
+        .split('\n')
+        .find((line) => line.startsWith('n'))
+        ?.slice(1);
+    } catch {
+      return false;
+    }
   }
-  if (resolve(cwd) !== resolve(expectedCwd)) return false;
+  if (cwd == null || resolve(cwd) !== resolve(expectedCwd)) return false;
 
   try {
-    const cmdline = readFileSync(`/proc/${pgid}/cmdline`, 'utf8');
-    const argv = cmdline.split('\0').filter(Boolean);
+    const argv =
+      process.platform === 'linux'
+        ? readFileSync(`/proc/${pgid}/cmdline`, 'utf8')
+            .split('\0')
+            .filter(Boolean)
+        : execFileSync('ps', ['-p', String(pgid), '-o', 'command='], {
+            encoding: 'utf8',
+          })
+            .trim()
+            .split(/\s+/);
     if (argv.length === 0) return false;
     return argv.some((arg) => /(^|\/)npm($|\s)/.test(arg));
   } catch {
@@ -174,7 +198,7 @@ function runIwsdk(dir, args) {
   return new Promise((resolve) => {
     const child = spawn('npx', ['iwsdk', ...args], {
       cwd: join(EXAMPLES, dir),
-      env: { ...process.env, IWSDK_DISABLE_MKCERT: '1' },
+      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -189,36 +213,30 @@ function runIwsdk(dir, args) {
 }
 
 async function activateRuntimeView(dir) {
+  const screenshotPath = `/tmp/iwsdk-test-runtime-${dir}.png`;
+  try {
+    unlinkSync(screenshotPath);
+  } catch {
+    // No prior readiness capture.
+  }
   const switched = await runIwsdk(dir, [
-    'workspace',
-    'set-view',
-    '--input-json',
-    '{"view":"runtime"}',
+    'browser',
+    'screenshot',
+    '--output-file',
+    screenshotPath,
   ]);
-  if (switched.code !== 0) {
-    return {
-      dir,
-      ok: false,
-      reason: switched.stderr.trim() || switched.stdout.trim(),
-    };
+  try {
+    unlinkSync(screenshotPath);
+  } catch {
+    // A failed command may not have produced a capture.
   }
-
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const state = await runIwsdk(dir, ['workspace', 'state', '--raw']);
-    if (state.code === 0) {
-      try {
-        if (JSON.parse(state.stdout).runtime?.ready === true) {
-          return { dir, ok: true };
-        }
-      } catch {
-        // Keep polling until the runtime iframe reports ready.
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  return { dir, ok: false, reason: 'runtime iframe did not become ready' };
+  return switched.code === 0
+    ? { dir, ok: true }
+    : {
+        dir,
+        ok: false,
+        reason: switched.stderr.trim() || switched.stdout.trim(),
+      };
 }
 
 async function activateRuntimeViews() {
@@ -286,7 +304,7 @@ if (command === 'start') {
     const child = spawn('npm', ['run', 'dev'], {
       cwd,
       detached: true,
-      env: { ...process.env, IWSDK_DISABLE_MKCERT: '1' },
+      env: process.env,
       stdio: ['ignore', logFd, logFd],
     });
     child.unref();

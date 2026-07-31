@@ -1,0 +1,50 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "resources": {},
+  "components": {
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  },
+  "nodes": [
+    {
+      "id": "plant-preview",
+      "name": "Plant Preview",
+      "content": {
+        "type": "asset",
+        "asset": "plant-sansevieria"
+      },
+      "components": {
+        "EnvironmentRaycastTarget": {
+          "space": "right",
+          "maxDistance": 10
+        }
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "content": {
+        "type": "asset",
+        "asset": "environment-raycast-welcome-panel"
+      },
+      "transform": {
+        "position": [0, 1.29, -1.9],
+        "scale": 0.4
+      },
+      "components": {
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "top": "20px",
+          "left": "20px",
+          "height": "40%",
+          "width": "25vw"
+        }
+      }
+    }
+  ]
+}

@@ -7,7 +7,10 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { createEditorRuntimeModuleSource } from '../src/editor/editor-runtime-source.js';
+import {
+  createEditorRuntimeModuleSource,
+  createEditorShellHtml,
+} from '../src/editor/editor-runtime-source.js';
 
 const workspaceSource = readFileSync(
   new URL('../src/editor/editor-workspace.tsx', import.meta.url),
@@ -37,7 +40,31 @@ function section(source: string, start: string, end: string): string {
 }
 
 describe('editor runtime source', () => {
-  test('defaults to runtime and exposes only runtime and editor workspace views', () => {
+  test('shows startup progress for real editor loading phases', () => {
+    const source = createRuntimeSource();
+    const shell = createEditorShellHtml(
+      '/injection.js',
+      '/editor-runtime.js',
+      '/editor.css',
+      '/__iwsdk/editor/document',
+    );
+
+    expect(shell).toContain('class="editor-loading"');
+    expect(shell).toContain('editor-loading-progress-indeterminate');
+    expect(shell).not.toContain('Editor UI modules will mount here');
+    expect(source).toContain(
+      "updateEditorStartupProgress('Loading editor modules…', 12)",
+    );
+    expect(source).toContain(
+      "updateEditorStartupProgress('Loading scene…', 48)",
+    );
+    expect(source).toContain(
+      "updateEditorStartupProgress('Building scene preview…', 70)",
+    );
+    expect(source).toContain('completeEditorStartup();');
+  });
+
+  test('exposes runtime and editor workspace views with a page reload control', () => {
     const source = createRuntimeSource();
     const viewState = section(
       source,
@@ -54,6 +81,11 @@ describe('editor runtime source', () => {
       'function createEditorFrame',
       'function getViewportHost',
     );
+    const controller = section(
+      source,
+      'function editorWorkspaceController',
+      'function createEditorFrame',
+    );
 
     expect(viewState).toContain('initialWorkspaceRoute.view');
     expect(viewSetter).toContain("['runtime', 'editor']");
@@ -63,6 +95,9 @@ describe('editor runtime source', () => {
     expect(frame).toContain('mountEditorWorkspace(root');
     expect(workspaceSource).toContain('data-workspace-view-button={view}');
     expect(workspaceSource).toContain("(['runtime', 'editor'] as const)");
+    expect(workspaceSource).toContain('data-workspace-reload-button');
+    expect(workspaceSource).toContain('controller.reloadPage?.()');
+    expect(controller).toContain('window.location.reload()');
     expect(workspaceSource).not.toContain("'split'");
   });
 
@@ -122,7 +157,7 @@ describe('editor runtime source', () => {
     );
   });
 
-  test('reloads UIKitML source for every editor preview render', () => {
+  test('shares one canonical UIKitML asset render across editor consumers', () => {
     const source = createRuntimeSource();
     const panelDocument = section(
       source,
@@ -133,6 +168,25 @@ describe('editor runtime source', () => {
     expect(panelDocument).toContain(
       'loadUIKitMLComponent(config, { forceReload: true })',
     );
+
+    const thumbnailRender = section(
+      source,
+      'async function generateAssetThumbnails',
+      'function sceneComponentScalar',
+    );
+    const sceneRender = section(
+      source,
+      'async function materializeEditorPanelPreviews',
+      'function disposeEditorPanelPreviews',
+    );
+    expect(thumbnailRender).toContain(
+      'await getEditorPanelAssetPreview(asset.id)',
+    );
+    expect(sceneRender).toContain(
+      'await getEditorPanelAssetPreview(props.config)',
+    );
+    expect(sceneRender).not.toContain('renderEditorPanelCanvas(');
+    expect(source).toContain('const assetPanelPreviewCache = new Map()');
 
     const detachedRender = section(
       source,
@@ -165,6 +219,30 @@ describe('editor runtime source', () => {
     expect(settle).toContain('frameScheduler.waitForFrameRequest(remaining)');
     expect(settle).not.toContain('minimumRenderFrames');
     expect(settle).not.toContain('stableFrames');
+  });
+
+  test('authors visibility intrinsically while keeping outliner visibility preview-only', () => {
+    const source = createRuntimeSource();
+    const schemas = section(
+      source,
+      'function authoredNodeVisible',
+      'function runtimeComponentSchemas',
+    );
+    const inspector = section(
+      source,
+      'function renderInspector',
+      'function projectNodePosition',
+    );
+
+    expect(schemas).toContain(
+      "node?.components?.['com.iwsdk.components.Visibility']",
+    );
+    expect(schemas).toContain('schema.editor?.hidden !== true');
+    expect(inspector).toContain('data-node-visible');
+    expect(inspector).toContain("op: 'updateVisibility'");
+    expect(workspaceSource).toContain('data-preview-visibility-toggle');
+    expect(workspaceSource).toContain('Hide in editor');
+    expect(workspaceSource).toContain('Show in editor');
   });
 
   test('stops the automatic world loop before configuring the editor renderer', () => {

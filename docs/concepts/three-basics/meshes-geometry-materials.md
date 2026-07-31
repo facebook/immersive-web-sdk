@@ -237,38 +237,49 @@ const mesh = new Mesh(new BoxGeometry(1, 1, 1), materials);
 
 ## Lighting and Environment
 
-### IWSDK's Default Lighting
+### Authored Lighting
 
-IWSDK provides good default lighting:
+IWSDK does not inject lighting implicitly. Generated starter scenes explicitly
+declare a gradient dome and gradient IBL on the level root:
 
-```ts
-// This happens automatically in World.create()
-// - Gradient environment (soft ambient lighting)
-// - PMREM generation for reflections
-// - Proper tone mapping
+```json
+{
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.2423, 0.6172, 0.8308, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  }
+}
 ```
+
+Because background and IBL are independent, removing one component does not
+cause IWSDK to recreate it.
 
 ### Custom Environment Maps
 
-For realistic reflections and lighting:
+For realistic reflections and lighting, author `IBLTexture` and optionally
+`DomeTexture` on the level root. Their `src` values may reference an HDR asset
+from the manifest:
 
 ```ts
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { PMREMGenerator } from '@iwsdk/core';
+import { DomeTexture, IBLTexture } from '@iwsdk/core';
 
-const loader = new HDRLoader();
-const pmremGenerator = new PMREMGenerator(world.renderer);
-
-loader.load('/environments/sunset.hdr', (texture) => {
-  const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-  pmremGenerator.dispose();
-
-  // Apply to scene
-  world.scene.environment = envMap;
-  world.scene.background = envMap; // Optional: visible background
-
-  // Apply to specific materials
-  material.envMap = envMap;
+const levelRoot = world.activeLevel.value;
+levelRoot.addComponent(IBLTexture, {
+  src: 'sunset-hdr',
+  intensity: 1,
+});
+levelRoot.addComponent(DomeTexture, {
+  src: 'sunset-hdr',
 });
 ```
 

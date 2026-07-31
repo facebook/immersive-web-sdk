@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { afterEach, describe, expect, test } from 'vitest';
 import {
@@ -28,13 +28,16 @@ afterEach(async () => {
 describe('editor right inspector runtime boundary', () => {
   test('keeps runtime internals out of the right inspector while proof hooks retain runtime facts', async () => {
     harness = await createEditorTestHarness('editor-runtime-inspector');
+    const scene = await harness.readScene();
+    scene.nodes[0].name = 'Friendly Table';
+    await writeFile(harness.scenePath, JSON.stringify(scene, null, 2), 'utf8');
     const editor = await harness.openEditor();
     await expectRealWebGLViewport(editor);
     await selectNode(editor.page, 'table-1');
 
     await expect
       .poll(() => rightInspectorSections(editor))
-      .toEqual(['Asset', 'Transform', 'Components']);
+      .toEqual(['Asset', 'Visibility', 'Transform', 'Components']);
     await expect
       .poll(() => editor.page.locator('.metadata-editor').count())
       .toBe(0);
@@ -55,6 +58,13 @@ describe('editor right inspector runtime boundary', () => {
       .toBe(0);
     await expect
       .poll(() => editor.page.locator('[data-node-title-edit]').inputValue())
+      .toBe('table-1');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-node-id="table-1"] .node-row-id')
+          .textContent(),
+      )
       .toBe('table-1');
     await expect
       .poll(() => editor.page.locator('#apply-transform').count())
@@ -154,6 +164,16 @@ describe('editor right inspector runtime boundary', () => {
       });
 
     await addComponentViaPicker(editor.page, 'TestInspectable');
+
+    await expect
+      .poll(() =>
+        editor.page
+          .locator(
+            '[data-component-type="TestInspectable"] .component-row-title > span',
+          )
+          .count(),
+      )
+      .toBe(0);
 
     await expect
       .poll(() => selectedRuntime(editor))

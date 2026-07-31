@@ -19,7 +19,7 @@ const PKG_ROOT = path.resolve(__dirname, '..');
 const VARIANTS_SRC = path.join(PKG_ROOT, 'variants-src');
 const DIST_ROOT = path.join(PKG_ROOT, 'dist');
 const DIST_ASSETS = path.join(DIST_ROOT, 'assets');
-const CODEX_SKILL_NAMES = ['iwsdk-scene-composer'];
+const CODEX_SKILL_NAMES = ['iwsdk-migrate-0-5', 'iwsdk-scene-composer'];
 
 const VARIANT_RE = /^starter-(vr|ar|browser)-manual-(ts|js)$/;
 

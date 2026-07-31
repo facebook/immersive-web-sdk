@@ -45,6 +45,7 @@ const pluginConfig = {
     'iwer',
     '@iwer/devui',
     '@iwer/sem',
+    '@vitejs/plugin-basic-ssl',
     'ws',
     'playwright',
     'sharp',

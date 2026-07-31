@@ -23,6 +23,36 @@ afterEach(async () => {
 });
 
 describe('editor outliner context actions', () => {
+  test('adds plain entities from the scene graph footer', async () => {
+    harness = await createEditorTestHarness('editor-add-entity');
+    const editor = await harness.openEditor();
+    await expectRealWebGLViewport(editor);
+
+    await editor.page.locator('#add-entity').click();
+    await expect
+      .poll(() => rootNodeIds(editor))
+      .toEqual(['table-1', 'entity-1']);
+    await expect.poll(() => selectedNodeIds(editor)).toEqual(['entity-1']);
+    await expect.poll(() => runtimeNodeIds(editor)).toContain('entity-1');
+    await expect
+      .poll(() =>
+        editor.page.evaluate(() => {
+          const documentValue = (window as any).IWSDK_SCENE_EDITOR.session
+            .document;
+          return documentValue.nodes.find(
+            (node: any) => node.id === 'entity-1',
+          );
+        }),
+      )
+      .toEqual({ id: 'entity-1' });
+
+    await editor.page.locator('#add-entity').click();
+    await expect
+      .poll(() => rootNodeIds(editor))
+      .toEqual(['table-1', 'entity-1', 'entity-2']);
+    await expect.poll(() => selectedNodeIds(editor)).toEqual(['entity-2']);
+  });
+
   test('duplicates and removes scene graph nodes with document, runtime, and reload parity', async () => {
     harness = await createEditorTestHarness('editor-outliner-context-actions');
     const editor = await harness.openEditor();
@@ -38,6 +68,25 @@ describe('editor outliner context actions', () => {
     await expect.poll(() => rootNodeIds(editor)).toEqual(['table-1', 'vase-1']);
 
     await openNodeContextMenu(editor, 'vase-1');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('#scene-graph-context-menu .context-menu-group')
+          .count(),
+      )
+      .toBe(3);
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-scene-graph-action="remove"]')
+          .getAttribute('data-destructive'),
+      )
+      .toBe('');
+    await expect(
+      editor.page
+        .locator('[data-scene-graph-action="duplicate"]')
+        .evaluate((element) => getComputedStyle(element).display),
+    ).resolves.toBe('flex');
     await editor.page.locator('[data-scene-graph-action="duplicate"]').click();
     await expect
       .poll(() => rootNodeIds(editor))

@@ -1,88 +1,84 @@
 {
-  "version": "iwsdk.scene.v1",
-  "units": "meters",
-  "resources": {},
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "equator": [
+        0.6584,
+        0.7084,
+        0.7913,
+        1
+      ],
+      "ground": [
+        0.807,
+        0.7758,
+        0.7454,
+        1
+      ],
+      "intensity": 1,
+      "sky": [
+        0.2423,
+        0.6172,
+        0.8308,
+        1
+      ]
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "equator": [
+        0.6584,
+        0.7084,
+        0.7913,
+        1
+      ],
+      "ground": [
+        0.807,
+        0.7758,
+        0.7454,
+        1
+      ],
+      "intensity": 1,
+      "sky": [
+        0.6902,
+        0.749,
+        0.7843,
+        1
+      ]
+    }
+  },
   "nodes": [
     {
-      "id": "environment",
-      "name": "Environment",
-      "content": {
-        "type": "asset",
-        "asset": "environment-desk"
-      },
-      "transform": {
-        "position": [
-          0,
-          -0.106921583,
-          0
-        ],
-        "rotationDeg": [
-          0,
-          180,
-          0
-        ]
-      },
       "components": {
         "LocomotionEnvironment": {},
         "PhysicsBody": {
           "state": "STATIC"
         },
         "PhysicsShape": {
-          "shape": "TriMesh",
-          "restitution": 0
+          "restitution": 0,
+          "shape": "TriMesh"
         }
+      },
+      "content": {
+        "asset": "environment-desk",
+        "type": "asset"
+      },
+      "id": "environment",
+      "name": "Environment",
+      "transform": {
+        "position": [
+          0,
+          -0.1069,
+          0
+        ],
+        "rotationDeg": [
+          0,
+          180,
+          0
+        ],
+        "scale": 1
       }
     },
     {
-      "id": "spawnable-objects",
-      "name": "Spawnable Objects",
-      "content": {
-        "type": "group"
-      },
       "children": [
         {
-          "id": "robot",
-          "name": "Robot",
-          "content": {
-            "type": "asset",
-            "asset": "robot"
-          },
-          "transform": {
-            "position": [
-              0,
-              0.945512056,
-              2
-            ],
-            "rotationDeg": [
-              0,
-              180,
-              0
-            ],
-            "scale": 0.5
-          },
           "components": {
-            "RayInteractable": {},
-            "DistanceGrabbable": {
-              "movementMode": "MoveFromTarget"
-            }
-          }
-        },
-        {
-          "id": "plant",
-          "name": "Plant",
-          "content": {
-            "type": "asset",
-            "asset": "plant-sansevieria"
-          },
-          "transform": {
-            "position": [
-              -1,
-              1.41135287,
-              1.50659847
-            ]
-          },
-          "components": {
-            "RayInteractable": {},
             "DistanceGrabbable": {
               "movementMode": "MoveFromTarget"
             },
@@ -91,47 +87,182 @@
               "linearDamping": 1
             },
             "PhysicsShape": {
-              "shape": "Auto",
-              "restitution": 0
-            }
-          }
-        },
-        {
-          "id": "robot-one-hand",
-          "name": "One Hand Physics Robot",
-          "content": {
-            "type": "asset",
-            "asset": "robot"
+              "restitution": 0,
+              "shape": "Auto"
+            },
+            "RayInteractable": {}
           },
+          "content": {
+            "asset": "plant-sansevieria",
+            "type": "asset"
+          },
+          "id": "plant",
+          "name": "Plant",
           "transform": {
             "position": [
-              1,
-              0.82065016,
-              0.93326962
+              0.5,
+              0.8476,
+              -1.75
             ],
             "rotationDeg": [
               0,
-              180,
+              0,
               0
             ],
-            "scale": 0.5
-          },
+            "scale": 1
+          }
+        },
+        {
           "components": {
-            "RayInteractable": {},
             "OneHandGrabbable": {},
             "PhysicsBody": {},
             "PhysicsShape": {
-              "shape": "Box",
               "dimensions": [
                 1,
                 1,
                 1
               ],
-              "restitution": 0
-            }
+              "restitution": 0,
+              "shape": "TriMesh"
+            },
+            "RayInteractable": {}
+          },
+          "content": {
+            "asset": "robot",
+            "type": "asset"
+          },
+          "id": "robot-one-hand",
+          "name": "One Hand Physics Robot",
+          "transform": {
+            "position": [
+              1,
+              1,
+              -1.75
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": 0.5
           }
         }
-      ]
+      ],
+      "content": {
+        "type": "group"
+      },
+      "id": "spawnable-objects",
+      "name": "Spawnable Objects"
+    },
+    {
+      "components": {
+        "PhysicsBody": {
+          "state": "DYNAMIC"
+        },
+        "PhysicsManipulation": {
+          "force": [
+            0.1,
+            0.1,
+            -0.1
+          ]
+        },
+        "PhysicsShape": {
+          "dimensions": [
+            0.2,
+            0.2,
+            0.2
+          ],
+          "shape": "Sphere"
+        }
+      },
+      "content": {
+        "asset": "physics-dynamic-sphere",
+        "type": "asset"
+      },
+      "id": "dynamic-sphere",
+      "name": "Dynamic Sphere",
+      "transform": {
+        "position": [
+          -1,
+          0.9497,
+          -1.75
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1
+      }
+    },
+    {
+      "components": {
+        "DistanceGrabbable": {},
+        "PhysicsBody": {
+          "state": "DYNAMIC"
+        },
+        "PhysicsShape": {
+          "dimensions": [
+            0.15,
+            0.4,
+            0
+          ],
+          "shape": "Cylinder"
+        }
+      },
+      "content": {
+        "asset": "physics-dynamic-cylinder",
+        "type": "asset"
+      },
+      "id": "dynamic-cylinder",
+      "name": "Dynamic Cylinder",
+      "transform": {
+        "position": [
+          -0.5,
+          1,
+          -1.75
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1
+      }
+    },
+    {
+      "components": {
+        "PokeInteractable": {},
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "height": "50%",
+          "left": "20px",
+          "top": "20px",
+          "width": "25vw"
+        }
+      },
+      "content": {
+        "asset": "physics-welcome-panel",
+        "type": "asset"
+      },
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "transform": {
+        "position": [
+          0,
+          1.5,
+          -2.4082
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 0.4
+      }
     }
-  ]
+  ],
+  "resources": {},
+  "units": "meters",
+  "version": "iwsdk.scene.v1"
 }

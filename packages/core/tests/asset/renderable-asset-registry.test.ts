@@ -38,14 +38,16 @@ describe('RenderableAssetRegistry', () => {
     expect(secondMesh.geometry).toBe(geometry);
     expect(secondMesh.material).toBe(material);
     expect(prototype.parent).toBeNull();
-    expect(registry.list()).toEqual([
-      {
-        bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
-        id: 'cabinet',
-        kind: 'object3d',
-        name: 'Procedural cabinet',
-      },
-    ]);
+    expect(registry.list()).toEqual(
+      expect.arrayContaining([
+        {
+          bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
+          id: 'cabinet',
+          kind: 'procedural',
+          name: 'Procedural cabinet',
+        },
+      ]),
+    );
   });
 
   it('rejects prototypes that already belong to another hierarchy', () => {
@@ -78,18 +80,46 @@ describe('RenderableAssetRegistry', () => {
     expect(registry.has('room')).toBe(true);
     expect(registry.has('menu')).toBe(true);
     expect(registry.hasRenderable('menu')).toBe(false);
-    expect(registry.list()).toEqual([
-      { id: 'room', kind: 'gltf', name: 'Room' },
-    ]);
-    expect(registry.catalog()).toEqual([
-      { id: 'room', kind: 'gltf', name: 'Room' },
-      {
-        id: 'menu',
-        kind: 'uikitml',
-        name: 'Main menu',
-        url: '/ui/menu.uikitml',
-      },
-    ]);
+    expect(registry.list()).toEqual(
+      expect.arrayContaining([{ id: 'room', kind: 'gltf', name: 'Room' }]),
+    );
+    expect(registry.catalog()).toEqual(
+      expect.arrayContaining([
+        { id: 'room', kind: 'gltf', name: 'Room' },
+        {
+          id: 'menu',
+          kind: 'uikitml',
+          name: 'Main menu',
+          url: '/ui/menu.uikitml',
+        },
+      ]),
+    );
     await expect(registry.instantiate('menu')).resolves.toBe(panel);
+  });
+
+  it('offers a concise set of built-in primitive assets', async () => {
+    const registry = new RenderableAssetRegistry();
+
+    expect(registry.catalog()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'primitive-box', kind: 'primitive' }),
+        expect.objectContaining({
+          id: 'primitive-capsule',
+          kind: 'primitive',
+        }),
+        expect.objectContaining({
+          id: 'primitive-cylinder',
+          kind: 'primitive',
+        }),
+        expect.objectContaining({
+          id: 'primitive-sphere',
+          kind: 'primitive',
+        }),
+      ]),
+    );
+    const first = await registry.instantiate<Mesh>('primitive-box');
+    const second = await registry.instantiate<Mesh>('primitive-box');
+    expect(first).not.toBe(second);
+    expect(first.geometry).toBe(second.geometry);
   });
 });

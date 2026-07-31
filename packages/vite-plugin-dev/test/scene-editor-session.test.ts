@@ -52,7 +52,7 @@ const listAssets = () =>
   Object.entries(ASSET_BOUNDS).map(([id, bounds]) => ({
     bounds,
     id,
-    kind: 'object3d' as const,
+    kind: 'procedural' as const,
     name: id,
   }));
 
@@ -144,7 +144,6 @@ describe('SceneEditorSession', () => {
       },
       snapshot: {
         componentSchemaHashes: {},
-        imageBasedLightingTypes: ['room'],
         limits: {
           maxNodes: 10_000,
           maxPatternExpansion: 10_000,
@@ -174,7 +173,6 @@ describe('SceneEditorSession', () => {
     expect(Object.keys(capabilities.snapshot).sort()).toEqual(
       [
         'componentSchemaHashes',
-        'imageBasedLightingTypes',
         'limits',
         'nodeContentTypes',
         'patternTypes',
@@ -206,8 +204,8 @@ describe('SceneEditorSession', () => {
     const patches: Parameters<typeof applyScenePatch>[1][] = [
       {
         environment: {
-          background: { color: '#cad5c0', type: 'color' },
           exposure: 1.1,
+          shadows: true,
           toneMapping: 'aces',
         },
         op: 'setEnvironment',

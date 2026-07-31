@@ -1,12 +1,12 @@
 ---
 name: test-level
-description: 'Test level system (LevelRoot, LevelTag, default lighting, scene hierarchy) against the poke example using the iwsdk CLI.'
+description: 'Test level system (LevelRoot, LevelTag, authored environment, scene hierarchy) against the poke example using the iwsdk CLI.'
 argument-hint: '[--suite root|tags|lighting|hierarchy|all]'
 ---
 
 # Level System Test
 
-Run 5 test suites covering LevelRoot, LevelTag membership, default lighting, scene hierarchy, and stability.
+Run 5 test suites covering LevelRoot, LevelTag membership, authored environment, scene hierarchy, and stability.
 
 **Configuration:**
 
@@ -141,7 +141,7 @@ Assert: 10 entities — entity 0 (scene root) plus 9 persistent input-rig entiti
 
 ---
 
-### Suite 3: Default Lighting
+### Suite 3: Authored Environment
 
 **Test 3.1: LevelRoot Has Both Environment Components**
 
@@ -149,15 +149,9 @@ Assert: 10 entities — entity 0 (scene root) plus 9 persistent input-rig entiti
 npx iwsdk ecs query --input-json '{"entityIndex":<root>,"components":["DomeGradient","IBLGradient"]}' 2>/dev/null
 ```
 
-Assert: Both components present with default color values.
-
-**Test 3.2: LevelSystem Config**
-
-```bash
-npx iwsdk ecs systems 2>/dev/null
-```
-
-Assert: LevelSystem has config key: `defaultLighting`.
+Assert: Both scene-authored components are present with the gradient values
+declared in `public/scenes/poke.iwsdk.scene.json`. They are not synthesized by
+`LevelSystem`.
 
 ---
 
@@ -209,7 +203,7 @@ Output a summary table:
 |------------------------|-----------|
 | 1. LevelRoot           | PASS/FAIL |
 | 2. LevelTag Membership | PASS/FAIL |
-| 3. Default Lighting    | PASS/FAIL |
+| 3. Authored Environment | PASS/FAIL |
 | 4. Scene Hierarchy     | PASS/FAIL |
 | 5. Stability           | PASS/FAIL |
 ```

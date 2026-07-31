@@ -52,6 +52,8 @@ export interface ComposeSceneDocumentOptions {
   componentCatalog?: SceneComponentCatalog;
   /** Disable formal composition/review policy checks for editor integrity use. */
   validateAuthoringWorkflow?: boolean;
+  /** Disable required component-link checks while loading editable drafts. */
+  validateComponentLinks?: boolean;
 }
 
 export interface SceneCompositionDependency {
@@ -95,6 +97,7 @@ export async function composeSceneDocument(
     'root scene document',
     options.componentCatalog,
     options.validateAuthoringWorkflow !== false,
+    options.validateComponentLinks !== false,
   );
   const rootSource = normalizeOptionalSource(options.source, 'root source');
   const dependencies: SceneCompositionDependency[] = [];
@@ -108,6 +111,7 @@ export async function composeSceneDocument(
     options.resolve,
     options.componentCatalog,
     options.validateAuthoringWorkflow !== false,
+    options.validateComponentLinks !== false,
     dependencies,
     activeModules,
   );
@@ -121,6 +125,9 @@ export async function composeSceneDocument(
     ...(rootDocument.components == null
       ? {}
       : { components: deepClone(rootDocument.components) }),
+    ...(rootDocument.player == null
+      ? {}
+      : { player: deepClone(rootDocument.player) }),
     ...(rootDocument.authoring == null
       ? {}
       : { authoring: deepClone(rootDocument.authoring) }),
@@ -135,6 +142,7 @@ export async function composeSceneDocument(
     assertValidSceneDocument(document, {
       componentCatalog: options.componentCatalog,
       validateAuthoringWorkflow: options.validateAuthoringWorkflow !== false,
+      validateComponentLinks: options.validateComponentLinks !== false,
     });
   } catch (error) {
     throw new Error(
@@ -152,6 +160,7 @@ async function collectModuleContribution(
   resolve: SceneModuleResolver,
   componentCatalog: SceneComponentCatalog | undefined,
   validateAuthoringWorkflow: boolean,
+  validateComponentLinks: boolean,
   dependencies: SceneCompositionDependency[],
   activeModules: ActiveModule[],
 ): Promise<ModuleContribution> {
@@ -183,6 +192,7 @@ async function collectModuleContribution(
       `scene module "${resolution.source}" at "${childNamespace}"`,
       componentCatalog,
       validateAuthoringWorkflow,
+      validateComponentLinks,
     );
     dependencies.push({
       id: sceneImport.id,
@@ -199,6 +209,7 @@ async function collectModuleContribution(
       resolve,
       componentCatalog,
       validateAuthoringWorkflow,
+      validateComponentLinks,
       dependencies,
       [
         ...activeModules,
@@ -269,6 +280,7 @@ function parseAndValidateDocument(
   label: string,
   componentCatalog: SceneComponentCatalog | undefined,
   validateAuthoringWorkflow: boolean,
+  validateComponentLinks: boolean,
 ): SceneDocument {
   let parsed = value;
   if (typeof value === 'string') {
@@ -282,6 +294,7 @@ function parseAndValidateDocument(
     assertValidSceneDocument(parsed, {
       componentCatalog,
       validateAuthoringWorkflow,
+      validateComponentLinks,
     });
   } catch (error) {
     throw new Error(`${label} is invalid: ${errorMessage(error)}`);

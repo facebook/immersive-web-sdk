@@ -7,44 +7,33 @@
 
 import {
   createSystem,
-  PanelUI,
-  PanelDocument,
-  eq,
+  UIKitMLAsset,
   VisibilityState,
-  UIKitDocument,
   UIKit,
 } from '@iwsdk/core';
 
-export class PanelSystem extends createSystem({
-  welcomePanel: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', './ui/welcome.uikitml')],
-  },
-}) {
+export class PanelSystem extends createSystem({}) {
   init() {
-    this.queries.welcomePanel.subscribe('qualify', (entity) => {
-      const document = PanelDocument.data.document[
-        entity.index
-      ] as UIKitDocument;
-      if (!document) {
-        return;
+    const panel = this.world.requireSceneObject<UIKitMLAsset>('welcome-panel');
+    const xrButton = panel.requireElementById('xr-button') as UIKit.Text;
+    const onClick = () => {
+      if (this.world.visibilityState.value === VisibilityState.NonImmersive) {
+        this.world.launchXR();
+      } else {
+        this.world.exitXR();
       }
-
-      const xrButton = document.getElementById('xr-button') as UIKit.Text;
-      xrButton.addEventListener('click', () => {
-        if (this.world.visibilityState.value === VisibilityState.NonImmersive) {
-          this.world.launchXR();
-        } else {
-          this.world.exitXR();
-        }
-      });
+    };
+    xrButton.addEventListener('click', onClick);
+    this.cleanupFuncs.push(
+      () => xrButton.removeEventListener('click', onClick),
       this.world.visibilityState.subscribe((visibilityState) => {
-        if (visibilityState === VisibilityState.NonImmersive) {
-          xrButton.setProperties({ text: 'Enter XR' });
-        } else {
-          xrButton.setProperties({ text: 'Exit to Browser' });
-        }
-      });
-    });
+        xrButton.setProperties({
+          text:
+            visibilityState === VisibilityState.NonImmersive
+              ? 'Enter XR'
+              : 'Exit to Browser',
+        });
+      }),
+    );
   }
 }

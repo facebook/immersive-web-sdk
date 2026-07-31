@@ -57,7 +57,6 @@ const DEFAULT_DEV_TIMEOUT_MS = 120000;
 const NUMBER_TOLERANCE = 2e-2;
 const TAB_CHANGE_WARNING = 'WARNING: Active browser tab changed';
 const HARNESS_RUNTIME_ENV = {
-  IWSDK_DISABLE_MKCERT: '1',
   IWSDK_RUNTIME_TRACE: '1',
 };
 const NODE_BINARY = 'node';

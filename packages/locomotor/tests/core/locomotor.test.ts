@@ -67,4 +67,31 @@ describe('Locomotor initialization', () => {
     expect(locomotor.position).toEqual(initialPlayerPosition);
     expect(MockWorker.instances).toHaveLength(0);
   });
+
+  it('exposes teleports immediately while the worker catches up', async () => {
+    const locomotor = new Locomotor({ useWorker: true });
+    await locomotor.initialize();
+
+    locomotor.teleport(new Vector3(7, 0, -4));
+
+    expect(locomotor.position.toArray()).toEqual([7, 0, -4]);
+    expect(
+      Array.from(
+        MockWorker.instances[0].postedMessages.at(-1) as ArrayLike<number>,
+      ).slice(0, 4),
+    ).toEqual([MessageType.Teleport, 7, 0, -4]);
+    locomotor.update(1 / 60);
+    expect(locomotor.position.toArray()).toEqual([7, 0, -4]);
+  });
+
+  it('forwards jump requests to the worker', async () => {
+    const locomotor = new Locomotor({ useWorker: true });
+    await locomotor.initialize();
+
+    locomotor.jump();
+
+    expect(MockWorker.instances[0].postedMessages.at(-1)).toEqual([
+      MessageType.Jump,
+    ]);
+  });
 });

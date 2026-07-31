@@ -32,6 +32,23 @@ const MSDF_GENERATOR_ENTRY = path.join(
   path.dirname(uikitRequire.resolve('@zappar/msdf-generator/worker.js')),
   'index.js',
 );
+const SCENE_COMPOSITION_ENTRY = fixtureRequire.resolve(
+  '@iwsdk/scene-composition',
+);
+const THREE_PACKAGE_ROOT = path.resolve(
+  path.dirname(fixtureRequire.resolve('three')),
+  '..',
+);
+const THREE_ENTRY = path.join(THREE_PACKAGE_ROOT, 'build/three.module.js');
+const THREE_VIEWPORT_GIZMO_ENTRY = fixtureRequire.resolve(
+  'three-viewport-gizmo',
+);
+const ORBIT_CONTROLS_ENTRY = fixtureRequire.resolve(
+  'three/examples/jsm/controls/OrbitControls.js',
+);
+const TRANSFORM_CONTROLS_ENTRY = fixtureRequire.resolve(
+  'three/examples/jsm/controls/TransformControls.js',
+);
 export const EDITOR_SCENE_RELATIVE_PATH =
   'public/scenes/editor-smoke.iwsdk.scene.json';
 export const EDITOR_REFERENCE_SVG =
@@ -101,7 +118,30 @@ export async function createEditorTestHarness(
       // The fixture uses IWSDK source from outside its temporary app root,
       // whereas a real installed app resolves this transitive dependency from
       // its own node_modules directory.
-      alias: { '@zappar/msdf-generator': MSDF_GENERATOR_ENTRY },
+      alias: [
+        {
+          find: '@iwsdk/scene-composition',
+          replacement: SCENE_COMPOSITION_ENTRY,
+        },
+        {
+          find: 'three-viewport-gizmo',
+          replacement: THREE_VIEWPORT_GIZMO_ENTRY,
+        },
+        {
+          find: 'three/examples/jsm/controls/OrbitControls.js',
+          replacement: ORBIT_CONTROLS_ENTRY,
+        },
+        {
+          find: 'three/examples/jsm/controls/TransformControls.js',
+          replacement: TRANSFORM_CONTROLS_ENTRY,
+        },
+        {
+          find: /^three\/(.*)$/,
+          replacement: `${THREE_PACKAGE_ROOT}/$1`,
+        },
+        { find: /^three$/, replacement: THREE_ENTRY },
+        { find: '@zappar/msdf-generator', replacement: MSDF_GENERATOR_ENTRY },
+      ],
     },
     root: tempRoot,
     server: {
@@ -630,7 +670,6 @@ try {
     level: '/scenes/editor-smoke.iwsdk.scene.json',
     render: {
       camera: { lookAt: [0, 0, 0], position: [3, 2.5, 5] },
-      defaultLighting: true,
     },
     xr: false,
   });
@@ -655,6 +694,7 @@ async function newPageContext(
     ...(options.managedWorkspace
       ? { extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS }
       : {}),
+    ignoreHTTPSErrors: true,
     viewport: { height: 720, width: 960 },
   });
   const page = await context.newPage();

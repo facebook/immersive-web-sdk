@@ -9,26 +9,32 @@ import { signal, type Signal } from '@preact/signals-core';
 import {
   Box,
   Boxes,
+  Camera,
   ChevronDown,
   ChevronRight,
+  Crosshair,
   Eye,
   EyeOff,
   Focus,
+  Gamepad2,
   Globe2,
   Lock,
   Magnet,
   Move3D,
   PanelTop,
+  PersonStanding,
   Plus,
   Redo2,
+  RefreshCw,
   Rotate3D,
   Scale3D,
   Undo2,
 } from 'lucide';
-import { h, render, type VNode } from 'preact';
+import { h, render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 
 type WorkspaceView = 'runtime' | 'editor';
+const ENTITY_REFERENCE_MIME = 'application/x-iwsdk-entity-reference';
 type IconNode = readonly [
   tag: string,
   attributes: Record<string, string | number>,
@@ -37,11 +43,15 @@ type IconNode = readonly [
 
 export interface EditorWorkspaceSnapshot {
   assetCount: number;
+  builtInSelection: string | null;
   dirty: boolean;
   dirtyStatus: string;
   ghostedNodeIds: string[];
   hiddenNodeIds: string[];
   lockedNodeIds: string[];
+  loading: boolean;
+  loadingProgress: number;
+  loadingStatus: string;
   nodeCount: number;
   nodes: any[];
   rootSelected: boolean;
@@ -58,13 +68,20 @@ export interface EditorWorkspaceSnapshot {
 
 export interface EditorWorkspaceController {
   addAsset?(assetId: string): void;
-  moveNode?(nodeId: string, parentId: string | null): void;
+  addEntity?(): void;
+  moveNode?(
+    nodeId: string,
+    parentId: string | null,
+    parent?: { type: 'player-space'; target: string },
+  ): void;
   openNodeContextMenu?(nodeId: string, point: { x: number; y: number }): void;
   redo?(): void;
+  reloadPage?(): void;
   selectNode?(
     nodeId: string,
     modifiers: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean },
   ): void;
+  selectBuiltin?(target: string): void;
   selectRoot?(): void;
   setTransformMode?(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
@@ -83,11 +100,15 @@ export interface EditorWorkspaceMount {
 
 const DEFAULT_SNAPSHOT: EditorWorkspaceSnapshot = {
   assetCount: 0,
+  builtInSelection: null,
   dirty: false,
   dirtyStatus: 'Saved',
   ghostedNodeIds: [],
   hiddenNodeIds: [],
   lockedNodeIds: [],
+  loading: true,
+  loadingProgress: 8,
+  loadingStatus: 'Starting editor…',
   nodeCount: 0,
   nodes: [],
   rootSelected: false,
@@ -105,18 +126,23 @@ const DEFAULT_SNAPSHOT: EditorWorkspaceSnapshot = {
 const ICONS = {
   Box,
   Boxes,
+  Camera,
   ChevronDown,
   ChevronRight,
+  Crosshair,
   Eye,
   EyeOff,
   Focus,
+  Gamepad2,
   Globe2,
   Lock,
   Magnet,
   Move3D,
   PanelTop,
+  PersonStanding,
   Plus,
   Redo2,
+  RefreshCw,
   Rotate3D,
   Scale3D,
   Undo2,
@@ -174,7 +200,52 @@ function EditorWorkspace({
           <EditorLeftPanel snapshot={snapshot} controller={controller} />
           <EditorInspector snapshot={snapshot} controller={controller} />
         </main>
+        {snapshot.loading ? (
+          <EditorLoadingState
+            overlay
+            progress={snapshot.loadingProgress}
+            status={snapshot.loadingStatus}
+          />
+        ) : null}
       </section>
+    </main>
+  );
+}
+
+function EditorLoadingState({
+  overlay = false,
+  progress,
+  status,
+}: {
+  overlay?: boolean;
+  progress: number;
+  status: string;
+}) {
+  const normalizedProgress = Math.min(100, Math.max(0, progress));
+  return (
+    <main
+      class={`editor-loading${overlay ? ' editor-loading-overlay' : ''}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div class="editor-loading-content">
+        <div class="editor-loading-spinner" aria-hidden="true" />
+        <h1>IWSDK Scene Editor</h1>
+        <p>{status}</p>
+        <div
+          class="editor-loading-track"
+          role="progressbar"
+          aria-label="Editor startup"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={normalizedProgress}
+        >
+          <span
+            class="editor-loading-progress"
+            style={{ width: `${normalizedProgress}%` }}
+          />
+        </div>
+      </div>
     </main>
   );
 }
@@ -204,6 +275,16 @@ function WorkspaceViewSwitcher({
           {view === 'runtime' ? 'Runtime' : 'Editor'}
         </button>
       ))}
+      <button
+        type="button"
+        class="workspace-reload-button"
+        data-workspace-reload-button
+        title="Reload page"
+        aria-label="Reload page"
+        onClick={() => controller.reloadPage?.()}
+      >
+        <Icon name="RefreshCw" />
+      </button>
     </div>
   );
 }
@@ -400,9 +481,29 @@ function SceneGraph({
 }) {
   const [query, setQuery] = useState('');
   const filteredNodes = useMemo(
-    () => filterSceneNodes(snapshot.nodes, query.trim().toLowerCase()),
+    () =>
+      sortSceneNodesById(
+        filterSceneNodes(snapshot.nodes, query.trim().toLowerCase()),
+      ),
     [snapshot.nodes, query],
   );
+  const levelNodes = filteredNodes.filter((node) => node.parent == null);
+  const playerNodes = (target: string) =>
+    filteredNodes.filter(
+      (node) =>
+        node.parent?.type === 'player-space' && node.parent.target === target,
+    );
+  const renderNodes = (nodes: any[], depth: number) =>
+    nodes.map((node) => (
+      <SceneNodeRow
+        key={node.id}
+        node={node}
+        depth={depth}
+        query={query}
+        snapshot={snapshot}
+        controller={controller}
+      />
+    ));
   return (
     <div class="panel-section scene-graph-section">
       <div class="panel-section-header">
@@ -418,56 +519,268 @@ function SceneGraph({
           onInput={(event) => setQuery(event.currentTarget.value)}
         />
       </div>
-      <button
-        id="scene-root-drop-target"
-        class="scene-root-drop-target node-row"
-        data-active={snapshot.rootSelected || undefined}
-        data-scene-root-drop
-        type="button"
-        style={{ '--depth': 0 } as any}
-        onClick={() => controller.selectRoot?.()}
-        onDragOver={(event) => {
-          const transfer = event.dataTransfer;
-          if (transfer?.types.includes('text/plain')) {
-            event.preventDefault();
-            transfer.dropEffect = 'move';
-          }
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          const nodeId = event.dataTransfer?.getData('text/plain');
-          if (nodeId) {
-            controller.moveNode?.(nodeId, null);
-          }
-        }}
+      <BuiltinSceneRow
+        id="player"
+        label="Player Space"
+        icon="PersonStanding"
+        entityReference={{ type: 'player-space', target: 'player' }}
+        selected={snapshot.builtInSelection === 'player'}
+        onSelect={() => controller.selectBuiltin?.('player')}
+        dropTarget={{ type: 'player-space', target: 'player' }}
+        controller={controller}
       >
-        <span class="node-row-icon">
-          <Icon name="Move3D" />
-        </span>
-        <span class="node-row-main">
-          <span class="node-row-id">Root</span>
-          <span class="node-row-subtitle">Scene Root</span>
-        </span>
-      </button>
-      <div id="outliner" role="tree">
-        {filteredNodes.length ? (
-          filteredNodes.map((node) => (
-            <SceneNodeRow
-              key={node.id}
-              node={node}
-              depth={0}
-              query={query}
-              snapshot={snapshot}
-              controller={controller}
-            />
-          ))
-        ) : (
-          <div class="empty-state" data-empty-outliner>
-            No matching nodes
-          </div>
-        )}
+        <BuiltinSceneRow
+          collapsible
+          id="camera"
+          label="Camera"
+          icon="Camera"
+          entityReference={{ type: 'player-space', target: 'camera' }}
+          selected={snapshot.builtInSelection === 'camera'}
+          onSelect={() => controller.selectBuiltin?.('camera')}
+          dropTarget={{ type: 'player-space', target: 'camera' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('camera'), 1)}
+        </BuiltinSceneRow>
+        <BuiltinSceneRow
+          collapsible
+          id="head"
+          label="Head"
+          icon="Focus"
+          entityReference={{ type: 'player-space', target: 'head' }}
+          selected={snapshot.builtInSelection === 'head'}
+          onSelect={() => controller.selectBuiltin?.('head')}
+          dropTarget={{ type: 'player-space', target: 'head' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('head'), 1)}
+        </BuiltinSceneRow>
+        <BuiltinSceneRow
+          collapsible
+          id="left-target-ray"
+          label="Left Target Ray"
+          icon="Crosshair"
+          entityReference={{ type: 'player-space', target: 'left-target-ray' }}
+          selected={snapshot.builtInSelection === 'left-target-ray'}
+          onSelect={() => controller.selectBuiltin?.('left-target-ray')}
+          dropTarget={{ type: 'player-space', target: 'left-target-ray' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('left-target-ray'), 1)}
+        </BuiltinSceneRow>
+        <BuiltinSceneRow
+          collapsible
+          id="left-grip"
+          label="Left Grip"
+          icon="Gamepad2"
+          entityReference={{ type: 'player-space', target: 'left-grip' }}
+          selected={snapshot.builtInSelection === 'left-grip'}
+          onSelect={() => controller.selectBuiltin?.('left-grip')}
+          dropTarget={{ type: 'player-space', target: 'left-grip' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('left-grip'), 1)}
+        </BuiltinSceneRow>
+        <BuiltinSceneRow
+          collapsible
+          id="right-target-ray"
+          label="Right Target Ray"
+          icon="Crosshair"
+          entityReference={{ type: 'player-space', target: 'right-target-ray' }}
+          selected={snapshot.builtInSelection === 'right-target-ray'}
+          onSelect={() => controller.selectBuiltin?.('right-target-ray')}
+          dropTarget={{ type: 'player-space', target: 'right-target-ray' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('right-target-ray'), 1)}
+        </BuiltinSceneRow>
+        <BuiltinSceneRow
+          collapsible
+          id="right-grip"
+          label="Right Grip"
+          icon="Gamepad2"
+          entityReference={{ type: 'player-space', target: 'right-grip' }}
+          selected={snapshot.builtInSelection === 'right-grip'}
+          onSelect={() => controller.selectBuiltin?.('right-grip')}
+          dropTarget={{ type: 'player-space', target: 'right-grip' }}
+          controller={controller}
+        >
+          {renderNodes(playerNodes('right-grip'), 1)}
+        </BuiltinSceneRow>
+        {renderNodes(playerNodes('player'), 0)}
+      </BuiltinSceneRow>
+      <BuiltinSceneRow
+        id="level-root"
+        label="Level Root"
+        icon="Move3D"
+        entityReference={{ type: 'level-root' }}
+        selected={snapshot.rootSelected}
+        onSelect={() => controller.selectRoot?.()}
+        dropTarget={null}
+        controller={controller}
+      >
+        <div id="outliner" role="tree">
+          {levelNodes.length ? (
+            renderNodes(levelNodes, 0)
+          ) : (
+            <div class="empty-state" data-empty-outliner>
+              No matching nodes
+            </div>
+          )}
+        </div>
+      </BuiltinSceneRow>
+      <div class="scene-graph-footer">
+        <button
+          id="add-entity"
+          class="component-add-button scene-add-entity-button"
+          type="button"
+          onClick={() => controller.addEntity?.()}
+        >
+          <Icon name="Plus" />
+          <span>Add Entity</span>
+        </button>
       </div>
     </div>
+  );
+}
+
+function BuiltinSceneRow({
+  children,
+  collapsible = false,
+  controller,
+  depth = 0,
+  dropTarget,
+  entityReference,
+  icon,
+  id,
+  label,
+  onSelect,
+  selected,
+}: {
+  children?: ComponentChildren;
+  collapsible?: boolean;
+  controller?: EditorWorkspaceController;
+  depth?: number;
+  dropTarget?: { type: 'player-space'; target: string } | null;
+  entityReference:
+    | { type: 'player-space'; target: string }
+    | { type: 'level-root' };
+  icon: keyof typeof ICONS;
+  id: string;
+  label: string;
+  onSelect(): void;
+  selected: boolean;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const acceptsDrop = dropTarget !== undefined;
+  const hasChildren = Array.isArray(children)
+    ? children.length > 0
+    : children != null && children !== false;
+  const hasDisclosure = collapsible && hasChildren;
+  const toggleExpanded = () => {
+    if (hasDisclosure) {
+      setExpanded((value) => !value);
+    }
+  };
+  return (
+    <>
+      <button
+        id={dropTarget === null ? 'scene-root-drop-target' : undefined}
+        class="scene-root-drop-target node-row builtin-node-row"
+        data-active={selected || undefined}
+        data-builtin-node={id}
+        data-scene-root-drop={dropTarget === null || undefined}
+        data-scene-builtin-drop={
+          dropTarget && dropTarget.type === 'player-space'
+            ? dropTarget.target
+            : undefined
+        }
+        draggable
+        type="button"
+        aria-expanded={hasDisclosure ? expanded : undefined}
+        style={{ '--depth': depth } as any}
+        onClick={onSelect}
+        onKeyDown={(event) => {
+          if (
+            !hasDisclosure ||
+            !['ArrowLeft', 'ArrowRight'].includes(event.key)
+          ) {
+            return;
+          }
+          const shouldExpand = event.key === 'ArrowRight';
+          if (shouldExpand === expanded) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          setExpanded(shouldExpand);
+        }}
+        onDragStart={(event) => {
+          const transfer = event.dataTransfer;
+          transfer?.setData(
+            ENTITY_REFERENCE_MIME,
+            JSON.stringify(entityReference),
+          );
+          if (transfer) {
+            transfer.effectAllowed = 'copy';
+          }
+        }}
+        onDragOver={
+          acceptsDrop
+            ? (event) => {
+                const transfer = event.dataTransfer;
+                if (transfer?.types.includes('text/plain')) {
+                  event.preventDefault();
+                  transfer.dropEffect = 'move';
+                }
+              }
+            : undefined
+        }
+        onDrop={
+          acceptsDrop
+            ? (event) => {
+                event.preventDefault();
+                const nodeId = event.dataTransfer?.getData('text/plain');
+                if (nodeId) {
+                  controller?.moveNode?.(nodeId, null, dropTarget ?? undefined);
+                }
+              }
+            : undefined
+        }
+      >
+        {collapsible ? (
+          <span
+            class="node-row-caret"
+            data-outliner-disclosure={hasDisclosure || undefined}
+            title={
+              hasDisclosure
+                ? `${expanded ? 'Collapse' : 'Expand'} ${label}`
+                : undefined
+            }
+            onClick={(event) => {
+              if (!hasDisclosure) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              toggleExpanded();
+            }}
+          >
+            {hasDisclosure ? (
+              <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} />
+            ) : null}
+          </span>
+        ) : null}
+        <span class="node-row-icon">
+          <Icon name={icon} />
+        </span>
+        <span class="node-row-main">
+          <span class="node-row-id">{label}</span>
+        </span>
+        <span class="node-row-built-in">Built-in</span>
+      </button>
+      {!collapsible || expanded ? children : null}
+    </>
   );
 }
 
@@ -542,8 +855,12 @@ function SceneNodeRow({
         onDragStart={(event) => {
           const transfer = event.dataTransfer;
           transfer?.setData('text/plain', node.id);
+          transfer?.setData(
+            ENTITY_REFERENCE_MIME,
+            JSON.stringify({ type: 'node', id: node.id }),
+          );
           if (transfer) {
-            transfer.effectAllowed = 'move';
+            transfer.effectAllowed = 'copyMove';
           }
         }}
         onDragOver={(event) => {
@@ -570,7 +887,7 @@ function SceneNodeRow({
           data-outliner-disclosure={children.length > 0 || undefined}
           title={
             children.length > 0
-              ? `${expanded ? 'Collapse' : 'Expand'} ${node.name || node.id}`
+              ? `${expanded ? 'Collapse' : 'Expand'} ${node.id}`
               : undefined
           }
           onClick={(event) => {
@@ -590,15 +907,15 @@ function SceneNodeRow({
           <Icon name={icon} />
         </span>
         <span class="node-row-main">
-          <span class="node-row-id">{node.name || node.id}</span>
+          <span class="node-row-id">{node.id}</span>
           <span class="node-row-subtitle">{sceneNodeSubtitle(node)}</span>
         </span>
         <span
           class="node-row-visibility"
           data-preview-visibility-toggle
           role="button"
-          title={hidden ? 'Show' : 'Hide'}
-          aria-label={hidden ? 'Show' : 'Hide'}
+          title={hidden ? 'Show in editor' : 'Hide in editor'}
+          aria-label={hidden ? 'Show in editor' : 'Hide in editor'}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -653,6 +970,20 @@ function filterSceneNodes(nodes: any[], query: string): any[] {
     );
     return matches || children.length ? [{ ...node, children }] : [];
   });
+}
+
+function sortSceneNodesById(nodes: any[]): any[] {
+  return [...nodes]
+    .sort((left, right) =>
+      String(left.id).localeCompare(String(right.id), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }),
+    )
+    .map((node) => ({
+      ...node,
+      children: sortSceneNodesById(node.children || []),
+    }));
 }
 
 function sceneNodeKind(node: any): string {
@@ -783,7 +1114,7 @@ function assetCatalogMeta(asset: any): string {
   if (
     !name ||
     name === asset.id ||
-    /^(root|scene|group|object3d|mesh)$/i.test(name)
+    /^(root|scene|group|object3d|procedural|mesh)$/i.test(name)
   ) {
     return kind;
   }

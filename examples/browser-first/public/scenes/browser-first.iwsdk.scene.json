@@ -1,0 +1,129 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "resources": {},
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.043137, 0.062745, 0.12549, 1],
+      "equator": [0.043137, 0.062745, 0.12549, 1],
+      "ground": [0.043137, 0.062745, 0.12549, 1],
+      "intensity": 1
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  },
+  "player": {
+    "transform": {
+      "position": [0, 0, 0]
+    }
+  },
+  "nodes": [
+    {
+      "id": "environment",
+      "name": "Environment",
+      "content": {
+        "type": "asset",
+        "asset": "environment-desk"
+      },
+      "transform": {
+        "position": [0, -0.107, 0],
+        "rotationDeg": [0, 180, 0]
+      },
+      "components": {
+        "LocomotionEnvironment": {
+          "type": "static"
+        },
+        "PhysicsShape": {
+          "shape": "TriMesh"
+        },
+        "PhysicsBody": {
+          "state": "STATIC"
+        }
+      }
+    },
+    {
+      "id": "ray-target",
+      "name": "Ray Target",
+      "content": {
+        "type": "asset",
+        "asset": "browser-first-ray-target"
+      },
+      "transform": {
+        "position": [-0.55, 0.93, -2.25]
+      },
+      "components": {
+        "RayInteractable": {},
+        "AudioSource": {
+          "src": "data:audio/wav;base64,UklGRuQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YcADAACAv+3/78KERRYCEDt4t+j98ciMTRsFDjZwr+L6882TVSEHDTFpqNv39NKaXCgKDCxioNX09NahZC4ODChbmM/w9NqobDUSDCRVkcjs9N2uczwWDCFPicHo8+C0e0IbDR5Jgrrj8uO6gkkgDxxEe7Pe8OW/iVAlERs/dKzZ7ubEkFcqFBk6baXT6+fIll4wFhk2Z57N6OfMnGU2GhgyYZfH5ejPomw8HRkvW5DB4efSqHNCIRktVoq73ebVrXpIJRoqUYO12eXXsoBOKhwoTH2v1OPYtoZVLh4nR3eoz+Hau4xbMyAmRHGiyt/avpJhOCMlQGucxdzbwpdnPiYlPWaWwNnbxZ1tQykmOmGQutbax6JzSCwmOFyKtdLZyaZ5TjAnNliEr87Yy6p/UzQpNFR/qsrWzK6EWTgqM1B5pMbVzbKJXj0tMk10n8HSzrWOZEEvMkpvmb3QzriTaUYyMkdrlLjNzrqXb0o1MkVmj7PKzbycdE84M0Niiq7HzL6geVQ7NEFfhanDy7+jflk/NkBbgKXAysCmgl5CNz9Ye6C8yMGph2NGOT9Vd5u4xsGsi2dKOz9Tc5a0w8Guj2xOPj9Rb5KwwcGwk3BSQD9PbI2svsCylnVXQ0BOaImnu8CzmXlbRkFMZYWjuL60nH1fSUJMYoGftb21n4FjTURLYH2bsru1oYVnUEZLXnqXrrm1o4hrVEhLXHaTq7e1pYtvV0pLWnOPp7W0po5zW0xMWXCMpLK0p5F2Xk9NWG6IoLCzqJN6YlJOV2uFna2xqZZ9ZVRPV2mCmaqwqZiAaFdRV2d/lqeuqZmDbFpTV2Z8k6StqZuGb11UV2V5j6GrqZyIcmBWWGR3jJ6pqJ2KdWNZWWNzh5mkpp6Oe2ldW2JxhJaipZ6QfWxgXGJwgpOfo56Rf25iXmJvf5Cdop6SgnFkX2NufY6aoJ2Tg3NnYWNtfIuYnpyThXZpY2RteomVnJuUh3hsZWVseYeTmpqUiHpuZ2ZseIWRmJmUiXxwaWhtd4OPlpiTin5za2ltdoGMlJaTin91bWpudYCKkpWSi4F3b2xudX+JkJORi4J4cW5vdX6HjpGQi4N6c29wdX2FjJCPi4N7dXFydnyEio6OioR9d3NzdnyDiYyMioR+eHV0d3yCh4qLiYR/enZ2eHyBhomKiISAe3h3eXyAhIeIh4SAfHp5enyAg4WGhoOAfnt6e31/goSFhIOBfn18fH5/gYODg4KBf35+fn+AgYGCgYGAgH9/f4CAgIA=",
+          "positional": false,
+          "volume": 0.35
+        }
+      }
+    },
+    {
+      "id": "physics-ball",
+      "name": "Physics Ball",
+      "content": {
+        "type": "asset",
+        "asset": "browser-first-physics-ball"
+      },
+      "transform": {
+        "position": [0.55, 2.1, -2.25]
+      },
+      "components": {
+        "PhysicsShape": {
+          "shape": "Sphere",
+          "dimensions": [0.18, 0.18, 0.18]
+        },
+        "PhysicsBody": {
+          "state": "DYNAMIC"
+        },
+        "OneHandGrabbable": {
+          "translate": true,
+          "rotate": true
+        }
+      },
+      "metadata": {
+        "browser-first.resetPose": {
+          "position": [0.55, 2.1, -2.25],
+          "quaternion": [0, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "content": {
+        "type": "asset",
+        "asset": "browser-first-welcome-panel"
+      },
+      "transform": {
+        "position": [0, 2, -2.25],
+        "scale": 0.4
+      },
+      "components": {
+        "RayInteractable": {}
+      }
+    },
+    {
+      "id": "player-avatar",
+      "name": "Player Avatar",
+      "framingRole": "support",
+      "parent": {
+        "type": "player-space",
+        "target": "player"
+      },
+      "content": {
+        "type": "asset",
+        "asset": "browser-first-player-avatar"
+      },
+      "transform": {
+        "position": [0, 0.8, 0]
+      }
+    }
+  ]
+}

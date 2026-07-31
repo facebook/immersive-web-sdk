@@ -119,15 +119,19 @@ export class DepthSensingSystem extends createSystem(
     );
 
     this.cleanupFuncs.push(
-      this.queries.occludables.subscribe('qualify', (entity: Entity) => {
-        this.attachOcclusionToEntity(entity);
-        if (
-          DepthOccludable.data.mode[entity.index] ===
-          OcclusionShadersMode.MinMaxSoftOcclusion
-        ) {
-          this.minMaxEntityCount++;
-        }
-      }),
+      this.queries.occludables.subscribe(
+        'qualify',
+        (entity: Entity) => {
+          this.attachOcclusionToEntity(entity);
+          if (
+            DepthOccludable.data.mode[entity.index] ===
+            OcclusionShadersMode.MinMaxSoftOcclusion
+          ) {
+            this.minMaxEntityCount++;
+          }
+        },
+        true,
+      ),
       this.queries.occludables.subscribe('disqualify', (entity: Entity) => {
         if (
           DepthOccludable.data.mode[entity.index] ===

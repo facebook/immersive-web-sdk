@@ -1,14 +1,16 @@
 # Grab Interactions Example
 
-This example demonstrates one-hand, two-hand, and distance grabbing in IWSDK. The
-static objects are declared in `public/scenes/grab.iwsdk.scene.json` and loaded
-with `level: './scenes/grab.iwsdk.scene.json'`.
+This example demonstrates one-hand, two-hand, and distance grabbing in IWSDK.
+Its globe, landmarks, pins, and pyramids are declared in
+`public/scenes/grab.iwsdk.scene.json` and loaded with
+`level: './scenes/grab.iwsdk.scene.json'`.
 
 ## What It Shows
 
-- `OneHandGrabbable` on a catalog plant asset.
-- `TwoHandsGrabbable` on a second plant asset.
-- `DistanceGrabbable` on robot assets.
+- A rotation-only `DistanceGrabbable` Earth with grabbable landmarks parented
+  to its surface.
+- `OneHandGrabbable` map pins.
+- `DistanceGrabbable` and `TwoHandsGrabbable` pyramids.
 - A UIKitML panel for entering and exiting XR.
 
 ## Project Structure
@@ -20,6 +22,7 @@ grab/
 │   └── panel.ts
 ├── public/
 │   ├── audio/
+│   ├── gltf/original-grab/
 │   ├── scenes/grab.iwsdk.scene.json
 │   ├── textures/
 │   └── ui/welcome.uikitml
@@ -27,8 +30,9 @@ grab/
 └── package.json
 ```
 
-Shared catalog assets are served at `/iwsdk-assets/...` by the example asset
-Vite plugin.
+The room uses the shared asset catalog. The original Grab models are preserved
+as standard GLB files from the example's earlier authoring source. The runtime
+loads them directly from the asset manifest and native scene.
 
 ## Run
 

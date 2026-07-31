@@ -474,6 +474,7 @@ let workspaceUi = null;
 let editorAssetManifest = {};
 let editorComponentManifest = [];
 let editorPanelPreviewRendererState = null;
+let editorPanelPreviewRendererCreatedCount = 0;
 let editorPanelPreviewRenderQueue = Promise.resolve();
 const editorPanelFrameSchedulers = new WeakMap();
 
@@ -574,6 +575,7 @@ async function loadEditorRuntimeDependencies() {
 const config = window.__IWSDK_EDITOR_CONFIG || {};
 const documentUrl = config.documentUrl || '/__iwsdk/editor/document';
 const sceneFilesUrl = config.sceneFilesUrl || '/__iwsdk/workspace/scenes';
+const projectFilesUrl = config.projectFilesUrl || '/__iwsdk/workspace/files';
 const reviewCapturesUrl =
   config.reviewCapturesUrl || '/__iwsdk/workspace/reviews/captures';
 const reviewsUrl = config.reviewsUrl || '/__iwsdk/workspace/reviews';
@@ -584,9 +586,15 @@ const root = document.getElementById('root');
 const EDITOR_OPTIMIZE_RELOAD_KEY = 'iwsdk-editor-optimize-dep-reload';
 const WORKSPACE_SCENE_PATH_KEY = 'iwsdk-workspace-scene-path';
 const WORKSPACE_EDITOR_HASH_PREFIX = '#editor';
+const ENTITY_REFERENCE_MIME = 'application/x-iwsdk-entity-reference';
 const initialWorkspaceRoute = importWorkspaceRoute();
 let editorWorldState = null;
 let editorMutationQueue = Promise.resolve();
+let editorStartupState = {
+  loading: true,
+  loadingProgress: 8,
+  loadingStatus: 'Starting editor…',
+};
 let sceneDocumentPath = null;
 let sceneDocumentRevision = null;
 let sceneSourceDocumentHash = null;
@@ -605,6 +613,8 @@ let workspaceScenePath = initialWorkspaceRoute.scenePath;
 const assetThumbnailCache = new Map();
 const assetThumbnailFailures = new Set();
 const assetPanelNaturalSizeCache = new Map();
+const assetPanelPreviewCache = new Map();
+const assetPanelPreviewVersions = new Map();
 let assetThumbnailGeneration = null;
 let runtimeDispatch = async () => {
   throw new Error('Scene editor runtime is still loading');
@@ -638,6 +648,7 @@ window.__IWSDK_EDITOR_REFERENCE_MODE = 'hidden';
 window.__IWSDK_EDITOR_REFERENCE_ID = null;
 window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
 window.__IWSDK_EDITOR_ROOT_SELECTED = false;
+window.__IWSDK_EDITOR_BUILTIN_SELECTION = null;
 window.__IWSDK_EDITOR_EVENTS = [];
 document.documentElement.dataset.iwsdkWorkspaceView = window.__IWSDK_WORKSPACE_VIEW;
 
@@ -930,6 +941,7 @@ async function sceneState(session) {
     runtimeHash: sceneRuntimeHash || hashes.runtimeHash,
     selection: {
       ...selection,
+      builtInTarget: window.__IWSDK_EDITOR_BUILTIN_SELECTION || null,
       rootSelected: window.__IWSDK_EDITOR_ROOT_SELECTED === true,
     },
     sourceDocumentHash: sceneSourceDocumentHash,
@@ -2334,6 +2346,37 @@ function setRoot(content) {
   }
 }
 
+function updateEditorStartupProgress(status, progress) {
+  const normalizedProgress = Math.min(100, Math.max(0, Number(progress) || 0));
+  editorStartupState = {
+    loading: true,
+    loadingProgress: normalizedProgress,
+    loadingStatus: String(status),
+  };
+  workspaceUi?.update(editorStartupState);
+
+  const statusElement = document.getElementById('editor-loading-status');
+  if (statusElement) {
+    statusElement.textContent = editorStartupState.loadingStatus;
+  }
+  const progressElement = document.getElementById('editor-loading-progress');
+  if (progressElement) {
+    progressElement.classList.remove('editor-loading-progress-indeterminate');
+    progressElement.style.width = normalizedProgress + '%';
+  }
+  const track = document.getElementById('editor-loading-track');
+  track?.setAttribute('aria-valuenow', String(normalizedProgress));
+}
+
+function completeEditorStartup() {
+  editorStartupState = {
+    loading: false,
+    loadingProgress: 100,
+    loadingStatus: 'Editor ready',
+  };
+  workspaceUi?.update(editorStartupState);
+}
+
 function renderLucideIcon(name) {
   const icon = LucideIcons?.[name];
   if (!Array.isArray(icon)) {
@@ -2606,15 +2649,22 @@ function editorWorkspaceController() {
         addAssetFromCatalog(session, camera, assetId);
       }
     },
-    moveNode(nodeId, parentId) {
+    addEntity() {
+      const session = activeEditorSession();
+      const camera = editorWorldState?.currentCamera;
+      if (session && camera) {
+        addEmptyEntity(session, camera);
+      }
+    },
+    moveNode(nodeId, parentId, parent) {
       const session = activeEditorSession();
       const camera = editorWorldState?.currentCamera;
       if (
         session &&
         camera &&
-        isValidOutlinerDrop(session.document, nodeId, parentId)
+        isValidOutlinerDrop(session.document, nodeId, parentId, parent)
       ) {
-        applyOutlinerReparent(session, camera, nodeId, parentId);
+        applyOutlinerReparent(session, camera, nodeId, parentId, parent);
       }
     },
     openNodeContextMenu(nodeId, point) {
@@ -2633,6 +2683,9 @@ function editorWorkspaceController() {
         });
       }
     },
+    reloadPage() {
+      window.location.reload();
+    },
     selectNode(nodeId, modifiers) {
       const session = activeEditorSession();
       if (!session) {
@@ -2642,6 +2695,18 @@ function editorWorkspaceController() {
       window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
       setEditorSelection(nodeIds);
       void session.dispatch('scene_select', { nodeIds }).then(refreshActiveEditor);
+    },
+    selectBuiltin(target) {
+      const session = activeEditorSession();
+      if (!session) {
+        return;
+      }
+      window.__IWSDK_EDITOR_RESOURCE_SELECTION = null;
+      setEditorBuiltinSelection(target);
+      void session.dispatch('scene_select', { nodeIds: [] }).then(() => {
+        setEditorBuiltinSelection(target);
+        refreshActiveEditor();
+      });
     },
     selectRoot() {
       const session = activeEditorSession();
@@ -2701,6 +2766,7 @@ function createEditorFrame() {
   }
   workspaceUi?.unmount?.();
   workspaceUi = mountEditorWorkspace(root, editorWorkspaceController(), {
+    ...editorStartupState,
     view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
   });
 }
@@ -2792,16 +2858,11 @@ async function generateAssetThumbnails(assets, documentValue) {
       let frame = null;
       try {
         if (asset.kind === 'uikitml') {
-          const preview = await renderEditorPanelCanvas(asset.id, {
-            background: '#202226',
-            height,
-            width,
-          });
-          assetPanelNaturalSizeCache.set(asset.id, {
-            height: preview.worldHeight,
-            width: preview.worldWidth,
-          });
-          assetThumbnailCache.set(asset.id, preview.dataURL);
+          // UIKitML thumbnails are the canonical editor render. The asset
+          // drawer scales this large transparent image down, and placed scene
+          // instances consume the exact same canvas instead of parsing and
+          // rendering the document a second time.
+          await getEditorPanelAssetPreview(asset.id);
         } else {
           const object = await editorWorldState.world.assets.instantiate(
             asset.id,
@@ -3068,7 +3129,11 @@ function positivePreviewDimension(value, fallback) {
 
 function getEditorPanelPreviewRenderer() {
   if (editorPanelPreviewRendererState) {
-    return editorPanelPreviewRendererState;
+    const state = editorPanelPreviewRendererState;
+    if (!state.contextLost && !state.renderer.getContext().isContextLost()) {
+      return state;
+    }
+    disposeEditorPanelPreviewRenderer(state);
   }
   const canvas = document.createElement('canvas');
   const renderer = new WebGLRenderer({
@@ -3083,7 +3148,7 @@ function getEditorPanelPreviewRenderer() {
     canvas,
     contextLossCount: 0,
     contextLost: false,
-    createdCount: 1,
+    createdCount: ++editorPanelPreviewRendererCreatedCount,
     renderCount: 0,
     renderer,
   };
@@ -3098,15 +3163,23 @@ function getEditorPanelPreviewRenderer() {
   window.addEventListener(
     'pagehide',
     () => {
-      renderer.dispose();
-      if (editorPanelPreviewRendererState === state) {
-        editorPanelPreviewRendererState = null;
-      }
+      disposeEditorPanelPreviewRenderer(state);
     },
     { once: true },
   );
   editorPanelPreviewRendererState = state;
   return state;
+}
+
+function disposeEditorPanelPreviewRenderer(state) {
+  if (!state) {
+    return;
+  }
+  if (editorPanelPreviewRendererState === state) {
+    editorPanelPreviewRendererState = null;
+  }
+  state.renderer.dispose();
+  state.renderer.forceContextLoss?.();
 }
 
 async function waitForEditorPanelPreviewContext(state) {
@@ -3138,24 +3211,20 @@ function editorPanelCanvasHasVisibleContent(context, width, height) {
   return false;
 }
 
-async function renderEditorPanelCanvasExclusive(config, options = {}) {
+async function renderEditorPanelCanvasExclusive(config) {
   let panelDocument = null;
   try {
-    let width = positivePreviewDimension(options.width, 512);
-    let height = positivePreviewDimension(options.height, 512);
+    let width = 512;
+    let height = 512;
     const previewRenderer = getEditorPanelPreviewRenderer();
     await waitForEditorPanelPreviewContext(previewRenderer);
     const { canvas: renderCanvas, renderer } = previewRenderer;
     previewRenderer.renderCount += 1;
-    const transparent = options.transparent === true;
     renderer.setSize(width, height, false);
-    if (transparent) {
-      renderer.setClearColor(0x000000, 0);
-    }
+    renderer.setClearColor(0x000000, 0);
 
     const previewScene = new Scene();
-    const background = options.background || '#202226';
-    previewScene.background = transparent ? null : new Color(background);
+    previewScene.background = null;
     panelDocument = await createEditorPanelDocument(config);
     previewScene.add(panelDocument);
     refreshEditorPanelClassLists(panelDocument);
@@ -3180,16 +3249,14 @@ async function renderEditorPanelCanvasExclusive(config, options = {}) {
     const worldWidth = naturalWidth;
     const worldHeight = naturalHeight;
     const contentAspect = worldWidth / worldHeight;
-    if (options.fitContent === true) {
-      if (contentAspect >= 1) {
-        width = 512;
-        height = Math.max(32, Math.round(width / contentAspect));
-      } else {
-        height = 512;
-        width = Math.max(32, Math.round(height * contentAspect));
-      }
-      renderer.setSize(width, height, false);
+    if (contentAspect >= 1) {
+      width = 512;
+      height = Math.max(32, Math.round(width / contentAspect));
+    } else {
+      height = 512;
+      width = Math.max(32, Math.round(height * contentAspect));
     }
+    renderer.setSize(width, height, false);
 
     const padding = 1.12;
     let viewWidth = worldWidth * padding;
@@ -3254,13 +3321,67 @@ async function renderEditorPanelCanvasExclusive(config, options = {}) {
   }
 }
 
-function renderEditorPanelCanvas(config, options = {}) {
-  const render = () => renderEditorPanelCanvasExclusive(config, options);
+function renderEditorPanelCanvas(config) {
+  const render = () => renderEditorPanelCanvasExclusive(config);
   const result = editorPanelPreviewRenderQueue.then(render, render);
   editorPanelPreviewRenderQueue = result.then(
     () => undefined,
     () => undefined,
   );
+  return result;
+}
+
+function invalidateEditorPanelAssetPreview(config) {
+  const resolvedConfig = resolveEditorPanelConfig(config);
+  assetPanelPreviewVersions.set(
+    resolvedConfig,
+    (assetPanelPreviewVersions.get(resolvedConfig) || 0) + 1,
+  );
+  assetPanelPreviewCache.delete(resolvedConfig);
+  assetThumbnailCache.delete(resolvedConfig);
+  assetThumbnailFailures.delete(resolvedConfig);
+  assetPanelNaturalSizeCache.delete(resolvedConfig);
+}
+
+function invalidateEditorPanelAssetPreviews() {
+  const configs = new Set(assetPanelPreviewCache.keys());
+  for (const asset of sceneAssets(editorWorldState?.currentSession?.document)) {
+    if (asset.kind === 'uikitml') {
+      configs.add(asset.id);
+    }
+  }
+  for (const config of configs) {
+    invalidateEditorPanelAssetPreview(config);
+  }
+}
+
+function getEditorPanelAssetPreview(config) {
+  const resolvedConfig = resolveEditorPanelConfig(config);
+  const cached = assetPanelPreviewCache.get(resolvedConfig);
+  if (cached) {
+    return cached;
+  }
+
+  const version = assetPanelPreviewVersions.get(resolvedConfig) || 0;
+  const result = renderEditorPanelCanvas(resolvedConfig).then((preview) => {
+    if (
+      (assetPanelPreviewVersions.get(resolvedConfig) || 0) === version &&
+      assetPanelPreviewCache.get(resolvedConfig) === result
+    ) {
+      assetThumbnailCache.set(resolvedConfig, preview.dataURL);
+      assetPanelNaturalSizeCache.set(resolvedConfig, {
+        height: preview.worldHeight,
+        width: preview.worldWidth,
+      });
+    }
+    return preview;
+  });
+  assetPanelPreviewCache.set(resolvedConfig, result);
+  result.catch(() => {
+    if (assetPanelPreviewCache.get(resolvedConfig) === result) {
+      assetPanelPreviewCache.delete(resolvedConfig);
+    }
+  });
   return result;
 }
 
@@ -3302,13 +3423,7 @@ async function materializeEditorPanelPreviews(loweredNodes) {
     const props = panelPropsForNode(lowered.node);
     if (props) {
       try {
-        const preview = await renderEditorPanelCanvas(
-          resolveEditorPanelConfig(props.config),
-          {
-            fitContent: true,
-            transparent: true,
-          },
-        );
+        const preview = await getEditorPanelAssetPreview(props.config);
         lowered.object.add(createEditorPanelTexturePreview(preview));
         delete lowered.object.userData.iwsdkEditorPanelPreviewError;
       } catch (error) {
@@ -3352,18 +3467,39 @@ async function renderUIKitMLAssetPreview(assetId, options = {}) {
   }
 
   const background = options.background || '#202226';
-  const preview = await renderEditorPanelCanvas(asset.id, {
-    background,
-    height: positivePreviewDimension(options.height, 512),
-    width: positivePreviewDimension(options.width, 512),
-  });
+  const width = positivePreviewDimension(options.width, 512);
+  const height = positivePreviewDimension(options.height, 512);
+  // Explicit preview commands are also the refresh boundary for same-URL
+  // UIKitML sources. Refresh the canonical render, then composite that exact
+  // image onto the requested inspection background.
+  invalidateEditorPanelAssetPreview(asset.id);
+  const preview = await getEditorPanelAssetPreview(asset.id);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Could not create UIKitML inspection canvas');
+  }
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+  const scale = Math.min(width / preview.width, height / preview.height);
+  const drawWidth = preview.width * scale;
+  const drawHeight = preview.height * scale;
+  context.drawImage(
+    preview.canvas,
+    (width - drawWidth) / 2,
+    (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight,
+  );
   return {
     assetId,
     background,
-    height: preview.height,
-    imageData: preview.dataURL.split(',')[1] || '',
+    height,
+    imageData: canvas.toDataURL('image/png').split(',')[1] || '',
     mimeType: 'image/png',
-    width: preview.width,
+    width,
   };
 }
 
@@ -3770,10 +3906,16 @@ function objectHierarchyProof() {
   return [...editorWorldState.objectMap.entries()].map(([nodeId, object]) => {
     let parent = object.parent;
     let parentNodeId = null;
+    let builtinParent = null;
     while (parent && parent !== editorWorldState.proxyRoot) {
       const candidate = parent.userData?.iwsdkSceneNodeId;
       if (typeof candidate === 'string' && candidate !== nodeId) {
         parentNodeId = candidate;
+        break;
+      }
+      const candidateBuiltin = parent.userData?.iwsdkBuiltinTarget;
+      if (typeof candidateBuiltin === 'string') {
+        builtinParent = candidateBuiltin;
         break;
       }
       parent = parent.parent;
@@ -3784,6 +3926,9 @@ function objectHierarchyProof() {
     const content = object.userData?.iwsdkSceneContent;
     return {
       assetId: content?.type === 'asset' ? content.asset : null,
+      ...(builtinParent && builtinParent !== 'level-root'
+        ? { builtinParent }
+        : {}),
       contentType: object.userData?.iwsdkSceneContentType ?? null,
       fallback: object.userData?.iwsdkEditorFallback ?? null,
       helperType: object.userData?.iwsdkEditorHelperType ?? null,
@@ -4213,6 +4358,109 @@ function indexLoweredNode(lowered) {
   }
 }
 
+const EDITOR_BUILTIN_PREVIEW_TRANSFORMS = {
+  player: {},
+  camera: { position: [0, 1.7, 0] },
+  head: { position: [0, 1.7, 0] },
+  'left-target-ray': { position: [-0.26, 1.35, -0.32] },
+  'right-target-ray': { position: [0.26, 1.35, -0.32] },
+  'left-grip': { position: [-0.24, 1.28, -0.24] },
+  'right-grip': { position: [0.24, 1.28, -0.24] },
+};
+
+function playerRigTransform(documentValue, target) {
+  return target === 'player'
+    ? documentValue.player?.transform || {}
+    : EDITOR_BUILTIN_PREVIEW_TRANSFORMS[target] || {};
+}
+
+function applyEditorBuiltinRigTransforms(documentValue) {
+  if (!editorWorldState?.builtInObjectMap) {
+    return;
+  }
+  for (const [target, object] of editorWorldState.builtInObjectMap) {
+    if (target === 'level-root') {
+      applyNodeTransform(object, {});
+    } else {
+      applyNodeTransform(object, playerRigTransform(documentValue, target));
+    }
+  }
+}
+
+function editorParentForRootNode(node) {
+  const target = node?.parent?.target;
+  return target
+    ? editorWorldState.builtInObjectMap.get(target)
+    : editorWorldState.levelRootProxy;
+}
+
+function markBuiltinEditorHelper(object, target) {
+  object.userData.iwsdkBuiltinTarget = target;
+  object.userData.iwsdkEditorHelper = true;
+  object.userData.iwsdkOwnsPrimitiveResources = true;
+  return object;
+}
+
+function createBuiltinEditorDecoration(target) {
+  const color = target === 'level-root' ? 0xa8ff78 : 0x68a7ff;
+  const decoration = new Group();
+  decoration.name = 'IWSDK-' + target + '-helper';
+  markBuiltinEditorHelper(decoration, target);
+  const radius =
+    target === 'head'
+      ? 0.09
+      : target === 'camera'
+        ? 0.065
+        : target.includes('target-ray')
+          ? 0.045
+          : target.includes('grip')
+            ? 0.055
+            : 0.075;
+  const anchor = new Mesh(
+    new SphereGeometry(radius, 20, 14),
+    new MeshBasicMaterial({
+      color,
+      depthWrite: false,
+      opacity: 0.32,
+      transparent: true,
+    }),
+  );
+  decoration.add(markBuiltinEditorHelper(anchor, target));
+  return decoration;
+}
+
+function createEditorBuiltinRig(proxyRoot) {
+  const player = new Group();
+  player.name = 'IWSDKPlayerSpaceProxy';
+  player.userData.iwsdkBuiltinTarget = 'player';
+  const levelRoot = new Group();
+  levelRoot.name = 'IWSDKLevelRootProxy';
+  levelRoot.userData.iwsdkBuiltinTarget = 'level-root';
+  const map = new Map([
+    ['player', player],
+    ['level-root', levelRoot],
+  ]);
+  for (const target of [
+    'camera',
+    'head',
+    'left-target-ray',
+    'left-grip',
+    'right-target-ray',
+    'right-grip',
+  ]) {
+    const object = new Group();
+    object.name = 'IWSDK-' + target + '-proxy';
+    object.userData.iwsdkBuiltinTarget = target;
+    player.add(object);
+    map.set(target, object);
+  }
+  for (const [target, object] of map) {
+    object.add(createBuiltinEditorDecoration(target));
+  }
+  proxyRoot.add(player, levelRoot);
+  return { builtInObjectMap: map, levelRootProxy: levelRoot };
+}
+
 function detachEditorSceneForSwap() {
   restoreEditorPreviewVisibility();
   restoreEditorReviewLens();
@@ -4220,9 +4468,12 @@ function detachEditorSceneForSwap() {
   editorWorldState.hoverHelper = null;
   editorWorldState.hoveredNodeId = null;
   disposeEditorLightBindings();
+  for (const root of editorWorldState.loweredNodes || []) {
+    root.object.removeFromParent();
+  }
   for (const child of [...editorWorldState.proxyRoot.children]) {
-    editorWorldState.proxyRoot.remove(child);
     if (child.userData.iwsdkEditorHelper === true) {
+      editorWorldState.proxyRoot.remove(child);
       disposeObjectTree(child);
     }
   }
@@ -4320,10 +4571,11 @@ function installLoweredEditorScene(documentValue, lowered, key, session) {
     editorWorldState.environmentPreviousState =
       previousEnvironmentBase || replacedEnvironmentState;
     reconcileEditorRootComponents(documentValue.components);
+    applyEditorBuiltinRigTransforms(documentValue);
     editorWorldState.currentDocumentValue = documentValue;
     editorWorldState.loweredNodes = lowered;
     for (const root of lowered) {
-      editorWorldState.proxyRoot.add(root.object);
+      editorParentForRootNode(root.node).add(root.object);
       indexLoweredNode(root);
     }
     consumeMaterializationFailure('install');
@@ -4356,7 +4608,7 @@ function installLoweredEditorScene(documentValue, lowered, key, session) {
     editorWorldState.pendingDocumentKey = previousPendingKey;
     editorWorldState.hoveredNodeId = previousHoveredNodeId;
     for (const root of previousLowered) {
-      editorWorldState.proxyRoot.add(root.object);
+      editorParentForRootNode(root.node).add(root.object);
       indexLoweredNode(root);
     }
     if (previousDocument) {
@@ -4485,6 +4737,9 @@ function rollbackEditorDocument() {
 function scheduleEditorSceneLowering(session, { force = false } = {}) {
   if (!editorWorldState) {
     return Promise.resolve();
+  }
+  if (force) {
+    invalidateEditorPanelAssetPreviews();
   }
   const documentValue = session.document;
   const key = JSON.stringify(documentValue);
@@ -5724,6 +5979,11 @@ function selectedNodeId() {
   return selection.length === 1 ? selection[0] : null;
 }
 
+function selectedBuiltinTarget() {
+  const target = window.__IWSDK_EDITOR_BUILTIN_SELECTION;
+  return target === 'player' ? target : null;
+}
+
 function selectionForNodeClick(nodeId, event) {
   const currentSelection = Array.isArray(window.__IWSDK_EDITOR_SELECTION)
     ? window.__IWSDK_EDITOR_SELECTION
@@ -5848,16 +6108,24 @@ function syncTransformControlsToSelection(session) {
   }
   applyTransformControlSettings();
   const nodeId = selectedNodeId();
-  const object = nodeId ? editorWorldState.objectMap.get(nodeId) : null;
+  const builtinTarget = selectedBuiltinTarget();
+  const object = builtinTarget
+    ? editorWorldState.builtInObjectMap.get(builtinTarget)
+    : nodeId
+      ? editorWorldState.objectMap.get(nodeId)
+      : null;
   const helper = editorWorldState.transformControls.getHelper();
-  if (!nodeId || !object || lockedOutlinerNodeIds.has(nodeId)) {
+  if (
+    !object ||
+    (!builtinTarget && (!nodeId || lockedOutlinerNodeIds.has(nodeId)))
+  ) {
     editorWorldState.transformControls.detach();
     editorWorldState.transformControlsAttachedNodeId = null;
     helper.visible = false;
     return;
   }
-  const node = findNodeById(session.document, nodeId);
-  if (!node) {
+  const node = nodeId ? findNodeById(session.document, nodeId) : null;
+  if (!builtinTarget && !node) {
     editorWorldState.transformControls.detach();
     editorWorldState.transformControlsAttachedNodeId = null;
     helper.visible = false;
@@ -5865,7 +6133,9 @@ function syncTransformControlsToSelection(session) {
   }
   editorWorldState.transformControls.attach(object);
   editorWorldState.transformControls.enabled = true;
-  editorWorldState.transformControlsAttachedNodeId = nodeId;
+  editorWorldState.transformControlsAttachedNodeId = builtinTarget
+    ? 'builtin:' + builtinTarget
+    : nodeId;
   helper.visible = true;
 }
 
@@ -5875,9 +6145,36 @@ async function commitTransformControlDrag(session, rerender) {
   }
   const dragState = editorWorldState.transformDragState;
   editorWorldState.transformDragState = null;
-  const node = findNodeById(session.document, dragState.nodeId);
   const object = editorWorldState.transformControls.object;
-  if (!node || !object) {
+  if (!object) {
+    return;
+  }
+  if (dragState.builtinTarget) {
+    const nextTransform = snapTransformForCurrentMode(
+      transformFromObject(
+        object,
+        playerRigTransform(session.document, dragState.builtinTarget),
+      ),
+    );
+    applyNodeTransform(object, nextTransform);
+    renderEditorWorld();
+    if (transformsEqual(dragState.startTransform, nextTransform)) {
+      rerender();
+      return;
+    }
+    await session.dispatch('scene_apply_patch', {
+      patch: {
+        op: 'updatePlayerTransform',
+        target: dragState.builtinTarget,
+        transform: nextTransform,
+      },
+    });
+    clearValidationResult();
+    rerender();
+    return;
+  }
+  const node = findNodeById(session.document, dragState.nodeId);
+  if (!node) {
     return;
   }
   const nextTransform = snapTransformForCurrentMode(
@@ -6048,7 +6345,6 @@ async function createEditorWorld(session, camera) {
         lookAt: camera.lookAt,
         position: camera.position,
       },
-      defaultLighting: false,
       fov: camera.fov,
     },
     xr: false,
@@ -6100,7 +6396,9 @@ async function createEditorWorld(session, camera) {
   const proxyRoot = new Group();
   proxyRoot.name = 'IWSDKSceneEditorProxyRoot';
   proxyRoot.userData.iwsdkEditorProxyRoot = true;
-  world.getActiveRoot().add(proxyRoot);
+  world.scene.add(proxyRoot);
+  const { builtInObjectMap, levelRootProxy } =
+    createEditorBuiltinRig(proxyRoot);
 
   const grid = new GridHelper(12, 24, 0x40515f, 0x26343d);
   grid.name = 'IWSDKSceneEditorGrid';
@@ -6119,6 +6417,7 @@ async function createEditorWorld(session, camera) {
   editorWorldState = {
     appliedRootComponentNames: new Set(),
     assetProof: new Map(),
+    builtInObjectMap,
     currentCamera: camera,
     currentDocumentValue: null,
     currentSession: session,
@@ -6133,6 +6432,7 @@ async function createEditorWorld(session, camera) {
     lensLayerMasks: new Map(),
     lensMaterials: new Map(),
     lensVisibility: new Map(),
+    levelRootProxy,
     lightBindings: new Map(),
     lowerGeneration: 0,
     loweredDocumentKey: null,
@@ -6184,12 +6484,20 @@ async function createEditorWorld(session, camera) {
     transformSpace: 'local',
     world,
   };
+  applyEditorBuiltinRigTransforms(session.document);
   loadVisibilityArrangements();
   transformControls.addEventListener('mouseDown', () => {
     const nodeId = selectedNodeId();
     const node = nodeId ? findNodeById(session.document, nodeId) : null;
-    editorWorldState.transformDragState =
-      nodeId && node
+    const builtinTarget = selectedBuiltinTarget();
+    editorWorldState.transformDragState = builtinTarget
+      ? {
+          builtinTarget,
+          startTransform: cloneTransform(
+            playerRigTransform(session.document, builtinTarget),
+          ),
+        }
+      : nodeId && node
         ? {
             nodeId,
             startTransform: cloneTransform(node.transform || {}),
@@ -6406,6 +6714,42 @@ function createViewportProof() {
   });
   return {
     assetLoads: [...editorWorldState.assetProof.values()],
+    builtInObjects: [...editorWorldState.builtInObjectMap.entries()].map(
+      ([target, object]) => {
+        let meshCount = 0;
+        let wireframeMaterialCount = 0;
+        const materialOpacities = [];
+        object.traverse((entry) => {
+          if (entry.isMesh !== true) return;
+          meshCount += 1;
+          if (
+            entry.userData?.iwsdkEditorHelper !== true ||
+            entry.userData?.iwsdkBuiltinTarget !== target
+          ) {
+            return;
+          }
+          const materials = Array.isArray(entry.material)
+            ? entry.material
+            : [entry.material];
+          for (const material of materials) {
+            if (material?.wireframe === true) wireframeMaterialCount += 1;
+            if (Number.isFinite(material?.opacity)) {
+              materialOpacities.push(material.opacity);
+            }
+          }
+        });
+        return {
+          materialOpacity:
+            materialOpacities.length > 0
+              ? Math.max(...materialOpacities)
+              : null,
+          meshCount,
+          target,
+          transform: objectTransformProof(object),
+          wireframeMaterialCount,
+        };
+      },
+    ),
     canvasHeight: canvas.height,
     canvasWidth: canvas.width,
     cameraHeight: editorWorldState.currentCamera?.height ?? null,
@@ -6569,6 +6913,8 @@ function findNodeHierarchyInfo(documentValue, nodeId) {
           index,
           node,
           parentId,
+          playerTarget:
+            parentId == null ? node.parent?.target || null : null,
           siblings: items,
         };
       }
@@ -6845,6 +7191,17 @@ function createGroupNodeId(documentValue) {
   return candidate;
 }
 
+function createEmptyEntityNodeId(documentValue) {
+  const ids = new Set(nodesInDocument(documentValue).map((node) => node.id));
+  let index = 1;
+  let candidate = 'entity-' + index;
+  while (ids.has(candidate)) {
+    index += 1;
+    candidate = 'entity-' + index;
+  }
+  return candidate;
+}
+
 function defaultTransformForAsset(documentValue, assetId) {
   const assetIndex = nodesInDocument(documentValue).length;
   const { max, min } = getAssetBounds(documentValue, assetId);
@@ -6867,10 +7224,7 @@ function defaultTransformForAsset(documentValue, assetId) {
 async function initialScaleForPanelAsset(assetId) {
   let size = assetPanelNaturalSizeCache.get(assetId);
   if (!size) {
-    const preview = await renderEditorPanelCanvas(assetId, {
-      fitContent: true,
-      transparent: true,
-    });
+    const preview = await getEditorPanelAssetPreview(assetId);
     size = { height: preview.worldHeight, width: preview.worldWidth };
     assetPanelNaturalSizeCache.set(assetId, size);
   }
@@ -6899,13 +7253,26 @@ function addAssetFromCatalog(session, camera, assetId) {
       node: {
         content: { asset: assetId, type: 'asset' },
         id: nodeId,
-        name: asset.name || nodeId,
         transform,
       },
       op: 'addNode',
     }]);
     setEditorSelection([nodeId]);
     result = await session.dispatch('scene_select', { nodeIds: [nodeId] });
+    syncSelectionFromResult(result);
+    clearValidationResult();
+    renderUi(session, camera);
+  });
+}
+
+function addEmptyEntity(session, camera) {
+  return runEditorMutation(async () => {
+    const nodeId = createEmptyEntityNodeId(session.document);
+    const result = await session.dispatch('scene_add_node', {
+      node: {
+        id: nodeId,
+      },
+    });
     syncSelectionFromResult(result);
     clearValidationResult();
     renderUi(session, camera);
@@ -6930,38 +7297,39 @@ function showSceneGraphContextMenu(session, camera, nodeId, point) {
   const hierarchyInfo = findNodeHierarchyInfo(session.document, nodeId);
   const groupable = groupableSelectedNodes(session.document, nodeId);
   const canUngroup = Boolean(hierarchyInfo?.node?.children?.length);
-  const canMoveUp = Boolean(hierarchyInfo && hierarchyInfo.index > 0);
-  const canMoveDown = Boolean(
-    hierarchyInfo &&
-      Array.isArray(hierarchyInfo.siblings) &&
-      hierarchyInfo.index < hierarchyInfo.siblings.length - 1,
-  );
-  menu.dataset.contextNodeId = nodeId;
-  menu.hidden = false;
   menu.innerHTML = \`
     <div class="context-menu-label">\${escapeHtml(nodeId)}</div>
-    <button data-scene-graph-action="toggle-solo">\${
-      soloOutlinerNodeId === nodeId ? 'Exit Solo' : 'Solo Group'
-    }</button>
-    <button data-scene-graph-action="toggle-ghost">\${
-      ghostedOutlinerNodeIds.has(nodeId) ? 'Show Normally' : 'Ghost Group'
-    }</button>
-    <button data-scene-graph-action="toggle-lock">\${
-      lockedOutlinerNodeIds.has(nodeId) ? 'Unlock Group' : 'Lock Group'
-    }</button>
-    <button data-scene-graph-action="reset-visibility">Reset Visibility</button>
-    <button data-scene-graph-action="group-selection" \${groupable ? '' : 'disabled'}>Group Selection</button>
-    <button data-scene-graph-action="ungroup" \${canUngroup ? '' : 'disabled'}>Ungroup</button>
-    <button data-scene-graph-action="move-up" \${canMoveUp ? '' : 'disabled'}>Move Up</button>
-    <button data-scene-graph-action="move-down" \${canMoveDown ? '' : 'disabled'}>Move Down</button>
-    <button data-scene-graph-action="duplicate">Duplicate Node</button>
-    <button data-scene-graph-action="remove">Remove Node</button>
+    <div class="context-menu-group">
+      <button data-scene-graph-action="toggle-solo">\${
+        soloOutlinerNodeId === nodeId ? 'Exit Solo' : 'Solo Group'
+      }</button>
+      <button data-scene-graph-action="toggle-ghost">\${
+        ghostedOutlinerNodeIds.has(nodeId) ? 'Show Normally' : 'Ghost Group'
+      }</button>
+      <button data-scene-graph-action="toggle-lock">\${
+        lockedOutlinerNodeIds.has(nodeId) ? 'Unlock Group' : 'Lock Group'
+      }</button>
+      <button data-scene-graph-action="reset-visibility">Reset Visibility</button>
+    </div>
+    <div class="context-menu-group">
+      <button data-scene-graph-action="group-selection" \${groupable ? '' : 'disabled'}>Group Selection</button>
+      <button data-scene-graph-action="ungroup" \${canUngroup ? '' : 'disabled'}>Ungroup</button>
+      <button data-scene-graph-action="duplicate">Duplicate Node</button>
+    </div>
+    <div class="context-menu-group">
+      <button data-scene-graph-action="remove" data-destructive>Remove Node</button>
+    </div>
   \`;
-
-  const menuWidth = 180;
-  const menuHeight = 332;
-  menu.style.left = \`\${Math.min(point.x, window.innerWidth - menuWidth - 8)}px\`;
-  menu.style.top = \`\${Math.min(point.y, window.innerHeight - menuHeight - 8)}px\`;
+  menu.dataset.contextNodeId = nodeId;
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  menu.style.visibility = 'hidden';
+  menu.hidden = false;
+  const menuWidth = menu.offsetWidth;
+  const menuHeight = menu.offsetHeight;
+  menu.style.left = \`\${Math.max(8, Math.min(point.x, window.innerWidth - menuWidth - 8))}px\`;
+  menu.style.top = \`\${Math.max(8, Math.min(point.y, window.innerHeight - menuHeight - 8))}px\`;
+  menu.style.visibility = '';
 
   menu.querySelectorAll('[data-scene-graph-action]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -6999,13 +7367,6 @@ function runSceneGraphContextAction(session, camera, nodeId, action) {
       syncSelectionFromResult(result);
     } else if (action === 'remove') {
       const result = await session.dispatch('scene_remove_node', { nodeId });
-      syncSelectionFromResult(result);
-    } else if (action === 'move-up' || action === 'move-down') {
-      const result = await reorderOutlinerNode(
-        session,
-        nodeId,
-        action === 'move-up' ? -1 : 1,
-      );
       syncSelectionFromResult(result);
     } else if (action === 'group-selection') {
       const result = await groupSelectedNodes(session, nodeId);
@@ -7046,7 +7407,13 @@ function groupableSelectedNodes(documentValue, contextNodeId) {
     return null;
   }
   const parentId = infos[0].parentId;
-  if (infos.some((info) => info.parentId !== parentId)) {
+  const playerTarget = infos[0].playerTarget;
+  if (
+    infos.some(
+      (info) =>
+        info.parentId !== parentId || info.playerTarget !== playerTarget,
+    )
+  ) {
     return null;
   }
   const sortedInfos = [...infos].sort((left, right) => left.index - right.index);
@@ -7054,6 +7421,7 @@ function groupableSelectedNodes(documentValue, contextNodeId) {
     insertIndex: sortedInfos[0].index,
     nodeIds: sortedInfos.map((info) => info.node.id),
     parentId,
+    playerTarget,
   };
 }
 
@@ -7072,7 +7440,14 @@ async function groupSelectedNodes(session, contextNodeId) {
       index: groupable.insertIndex,
       node: {
         id: groupId,
-        name: 'Group',
+        ...(groupable.playerTarget
+          ? {
+              parent: {
+                target: groupable.playerTarget,
+                type: 'player-space',
+              },
+            }
+          : {}),
       },
       op: 'addNode',
       parentId: groupable.parentId,
@@ -7115,6 +7490,14 @@ async function ungroupNode(session, nodeId) {
         nodeId: childIds[index],
         op: 'moveNode',
         parentId: hierarchyInfo.parentId,
+        ...(hierarchyInfo.playerTarget
+          ? {
+              parent: {
+                target: hierarchyInfo.playerTarget,
+                type: 'player-space',
+              },
+            }
+          : {}),
         preserveWorldTransform: true,
       },
     });
@@ -7135,32 +7518,12 @@ async function ungroupNode(session, nodeId) {
   };
 }
 
-function reorderOutlinerNode(session, nodeId, direction) {
-  const hierarchyInfo = findNodeHierarchyInfo(session.document, nodeId);
-  if (!hierarchyInfo || !Array.isArray(hierarchyInfo.siblings)) {
-    throw new Error('Cannot reorder unknown node "' + nodeId + '"');
-  }
-  const nextIndex = hierarchyInfo.index + direction;
-  if (nextIndex < 0 || nextIndex >= hierarchyInfo.siblings.length) {
-    return {
-      action: 'nodeReorderSkipped',
-      selection: [nodeId],
-      valid: true,
-    };
-  }
-  const childIds = hierarchyInfo.siblings.map((node) => node.id);
-  const [movedId] = childIds.splice(hierarchyInfo.index, 1);
-  childIds.splice(nextIndex, 0, movedId);
-  return session.dispatch('scene_apply_patch', {
-    patch: {
-      childIds,
-      op: 'reorderChildren',
-      parentId: hierarchyInfo.parentId,
-    },
-  });
-}
-
-function isValidOutlinerDrop(documentValue, draggedNodeId, targetNodeId) {
+function isValidOutlinerDrop(
+  documentValue,
+  draggedNodeId,
+  targetNodeId,
+  parent,
+) {
   if (!draggedNodeId || draggedNodeId === targetNodeId) {
     return false;
   }
@@ -7170,19 +7533,26 @@ function isValidOutlinerDrop(documentValue, draggedNodeId, targetNodeId) {
     return false;
   }
   const current = findNodeHierarchyInfo(documentValue, draggedNodeId);
-  if (current?.parentId === targetNodeId) {
+  const currentPlayerTarget =
+    current?.parentId == null ? current?.node?.parent?.target : null;
+  const nextPlayerTarget = parent?.target || null;
+  if (
+    current?.parentId === targetNodeId &&
+    currentPlayerTarget === nextPlayerTarget
+  ) {
     return false;
   }
   return targetNodeId == null || !nodeHasDescendant(draggedNode, targetNodeId);
 }
 
-function applyOutlinerReparent(session, camera, nodeId, parentId) {
+function applyOutlinerReparent(session, camera, nodeId, parentId, parent) {
   return runEditorMutation(async () => {
     const result = await session.dispatch('scene_apply_patch', {
       patch: {
         nodeId,
         op: 'moveNode',
         parentId,
+        ...(parent ? { parent } : {}),
         preserveWorldTransform: true,
       },
     });
@@ -7199,7 +7569,15 @@ function setEditorSelection(nodeIds, { rootWhenEmpty = true } = {}) {
   window.__IWSDK_EDITOR_SELECTION = selection;
   window.__IWSDK_EDITOR_ROOT_SELECTED =
     rootWhenEmpty && selection.length === 0;
+  window.__IWSDK_EDITOR_BUILTIN_SELECTION =
+    window.__IWSDK_EDITOR_ROOT_SELECTED ? 'level-root' : null;
   return selection;
+}
+
+function setEditorBuiltinSelection(target) {
+  window.__IWSDK_EDITOR_SELECTION = [];
+  window.__IWSDK_EDITOR_ROOT_SELECTED = target === 'level-root';
+  window.__IWSDK_EDITOR_BUILTIN_SELECTION = target;
 }
 
 function syncSelectionFromResult(result) {
@@ -7563,9 +7941,28 @@ function componentNameForSchema(schema) {
     : schema.id;
 }
 
+function authoredNodeVisible(node) {
+  if (typeof node?.visible === 'boolean') {
+    return node.visible;
+  }
+  const legacy =
+    node?.components?.Visibility ||
+    node?.components?.['com.iwsdk.components.Visibility'];
+  return legacy?.isVisible !== false;
+}
+
 function componentSchemasForDocument(_documentValue) {
   return runtimeComponentSchemas().filter(
-    (schema) => schema.id !== 'PanelUI' && schema.id !== 'PanelDocument',
+    (schema) =>
+      schema.id !== 'PanelUI' &&
+      schema.id !== 'PanelDocument' &&
+      schema.editor?.hidden !== true,
+  );
+}
+
+function componentSchemaMapForDocument(_documentValue) {
+  return new Map(
+    runtimeComponentSchemas().map((schema) => [schema.id, schema]),
   );
 }
 
@@ -7627,6 +8024,9 @@ function defaultComponentProps(schema) {
 }
 
 function defaultValueForField(field) {
+  if (field.widget === 'entity') {
+    return null;
+  }
   switch (field.type) {
     case 'Boolean':
       return false;
@@ -7648,8 +8048,9 @@ function defaultValueForField(field) {
     case 'String':
     case 'FilePath':
       return '';
-    case 'Object':
     case 'Entity':
+      return null;
+    case 'Object':
     default:
       return {};
   }
@@ -7675,28 +8076,33 @@ function parseComponentValue(text) {
   }
 }
 
-function renderComponentRows(componentEntries, componentSchemaMap) {
+function renderComponentRows(componentEntries, componentSchemaMap, documentValue) {
   if (componentEntries.length === 0) {
     return '<p class="empty-state">No components</p>';
   }
 
   return componentEntries
     .map(([name, value], index) =>
-      renderComponentRow(name, value, index, componentSchemaMap),
+      renderComponentRow(name, value, index, componentSchemaMap, documentValue),
     )
     .join('');
 }
 
-function renderComponentRow(name, value, index, componentSchemaMap) {
+function renderComponentRow(name, value, index, componentSchemaMap, documentValue) {
   const componentType = componentPayloadType(name, value);
   const schema = componentSchemaMap.get(componentType);
   const props = componentPayloadProps(value);
   const title = schema?.name || componentType || name;
+  const description = distinctComponentDescription(
+    schema?.description,
+    title,
+    name,
+  );
   const fieldControls = schema
     ? Object.entries(schema.fields || {})
         .filter(([, field]) => field.hidden !== true)
         .map(([fieldName, field]) =>
-          renderComponentField(fieldName, field, props[fieldName]),
+          renderComponentField(fieldName, field, props[fieldName], documentValue),
         )
         .join('')
     : '<label>Payload <textarea data-component-value rows="5">' +
@@ -7715,9 +8121,9 @@ function renderComponentRow(name, value, index, componentSchemaMap) {
     '">' +
     '<div class="component-row-header"><span class="component-row-title"><strong>' +
     escapeHtml(title) +
-    '</strong><span>' +
-    escapeHtml(name) +
-    '</span></span><button class="component-remove-button icon-button" data-remove-component title="Remove ' +
+    '</strong>' +
+    (description ? '<span>' + escapeHtml(description) + '</span>' : '') +
+    '</span><button class="component-remove-button icon-button" data-remove-component title="Remove ' +
     escapeHtml(title) +
     '" aria-label="Remove ' +
     escapeHtml(title) +
@@ -7731,7 +8137,22 @@ function renderComponentRow(name, value, index, componentSchemaMap) {
   );
 }
 
-function renderComponentField(fieldName, field, value) {
+function distinctComponentDescription(description, ...identifiers) {
+  const value = typeof description === 'string' ? description.trim() : '';
+  if (!value) {
+    return '';
+  }
+  const normalized = value.toLocaleLowerCase();
+  return identifiers.some(
+    (identifier) =>
+      typeof identifier === 'string' &&
+      identifier.trim().toLocaleLowerCase() === normalized,
+  )
+    ? ''
+    : value;
+}
+
+function renderComponentField(fieldName, field, value, documentValue) {
   const fieldValue =
     value !== undefined
       ? value
@@ -7871,7 +8292,51 @@ function renderComponentField(fieldName, field, value) {
     );
   }
 
-  if (field.type === 'Object' || field.type === 'Entity') {
+  if (field.type === 'FilePath') {
+    const missing = String(fieldValue ?? '').trim().length === 0;
+    return (
+      '<div class="component-field-row component-file-row" data-component-field-row="' +
+      escapeHtml(fieldName) +
+      '" data-field-invalid="' +
+      String(missing) +
+      '"' +
+      omittedAttribute +
+      '>' +
+      fieldLabel +
+      '<div class="component-file-control"><input data-component-field="' +
+      escapeHtml(fieldName) +
+      '" data-component-field-type="FilePath" value="' +
+      escapeHtml(String(fieldValue ?? '')) +
+      '" /><button type="button" class="component-file-browse-button icon-button" data-component-file-browse data-file-types="' +
+      escapeHtml(field.fileTypes || '') +
+      '" data-subfolder="' +
+      escapeHtml(field.subfolder || '') +
+      '" title="Choose ' +
+      escapeHtml(fieldLabelText) +
+      '" aria-label="Choose ' +
+      escapeHtml(fieldLabelText) +
+      '">' +
+      renderLucideIcon('FolderOpen') +
+      '</button></div>' +
+      (missing
+        ? '<span class="component-field-warning">Select a project file</span>'
+        : '') +
+      '</div>'
+    );
+  }
+
+  if (field.type === 'Entity' || field.widget === 'entity') {
+    return renderEntityReferenceField(
+      fieldName,
+      field,
+      fieldValue,
+      fieldLabel,
+      omittedAttribute,
+      documentValue,
+    );
+  }
+
+  if (field.type === 'Object') {
     return (
       '<label class="component-field-row component-object-row" data-component-field-row="' +
       escapeHtml(fieldName) +
@@ -7904,6 +8369,104 @@ function renderComponentField(fieldName, field, value) {
     escapeHtml(String(fieldValue ?? '')) +
     '" /></label>'
   );
+}
+
+function renderEntityReferenceField(
+  fieldName,
+  field,
+  value,
+  fieldLabel,
+  omittedAttribute,
+  documentValue,
+) {
+  const state = entityReferenceDisplayState(value, documentValue);
+  return (
+    '<div class="component-field-row component-entity-row" data-component-field-row="' +
+    escapeHtml(fieldName) +
+    '" data-field-invalid="' +
+    String(!state.valid) +
+    '"' +
+    omittedAttribute +
+    '>' +
+    fieldLabel +
+    '<div class="component-entity-control" data-component-entity-drop data-field-invalid="' +
+    String(!state.valid) +
+    '" aria-invalid="' +
+    String(!state.valid) +
+    '" tabindex="0">' +
+    '<input type="hidden" data-component-field="' +
+    escapeHtml(fieldName) +
+    '" data-component-field-type="' +
+    escapeHtml(field.type) +
+    '" data-component-field-widget="entity" value="' +
+    escapeHtml(componentValueText(value ?? null)) +
+    '" />' +
+    '<span class="component-entity-icon">' +
+    renderLucideIcon(state.builtin ? 'PersonStanding' : 'Box') +
+    '</span><span class="component-entity-value">' +
+    escapeHtml(state.label) +
+    '</span>' +
+    (value == null
+      ? ''
+      : '<button type="button" class="component-entity-clear-button icon-button" data-component-entity-clear title="Clear entity reference" aria-label="Clear entity reference">' +
+        renderLucideIcon('X') +
+        '</button>') +
+    '</div>' +
+    (!state.valid
+      ? '<span class="component-field-warning">' +
+        escapeHtml(state.warning) +
+        '</span>'
+      : '') +
+    '</div>'
+  );
+}
+
+function entityReferenceDisplayState(value, documentValue) {
+  if (value?.type === 'node' && typeof value.id === 'string') {
+    const valid = Boolean(findNodeById(documentValue, value.id));
+    return {
+      builtin: false,
+      label: valid ? value.id : value.id + ' (Missing)',
+      valid,
+      warning: valid ? '' : 'Referenced entity no longer exists',
+    };
+  }
+  if (
+    value?.type === 'player-space' &&
+    [
+      'player',
+      'camera',
+      'head',
+      'left-target-ray',
+      'left-grip',
+      'right-target-ray',
+      'right-grip',
+    ].includes(value.target)
+  ) {
+    return {
+      builtin: true,
+      label: playerRigTargetLabel(value.target),
+      valid: true,
+      warning: '',
+    };
+  }
+  if (value?.type === 'level-root') {
+    return { builtin: true, label: 'Level Root', valid: true, warning: '' };
+  }
+  if (Number.isInteger(value)) {
+    return {
+      builtin: false,
+      label: 'Runtime entity #' + value,
+      valid: true,
+      warning: '',
+    };
+  }
+  return {
+    builtin: false,
+    label: 'None (drop an entity)',
+    valid: false,
+    warning: 'Drag an entity from the Scene Graph',
+  };
 }
 
 function componentColorHex(value) {
@@ -8058,7 +8621,10 @@ function readComponentField(row, fieldName, field) {
     }
     return value;
   }
-  if (field.type === 'Object' || field.type === 'Entity') {
+  if (field.type === 'Entity' || field.widget === 'entity') {
+    return parseComponentValue(input.value || 'null');
+  }
+  if (field.type === 'Object') {
     return parseComponentValue(input.value || '{}');
   }
   return input.value;
@@ -8152,6 +8718,33 @@ function markComponentFieldAuthored(target) {
   }
 }
 
+function refreshInlineComponentFieldValidity(target) {
+  if (
+    !(target instanceof HTMLInputElement) ||
+    target.dataset.componentFieldType !== 'FilePath'
+  ) {
+    return;
+  }
+  const fieldRow = target.closest('[data-component-field-row]');
+  if (!(fieldRow instanceof HTMLElement)) {
+    return;
+  }
+  const invalid = target.value.trim().length === 0;
+  fieldRow.dataset.fieldInvalid = String(invalid);
+  target.setAttribute('aria-invalid', String(invalid));
+  const existing = fieldRow.querySelector('.component-field-warning');
+  if (!invalid) {
+    existing?.remove();
+    return;
+  }
+  if (existing == null) {
+    const warning = document.createElement('span');
+    warning.className = 'component-field-warning';
+    warning.textContent = 'Select a project file';
+    fieldRow.append(warning);
+  }
+}
+
 function refreshEditorStatus(session, camera) {
   window.__IWSDK_EDITOR_CAMERA = camera;
   const documentValue = session.document;
@@ -8200,9 +8793,18 @@ function refreshEditorStatus(session, camera) {
 }
 
 function componentPatchForTarget(target, component, value) {
-  return target?.root === true
-    ? { component, op: 'updateRootComponent', value }
-    : { component, nodeId: target.id, op: 'updateComponent', value };
+  if (target?.root === true) {
+    return { component, op: 'updateRootComponent', value };
+  }
+  if (typeof target?.playerTarget === 'string') {
+    return {
+      component,
+      op: 'updatePlayerComponent',
+      target: target.playerTarget,
+      value,
+    };
+  }
+  return { component, nodeId: target.id, op: 'updateComponent', value };
 }
 
 function commitComponentRow(inspector, row, session, camera, target, componentSchemaMap) {
@@ -8213,9 +8815,9 @@ function commitComponentRow(inspector, row, session, camera, target, componentSc
     signature = componentRowSignature(row, componentSchemaMap);
   } catch (error) {
     setComponentEditorMessage(inspector, String(error?.message || error), true);
-    return;
+    return Promise.resolve();
   }
-  runInspectorMutation(inspector, async () => {
+  return runInspectorMutation(inspector, async () => {
     if (
       signature === row.dataset.committedValue ||
       signature === row.dataset.pendingValue
@@ -8620,6 +9222,7 @@ const ROOT_INTRINSIC_COMPONENT_IDS = new Set([
   'LevelRoot',
   'LevelTag',
   'Transform',
+  'Visibility',
 ]);
 
 function renderComponentEditor(
@@ -8627,13 +9230,19 @@ function renderComponentEditor(
   componentSchemas,
   componentSchemaMap,
   excludedIds = new Set(),
+  documentValue,
 ) {
-  const componentEntries = Object.entries(components || {}).filter(
-    ([name]) => !['PanelUI', 'PanelDocument'].includes(stripComponentPrefix(name)),
-  );
+  const componentEntries = Object.entries(components || {}).filter(([name]) => {
+    const componentId = stripComponentPrefix(name);
+    return (
+      !['PanelUI', 'PanelDocument'].includes(componentId) &&
+      componentSchemaMap.get(componentId)?.editor?.hidden !== true
+    );
+  });
   const componentRows = renderComponentRows(
     componentEntries,
     componentSchemaMap,
+    documentValue,
   );
   const addableComponents = componentSchemas.filter(
     (schema) =>
@@ -8655,14 +9264,17 @@ function renderComponentPicker(componentSchemas) {
   const options = componentSchemas
     .map((schema) => {
       const name = schema.id;
-      const description = schema.description || schema.id;
+      const description = distinctComponentDescription(
+        schema.description,
+        name,
+      );
       const searchText = [name, schema.id, description, schema.source || '']
         .join(' ')
         .toLowerCase();
       return \`
         <button type="button" class="component-picker-option" data-component-picker-option="\${escapeHtml(schema.id)}" data-component-picker-search="\${escapeHtml(searchText)}">
           <strong>\${escapeHtml(name)}</strong>
-          <span>\${escapeHtml(description)}</span>
+          \${description ? '<span>' + escapeHtml(description) + '</span>' : ''}
         </button>
       \`;
     })
@@ -8684,18 +9296,18 @@ function renderComponentPicker(componentSchemas) {
 
 function renderRootInspector(inspector, session, camera) {
   const componentSchemas = componentSchemasForDocument(session.document);
-  const componentSchemaMap = new Map(
-    componentSchemas.map((schema) => [schema.id, schema]),
-  );
+  const componentSchemaMap = componentSchemaMapForDocument(session.document);
   inspector.innerHTML = \`
     <div class="inspector-node scene-root-inspector" data-scene-root-inspector>
-      <div class="inspector-title">Scene Root</div>
+      <div class="inspector-title">Level Root</div>
+      <div class="inspector-built-in-note">Built-in runtime entity</div>
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.pinned"></div>
       \${renderComponentEditor(
         session.document.components,
         componentSchemas,
         componentSchemaMap,
         ROOT_INTRINSIC_COMPONENT_IDS,
+        session.document,
       )}
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.global"></div>
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.section"></div>
@@ -8708,6 +9320,416 @@ function renderRootInspector(inspector, session, camera) {
     { root: true },
     componentSchemaMap,
   );
+}
+
+function playerRigDescriptor(documentValue, target) {
+  const player = documentValue.player || {};
+  switch (target) {
+    case 'player':
+      return player;
+    case 'camera':
+      return player.camera || {};
+    case 'head':
+      return player.head || {};
+    case 'left-target-ray':
+      return player.leftTargetRay || {};
+    case 'right-target-ray':
+      return player.rightTargetRay || {};
+    case 'left-grip':
+      return player.leftGrip || {};
+    case 'right-grip':
+      return player.rightGrip || {};
+    default:
+      return {};
+  }
+}
+
+function playerRigTargetLabel(target) {
+  return {
+    player: 'Player Space',
+    camera: 'Camera',
+    head: 'Head',
+    'left-target-ray': 'Left Target Ray',
+    'right-target-ray': 'Right Target Ray',
+    'left-grip': 'Left Grip',
+    'right-grip': 'Right Grip',
+  }[target] || target;
+}
+
+function renderBuiltinTransformEditor(transform, target) {
+  const fields = [
+    ['Position', 'position', vec3FromTransform(transform, 'position', [0, 0, 0])],
+    [
+      'Rotation',
+      'rotationDeg',
+      vec3FromTransform(transform, 'rotationDeg', [0, 0, 0]),
+    ],
+    ['Scale', 'scale', scaleToEditorVec3(transform.scale)],
+  ];
+  const tracked = !['player', 'camera'].includes(target);
+  return \`
+    <details class="inspector-section transform-section" open>
+      \${inspectorSectionSummary('Transform')}
+      \${tracked ? '<div class="inspector-built-in-note">Preview pose; runtime tracking can override it.</div>' : ''}
+      <div class="transform-editor">
+        \${fields
+          .map(
+            ([label, field, values]) => \`
+              <div class="transform-row">
+                <span class="transform-row-label">\${label}</span>
+                <label>X <input type="number" step="0.01" data-transform-field="\${field}.0" value="\${values[0]}" /></label>
+                <label>Y <input type="number" step="0.01" data-transform-field="\${field}.1" value="\${values[1]}" /></label>
+                <label>Z <input type="number" step="0.01" data-transform-field="\${field}.2" value="\${values[2]}" /></label>
+                <button class="transform-reset-button icon-button" data-reset-builtin-transform="\${escapeHtml(field)}" title="Reset \${escapeHtml(label)}" aria-label="Reset \${escapeHtml(label)}">\${renderLucideIcon('RefreshCcw')}</button>
+              </div>
+            \`,
+          )
+          .join('')}
+      </div>
+      <div id="transform-editor-message"></div>
+    </details>
+  \`;
+}
+
+function bindBuiltinTransformEditor(
+  inspector,
+  session,
+  camera,
+  target,
+  baseTransform,
+) {
+  const commit = () => {
+    runTransformMutation(inspector, async () => {
+      const nextTransform = readTransformFields(inspector, baseTransform);
+      await session.dispatch('scene_apply_patch', {
+        patch: {
+          op: 'updatePlayerTransform',
+          target,
+          transform: nextTransform,
+        },
+      });
+      clearValidationResult();
+      renderUi(session, camera);
+    });
+  };
+  inspector.querySelectorAll('[data-transform-field]').forEach((input) => {
+    input.addEventListener('change', commit);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.target?.blur?.();
+      }
+    });
+  });
+  inspector
+    .querySelectorAll('[data-reset-builtin-transform]')
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        const field = button.getAttribute('data-reset-builtin-transform');
+        const nextTransform = { ...baseTransform };
+        if (field === 'position') nextTransform.position = [0, 0, 0];
+        if (field === 'rotationDeg') nextTransform.rotationDeg = [0, 0, 0];
+        if (field === 'scale') nextTransform.scale = 1;
+        runTransformMutation(inspector, async () => {
+          await session.dispatch('scene_apply_patch', {
+            patch: {
+              op: 'updatePlayerTransform',
+              target,
+              transform: nextTransform,
+            },
+          });
+          clearValidationResult();
+          renderUi(session, camera);
+        });
+      });
+    });
+}
+
+function renderPlayerRigInspector(inspector, session, camera, target) {
+  const componentSchemas = componentSchemasForDocument(session.document);
+  const componentSchemaMap = componentSchemaMapForDocument(session.document);
+  const descriptor = playerRigDescriptor(session.document, target);
+  const transform = playerRigTransform(session.document, target);
+  inspector.innerHTML = \`
+    <div class="inspector-node builtin-inspector" data-builtin-inspector="\${escapeHtml(target)}">
+      <div class="inspector-title">\${escapeHtml(playerRigTargetLabel(target))}</div>
+      <div class="inspector-built-in-note">\${
+        target === 'player'
+          ? 'Authored player origin in the virtual environment'
+          : 'Built-in runtime-tracked entity'
+      }</div>
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.pinned"></div>
+      \${target === 'player' ? renderBuiltinTransformEditor(transform, target) : ''}
+      \${renderComponentEditor(
+        descriptor.components,
+        componentSchemas,
+        componentSchemaMap,
+        ROOT_INTRINSIC_COMPONENT_IDS,
+        session.document,
+      )}
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.global"></div>
+      <div class="editor-slot inspector-slot" data-editor-slot="inspector.section"></div>
+    </div>
+  \`;
+  if (target === 'player') {
+    bindBuiltinTransformEditor(
+      inspector,
+      session,
+      camera,
+      target,
+      transform,
+    );
+  }
+  bindComponentEditor(
+    inspector,
+    session,
+    camera,
+    { playerTarget: target },
+    componentSchemaMap,
+  );
+}
+
+function bindComponentFilePickers(
+  inspector,
+  session,
+  camera,
+  target,
+  componentSchemaMap,
+) {
+  inspector.querySelectorAll('[data-component-file-browse]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('[data-component-index]');
+      const fieldRow = button.closest('[data-component-field-row]');
+      const input = fieldRow?.querySelector('[data-component-field]');
+      if (!(row instanceof HTMLElement) || !(input instanceof HTMLInputElement)) {
+        setComponentEditorMessage(inspector, 'File field is unavailable', true);
+        return;
+      }
+
+      button.disabled = true;
+      setComponentEditorMessage(inspector, 'Loading project files…');
+      try {
+        const url = new URL(projectFilesUrl, window.location.href);
+        const subfolder = button.getAttribute('data-subfolder') || '';
+        const fileTypes = button.getAttribute('data-file-types') || '';
+        if (subfolder) url.searchParams.set('subfolder', subfolder);
+        if (fileTypes) url.searchParams.set('fileTypes', fileTypes);
+        const response = await fetch(url);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to list project files');
+        }
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        showComponentFilePicker({
+          files,
+          fileTypes,
+          initialValue: input.value,
+          label:
+            fieldRow.querySelector('.component-field-label')?.textContent ||
+            'file',
+          onSelect: (path) => {
+            input.value = path;
+            markComponentFieldAuthored(input);
+            refreshInlineComponentFieldValidity(input);
+            commitComponentRow(
+              inspector,
+              row,
+              session,
+              camera,
+              target,
+              componentSchemaMap,
+            );
+          },
+        });
+        setComponentEditorMessage(inspector, '');
+      } catch (error) {
+        setComponentEditorMessage(
+          inspector,
+          String(error?.message || error),
+          true,
+        );
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+function showComponentFilePicker({
+  files,
+  fileTypes,
+  initialValue,
+  label,
+  onSelect,
+}) {
+  document.getElementById('component-file-picker-dialog')?.remove();
+  const dialog = document.createElement('dialog');
+  dialog.id = 'component-file-picker-dialog';
+  dialog.className = 'component-picker-dialog';
+  const typeHint = fileTypes
+    ? '<span>Showing ' + escapeHtml(fileTypes.split(',').join(', ')) + '</span>'
+    : '';
+  dialog.innerHTML =
+    '<div class="component-picker-card">' +
+    '<div class="component-picker-header"><h3>Choose ' +
+    escapeHtml(label) +
+    '</h3><button type="button" class="icon-button" data-close-file-picker aria-label="Close file picker">' +
+    renderLucideIcon('X') +
+    '</button></div>' +
+    '<input class="component-file-picker-search" type="search" placeholder="Search project files" aria-label="Search project files" />' +
+    typeHint +
+    '<div class="component-picker-list"></div>' +
+    '</div>';
+  const list = dialog.querySelector('.component-picker-list');
+  const search = dialog.querySelector('.component-file-picker-search');
+  const entries = files.map((file) => {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'component-picker-option';
+    option.dataset.filePickerPath = String(file.path || '');
+    option.innerHTML = '<strong>' + escapeHtml(String(file.path || '')) + '</strong>';
+    if (file.path === initialValue) {
+      option.dataset.selected = 'true';
+    }
+    option.addEventListener('click', () => {
+      onSelect(String(file.path || ''));
+      dialog.close();
+    });
+    list?.append(option);
+    return option;
+  });
+  const empty = document.createElement('p');
+  empty.className = 'component-picker-empty';
+  empty.textContent =
+    files.length === 0
+      ? 'No matching files found in public/.'
+      : 'No files match this search.';
+  empty.hidden = files.length > 0;
+  list?.append(empty);
+  const filter = () => {
+    const query =
+      search instanceof HTMLInputElement
+        ? search.value.trim().toLocaleLowerCase()
+        : '';
+    let visibleCount = 0;
+    for (const entry of entries) {
+      const visible =
+        query.length === 0 ||
+        (entry.dataset.filePickerPath || '').toLocaleLowerCase().includes(query);
+      entry.hidden = !visible;
+      if (visible) visibleCount += 1;
+    }
+    empty.hidden = visibleCount > 0;
+  };
+  search?.addEventListener('input', filter);
+  dialog
+    .querySelector('[data-close-file-picker]')
+    ?.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  document.body.append(dialog);
+  dialog.showModal();
+  requestAnimationFrame(() => search?.focus());
+}
+
+function bindComponentEntityFields(
+  inspector,
+  session,
+  camera,
+  target,
+  componentSchemaMap,
+) {
+  inspector.querySelectorAll('[data-component-entity-drop]').forEach((control) => {
+    const row = control.closest('[data-component-index]');
+    const input = control.querySelector('[data-component-field]');
+    if (!(row instanceof HTMLElement) || !(input instanceof HTMLInputElement)) {
+      return;
+    }
+    const setDropActive = (active) => {
+      control.dataset.dropActive = active ? 'true' : 'false';
+    };
+    control.addEventListener('dragover', (event) => {
+      if (!event.dataTransfer?.types.includes(ENTITY_REFERENCE_MIME)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'copy';
+      setDropActive(true);
+    });
+    control.addEventListener('dragleave', (event) => {
+      if (event.relatedTarget instanceof Node && control.contains(event.relatedTarget)) {
+        return;
+      }
+      setDropActive(false);
+    });
+    control.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setDropActive(false);
+      try {
+        const reference = parseEntityReferenceTransfer(event.dataTransfer);
+        input.value = componentValueText(reference);
+        markComponentFieldAuthored(input);
+        await commitComponentRow(
+          inspector,
+          row,
+          session,
+          camera,
+          target,
+          componentSchemaMap,
+        );
+        renderUi(session, camera);
+      } catch (error) {
+        setComponentEditorMessage(
+          inspector,
+          String(error?.message || error),
+          true,
+        );
+      }
+    });
+    control
+      .querySelector('[data-component-entity-clear]')
+      ?.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = 'null';
+        markComponentFieldAuthored(input);
+        await commitComponentRow(
+          inspector,
+          row,
+          session,
+          camera,
+          target,
+          componentSchemaMap,
+        );
+        renderUi(session, camera);
+      });
+  });
+}
+
+function parseEntityReferenceTransfer(transfer) {
+  const text = transfer?.getData(ENTITY_REFERENCE_MIME) || '';
+  const reference = parseComponentValue(text);
+  if (
+    reference?.type === 'node' &&
+    typeof reference.id === 'string' &&
+    reference.id.length > 0
+  ) {
+    return reference;
+  }
+  if (
+    reference?.type === 'player-space' &&
+    typeof reference.target === 'string'
+  ) {
+    return reference;
+  }
+  if (reference?.type === 'level-root') {
+    return reference;
+  }
+  throw new Error('Drop an entity from the Scene Graph');
 }
 
 function bindComponentEditor(
@@ -8724,6 +9746,7 @@ function bindComponentEditor(
     );
     row.addEventListener('input', (event) => {
       markComponentFieldAuthored(event.target);
+      refreshInlineComponentFieldValidity(event.target);
     });
     row.addEventListener('change', (event) => {
       const eventTarget = event.target;
@@ -8800,6 +9823,20 @@ function bindComponentEditor(
         });
       });
   });
+  bindComponentFilePickers(
+    inspector,
+    session,
+    camera,
+    target,
+    componentSchemaMap,
+  );
+  bindComponentEntityFields(
+    inspector,
+    session,
+    camera,
+    target,
+    componentSchemaMap,
+  );
   const componentPicker = inspector.querySelector('#component-picker-dialog');
   const componentSearch = inspector.querySelector('#component-picker-search');
   const componentOptions = [
@@ -8884,6 +9921,7 @@ function renderInspector(inspector, session, camera, node) {
   const position = vec3FromTransform(transform, 'position', [0, 0, 0]);
   const rotationDeg = vec3FromTransform(transform, 'rotationDeg', [0, 0, 0]);
   const scale = scaleToEditorVec3(transform.scale);
+  const visible = authoredNodeVisible(node);
   const fields = [
     ['Position', 'position', position],
     ['Rotation', 'rotationDeg', rotationDeg],
@@ -8891,9 +9929,7 @@ function renderInspector(inspector, session, camera, node) {
   ];
   const assets = sceneAssets(session.document);
   const componentSchemas = componentSchemasForDocument(session.document);
-  const componentSchemaMap = new Map(
-    componentSchemas.map((schema) => [schema.id, schema]),
-  );
+  const componentSchemaMap = componentSchemaMapForDocument(session.document);
   inspector.innerHTML = \`
     <div class="inspector-node">
       <input class="inspector-title inspector-title-edit" data-node-title-edit value="\${escapeHtml(node.id)}" aria-label="Node name" title="Rename node" spellcheck="false" />
@@ -8901,6 +9937,15 @@ function renderInspector(inspector, session, camera, node) {
       <details class="inspector-section asset-editor" open>
         \${inspectorSectionSummary('Asset')}
         \${renderAssetInspector(node, assets)}
+      </details>
+      <details class="inspector-section visibility-section" open>
+        \${inspectorSectionSummary('Visibility')}
+        <div class="visibility-editor">
+          <label class="component-field-row component-boolean-row">
+            <span class="component-field-label">Visible</span>
+            <input type="checkbox" data-node-visible \${visible ? 'checked' : ''} />
+          </label>
+        </div>
       </details>
       <details class="inspector-section transform-section" open>
         \${inspectorSectionSummary('Transform')}
@@ -8925,6 +9970,8 @@ function renderInspector(inspector, session, camera, node) {
         node.components,
         componentSchemas,
         componentSchemaMap,
+        new Set(),
+        session.document,
       )}
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.global"></div>
       <div class="editor-slot inspector-slot" data-editor-slot="inspector.section"></div>
@@ -8956,6 +10003,21 @@ function renderInspector(inspector, session, camera, node) {
       event.preventDefault();
       event.target.blur();
     }
+  });
+  inspector.querySelector('[data-node-visible]')?.addEventListener('change', (event) => {
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const nextVisible = event.target.checked;
+    runInspectorMutation(inspector, async () => {
+      await session.dispatch('scene_apply_patch', {
+        patch: nextVisible
+          ? { nodeId: node.id, op: 'updateVisibility' }
+          : { nodeId: node.id, op: 'updateVisibility', visible: false },
+      });
+      clearValidationResult();
+      renderUi(session, camera);
+    });
   });
   inspector.querySelectorAll('[data-transform-field]').forEach((input) => {
     input.addEventListener('change', () => {
@@ -9076,7 +10138,11 @@ function pickCanvasNode(session, camera, canvas, event) {
     editorWorldState.world.camera,
   );
   const intersections = editorWorldState.raycaster.intersectObjects(
-    [...editorWorldState.objectMap.values()],
+    [
+      ...editorWorldState.objectMap.values(),
+      editorWorldState.builtInObjectMap.get('player'),
+      editorWorldState.builtInObjectMap.get('level-root'),
+    ].filter(Boolean),
     true,
   );
   for (const intersection of intersections) {
@@ -9095,6 +10161,13 @@ function pickCanvasNode(session, camera, canvas, event) {
             point: eventCanvasPoint(canvas, event),
           };
         }
+      }
+      const builtinTarget = current.userData?.iwsdkBuiltinTarget;
+      if (typeof builtinTarget === 'string') {
+        return {
+          builtinTarget,
+          point: eventCanvasPoint(canvas, event),
+        };
       }
       current = current.parent;
     }
@@ -9167,6 +10240,7 @@ function renderUi(session, camera) {
     nodeCount: nodes.length,
     nodes: editorWorkspaceSceneNodes(documentValue.nodes || [], assets),
     rootSelected: window.__IWSDK_EDITOR_ROOT_SELECTED === true,
+    builtInSelection: window.__IWSDK_EDITOR_BUILTIN_SELECTION || null,
     sceneAssets: catalogSceneAssets(documentValue),
     scenePath: currentScenePath(),
     selectedNodeIds: selected,
@@ -9186,8 +10260,16 @@ function renderUi(session, camera) {
 
   const inspector = document.getElementById('inspector');
   if (inspector) {
-    if (window.__IWSDK_EDITOR_ROOT_SELECTED === true) {
+    const builtInSelection = window.__IWSDK_EDITOR_BUILTIN_SELECTION;
+    if (builtInSelection === 'level-root') {
       renderRootInspector(inspector, session, camera);
+    } else if (builtInSelection) {
+      renderPlayerRigInspector(
+        inspector,
+        session,
+        camera,
+        builtInSelection,
+      );
     } else {
       const selectedNodes = selected
         .map((nodeId) => findNodeById(documentValue, nodeId))
@@ -9239,6 +10321,13 @@ function attachCanvasInteractions(canvas, session, getCamera, rerender) {
         await session.dispatch('scene_select', { nodeIds: [] });
         rerender();
       }
+      return;
+    }
+    if (hit.builtinTarget) {
+      setEditorBuiltinSelection(hit.builtinTarget);
+      await session.dispatch('scene_select', { nodeIds: [] });
+      setEditorBuiltinSelection(hit.builtinTarget);
+      rerender();
       return;
     }
     const nodeIds = selectionForNodeClick(hit.node.id, event);
@@ -9412,10 +10501,13 @@ async function sha256Base64Bytes(imageData) {
 }
 
 async function init() {
+  updateEditorStartupProgress('Loading editor modules…', 12);
   await loadEditorRuntimeDependencies();
+  updateEditorStartupProgress('Opening workspace…', 28);
   createEditorFrame();
   attachWorkspaceViewControls();
   if (!hasConfiguredScenePath()) {
+    updateEditorStartupProgress('Finding scene files…', 38);
     const listedScenes = await dispatchWorkspaceCommand(
       null,
       'scene_list_files',
@@ -9438,10 +10530,12 @@ async function init() {
         session: null,
         unregisterContribution: unregisterEditorContribution,
       };
+      completeEditorStartup();
       await renderScenePicker();
       return;
     }
   }
+  updateEditorStartupProgress('Loading scene…', 48);
   const loadedScene = await fetchComposedSceneDocument(currentScenePath());
   const documentValue = loadedScene.document;
   updateComposedSceneIdentity(loadedScene);
@@ -9634,7 +10728,9 @@ async function init() {
     return finalResult;
   };
 
+  updateEditorStartupProgress('Building scene preview…', 70);
   await createEditorWorld(session, activeCamera);
+  updateEditorStartupProgress('Finalizing editor…', 94);
   installSceneFileWatcher(session, () => activeCamera);
 
   const runtime = window.FRAMEWORK_MCP_RUNTIME;
@@ -9714,6 +10810,14 @@ async function init() {
       const image = preview?.material?.map?.image;
       const context =
         image instanceof HTMLCanvasElement ? image.getContext('2d') : null;
+      const node = findNodeById(
+        editorWorldState?.currentSession?.document,
+        nodeId,
+      );
+      const panelProps = panelPropsForNode(node);
+      const canonicalConfig = panelProps
+        ? resolveEditorPanelConfig(panelProps.config)
+        : null;
       const cornerAlpha = context
         ? [
             [0, 0],
@@ -9743,10 +10847,18 @@ async function init() {
             computedSize:
               preview.userData?.iwsdkEditorPanelComputedSize || null,
             materialType: preview.material?.type || null,
+            pixelSize: image
+              ? { height: image.height, width: image.width }
+              : null,
             roundedCornerAlpha,
             textureColorSpace: preview.material?.map?.colorSpace || null,
             toneMapped: preview.material?.toneMapped ?? null,
             transparent: preview.material?.transparent ?? null,
+            usesAssetThumbnail:
+              canonicalConfig != null && context != null
+                ? assetThumbnailCache.get(canonicalConfig) ===
+                  image.toDataURL('image/png')
+                : false,
             scale: preview.scale.toArray(),
           }
         : null;
@@ -9761,6 +10873,15 @@ async function init() {
             renderCount: editorPanelPreviewRendererState.renderCount,
           }
         : null,
+    forcePanelPreviewContextLoss: () => {
+      const state = getEditorPanelPreviewRenderer();
+      state.renderer.forceContextLoss?.();
+      state.contextLost = true;
+      return {
+        createdCount: state.createdCount,
+        contextLost: state.contextLost,
+      };
+    },
     getPreviewVisibilityState: () => ({
       ...currentPreviewVisibilityState(),
       raycastCount: editorWorldState?.raycastCount ?? 0,
@@ -9936,6 +11057,7 @@ async function init() {
   );
 
   renderUi(session, activeCamera);
+  completeEditorStartup();
 }
 
 function shouldRetryEditorStartup(error) {
@@ -9970,6 +11092,7 @@ export function createEditorShellHtml(
   editorStylesheetVirtualId: string,
   documentUrl: string,
   options: {
+    projectFilesUrl?: string;
     publishUrl?: string;
     reviewCapturesUrl?: string;
     reviewsUrl?: string;
@@ -9993,6 +11116,7 @@ export function createEditorShellHtml(
         'scene-' + Math.random().toString(36).slice(2);
       window.__IWSDK_EDITOR_CONFIG = {
         documentUrl: ${JSON.stringify(documentUrl)},
+        projectFilesUrl: ${JSON.stringify(options.projectFilesUrl ?? '/__iwsdk/workspace/files')},
         publishUrl: ${JSON.stringify(options.publishUrl ?? '/__iwsdk/workspace/publish')},
         reviewCapturesUrl: ${JSON.stringify(options.reviewCapturesUrl ?? '/__iwsdk/workspace/reviews/captures')},
         reviewsUrl: ${JSON.stringify(options.reviewsUrl ?? '/__iwsdk/workspace/reviews')},
@@ -10027,9 +11151,25 @@ export function createEditorShellHtml(
   </head>
   <body>
     <div id="root">
-      <main>
+      <main class="editor-loading" role="status" aria-live="polite">
+        <div class="editor-loading-content">
+          <div class="editor-loading-spinner" aria-hidden="true"></div>
         <h1>IWSDK Scene Editor</h1>
-        <p>The native editor route is connected to the IWSDK dev runtime. Editor UI modules will mount here as the scene composition stack lands.</p>
+          <p id="editor-loading-status">Starting editor…</p>
+          <div
+            id="editor-loading-track"
+            class="editor-loading-track"
+            role="progressbar"
+            aria-label="Editor startup"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <span
+              id="editor-loading-progress"
+              class="editor-loading-progress editor-loading-progress-indeterminate"
+            ></span>
+          </div>
+        </div>
       </main>
     </div>
   </body>

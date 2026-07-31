@@ -95,6 +95,38 @@ describe('editor asset catalog', () => {
       createdCount: 1,
     });
 
+    await editor.page.evaluate(() =>
+      (
+        window as any
+      ).IWSDK_SCENE_EDITOR_TEST_HOOKS.forcePanelPreviewContextLoss(),
+    );
+    const recoveredPreview = await dispatchSceneTool(
+      editor.page,
+      'ui_render_preview',
+      {
+        assetId: 'welcome-panel',
+        height: 256,
+        width: 256,
+      },
+    );
+    expect(recoveredPreview).toMatchObject({
+      assetId: 'welcome-panel',
+      height: 256,
+      mimeType: 'image/png',
+      width: 256,
+    });
+    expect(recoveredPreview.imageData.length).toBeGreaterThan(100);
+    expect(
+      await editor.page.evaluate(() =>
+        (
+          window as any
+        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getPanelPreviewRendererState(),
+      ),
+    ).toMatchObject({
+      contextLost: false,
+      createdCount: 2,
+    });
+
     await editor.page.locator('[data-node-id="legacy-panel"]').click();
     await editor.page.evaluate(() =>
       (
@@ -132,7 +164,16 @@ describe('editor asset catalog', () => {
             rows.map((row) => row.getAttribute('data-add-asset')),
           ),
       )
-      .toEqual(['table', 'vase', 'procedural-plinth', 'welcome-panel']);
+      .toEqual([
+        'primitive-box',
+        'primitive-capsule',
+        'primitive-cylinder',
+        'primitive-sphere',
+        'table',
+        'vase',
+        'procedural-plinth',
+        'welcome-panel',
+      ]);
     await expect
       .poll(() =>
         editor.page
@@ -146,6 +187,10 @@ describe('editor asset catalog', () => {
         expect.stringMatching(/^data:image\/png;base64,/u),
         expect.stringMatching(/^data:image\/png;base64,/u),
         expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
+        expect.stringMatching(/^data:image\/png;base64,/u),
       ]);
     await expect
       .poll(() =>
@@ -154,6 +199,20 @@ describe('editor asset catalog', () => {
           .textContent(),
       )
       .toBe('procedural-plinth');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-asset-id="procedural-plinth"] .asset-catalog-meta')
+          .textContent(),
+      )
+      .toBe('procedural - Procedural plinth');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-asset-id="primitive-box"] .asset-catalog-meta')
+          .textContent(),
+      )
+      .toBe('primitive - Box');
     await expect
       .poll(() =>
         editor.page
@@ -198,7 +257,7 @@ describe('editor asset catalog', () => {
       .toMatchObject({
         nodeIds: ['table-1', 'vase-1'],
         selected: ['vase-1'],
-        status: '2 nodes, 4 assets',
+        status: '2 nodes, 8 assets',
         vaseNode: {
           content: { asset: 'vase', type: 'asset' },
           id: 'vase-1',
@@ -268,6 +327,22 @@ describe('editor asset catalog', () => {
           .getAttribute('src'),
       )
       .toMatch(/^data:image\/png;base64,/u);
+    const thumbnailState = await editor.page.evaluate(() => {
+      const image = document.querySelector(
+        '[data-asset-id="welcome-panel"] .asset-catalog-thumb img',
+      ) as HTMLImageElement | null;
+      return {
+        height: image?.naturalHeight,
+        renderCount: (
+          window as any
+        ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getPanelPreviewRendererState()
+          ?.renderCount,
+        width: image?.naturalWidth,
+      };
+    });
+    expect(
+      Math.max(thumbnailState.width || 0, thumbnailState.height || 0),
+    ).toBe(512);
     await expect
       .poll(() =>
         editor.page
@@ -275,6 +350,19 @@ describe('editor asset catalog', () => {
           .evaluate((image) => getComputedStyle(image).objectFit),
       )
       .toBe('contain');
+    await expect
+      .poll(() =>
+        editor.page
+          .locator('[data-asset-id="welcome-panel"] .asset-catalog-thumb')
+          .evaluate((thumbnail) => {
+            const style = getComputedStyle(thumbnail);
+            return {
+              color: style.backgroundColor,
+              image: style.backgroundImage,
+            };
+          }),
+      )
+      .toEqual({ color: 'rgba(0, 0, 0, 0)', image: 'none' });
 
     await editor.page.locator('[data-add-asset="welcome-panel"]').click();
     await expect
@@ -293,11 +381,17 @@ describe('editor asset catalog', () => {
             cornerAlpha: preview?.cornerAlpha,
             materialType: preview?.materialType,
             node,
+            pixelSize: preview?.pixelSize,
             previewSize: preview?.computedSize,
+            rendererRenderCount: (
+              window as any
+            ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getPanelPreviewRendererState()
+              ?.renderCount,
             selected: (window as any).__IWSDK_EDITOR_SELECTION,
             textureColorSpace: preview?.textureColorSpace,
             toneMapped: preview?.toneMapped,
             transparent: preview?.transparent,
+            usesAssetThumbnail: preview?.usesAssetThumbnail,
           };
         });
         return { ...state, errors: editor.errors() };
@@ -314,10 +408,13 @@ describe('editor asset catalog', () => {
           },
         },
         previewSize: { height: expect.any(Number), width: expect.any(Number) },
+        pixelSize: { height: expect.any(Number), width: expect.any(Number) },
         materialType: 'MeshBasicMaterial',
+        rendererRenderCount: thumbnailState.renderCount,
         textureColorSpace: 'srgb',
         toneMapped: false,
         transparent: true,
+        usesAssetThumbnail: true,
         selected: ['welcome-panel-1'],
       });
     await expect

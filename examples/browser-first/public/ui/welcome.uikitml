@@ -50,7 +50,7 @@
   <div class="panel-content">
     <div class="heading"> Browser-First IWSDK </div>
     <Divider></Divider>
-    <div class="sub-heading"> Runs with xr: false. WASD or arrow keys move the player; right-drag to look around; left-click to ray-press the cube or grab the ball.</div>
+    <div class="sub-heading"> Runs with xr: false. WASD or arrow keys move the player; right-drag to look around; left-click to ray-press the cube or grab the ball. Toggle View switches between first- and third-person cameras.</div>
   </div>
   <Button id="reset-button" class="button" style="margin-bottom: 0">
     <ButtonIcon>

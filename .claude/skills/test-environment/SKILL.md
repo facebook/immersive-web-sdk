@@ -1,12 +1,12 @@
 ---
 name: test-environment
-description: 'Test environment system (DomeGradient, IBLGradient, default lighting, component schemas) against the poke example using the iwsdk CLI.'
+description: 'Test environment system (authored DomeGradient and IBLGradient, component schemas) against the poke example using the iwsdk CLI.'
 argument-hint: '[--suite gradient|ibl|defaults|all]'
 ---
 
 # Environment System Test
 
-Run 6 test suites covering default lighting verification, system registration, component registration, scene hierarchy, ECS data modification, and stability.
+Run 6 test suites covering authored environment verification, system registration, component registration, scene hierarchy, ECS data modification, and stability.
 
 **Configuration:**
 
@@ -83,7 +83,7 @@ Run these commands in order:
 
 ---
 
-### Suite 1: Default Lighting Verification
+### Suite 1: Authored Environment Verification
 
 **Test 1.1: Find LevelRoot Dynamically**
 
@@ -99,7 +99,8 @@ Assert: Exactly 1 entity. Save its `entityIndex` as `<root>`.
 npx iwsdk ecs query --input-json '{"entityIndex":<root>,"components":["DomeGradient","IBLGradient"]}' 2>/dev/null
 ```
 
-Assert: Both components present with default values:
+Assert: Both components are present with the values explicitly authored in
+`public/scenes/poke.iwsdk.scene.json`:
 
 **DomeGradient defaults:**
 | Field | Expected Value |
@@ -222,7 +223,7 @@ Output a summary table:
 ```
 | Suite                    | Result    |
 |--------------------------|-----------|
-| 1. Default Lighting      | PASS/FAIL |
+| 1. Authored Environment  | PASS/FAIL |
 | 2. System Registration   | PASS/FAIL |
 | 3. Component Registration| PASS/FAIL |
 | 4. Scene Hierarchy       | PASS/FAIL |
@@ -257,9 +258,12 @@ Setting DomeGradient/IBLGradient color fields via `npx iwsdk ecs set-component` 
 
 The `_needsUpdate` flag is consumed by the EnvironmentSystem and reset to `false`. The response may already show `newValue: false`.
 
-### Default lighting auto-attach
+### Environment components are explicit
 
-`LevelSystem` attaches `DomeGradient` + `IBLGradient` to the LevelRoot ONLY if `defaultLighting: true` (default) AND the level root doesn't already have dome/IBL components.
+`LevelSystem` does not synthesize dome or IBL components. Their absence is
+meaningful, and each scene must author the background and image-based lighting
+it wants on the level root. The poke fixture scene includes both gradient
+components explicitly.
 
 ### Entity indices change on reload
 

@@ -52,7 +52,4 @@ coverage/
 *.sln
 *.sw?
 
-# Local SSL certificates (auto-generated)
-.cert/
-
 public/ui/

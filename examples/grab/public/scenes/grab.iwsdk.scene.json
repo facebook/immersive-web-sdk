@@ -1,4 +1,18 @@
 {
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.2423, 0.6172, 0.8308, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  },
   "nodes": [
     {
       "components": {
@@ -24,74 +38,102 @@
       }
     },
     {
-      "components": {
-        "DistanceGrabbable": {
-          "detachOnGrab": true,
-          "movementMode": "MoveFromTarget"
+      "children": [
+        {
+          "components": {
+            "DistanceGrabbable": {
+              "movementMode": "MoveAtSource"
+            },
+            "RayInteractable": {}
+          },
+          "content": {
+            "asset": "opera-house",
+            "type": "asset"
+          },
+          "id": "opera-house",
+          "name": "Sydney Opera House",
+          "transform": {
+            "position": [
+              0.238888308,
+              -0.141699791,
+              0.252290606
+            ],
+            "rotationDeg": [
+              1.334002,
+              -42.969673,
+              -109.933751
+            ],
+            "scale": 2
+          }
         },
-        "RayInteractable": {}
-      },
-      "content": {
-        "asset": "robot",
-        "type": "asset"
-      },
-      "id": "robot-distance-grab",
-      "name": "Distance Grabbable Robot",
-      "transform": {
-        "position": [
-          0,
-          0.95,
-          -2.6807
-        ],
-        "rotationDeg": [
-          0,
-          0,
-          0
-        ],
-        "scale": 0.5
-      }
-    },
-    {
-      "components": {
-        "OneHandGrabbable": {},
-        "RayInteractable": {}
-      },
-      "content": {
-        "asset": "plant-sansevieria",
-        "type": "asset"
-      },
-      "id": "plant-one-hand",
-      "name": "One Hand Grabbable Plant",
-      "transform": {
-        "position": [
-          0.65,
-          0.95,
-          -1.65
-        ],
-        "scale": 1.25
-      }
-    },
-    {
-      "components": {
-        "RayInteractable": {},
-        "TwoHandsGrabbable": {}
-      },
-      "content": {
-        "asset": "plant-sansevieria",
-        "type": "asset"
-      },
-      "id": "plant-two-hands",
-      "name": "Two Hands Grabbable Plant",
-      "transform": {
-        "position": [
-          1.05,
-          0.95,
-          -1.65
-        ],
-        "scale": 1.25
-      }
-    },
-    {
+        {
+          "components": {
+            "DistanceGrabbable": {
+              "detachOnGrab": true,
+              "movementMode": "MoveTowardsTarget"
+            },
+            "RayInteractable": {}
+          },
+          "content": {
+            "asset": "eiffel-tower",
+            "type": "asset"
+          },
+          "id": "eiffel-tower",
+          "name": "Eiffel Tower",
+          "transform": {
+            "position": [
+              -0.115483746,
+              0.326958895,
+              0.13850832
+            ],
+            "rotationDeg": [
+              16.236858,
+              27.934174,
+              35.588075
+            ],
+            "scale": 2
+          }
+        },
+        {
+          "components": {
+            "DistanceGrabbable": {
+              "detachOnGrab": true,
+              "movementMode": "MoveTowardsTarget",
+              "targetPositionOffset": [
+                0.1,
+                0,
+                0
+              ],
+              "targetQuaternionOffset": [
+                0,
+                0.8660254,
+                0,
+                0.5
+              ]
+            },
+            "RayInteractable": {}
+          },
+          "content": {
+            "asset": "chichen-itza",
+            "type": "asset"
+          },
+          "id": "chichen-itza",
+          "name": "Chichen Itza",
+          "transform": {
+            "position": [
+              0.066643149,
+              0.212902188,
+              -0.298222184
+            ],
+            "rotationDeg": [
+              -54.667282,
+              2.093367,
+              -9.274072
+            ],
+            "scale": 2
+          }
+        }
+      ],
       "components": {
         "DistanceGrabbable": {
           "movementMode": "RotateAtSource",
@@ -101,18 +143,193 @@
         "RayInteractable": {}
       },
       "content": {
-        "asset": "robot",
+        "asset": "earth",
         "type": "asset"
       },
-      "id": "robot-rotate-only",
-      "name": "Rotate Only Robot",
+      "id": "earth",
+      "name": "Earth",
       "transform": {
         "position": [
-          -0.7,
-          0.95,
-          -1.65
+          0,
+          1.1497,
+          -1.6608
         ],
-        "scale": 0.45
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1
+      }
+    },
+    {
+      "components": {
+        "OneHandGrabbable": {},
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "pin",
+        "type": "asset"
+      },
+      "id": "pin-1",
+      "name": "Map Pin 1",
+      "transform": {
+        "position": [
+          0.6,
+          0.8,
+          -1.5
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 3
+      }
+    },
+    {
+      "components": {
+        "OneHandGrabbable": {},
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "pin",
+        "type": "asset"
+      },
+      "id": "pin-2",
+      "name": "Map Pin 2",
+      "transform": {
+        "position": [
+          0.75,
+          0.8,
+          -1.5
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 3
+      }
+    },
+    {
+      "components": {
+        "OneHandGrabbable": {},
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "pin",
+        "type": "asset"
+      },
+      "id": "pin-3",
+      "name": "Map Pin 3",
+      "transform": {
+        "position": [
+          0.9,
+          0.8,
+          -1.5
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 3
+      }
+    },
+    {
+      "components": {
+        "DistanceGrabbable": {
+          "moveSpeedFactor": 0.5,
+          "movementMode": "MoveTowardsTarget",
+          "targetPositionOffset": [
+            0,
+            0.1,
+            0
+          ],
+          "targetQuaternionOffset": [
+            0.1045285,
+            0,
+            0,
+            0.9945219
+          ]
+        },
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "pyramid",
+        "type": "asset"
+      },
+      "id": "pyramid-distance-grab",
+      "name": "Distance Grabbable Pyramid",
+      "transform": {
+        "position": [
+          -1,
+          0.75,
+          -1.6
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 5
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {},
+        "TwoHandsGrabbable": {}
+      },
+      "content": {
+        "asset": "pyramid",
+        "type": "asset"
+      },
+      "id": "pyramid-two-hands",
+      "name": "Two-Hand Grabbable Pyramid",
+      "transform": {
+        "position": [
+          -0.6,
+          0.75,
+          -1.6
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 5
+      }
+    },
+    {
+      "components": {
+        "PokeInteractable": {},
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "height": "50%",
+          "left": "20px",
+          "top": "20px",
+          "width": "25vw"
+        }
+      },
+      "content": {
+        "asset": "grab-welcome-panel",
+        "type": "asset"
+      },
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "transform": {
+        "position": [
+          0,
+          2.082,
+          -2.3648
+        ],
+        "rotationDeg": [
+          0,
+          0,
+          0
+        ],
+        "scale": 0.4
       }
     }
   ],

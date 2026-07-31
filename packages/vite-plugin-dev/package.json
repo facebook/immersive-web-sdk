@@ -49,6 +49,7 @@
   "author": "Felix Zhang <fe1ix@meta.com>",
   "license": "MIT",
   "dependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@iwer/devui": "^2.3.0",
     "@iwer/sem": "^2.3.0",
     "@iwsdk/core": "workspace:*",

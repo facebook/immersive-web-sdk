@@ -265,7 +265,7 @@ describe('LevelSystem', () => {
   });
 
   it('uses environment components as the only authored dome and IBL sources', async () => {
-    const world = createLevelWorld(true);
+    const world = createLevelWorld();
     const document = makeEnvironmentScene();
     document.components = {
       'com.iwsdk.components.DomeGradient': {},
@@ -280,20 +280,20 @@ describe('LevelSystem', () => {
     expect(world.activeLevel.value.hasComponent(IBLGradient)).toBe(false);
   });
 
-  it('supplies default browser background and PBR lighting when unauthored', async () => {
-    const world = createLevelWorld(true);
+  it('does not inject background or IBL components when they are unauthored', async () => {
+    const world = createLevelWorld();
     const document = makeEnvironmentScene();
 
     const load = world.loadSceneDocument(document);
     world.update(0, 0);
     await load;
 
-    expect(world.activeLevel.value.hasComponent(DomeGradient)).toBe(true);
-    expect(world.activeLevel.value.hasComponent(IBLGradient)).toBe(true);
+    expect(world.activeLevel.value.hasComponent(DomeGradient)).toBe(false);
+    expect(world.activeLevel.value.hasComponent(IBLGradient)).toBe(false);
   });
 
   it('uses explicit scene root components without restoring removed defaults', async () => {
-    const world = createLevelWorld(true);
+    const world = createLevelWorld();
     const document = makeEnvironmentScene();
     document.components = {
       'com.iwsdk.components.DomeGradient': {
@@ -352,7 +352,7 @@ function makeEnvironmentScene(
   };
 }
 
-function createLevelWorld(defaultLighting = false): World {
+function createLevelWorld(): World {
   const world = new World();
   world.camera = new PerspectiveCamera();
   world.scene = new Scene();
@@ -392,9 +392,7 @@ function createLevelWorld(defaultLighting = false): World {
   initialLevelRoot.addComponent(LevelRoot);
   world.activeLevel = signal(initialLevelRoot);
 
-  world.registerSystem(LevelSystem, {
-    configData: { defaultLighting },
-  });
+  world.registerSystem(LevelSystem);
 
   return world;
 }

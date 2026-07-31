@@ -48,16 +48,25 @@ describe('editor built-in component schemas', () => {
           'RayInteractable',
           'RectAreaLight',
           'SpotLight',
-          'Transform',
           'TwoHandsGrabbable',
-          'Visibility',
         ]),
       );
+    expect(await componentOptions(editor)).not.toContain('Transform');
+    expect(await componentOptions(editor)).not.toContain('Visibility');
 
     await addComponent(editor, 'AudioSource');
     await componentRow(editor, 'AudioSource')
-      .locator('[data-component-field="src"]')
-      .fill('/audio/click.mp3');
+      .locator('[data-component-file-browse]')
+      .click();
+    const filePicker = editor.page.locator('#component-file-picker-dialog');
+    await expect.poll(() => filePicker.getAttribute('open')).not.toBeNull();
+    await expect
+      .poll(() => filePicker.locator('[data-file-picker-path]').count())
+      .toBe(1);
+    await filePicker
+      .locator('[data-file-picker-path="./audio/ambient.wav"]')
+      .click();
+    await expect.poll(() => filePicker.count()).toBe(0);
     await componentRow(editor, 'AudioSource')
       .locator('[data-component-field="volume"]')
       .fill('0.5');
@@ -73,20 +82,20 @@ describe('editor built-in component schemas', () => {
       .toMatchObject({
         distanceModel: 'linear',
         loop: true,
-        src: '/audio/click.mp3',
+        src: './audio/ambient.wav',
         volume: 0.5,
       });
 
-    await addComponent(editor, 'Visibility');
-    await componentRow(editor, 'Visibility')
-      .locator('[data-component-field="isVisible"]')
-      .setChecked(false);
-    await focusComponentCommitTarget(editor);
+    await editor.page.locator('[data-node-visible]').setChecked(false);
     await expect
-      .poll(() => componentValue(editor, 'Visibility'))
-      .toMatchObject({
-        isVisible: false,
-      });
+      .poll(() =>
+        editor.page.evaluate(
+          () =>
+            (window as any).IWSDK_SCENE_EDITOR.session.document.nodes[0]
+              .visible,
+        ),
+      )
+      .toBe(false);
 
     await addComponent(editor, 'PhysicsBody');
     await componentRow(editor, 'PhysicsBody')
@@ -253,10 +262,11 @@ describe('editor built-in component schemas', () => {
       dispatchSceneTool(editor.page, 'scene_save'),
     ).resolves.toMatchObject({ dirty: false });
     const savedScene = await harness.readScene();
+    expect(savedScene.nodes[0].visible).toBe(false);
     expect(savedScene.nodes[0].components).toEqual(
       expect.objectContaining({
         'com.iwsdk.components.AudioSource': expect.objectContaining({
-          src: '/audio/click.mp3',
+          src: './audio/ambient.wav',
         }),
         'com.iwsdk.components.DistanceGrabbable': expect.objectContaining({
           translate: false,
@@ -279,10 +289,10 @@ describe('editor built-in component schemas', () => {
           intensity: 75,
         }),
         'com.iwsdk.components.RayInteractable': {},
-        'com.iwsdk.components.Visibility': expect.objectContaining({
-          isVisible: false,
-        }),
       }),
+    );
+    expect(savedScene.nodes[0].components).not.toHaveProperty(
+      'com.iwsdk.components.Visibility',
     );
   }, 45000);
 });

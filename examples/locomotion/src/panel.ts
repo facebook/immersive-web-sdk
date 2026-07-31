@@ -6,13 +6,11 @@
  */
 
 import {
-  AudioSource,
   AudioUtils,
   createComponent,
   createSystem,
   Entity,
   LocomotionSystem,
-  PlaybackMode,
   UIKitDocument,
   UIKitMLAsset,
   Vector3,
@@ -83,17 +81,13 @@ export class SettingsSystem extends createSystem({
   private panelPosition = new Vector3();
 
   init() {
-    this.queries.settingsPanel.subscribe('qualify', (entity) => {
-      this.setupUIInteractions(entity);
-      entity.addComponent(AudioSource, {
-        src: 'audio/switch.mp3',
-        positional: false,
-        playbackMode: PlaybackMode.FadeRestart,
-        maxInstances: 3,
-        loop: false,
-        volume: 0.3,
-      });
-    });
+    this.queries.settingsPanel.subscribe(
+      'qualify',
+      (entity) => {
+        this.setupUIInteractions(entity);
+      },
+      true,
+    );
   }
 
   setupUIInteractions(entity: Entity) {

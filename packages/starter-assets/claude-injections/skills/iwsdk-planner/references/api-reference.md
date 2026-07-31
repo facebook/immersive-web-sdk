@@ -795,7 +795,6 @@ const world = await World.create(container, {
     fov: 50,
     near: 0.1,
     far: 200,
-    defaultLighting: true, // Auto-creates DomeGradient + IBLGradient on level roots
     stencil: false, // Enable stencil buffer if needed
   },
 
@@ -845,6 +844,10 @@ world.registerSystem(MySystem);
 world.launchXR();
 world.exitXR();
 ```
+
+Background and image-based lighting are authored explicitly with dome and IBL
+components on the level root. IWSDK does not synthesize missing environment
+components; starter scenes include gradient defaults.
 
 ### Post-Creation Initialization Sequence
 

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { setComponentEditorMetadata } from '../ecs/component-editor-metadata.js';
 import { Types, createComponent } from '../ecs/component.js';
 
 /**
@@ -13,13 +14,16 @@ import { Types, createComponent } from '../ecs/component.js';
  * @category Scene
  * @hideineditor
  */
-export const Transform = createComponent(
-  'Transform',
-  {
-    position: { type: Types.Vec3, default: [NaN, NaN, NaN] },
-    orientation: { type: Types.Vec4, default: [NaN, NaN, NaN, NaN] },
-    scale: { type: Types.Vec3, default: [NaN, NaN, NaN] },
-    parent: { type: Types.Entity, default: undefined as any },
-  },
-  'Component for 3D transformation (position, rotation, scale)',
+export const Transform = setComponentEditorMetadata(
+  createComponent(
+    'Transform',
+    {
+      position: { type: Types.Vec3, default: [NaN, NaN, NaN] },
+      orientation: { type: Types.Vec4, default: [NaN, NaN, NaN, NaN] },
+      scale: { type: Types.Vec3, default: [NaN, NaN, NaN] },
+      parent: { type: Types.Entity, default: undefined as any },
+    },
+    'Component for 3D transformation (position, rotation, scale)',
+  ),
+  { hidden: true, intrinsic: true },
 );

@@ -764,7 +764,6 @@ function startDevServer(cwd, port) {
       env: {
         ...process.env,
         BROWSER: 'none',
-        IWSDK_DISABLE_MKCERT: '1',
         IWSDK_TEST_MANAGED_WORKSPACE_TOKEN:
           RENDER_PROOF_MANAGED_WORKSPACE_TOKEN,
         NODE_ENV: process.env.NODE_ENV ?? 'test',

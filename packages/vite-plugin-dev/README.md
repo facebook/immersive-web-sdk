@@ -8,6 +8,7 @@ Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwr
 - 🏠 **Synthetic Environments** — Optional room-scale environments for AR testing
 - 🤖 **AI Agent Tooling** — MCP-based tools for Claude Code, Cursor, Copilot, and Codex
 - 🖥️ **Managed Browser** — Playwright browser for screenshots and console capture
+- 🔒 **Development HTTPS** — Cached self-signed certificate without modifying the OS trust store
 - 🔧 **Zero Config** — Works out of the box with sensible defaults
 
 ## Installation
@@ -68,6 +69,11 @@ iwsdkDev({
     // Screenshot size constraint (viewport in agent mode, downscale bound otherwise)
     screenshotSize: { width: 800, height: 800 }, // default
   },
+
+  // HTTPS is enabled by default. The managed browser accepts this untrusted
+  // local certificate automatically; physical headsets retain their warning.
+  // Set `false` for HTTP, or pass generation options such as `domains`.
+  https: true,
 
   // Enable verbose logging
   verbose: false, // default

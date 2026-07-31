@@ -113,7 +113,7 @@ import {
  *
  * @category Runtime
  * @remarks
- * Defaults are tuned for VR; you can override camera frustum and default lighting via {@link WorldOptions.render}.
+ * Defaults are tuned for VR; camera and renderer behavior can be customized through {@link WorldOptions.render}.
  */
 export type WorldOptions = {
   /** Asset manifest to preload before the first frame. */
@@ -136,8 +136,6 @@ export type WorldOptions = {
     near?: number;
     /** Far clipping plane. @defaultValue 200 */
     far?: number;
-    /** Generate a default gradient environment and background. @defaultValue true */
-    defaultLighting?: boolean;
     /** Enable stencil buffer. @defaultValue false */
     stencil?: boolean;
     /** Initial local camera pose under `world.player`. */
@@ -261,8 +259,8 @@ export async function initializeWorld(
     restoreCameraOnExit: config.xr.restoreCameraOnExit,
   };
 
-  // Register core systems (LevelSystem receives defaultLighting)
-  registerCoreSystems(world, config);
+  // Register core systems
+  registerCoreSystems(world);
 
   // Initialize asset manager
   initializeAssetManager(renderer, world);
@@ -357,7 +355,6 @@ function extractConfiguration(options: WorldOptions) {
     cameraNear: options.render?.near ?? 0.1,
     cameraFar: options.render?.far ?? 200,
     cameraPose: options.render?.camera,
-    defaultLighting: options.render?.defaultLighting ?? true,
     stencil: options.render?.stencil ?? false,
     xr: {
       enabled: options.xr !== false,
@@ -460,11 +457,6 @@ function assignRenderingToWorld(
   // @ts-ignore init signal now; LevelSystem will enforce identity each frame
   world.activeLevel = signal(levelRootEntity);
 }
-
-/**
- * Setup default lighting environment using Unity-style gradient ambient lighting
- */
-// default lighting is attached per level by LevelSystem
 
 /**
  * Setup XR input management
@@ -614,10 +606,7 @@ function manageOfferFlow(world: World, mode: 'once' | 'always') {
 /**
  * Register core interaction systems
  */
-function registerCoreSystems(
-  world: World,
-  config: ReturnType<typeof extractConfiguration>,
-) {
+function registerCoreSystems(world: World) {
   world
     .registerComponent(RayInteractable)
     .registerComponent(PokeInteractable)
@@ -638,9 +627,7 @@ function registerCoreSystems(
     // Unified environment system (background + IBL)
     .registerSystem(EnvironmentSystem)
     .registerSystem(LightSystem)
-    .registerSystem(LevelSystem, {
-      configData: { defaultLighting: config.defaultLighting },
-    });
+    .registerSystem(LevelSystem);
 }
 
 /**

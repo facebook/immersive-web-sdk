@@ -55,6 +55,8 @@ export interface SceneDocumentValidationOptions {
    * semantics. Disable this for runtime/editor document-integrity checks.
    */
   validateAuthoringWorkflow?: boolean;
+  /** Validate required file and entity links. Runtime loading may allow drafts. */
+  validateComponentLinks?: boolean;
 }
 
 export function validateSceneDocument(
@@ -68,6 +70,7 @@ export function validateSceneDocument(
       issues,
       options.componentCatalog,
       options.validateAuthoringWorkflow !== false,
+      options.validateComponentLinks !== false,
     );
   }
   return { valid: issues.length === 0, issues };
@@ -602,6 +605,7 @@ function validateSceneSemantics(
   issues: ValidationIssue[],
   componentCatalog: SceneComponentCatalog | undefined,
   validateAuthoringWorkflow: boolean,
+  validateLinkedComponentFields: boolean,
 ) {
   validateSceneImports(document.imports ?? [], issues);
   validateMetadataNamespaces(document.metadata, '$.metadata', issues);
@@ -637,6 +641,7 @@ function validateSceneSemantics(
   });
 
   const schemas = validateComponentCatalog(componentCatalog, issues);
+  const mainNodeIds = collectNodeIdsStrict(document.nodes, '$.nodes', issues);
   validateComponents(
     document.components,
     '$.components',
@@ -645,7 +650,10 @@ function validateSceneSemantics(
     issues,
   );
   validateRootComponents(document.components, issues);
-  const mainNodeIds = collectNodeIdsStrict(document.nodes, '$.nodes', issues);
+  validatePlayerComponents(document, schemas, componentCatalog != null, issues);
+  if (componentCatalog != null && validateLinkedComponentFields) {
+    validateComponentLinks(document, schemas, mainNodeIds, issues);
+  }
   let totalNodes = mainNodeIds.size;
   const prefabNodeIds = new Map<string, Set<string>>();
   resources.prefabs?.forEach((prefab, index) => {
@@ -664,6 +672,7 @@ function validateSceneSemantics(
       schemas,
       componentCatalog != null,
       issues,
+      false,
     );
   });
   if (totalNodes > MAX_SCENE_NODES) {
@@ -682,6 +691,7 @@ function validateSceneSemantics(
     schemas,
     componentCatalog != null,
     issues,
+    true,
   );
   validatePrefabCycles(document, prefabIds, issues);
   if (
@@ -790,6 +800,7 @@ function validateNodes(
   schemas: Map<string, SceneComponentSchema>,
   validateComponentFields: boolean,
   issues: ValidationIssue[],
+  allowPlayerParent: boolean,
 ) {
   nodes.forEach((node, index) => {
     const nodePath =
@@ -799,6 +810,14 @@ function validateNodes(
       `${nodePath}.transform`,
       issues,
     );
+    if (node.parent != null && !allowPlayerParent) {
+      addIssue(
+        issues,
+        `${nodePath}.parent`,
+        'player-space parents are only valid on top-level scene nodes',
+        'conflict',
+      );
+    }
     validateMetadataNamespaces(node.metadata, `${nodePath}.metadata`, issues);
     const content = node.content;
     if (content?.type === 'instance' || content?.type === 'pattern') {
@@ -845,6 +864,7 @@ function validateNodes(
       schemas,
       validateComponentFields,
       issues,
+      false,
     );
   });
 }
@@ -2017,6 +2037,51 @@ function validateRootComponents(
   }
 }
 
+function validatePlayerComponents(
+  document: SceneDocument,
+  schemas: Map<string, SceneComponentSchema>,
+  validateComponentFields: boolean,
+  issues: ValidationIssue[],
+) {
+  const targets = [
+    ['player', document.player],
+    ['camera', document.player?.camera],
+    ['head', document.player?.head],
+    ['leftTargetRay', document.player?.leftTargetRay],
+    ['rightTargetRay', document.player?.rightTargetRay],
+    ['leftGrip', document.player?.leftGrip],
+    ['rightGrip', document.player?.rightGrip],
+  ] as const;
+  const intrinsic = new Set(['LevelRoot', 'LevelTag', 'Transform']);
+  for (const [target, descriptor] of targets) {
+    const descriptorPath =
+      target === 'player' ? '$.player' : `$.player.${target}`;
+    const path = `${descriptorPath}.components`;
+    validateTransformCoordinates(
+      descriptor?.transform,
+      `${descriptorPath}.transform`,
+      issues,
+    );
+    validateComponents(
+      descriptor?.components,
+      path,
+      schemas,
+      validateComponentFields,
+      issues,
+    );
+    for (const name of Object.keys(descriptor?.components ?? {})) {
+      if (intrinsic.has(stripComponentPrefix(name))) {
+        addIssue(
+          issues,
+          childPath(path, name),
+          `component "${name}" is owned by the runtime player rig`,
+          'conflict',
+        );
+      }
+    }
+  }
+}
+
 function matchesComponentField(
   value: unknown,
   field: SceneComponentFieldSchema,
@@ -2029,7 +2094,10 @@ function matchesComponentField(
       matches = Number.isInteger(value);
       break;
     case 'Entity':
-      matches = value === null || Number.isInteger(value);
+      matches =
+        value === null ||
+        Number.isInteger(value) ||
+        isSceneEntityReference(value);
       break;
     case 'Float32':
     case 'Float64':
@@ -2077,6 +2145,156 @@ function matchesComponentField(
       (field.max == null || value <= field.max);
   }
   return matches;
+}
+
+function validateComponentLinks(
+  document: SceneDocument,
+  schemas: Map<string, SceneComponentSchema>,
+  nodeIds: Set<string>,
+  issues: ValidationIssue[],
+) {
+  validateComponentLinkMap(
+    document.components,
+    '$.components',
+    schemas,
+    nodeIds,
+    issues,
+  );
+  const playerTargets = [
+    ['player', document.player],
+    ['camera', document.player?.camera],
+    ['head', document.player?.head],
+    ['leftTargetRay', document.player?.leftTargetRay],
+    ['rightTargetRay', document.player?.rightTargetRay],
+    ['leftGrip', document.player?.leftGrip],
+    ['rightGrip', document.player?.rightGrip],
+  ] as const;
+  for (const [target, descriptor] of playerTargets) {
+    const descriptorPath =
+      target === 'player' ? '$.player' : `$.player.${target}`;
+    validateComponentLinkMap(
+      descriptor?.components,
+      `${descriptorPath}.components`,
+      schemas,
+      nodeIds,
+      issues,
+    );
+  }
+  const visit = (nodes: SceneNode[], path: string) => {
+    nodes.forEach((node, index) => {
+      const nodePath =
+        nodes.length === 1 && path.endsWith('.root')
+          ? path
+          : `${path}[${index}]`;
+      validateComponentLinkMap(
+        node.components,
+        `${nodePath}.components`,
+        schemas,
+        nodeIds,
+        issues,
+      );
+      visit(node.children ?? [], `${nodePath}.children`);
+    });
+  };
+  visit(document.nodes, '$.nodes');
+}
+
+function validateComponentLinkMap(
+  components: Record<string, unknown> | undefined,
+  path: string,
+  schemas: Map<string, SceneComponentSchema>,
+  nodeIds: Set<string>,
+  issues: ValidationIssue[],
+) {
+  for (const [name, payload] of Object.entries(components ?? {})) {
+    if (!isPlainObject(payload)) {
+      continue;
+    }
+    const schema = schemas.get(stripComponentPrefix(name)) ?? schemas.get(name);
+    if (schema == null) {
+      continue;
+    }
+    const componentPath = childPath(path, name);
+    for (const [fieldName, field] of Object.entries(schema.fields)) {
+      if (field.hidden === true) {
+        continue;
+      }
+      const fieldPath = childPath(componentPath, fieldName);
+      const value = payload[fieldName] ?? field.default;
+      if (
+        field.type === 'FilePath' &&
+        (typeof value !== 'string' || value.trim().length === 0)
+      ) {
+        addIssue(issues, fieldPath, 'file path is not selected', 'required');
+        continue;
+      }
+      const isEntityField =
+        field.type === 'Entity' || field.widget === 'entity';
+      if (!isEntityField) {
+        if (field.required === true && (value == null || value === '')) {
+          addIssue(issues, fieldPath, 'field is required', 'required');
+        }
+        continue;
+      }
+      if (value == null) {
+        if (field.required === true) {
+          addIssue(
+            issues,
+            fieldPath,
+            'entity reference is not linked',
+            'required',
+          );
+        }
+        continue;
+      }
+      if (isSceneNodeReference(value) && !nodeIds.has(value.id)) {
+        addIssue(
+          issues,
+          fieldPath,
+          `referenced scene entity "${value.id}" does not exist`,
+          'reference',
+        );
+      } else if (!Number.isInteger(value) && !isSceneEntityReference(value)) {
+        addIssue(
+          issues,
+          fieldPath,
+          'value is not a scene entity reference',
+          'type',
+        );
+      }
+    }
+  }
+}
+
+function isSceneNodeReference(
+  value: unknown,
+): value is { type: 'node'; id: string } {
+  return (
+    isPlainObject(value) &&
+    value.type === 'node' &&
+    typeof value.id === 'string' &&
+    value.id.length > 0
+  );
+}
+
+function isSceneEntityReference(value: unknown) {
+  return (
+    isSceneNodeReference(value) ||
+    (isPlainObject(value) &&
+      value.type === 'level-root' &&
+      Object.keys(value).length === 1) ||
+    (isPlainObject(value) &&
+      value.type === 'player-space' &&
+      [
+        'player',
+        'camera',
+        'head',
+        'left-target-ray',
+        'right-target-ray',
+        'left-grip',
+        'right-grip',
+      ].includes(String(value.target)))
+  );
 }
 
 function stripComponentPrefix(name: string) {

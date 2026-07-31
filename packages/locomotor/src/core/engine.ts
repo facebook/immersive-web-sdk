@@ -53,6 +53,7 @@ export class LocomotionEngine {
   public jumpHeight = 1.5;
   public jumpCooldown = 0.1;
   private lastJumpTime = 0;
+  private isJumping = false;
 
   public acceleration = 100;
   public deceleration = 100;
@@ -99,6 +100,7 @@ export class LocomotionEngine {
   teleport(position: Vector3) {
     this.playerPosition.copy(position);
     this.playerVelocity.set(0, 0, 0);
+    this.isJumping = false;
     this.updating = true;
     this.lastUpdateTime = performance.now();
   }
@@ -260,7 +262,12 @@ export class LocomotionEngine {
       this.maxSlope,
     );
 
-    this.isGrounded = groundInfo.isGrounded;
+    const ascendingFromJump =
+      this.isJumping && this.playerVelocity.dot(this.upAxis) > 0;
+    this.isGrounded = !ascendingFromJump && groundInfo.isGrounded;
+    if (this.isJumping && !ascendingFromJump) {
+      this.isJumping = false;
+    }
 
     this.isGroundedOnStatic =
       this.isGrounded &&
@@ -365,6 +372,7 @@ export class LocomotionEngine {
 
     // Update state
     this.isGrounded = false; // Prevent ground snapping during jump
+    this.isJumping = true;
     this.lastJumpTime = currentTime;
     this.updating = true;
   }

@@ -50,6 +50,7 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
       description:
         'Components applied to the runtime level-root entity. An explicit empty map disables implicit root components.',
     },
+    player: { $ref: '#/$defs/playerRig' },
     metadata: { $ref: '#/$defs/jsonObject' },
     authoring: { $ref: '#/$defs/authoring' },
     resources: { $ref: '#/$defs/resources' },
@@ -62,6 +63,39 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
   },
   $defs: {
     identifier: { type: 'string', minLength: 1 },
+    builtinEntity: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        components: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/componentValue' },
+        },
+        transform: {
+          $ref: '#/$defs/transform',
+          deprecated: true,
+          description:
+            'Legacy tracked-space preview transform. Retained for file compatibility and ignored at runtime.',
+        },
+      },
+    },
+    playerRig: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        components: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/componentValue' },
+        },
+        transform: { $ref: '#/$defs/transform' },
+        camera: { $ref: '#/$defs/builtinEntity' },
+        head: { $ref: '#/$defs/builtinEntity' },
+        leftTargetRay: { $ref: '#/$defs/builtinEntity' },
+        rightTargetRay: { $ref: '#/$defs/builtinEntity' },
+        leftGrip: { $ref: '#/$defs/builtinEntity' },
+        rightGrip: { $ref: '#/$defs/builtinEntity' },
+      },
+    },
     color: {
       type: 'string',
       pattern: '^#[0-9a-fA-F]{6}$',
@@ -135,6 +169,25 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
           oneOf: [
             { type: 'number', exclusiveMinimum: 0 },
             { $ref: '#/$defs/positiveVec3' },
+          ],
+        },
+      },
+    },
+    playerSpaceParent: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['type', 'target'],
+      properties: {
+        type: { const: 'player-space' },
+        target: {
+          enum: [
+            'player',
+            'camera',
+            'head',
+            'left-target-ray',
+            'right-target-ray',
+            'left-grip',
+            'right-grip',
           ],
         },
       },
@@ -415,6 +468,7 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
       properties: {
         id: { $ref: '#/$defs/identifier' },
         name: { type: 'string', minLength: 1 },
+        visible: { type: 'boolean' },
         framingRole: { default: 'content', enum: ['content', 'support'] },
         content: { $ref: '#/$defs/nodeContent' },
         transform: { $ref: '#/$defs/transform' },
@@ -428,41 +482,8 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
           items: { $ref: '#/$defs/node' },
         },
         metadata: { $ref: '#/$defs/jsonObject' },
+        parent: { $ref: '#/$defs/playerSpaceParent' },
       },
-    },
-    background: {
-      oneOf: [
-        {
-          type: 'object',
-          additionalProperties: false,
-          required: ['type', 'color'],
-          properties: {
-            type: { const: 'color' },
-            color: { $ref: '#/$defs/color' },
-          },
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          required: ['type', 'topColor', 'bottomColor'],
-          properties: {
-            type: { const: 'gradient' },
-            topColor: { $ref: '#/$defs/color' },
-            bottomColor: { $ref: '#/$defs/color' },
-            exponent: {
-              type: 'number',
-              exclusiveMinimum: 0,
-              maximum: 8,
-            },
-          },
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          required: ['type'],
-          properties: { type: { const: 'transparent' } },
-        },
-      ],
     },
     fog: {
       oneOf: [
@@ -489,36 +510,10 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
         },
       ],
     },
-    arEnvironment: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['background', 'lights'],
-      properties: {
-        background: { enum: ['transparent', 'environment'] },
-        lights: { enum: ['authored', 'estimated', 'combined'] },
-      },
-    },
-    imageBasedLighting: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['type'],
-      properties: {
-        type: { const: 'room' },
-        intensity: { type: 'number', minimum: 0, maximum: 4 },
-        sigma: {
-          type: 'number',
-          minimum: 0,
-          maximum: 0.04,
-          description:
-            'Room-environment PMREM blur in radians, capped at the renderer sample limit.',
-        },
-      },
-    },
     environment: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        background: { $ref: '#/$defs/background' },
         fog: { $ref: '#/$defs/fog' },
         toneMapping: {
           enum: ['none', 'linear', 'reinhard', 'cineon', 'aces'],
@@ -526,8 +521,6 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
         exposure: { type: 'number', minimum: 0 },
         shadows: { type: 'boolean' },
         shadowMapType: { enum: ['basic', 'pcf', 'pcf-soft'] },
-        imageBasedLighting: { $ref: '#/$defs/imageBasedLighting' },
-        ar: { $ref: '#/$defs/arEnvironment' },
       },
     },
     sourceReference: {

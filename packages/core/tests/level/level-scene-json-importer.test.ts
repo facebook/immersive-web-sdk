@@ -17,7 +17,10 @@ import type { Entity } from '../../src/ecs/entity.js';
 import { World } from '../../src/ecs/world.js';
 import { RayInteractable } from '../../src/input/state-tags.js';
 import { LevelComponentApplier } from '../../src/level/level-component-applier.js';
-import { SceneJSONImporter } from '../../src/level/level-scene-json-importer.js';
+import {
+  activateScenePlayerAttachments,
+  SceneJSONImporter,
+} from '../../src/level/level-scene-json-importer.js';
 import { LevelSystem } from '../../src/level/level-system.js';
 import {
   BoxGeometry,
@@ -52,6 +55,15 @@ vi.hoisted(() => {
 
 const NativeSmoke = createComponent('NativeSmoke', {
   enabled: { type: Types.Boolean, default: false },
+});
+
+const _NativeLinks = createComponent('NativeLinks', {
+  entityTarget: { type: Types.Entity, default: undefined },
+  objectTarget: {
+    type: Types.Object,
+    default: undefined,
+    widget: 'entity',
+  },
 });
 
 interface ComponentCall {
@@ -110,6 +122,21 @@ function makeWorld() {
   const rootObject = new Object3D();
   const root = makeEntity(rootObject, nextIndex++);
   const entities: FakeEntity[] = [];
+  const player = makeEntity(new Object3D(), nextIndex++);
+  const camera = makeEntity(new Object3D(), nextIndex++);
+  const head = makeEntity(new Object3D(), nextIndex++);
+  const leftRay = makeEntity(new Object3D(), nextIndex++);
+  const rightRay = makeEntity(new Object3D(), nextIndex++);
+  const leftGrip = makeEntity(new Object3D(), nextIndex++);
+  const rightGrip = makeEntity(new Object3D(), nextIndex++);
+  player.object3D?.add(
+    camera.object3D!,
+    head.object3D!,
+    leftRay.object3D!,
+    rightRay.object3D!,
+    leftGrip.object3D!,
+    rightGrip.object3D!,
+  );
 
   const assetBounds = {
     table: { max: [1, 1, 1], min: [-1, 0, -1] },
@@ -136,6 +163,8 @@ function makeWorld() {
     return object;
   });
   const world = {
+    activeLevelId: 'level:test',
+    cameraEntity: camera,
     componentCatalog: undefined,
     assets: {
       bounds: (assetId: string) =>
@@ -149,6 +178,12 @@ function makeWorld() {
       return entity;
     }),
     getActiveRoot: vi.fn(() => rootObject),
+    playerEntity: player,
+    playerHeadEntity: head,
+    playerSpaceEntities: {
+      gripSpaces: { left: leftGrip, right: rightGrip },
+      raySpaces: { left: leftRay, right: rightRay },
+    },
     registerComponent: vi.fn(),
   };
 
@@ -157,6 +192,7 @@ function makeWorld() {
     instantiate,
     root,
     rootObject,
+    targets: { camera, head, leftGrip, leftRay, player, rightGrip, rightRay },
     world: world as unknown as World,
   };
 }
@@ -196,6 +232,24 @@ describe('SceneJSONImporter', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('stages and activates authored children under persistent player spaces', async () => {
+    const { root, targets, world } = makeWorld();
+    const scene = makeScene();
+    scene.nodes[0].parent = {
+      target: 'left-grip',
+      type: 'player-space',
+    };
+
+    const result = await SceneJSONImporter.loadDocument(world, scene, root);
+    const table = result.nodes.get('table-node')!;
+    expect(table.entity.parentEntity).toBe(targets.leftGrip);
+    expect(table.object.visible).toBe(false);
+    expect(table.object.userData.iwsdkSceneLevelId).toBe('level:test');
+
+    activateScenePlayerAttachments(result);
+    expect(table.object.visible).toBe(true);
   });
 
   it('loads draft authoring metadata that is not review-complete', async () => {
@@ -434,6 +488,30 @@ describe('SceneJSONImporter', () => {
       props: {
         enabled: true,
       },
+    });
+  });
+
+  it('resolves stable authored and player-space entity references after creating the scene hierarchy', async () => {
+    const { root, targets, world } = makeWorld();
+    const scene = makeScene();
+    scene.nodes[0].components = {
+      ...scene.nodes[0].components,
+      NativeLinks: {
+        entityTarget: { id: 'lamp-node', type: 'node' },
+        objectTarget: { target: 'head', type: 'player-space' },
+      },
+    };
+
+    const result = await SceneJSONImporter.loadDocument(world, scene, root);
+    const table = result.nodes.get('table-node')!.entity as FakeEntity;
+    const lamp = result.nodes.get('lamp-node')!.entity;
+    const links = table.componentCalls.find(
+      (call) => call.component.id === 'NativeLinks',
+    );
+
+    expect(links?.props).toEqual({
+      entityTarget: lamp,
+      objectTarget: targets.head.object3D,
     });
   });
 
@@ -732,12 +810,6 @@ describe('SceneJSONImporter', () => {
         entities: [existingLevelEntity],
       },
     };
-    (system as any).config = {
-      defaultLighting: {
-        value: false,
-      },
-    };
-
     system.update();
     await loadPromise;
 

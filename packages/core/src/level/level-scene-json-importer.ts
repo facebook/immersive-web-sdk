@@ -12,6 +12,7 @@ import {
   type JsonObject,
   type SceneDocument,
   type SceneCompositionDependency,
+  type SceneEntityReference,
   type SceneNode,
   type SceneNodeContent,
   type SceneNodeFramingRole,
@@ -20,7 +21,11 @@ import {
 import type { Entity } from '../ecs/entity.js';
 import type { World } from '../ecs/world.js';
 import { Object3D } from '../runtime/index.js';
-import { LevelComponentApplier } from './level-component-applier.js';
+import {
+  LEVEL_COMPONENT_PREFIX,
+  LevelComponentApplier,
+} from './level-component-applier.js';
+import { getScenePlayerTargetEntity } from './level-player-rig.js';
 import {
   disposeLoweredSceneNodes,
   lowerSceneDocumentObjects,
@@ -49,11 +54,18 @@ export interface SceneJSONLoadResult {
   dependencies: SceneCompositionDependency[];
   document: SceneDocument;
   nodes: Map<string, SceneJSONImportedNode>;
+  playerAttachments: Entity[];
   rootEntities: Entity[];
   runtimeHash: Sha256;
 }
 
 export interface SceneJSONImportOptions {}
+
+interface PendingSceneComponents {
+  components: Record<string, unknown>;
+  entity: Entity;
+  nodeId: string;
+}
 
 /**
  * Loads native IWSDK scene JSON documents into a level root.
@@ -108,6 +120,7 @@ export class SceneJSONImporter {
       // Authoring review completeness is not part of the runtime projection.
       // Draft scenes that the editor can render must remain runtime-loadable.
       validateAuthoringWorkflow: false,
+      validateComponentLinks: false,
     };
     assertValidSceneDocument(sourceDocument, validationOptions);
     if ((sourceDocument.imports?.length ?? 0) > 0 && documentUrl == null) {
@@ -146,36 +159,72 @@ export class SceneJSONImporter {
       dependencies: composed.dependencies,
       document: resolvedDocument,
       nodes: new Map(),
+      playerAttachments: [],
       rootEntities: [],
       runtimeHash,
     };
 
     let roots: SceneLoweredNode[] = [];
     const createdEntities: Entity[] = [];
+    const pendingComponents: PendingSceneComponents[] = [];
     try {
-      if (resolvedDocument.components != null) {
-        LevelComponentApplier.applyComponents(
-          parentEntity,
-          resolvedDocument.components,
-          world,
-          { nodeId: '$root', strict: true },
-        );
-      }
       roots = await lowerSceneDocumentObjects(resolvedDocument, {
         loadAsset: (assetId) => world.assets.instantiate(assetId),
         resolveAssetBounds: (assetId) => world.assets.bounds(assetId),
         runtimeHash,
       });
       for (const root of roots) {
+        const playerTarget = root.node.parent?.target;
+        const rootParent =
+          playerTarget == null
+            ? parentEntity
+            : getScenePlayerTargetEntity(world, playerTarget);
+        if (playerTarget != null) {
+          root.object.userData.iwsdkSceneAuthoredVisible = root.object.visible;
+          root.object.visible = false;
+        }
         const entity = this.createEntityForLoweredNode(
           world,
           root,
-          parentEntity,
+          rootParent,
           documentUrl,
           result,
           createdEntities,
+          pendingComponents,
         );
         result.rootEntities.push(entity);
+        if (playerTarget != null) {
+          result.playerAttachments.push(entity);
+        }
+      }
+      const resolveEntityReference = createSceneEntityReferenceResolver(
+        world,
+        parentEntity,
+        result.nodes,
+      );
+      if (resolvedDocument.components != null) {
+        LevelComponentApplier.applyComponents(
+          parentEntity,
+          resolvedDocument.components,
+          world,
+          {
+            nodeId: '$root',
+            resolveEntityReference,
+            strict: true,
+          },
+        );
+      }
+      for (const pending of pendingComponents) {
+        LevelComponentApplier.applyComponents(
+          pending.entity,
+          pending.components,
+          world,
+          {
+            nodeId: pending.nodeId,
+            resolveEntityReference,
+            strict: true,
+          },
+        );
       }
       const parentObject = parentEntity.object3D ?? world.getActiveRoot();
       parentObject.userData.iwsdkSceneRuntimeHash = runtimeHash;
@@ -208,6 +257,7 @@ export class SceneJSONImporter {
     documentUrl: string | undefined,
     result: SceneJSONLoadResult,
     createdEntities: Entity[],
+    pendingComponents: PendingSceneComponents[],
   ): Entity {
     const parentObject = parentEntity.object3D ?? world.getActiveRoot();
     if (lowered.object.parent !== parentObject) {
@@ -216,17 +266,18 @@ export class SceneJSONImporter {
     lowered.object.traverse((object) => {
       object.userData.iwsdkSceneDocumentUrl = documentUrl;
       object.userData.iwsdkSceneRuntimeHash = result.runtimeHash;
+      object.userData.iwsdkSceneLevelId = world.activeLevelId;
     });
 
     const entity = world.createTransformEntity(lowered.object, parentEntity);
     createdEntities.push(entity);
-    if (lowered.node.components != null) {
-      LevelComponentApplier.applyComponents(
+    const components = withoutIntrinsicVisibility(lowered.node.components);
+    if (components != null) {
+      pendingComponents.push({
+        components,
         entity,
-        lowered.node.components,
-        world,
-        { nodeId: lowered.id, strict: true },
-      );
+        nodeId: lowered.id,
+      });
     }
     addImportedNode(result, lowered, entity);
     for (const virtual of lowered.virtualNodes) {
@@ -240,9 +291,72 @@ export class SceneJSONImporter {
         documentUrl,
         result,
         createdEntities,
+        pendingComponents,
       );
     }
     return entity;
+  }
+}
+
+function withoutIntrinsicVisibility(
+  components: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (components == null) {
+    return undefined;
+  }
+  const result = Object.fromEntries(
+    Object.entries(components).filter(
+      ([name]) =>
+        name !== 'Visibility' && name !== `${LEVEL_COMPONENT_PREFIX}Visibility`,
+    ),
+  );
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
+/** Resolve stable scene JSON entity references after all scene entities exist. */
+export function createSceneEntityReferenceResolver(
+  world: World,
+  levelRoot: Entity,
+  nodes: ReadonlyMap<string, { entity: Entity }>,
+): (reference: unknown) => Entity | undefined {
+  return (reference) => {
+    if (!isSceneEntityReference(reference)) {
+      return undefined;
+    }
+    if (reference.type === 'node') {
+      return nodes.get(reference.id)?.entity;
+    }
+    if (reference.type === 'player-space') {
+      return getScenePlayerTargetEntity(world, reference.target);
+    }
+    return levelRoot;
+  };
+}
+
+function isSceneEntityReference(value: unknown): value is SceneEntityReference {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const reference = value as Record<string, unknown>;
+  return (
+    (reference.type === 'node' && typeof reference.id === 'string') ||
+    (reference.type === 'player-space' &&
+      typeof reference.target === 'string') ||
+    reference.type === 'level-root'
+  );
+}
+
+/** Reveal player-space attachments after their replacement level commits. */
+export function activateScenePlayerAttachments(
+  result: SceneJSONLoadResult | undefined,
+): void {
+  for (const entity of result?.playerAttachments ?? []) {
+    const object = entity.object3D;
+    if (object == null) {
+      continue;
+    }
+    object.visible = object.userData.iwsdkSceneAuthoredVisible !== false;
+    delete object.userData.iwsdkSceneAuthoredVisible;
   }
 }
 

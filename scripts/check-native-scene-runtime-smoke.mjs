@@ -391,7 +391,6 @@ function startDevServer(cwd, port) {
       env: {
         ...process.env,
         BROWSER: 'none',
-        IWSDK_DISABLE_MKCERT: '1',
         NO_COLOR: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

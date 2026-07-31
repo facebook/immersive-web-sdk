@@ -95,6 +95,7 @@ describe('editor WebGL render proof', () => {
     harness = await createEditorTestHarness('editor-scene-picker');
     const context = await harness.browser.newContext({
       extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
+      ignoreHTTPSErrors: true,
       viewport: { height: 720, width: 960 },
     });
     const page = await context.newPage();

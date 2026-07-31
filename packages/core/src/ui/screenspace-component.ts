@@ -11,8 +11,8 @@ import { Types, createComponent } from '../ecs/component.js';
 export const ScreenSpace = createComponent(
   'ScreenSpace',
   {
-    height: { type: Types.String, default: 'auto' },
-    width: { type: Types.String, default: 'auto' },
+    height: { type: Types.String, default: '25vh' },
+    width: { type: Types.String, default: '25vw' },
     top: { type: Types.String, default: 'auto' },
     bottom: { type: Types.String, default: 'auto' },
     left: { type: Types.String, default: 'auto' },

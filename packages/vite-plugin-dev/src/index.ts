@@ -43,6 +43,7 @@ import {
   type SceneObjectInspectionSpec,
   type SceneReview,
 } from '@iwsdk/scene-composition';
+import { getCertificate } from '@vitejs/plugin-basic-ssl';
 import type { ModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
@@ -95,6 +96,7 @@ export type {
   AiOptions,
   AiMode,
   EmulatorOptions,
+  DevelopmentHttpsOptions,
   WorkspaceOptions,
   ProcessedDevOptions,
   IWERPluginOptions,
@@ -125,6 +127,7 @@ const RESOLVED_COMPONENT_MANIFEST_ID = '\0' + COMPONENT_MANIFEST_ID;
 const EDITOR_ROUTE = '/__iwsdk/editor';
 const WORKSPACE_ROUTE = '/__iwsdk/workspace';
 const WORKSPACE_SCENES_ROUTE = `${WORKSPACE_ROUTE}/scenes`;
+const WORKSPACE_FILES_ROUTE = `${WORKSPACE_ROUTE}/files`;
 const WORKSPACE_REVIEWS_ROUTE = `${WORKSPACE_ROUTE}/reviews`;
 const WORKSPACE_REVIEW_CAPTURES_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/captures`;
 const WORKSPACE_REVIEW_TRANSITIONS_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/transitions`;
@@ -136,6 +139,12 @@ const OPTIMIZER_EXCLUSIONS = [
   'preact',
   'preact/hooks',
   'preact/jsx-runtime',
+];
+const OPTIMIZER_INCLUSIONS = [
+  '@iwsdk/scene-composition',
+  'three-viewport-gizmo',
+  'three/examples/jsm/controls/OrbitControls.js',
+  'three/examples/jsm/controls/TransformControls.js',
 ];
 const MANAGED_WORKSPACE_HEADER = 'x-iwsdk-managed-workspace';
 const MANAGED_WORKSPACE_QUERY = '__iwsdkManagedWorkspace';
@@ -268,7 +277,39 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   return {
     name: 'iwsdk-dev',
 
-    config(userConfig) {
+    async config(userConfig, environment) {
+      // WebXR requires a secure context on network hosts. Generate an
+      // untrusted certificate locally instead of installing a development CA
+      // into the operating-system trust store. Playwright accepts it in the
+      // managed browser; physical headsets retain their explicit warning.
+      // Preserve Vite's own HTTPS configuration when the app supplies one.
+      if (
+        environment.command === 'serve' &&
+        options.https !== false &&
+        userConfig.server?.https === undefined
+      ) {
+        const httpsOptions =
+          typeof options.https === 'object' ? options.https : {};
+        const projectRoot = path.resolve(userConfig.root ?? process.cwd());
+        const configuredCacheDir =
+          httpsOptions.certDir ??
+          path.join(userConfig.cacheDir ?? 'node_modules/.vite', 'iwsdk-https');
+        const certDir = path.isAbsolute(configuredCacheDir)
+          ? configuredCacheDir
+          : path.resolve(projectRoot, configuredCacheDir);
+        const certificate = await getCertificate(
+          certDir,
+          httpsOptions.name ?? 'IWSDK Development',
+          httpsOptions.domains,
+          httpsOptions.ttlDays ?? 365,
+        );
+        userConfig.server ??= {};
+        userConfig.server.https = {
+          cert: certificate,
+          key: certificate,
+        };
+      }
+
       // The editor workspace is loaded from a virtual module after the app has
       // started. Keep its framework dependencies out of Vite's late discovery
       // pass so opening the editor cannot invalidate the running page. The
@@ -281,6 +322,21 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           (dependency) =>
             !userConfig.optimizeDeps?.exclude?.includes(dependency),
         ),
+      ];
+      userConfig.optimizeDeps.include = [
+        ...(userConfig.optimizeDeps.include ?? []),
+        ...OPTIMIZER_INCLUSIONS.filter(
+          (dependency) =>
+            !userConfig.optimizeDeps?.include?.includes(dependency),
+        ),
+      ];
+      // Emulator packages declare their own `three` dependency. Force every
+      // browser-side import through the app's IWSDK-compatible Three.js entry
+      // so the runtime and emulator share constructors and global state.
+      userConfig.resolve ??= {};
+      userConfig.resolve.dedupe = [
+        ...(userConfig.resolve.dedupe ?? []),
+        ...(!userConfig.resolve.dedupe?.includes('three') ? ['three'] : []),
       ];
       // The Playwright window is the managed browser surface in every workspace
       // mode, so suppress Vite's independent browser launch.
@@ -405,6 +461,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             return;
           }
           handleWorkspaceScenesRequest(request, response, config.root);
+          return;
+        }
+
+        if (pathname === WORKSPACE_FILES_ROUTE) {
+          if (!isManagedWorkspaceRequest) {
+            sendJsonError(
+              response,
+              403,
+              'IWSDK project file browsing is only available in the managed workspace browser.',
+            );
+            return;
+          }
+          handleWorkspaceFilesRequest(request, response, config.root);
           return;
         }
 
@@ -674,6 +743,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 headerName: MANAGED_WORKSPACE_HEADER,
                 pathnames: [
                   WORKSPACE_ROUTE,
+                  WORKSPACE_FILES_ROUTE,
                   WORKSPACE_SCENES_ROUTE,
                   WORKSPACE_REVIEWS_ROUTE,
                   WORKSPACE_REVIEW_CAPTURES_ROUTE,
@@ -1820,6 +1890,7 @@ function sendWorkspaceShell(response: ServerResponse): void {
       EDITOR_STYLESHEET_ID,
       `${EDITOR_ROUTE}/document`,
       {
+        projectFilesUrl: WORKSPACE_FILES_ROUTE,
         publishUrl: WORKSPACE_PUBLISH_ROUTE,
         runtimePreflightUrl: WORKSPACE_RUNTIME_PREFLIGHT_ROUTE,
         reviewCapturesUrl: WORKSPACE_REVIEW_CAPTURES_ROUTE,
@@ -2170,6 +2241,68 @@ async function handleWorkspaceScenesRequest(
       JSON.stringify({
         error: error instanceof Error ? error.message : String(error),
       }),
+    );
+  }
+}
+
+async function handleWorkspaceFilesRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  workspaceRoot: string,
+): Promise<void> {
+  try {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.statusCode = 405;
+      response.setHeader('Allow', 'GET, HEAD');
+      response.end('Method not allowed');
+      return;
+    }
+    const parsed = new URL(request.url ?? '', 'http://iwsdk.local');
+    const subfolder = parsed.searchParams.get('subfolder')?.trim() ?? '';
+    const extensions = new Set(
+      (parsed.searchParams.get('fileTypes') ?? '')
+        .split(',')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => /^\.[a-z0-9]+$/u.test(entry)),
+    );
+    const publicRoot = path.resolve(workspaceRoot, 'public');
+    const browseRoot = path.resolve(publicRoot, subfolder);
+    if (!isPathInside(publicRoot, browseRoot)) {
+      throw new Error('File picker subfolder must stay inside public/.');
+    }
+    const files: Array<{ path: string; size: number }> = [];
+    const visit = (directory: string): void => {
+      if (!existsSync(directory)) {
+        return;
+      }
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const absolutePath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          visit(absolutePath);
+        } else if (
+          entry.isFile() &&
+          (extensions.size === 0 ||
+            extensions.has(path.extname(entry.name).toLowerCase()))
+        ) {
+          files.push({
+            path: `./${toPosixPath(path.relative(publicRoot, absolutePath))}`,
+            size: statSync(absolutePath).size,
+          });
+        }
+      }
+    };
+    visit(browseRoot);
+    files.sort((left, right) => left.path.localeCompare(right.path));
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.end(
+      request.method === 'HEAD' ? undefined : JSON.stringify({ files }),
+    );
+  } catch (error) {
+    sendJsonError(
+      response,
+      400,
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
