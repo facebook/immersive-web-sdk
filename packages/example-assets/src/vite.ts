@@ -78,8 +78,8 @@ export function iwsdkExampleAssets({
         }
 
         try {
-          response.setHeader('Content-Type', mimeTypeFor(requestedFile));
-          response.writeHead(200).end(await readFile(requestedFile));
+          response.setHeader('Content-Type', requestedFile.mimeType);
+          response.writeHead(200).end(await readFile(requestedFile.sourcePath));
         } catch {
           response.writeHead(404).end();
         }
@@ -111,7 +111,7 @@ function resolveAssetRequest({
   pathname: string;
   publicRoot: string;
   requestedAssetIds: ReadonlySet<string>;
-}): string | undefined {
+}): { mimeType: string; sourcePath: string } | undefined {
   const prefix = `/${publicRoot.replace(/^\/+|\/+$/g, '')}/`;
   const normalizedPathname = decodeURIComponent(pathname);
   if (!normalizedPathname.startsWith(prefix)) {
@@ -127,23 +127,13 @@ function resolveAssetRequest({
   }
 
   const asset = getExampleAsset(assetId);
-  if (asset == null || !asset.files.some((file) => file.path === filePath)) {
+  const file = asset?.files.find((candidate) => candidate.path === filePath);
+  if (asset == null || file == null) {
     return undefined;
   }
 
-  return getExampleAssetSourceFilePath(assetId, filePath, assetRoot);
-}
-
-function mimeTypeFor(filePath: string): string {
-  switch (path.extname(filePath).toLowerCase()) {
-    case '.gltf':
-      return 'model/gltf+json';
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    case '.png':
-      return 'image/png';
-    default:
-      return 'application/octet-stream';
-  }
+  return {
+    mimeType: file.mimeType,
+    sourcePath: getExampleAssetSourceFilePath(assetId, filePath, assetRoot),
+  };
 }

@@ -9,6 +9,11 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import {
+  buildGenericAdapterPrompt,
+  pruneAgentAdapters,
+  syncAgentAdapters,
+} from '../src/agent-adapters.js';
 import { readAdapterStatus } from '../src/commands/adapter.js';
 import {
   getManagedMcpServerRegistry,
@@ -77,25 +82,25 @@ describe('managed MCP registry', () => {
       'dist',
       'cli.js',
     );
-    const hzdbMarker = path.join(
+    const metaVrEntrypoint = path.join(
       normalizedAppA,
       'node_modules',
       '@meta-quest',
-      'hzdb',
-      'package.json',
+      'metavr',
+      'bin.js',
     );
     await mkdir(path.dirname(cliEntrypoint), { recursive: true });
     await mkdir(path.dirname(referenceEntrypoint), { recursive: true });
-    await mkdir(path.dirname(hzdbMarker), { recursive: true });
+    await mkdir(path.dirname(metaVrEntrypoint), { recursive: true });
     await writeFile(cliEntrypoint, '', 'utf8');
     await writeFile(referenceEntrypoint, '', 'utf8');
-    await writeFile(hzdbMarker, '{}\n', 'utf8');
+    await writeFile(metaVrEntrypoint, '', 'utf8');
 
     const registry = getManagedMcpServerRegistry({ workspaceRoot: appA });
     expect(Object.keys(registry.entries)).toEqual([
       'iwsdk-runtime',
       'iwsdk-reference',
-      'hzdb',
+      'metavr',
     ]);
     expect(registry.entries['iwsdk-runtime']?.command).toBe('node');
     expect(registry.entries['iwsdk-runtime']?.args).toContain(cliEntrypoint);
@@ -104,10 +109,121 @@ describe('managed MCP registry', () => {
     expect(registry.entries['iwsdk-runtime']?.args).not.toContain(
       '--workspace',
     );
+    expect(registry.entries.metavr).toEqual({
+      command: 'node',
+      args: [metaVrEntrypoint, 'mcp', 'server'],
+    });
   });
 });
 
 describe('adapter helpers', () => {
+  test('syncs complete cross-harness instructions, MCP, and narrow permissions while preserving user config', async () => {
+    const metaVrEntrypoint = path.join(
+      appA,
+      'node_modules',
+      '@meta-quest',
+      'metavr',
+      'bin.js',
+    );
+    await mkdir(path.dirname(metaVrEntrypoint), { recursive: true });
+    await writeFile(metaVrEntrypoint, '', 'utf8');
+    await mkdir(path.join(appA, '.claude'), { recursive: true });
+    await writeFile(
+      path.join(appA, '.claude', 'settings.json'),
+      `${JSON.stringify(
+        {
+          permissions: { allow: ['Bash(npm test)'] },
+          enabledMcpjsonServers: ['user-server'],
+          enableAllProjectMcpServers: true,
+          customSetting: true,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    await syncAgentAdapters({ workspaceRoot: appA });
+
+    const claudeSettings = JSON.parse(
+      await readFile(path.join(appA, '.claude', 'settings.json'), 'utf8'),
+    );
+    const cursorPermissions = JSON.parse(
+      await readFile(path.join(appA, '.cursor', 'permissions.json'), 'utf8'),
+    );
+    const codex = await readFile(
+      path.join(appA, '.codex', 'config.toml'),
+      'utf8',
+    );
+    const openCode = JSON.parse(
+      await readFile(path.join(appA, 'opencode.json'), 'utf8'),
+    );
+    const adapters = await readAdapterStatus(appA);
+
+    expect(await readFile(path.join(appA, 'AGENTS.md'), 'utf8')).toContain(
+      '# IWSDK',
+    );
+    expect(await readFile(path.join(appA, 'CLAUDE.md'), 'utf8')).toContain(
+      '@AGENTS.md',
+    );
+    expect(claudeSettings.customSetting).toBe(true);
+    expect(claudeSettings.permissions.allow).toEqual(
+      expect.arrayContaining([
+        'Bash(npm test)',
+        'mcp__iwsdk-runtime__*',
+        'mcp__metavr__*',
+      ]),
+    );
+    expect(claudeSettings.enabledMcpjsonServers).toEqual(
+      expect.arrayContaining(['user-server', 'iwsdk-runtime', 'metavr']),
+    );
+    expect(claudeSettings.enableAllProjectMcpServers).toBeUndefined();
+    expect(cursorPermissions.autoRun.allow_instructions).toEqual([
+      expect.stringContaining('iwsdk-runtime'),
+    ]);
+    expect(codex).toContain('default_tools_approval_mode = "approve"');
+    expect(codex).toContain('[mcp_servers.metavr]');
+    expect(openCode.mcp['iwsdk-runtime']).toMatchObject({
+      type: 'local',
+      enabled: true,
+    });
+    expect(openCode.mcp.metavr).toMatchObject({
+      type: 'local',
+      enabled: true,
+    });
+    expect(openCode.permission['iwsdk-runtime_*']).toBe('allow');
+    expect(openCode.permission['metavr_*']).toBe('allow');
+    expect(openCode.permission.skill['iwsdk-*']).toBe('allow');
+    expect(adapters.every((entry) => entry.status === 'configured')).toBe(true);
+    expect(
+      adapters.find((entry) => entry.tool === 'copilot')?.support.permissions,
+    ).toMatchObject({ status: 'manual', file: null });
+
+    await pruneAgentAdapters({ workspaceRoot: appA });
+    const prunedClaudeSettings = JSON.parse(
+      await readFile(path.join(appA, '.claude', 'settings.json'), 'utf8'),
+    );
+    expect(prunedClaudeSettings.customSetting).toBe(true);
+    expect(prunedClaudeSettings.permissions.allow).toEqual(['Bash(npm test)']);
+    expect(prunedClaudeSettings.enabledMcpjsonServers).toEqual(['user-server']);
+    expect(await readFile(path.join(appA, 'AGENTS.md'), 'utf8')).toContain(
+      '# IWSDK',
+    );
+    const prunedOpenCode = JSON.parse(
+      await readFile(path.join(appA, 'opencode.json'), 'utf8'),
+    );
+    expect(prunedOpenCode.mcp?.metavr).toBeUndefined();
+    expect(prunedOpenCode.permission?.['metavr_*']).toBeUndefined();
+    expect(prunedOpenCode.permission?.skill?.['iwsdk-*']).toBeUndefined();
+  });
+
+  test('builds a generic adapter prompt that preserves portable skills and scopes', () => {
+    const prompt = buildGenericAdapterPrompt(appA);
+    expect(prompt).toContain('.agents/skills/');
+    expect(prompt).toContain('nested AGENTS.md scopes');
+    expect(prompt).toContain('Preapprove loading iwsdk-* skills');
+  });
+
   test('merges managed JSON entries without removing user-owned siblings', async () => {
     const filePath = path.join(tempDir, 'config', '.mcp.json');
     await mergeJsonConfig(
@@ -199,6 +315,7 @@ describe('adapter helpers', () => {
     );
     expect(cursor.mcpServers['iwsdk-runtime'].command).toBe('node');
     expect(codex).toContain('[mcp_servers.iwsdk-runtime]');
+    expect(codex).toContain('default_tools_approval_mode = "approve"');
     expect(codex).not.toContain('iwsdk-dev-mcp');
     expect(codex).not.toContain('--port');
     expect(codex).not.toContain('--workspace');
@@ -223,6 +340,10 @@ describe('adapter helpers', () => {
               command: 'node',
               args: ['reference.js'],
             },
+            hzdb: {
+              command: 'npx',
+              args: ['@meta-quest/hzdb', 'mcp', 'server'],
+            },
             'user-owned': {
               command: 'node',
               args: ['user.js'],
@@ -244,6 +365,7 @@ describe('adapter helpers', () => {
     expect(parsed.mcpServers.iwsdk).toBeUndefined();
     expect(parsed.mcpServers['iwsdk-dev-mcp']).toBeUndefined();
     expect(parsed.mcpServers['iwsdk-rag-local']).toBeUndefined();
+    expect(parsed.mcpServers.hzdb).toBeUndefined();
     expect(parsed.mcpServers['user-owned']).toEqual({
       command: 'node',
       args: ['user.js'],

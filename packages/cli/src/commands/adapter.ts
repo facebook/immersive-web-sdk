@@ -8,6 +8,13 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import {
+  buildGenericAdapterPrompt,
+  getAdapterSupportStatus,
+  pruneAgentAdapters,
+  syncAgentAdapters,
+  type AdapterSupportStatus,
+} from '../agent-adapters.js';
 import { createSuccess } from '../cli-results.js';
 import type {
   CliOptions,
@@ -21,10 +28,9 @@ import {
   DEFAULT_MCP_SERVER_NAME,
   LEGACY_MCP_ARG_TOKENS,
   LEGACY_MCP_SERVER_NAMES,
+  getManagedMcpServerRegistry,
   hasManagedMcpArgToken,
   hasManagedMcpServerReference,
-  pruneMcpAdapters,
-  syncMcpAdapters,
 } from '../mcp-adapters.js';
 import {
   MCP_CONFIG_TARGETS,
@@ -38,6 +44,7 @@ export interface AdapterStatusEntry {
   file: string;
   exists: boolean;
   status: 'configured' | 'missing' | 'stale';
+  support: AdapterSupportStatus;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -130,16 +137,25 @@ export async function readAdapterStatus(
   workspaceRoot: string,
 ): Promise<AdapterStatusEntry[]> {
   const status: AdapterStatusEntry[] = [];
+  const serverNames = Object.keys(
+    getManagedMcpServerRegistry({ workspaceRoot }).entries,
+  );
 
   for (const tool of SUPPORTED_AI_TOOLS) {
     const target = MCP_CONFIG_TARGETS[tool];
     const filePath = path.join(workspaceRoot, target.file);
+    const support = await getAdapterSupportStatus(
+      workspaceRoot,
+      tool,
+      serverNames,
+    );
     if (!existsSync(filePath)) {
       status.push({
         tool,
         file: target.file,
         exists: false,
         status: 'missing',
+        support,
       });
       continue;
     }
@@ -153,9 +169,12 @@ export async function readAdapterStatus(
       status:
         managedContent !== null &&
         hasCanonicalManagedAdapterEntry(managedContent) &&
-        !hasLegacyManagedAdapterEntry(managedContent)
+        !hasLegacyManagedAdapterEntry(managedContent) &&
+        support.instruction.status === 'configured' &&
+        support.permissions.status !== 'missing'
           ? 'configured'
           : 'stale',
+      support,
     });
   }
 
@@ -197,7 +216,7 @@ export async function handleAdapterSync(
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspace(io, options.workspace);
   const tools = resolveAdapterTools(options);
-  const result = await syncMcpAdapters({ workspaceRoot, tools });
+  const result = await syncAgentAdapters({ workspaceRoot, tools });
   return createSuccess({
     ...result,
     adapters: await readAdapterStatus(workspaceRoot),
@@ -210,7 +229,7 @@ export async function handleAdapterPrune(
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspace(io, options.workspace);
   const tools = resolveAdapterTools(options);
-  await pruneMcpAdapters({ workspaceRoot, tools });
+  await pruneAgentAdapters({ workspaceRoot, tools });
   return createSuccess({
     workspaceRoot,
     tools,
@@ -227,4 +246,13 @@ export async function handleAdapterStatus(
     workspaceRoot,
     adapters: await readAdapterStatus(workspaceRoot),
   });
+}
+
+export async function handleAdapterPrompt(
+  options: CliOptions,
+  io: ResolvedCliIo,
+): Promise<null> {
+  const workspaceRoot = await resolveWorkspace(io, options.workspace);
+  io.stdout.write(`${buildGenericAdapterPrompt(workspaceRoot)}\n`);
+  return null;
 }

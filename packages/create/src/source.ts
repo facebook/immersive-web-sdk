@@ -5,18 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import type { Recipe } from '@pmndrs/chef';
-import {
-  DEFAULT_ASSETS_BASE,
-  fetchRecipesIndex,
-  fetchRecipeByFileName,
-} from './recipes.js';
-import type { VariantId } from './types.js';
+import { VERSION } from './version.js';
 
 /**
  * Directory inside scaffolded projects where SDK package tarballs are stored.
  * Preserves the monorepo's subdirectory hierarchy so that internal `file:`
- * references between packages (e.g., core → glxf) resolve correctly.
+ * references between packages (e.g., core → scene-composition) resolve correctly.
  */
 export const SDK_PACKAGES_DIR = '.sdk-packages';
 
@@ -37,19 +31,12 @@ export interface BundleManifest {
 }
 
 /**
- * Abstraction over where SDK recipes and packages come from.
- * NpmSource fetches from jsDelivr CDN; BundleSource fetches from a remote
- * bundle URL.
+ * Abstraction over where SDK package versions/tarballs come from. Starter
+ * source is always embedded in @iwsdk/create.
  */
 export interface ResolvedSource {
   /** One-time setup (e.g., validate remote bundle manifest) */
   prepare(): Promise<void>;
-
-  /** Fetch the recipes index.json */
-  fetchIndex(): Promise<{ id: VariantId; name: string; recipe: string }[]>;
-
-  /** Fetch a recipe by its file name */
-  fetchRecipe(fileName: string): Promise<Recipe>;
 
   /**
    * Return the install specifier for an @iwsdk/* package.
@@ -72,12 +59,6 @@ export interface ResolvedSource {
    */
   downloadPackages(destDir: string): Promise<void>;
 
-  /**
-   * Resolve relative asset URLs in a recipe to absolute URLs.
-   * Returns a new recipe object (no mutation).
-   */
-  resolveRecipeUrls(recipe: Recipe): Recipe;
-
   /** Whether this source uses bundle mode */
   isBundleMode: boolean;
 
@@ -86,48 +67,7 @@ export interface ResolvedSource {
 }
 
 /**
- * Prepend a base URL to relative `url` edits in a recipe.
- * Absolute URLs pass through unchanged (backwards compatible).
- * Returns a new recipe object (no mutation).
- */
-function prependBaseUrl(recipe: Recipe, base: string): Recipe {
-  const edits = recipe.edits;
-  if (!edits) {
-    return recipe;
-  }
-
-  const baseWithSlash = base.endsWith('/') ? base : base + '/';
-  const newEdits: Record<string, any> = {};
-  let changed = false;
-
-  for (const [key, value] of Object.entries(edits)) {
-    if (
-      value &&
-      typeof value === 'object' &&
-      'url' in value &&
-      typeof (value as any).url === 'string'
-    ) {
-      const url = (value as any).url as string;
-      if (!URL.canParse(url)) {
-        // Relative URL — prepend base
-        newEdits[key] = { ...value, url: new URL(url, baseWithSlash).href };
-        changed = true;
-      } else {
-        newEdits[key] = value;
-      }
-    } else {
-      newEdits[key] = value;
-    }
-  }
-
-  if (!changed) {
-    return recipe;
-  }
-  return { ...recipe, edits: newEdits };
-}
-
-/**
- * Default source: fetches recipes and packages from jsDelivr CDN / npm registry.
+ * Default source: package dependencies resolve from the npm registry.
  */
 export class NpmSource implements ResolvedSource {
   isBundleMode = false;
@@ -136,18 +76,8 @@ export class NpmSource implements ResolvedSource {
     // no-op
   }
 
-  async fetchIndex(): Promise<
-    { id: VariantId; name: string; recipe: string }[]
-  > {
-    return fetchRecipesIndex();
-  }
-
-  async fetchRecipe(fileName: string): Promise<Recipe> {
-    return fetchRecipeByFileName(fileName);
-  }
-
   getPackageInstallSpec(_name: string): string | undefined {
-    return undefined; // npm resolves from registry using version in recipe
+    return undefined; // generated package.json uses the matching SDK version
   }
 
   getPackageInstallSpecs(): Record<string, string> {
@@ -158,20 +88,13 @@ export class NpmSource implements ResolvedSource {
     // no-op — npm resolves packages from the registry
   }
 
-  resolveRecipeUrls(recipe: Recipe): Recipe {
-    const base = DEFAULT_ASSETS_BASE.endsWith('/')
-      ? DEFAULT_ASSETS_BASE
-      : DEFAULT_ASSETS_BASE + '/';
-    return prependBaseUrl(recipe, base);
-  }
-
   async cleanup(): Promise<void> {
     // no-op
   }
 }
 
 /**
- * Bundle source: fetches recipes and packages from a remote HTTP(S) bundle URL.
+ * Bundle source: fetches packages from a remote HTTP(S) bundle URL.
  * Resolves @iwsdk/* packages to local file: paths after downloading tarballs.
  */
 export class BundleSource implements ResolvedSource {
@@ -199,21 +122,14 @@ export class BundleSource implements ResolvedSource {
           'Please update your CLI or use a compatible bundle.',
       );
     }
+    if (this.manifest.sdkVersion !== VERSION) {
+      throw new Error(
+        `SDK bundle version ${JSON.stringify(this.manifest.sdkVersion)} does not match @iwsdk/create ${JSON.stringify(VERSION)}. Use a Create package from the same SDK build.`,
+      );
+    }
     for (const packagePath of Object.values(this.manifest.packages)) {
       this.manifestSubPath(packagePath);
     }
-  }
-
-  async fetchIndex(): Promise<
-    { id: VariantId; name: string; recipe: string }[]
-  > {
-    const content = await this.readContent('recipes/index.json');
-    return JSON.parse(content);
-  }
-
-  async fetchRecipe(fileName: string): Promise<Recipe> {
-    const content = await this.readContent(`recipes/${fileName}`);
-    return JSON.parse(content);
   }
 
   getPackageInstallSpec(name: string): string | undefined {
@@ -262,10 +178,6 @@ export class BundleSource implements ResolvedSource {
       const buffer = Buffer.from(await resp.arrayBuffer());
       await writeFile(destFile, buffer);
     }
-  }
-
-  resolveRecipeUrls(recipe: Recipe): Recipe {
-    return prependBaseUrl(recipe, this.baseUrl);
   }
 
   async cleanup(): Promise<void> {

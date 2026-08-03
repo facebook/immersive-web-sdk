@@ -6,6 +6,7 @@
     "sourcePath": "assets/environment-desk",
     "entryFile": "environmentDesk.gltf",
     "publicPath": "/iwsdk-assets/environment-desk/environmentDesk.gltf",
+    "byteSize": 6121588,
     "tags": ["environment", "room", "desk"],
     "bounds": {
       "min": [-862.1762084960938, -704.1123046875, -423.6421203613281],
@@ -14,21 +15,46 @@
     "files": [
       {
         "path": "d022feed3df22c33fedf823eab2fb76a.jpg",
+        "bytes": 2634281,
+        "mimeType": "image/jpeg",
         "sha256": "289d5c71fe722f3367f4898fa5fa3edf16f3e5d1f74e8eb6c1ee5c0bd61f57ca"
       },
       {
         "path": "de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "bytes": 2035621,
+        "mimeType": "image/jpeg",
         "sha256": "45693b5afb4d0ec8394da4cfb8b7fd9f84b4148064f51a245400e4287f0d3f90"
       },
       {
         "path": "environmentDesk.gltf",
+        "bytes": 1036308,
+        "mimeType": "model/gltf+json",
         "sha256": "b55e4ee6f19d0bca42f7085730d8750fdb1a3db7d9b75e5972dd91cc803cccc2"
       },
       {
         "path": "fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "bytes": 415378,
+        "mimeType": "image/jpeg",
         "sha256": "35fbf8c79b663adee07314c7cbb384f8f14b9a2c6668d9699e553e994da3216f"
       }
-    ]
+    ],
+    "custody": {
+      "kind": "repository-history",
+      "repositoryUrl": "https://github.com/facebook/immersive-web-sdk",
+      "commit": "a3f9011096818777d16b423a6c17e40c82074e65",
+      "path": "packages/starter-assets/starter-template/public/gltf/environmentDesk"
+    },
+    "origin": {
+      "status": "verified",
+      "sourceUrl": "https://github.com/facebook/immersive-web-sdk/tree/a3f9011096818777d16b423a6c17e40c82074e65/packages/starter-assets/starter-template/public/gltf/environmentDesk",
+      "author": "Meta Platforms, Inc. and affiliates"
+    },
+    "license": {
+      "status": "verified",
+      "spdx": "MIT",
+      "evidence": "First-party authorship and MIT redistribution terms confirmed by the IWSDK maintainer on 2026-07-31; repository license: https://github.com/facebook/immersive-web-sdk/blob/a3f9011096818777d16b423a6c17e40c82074e65/LICENSE",
+      "attribution": "Copyright (c) Meta Platforms, Inc. and affiliates."
+    }
   },
   {
     "id": "robot",
@@ -37,6 +63,7 @@
     "sourcePath": "assets/robot",
     "entryFile": "robot.gltf",
     "publicPath": "/iwsdk-assets/robot/robot.gltf",
+    "byteSize": 1246580,
     "tags": ["character", "robot"],
     "bounds": {
       "min": [-29.710256576538086, -22.996440887451172, -73.18901824951172],
@@ -45,29 +72,58 @@
     "files": [
       {
         "path": "288d754a3fb5199c07278aa1e889259c.png",
+        "bytes": 46973,
+        "mimeType": "image/png",
         "sha256": "5860fd89b1a12469866cf3e8f7ddd6dd8511897485fbae5fdbaf0b406fc30eef"
       },
       {
         "path": "82f7622c553a011ccb45883b167253b8.png",
+        "bytes": 32869,
+        "mimeType": "image/png",
         "sha256": "1d704a9cbe74b32b551ae50af3c72ffe266be57e5abfed9db18c6778440a3ae1"
       },
       {
         "path": "86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "bytes": 639670,
+        "mimeType": "image/png",
         "sha256": "f37d2c32282b13022b035df057911536495f653a026e39d3beb4fcdec347922d"
       },
       {
         "path": "c6378ca88952228817e344695bd6ec8c.png",
+        "bytes": 107798,
+        "mimeType": "image/png",
         "sha256": "3a7e0e15c8712945be8557527740dcbdcad29e43bc2af68b8126ec0f1b228cea"
       },
       {
         "path": "cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "bytes": 14142,
+        "mimeType": "image/png",
         "sha256": "15d30c4fdd36221621b2be36e6acc42464a7d46138bea60c816cd1b18f1ce931"
       },
       {
         "path": "robot.gltf",
+        "bytes": 405128,
+        "mimeType": "model/gltf+json",
         "sha256": "e735d2191e01eb1b745ac32992f588f3a9682da8bbd04949240db1bcf9fa1f4a"
       }
-    ]
+    ],
+    "custody": {
+      "kind": "repository-history",
+      "repositoryUrl": "https://github.com/facebook/immersive-web-sdk",
+      "commit": "a3f9011096818777d16b423a6c17e40c82074e65",
+      "path": "packages/starter-assets/starter-template/public/gltf/robot"
+    },
+    "origin": {
+      "status": "verified",
+      "sourceUrl": "https://github.com/facebook/immersive-web-sdk/tree/a3f9011096818777d16b423a6c17e40c82074e65/packages/starter-assets/starter-template/public/gltf/robot",
+      "author": "Meta Platforms, Inc. and affiliates"
+    },
+    "license": {
+      "status": "verified",
+      "spdx": "MIT",
+      "evidence": "First-party authorship and MIT redistribution terms confirmed by the IWSDK maintainer on 2026-07-31; repository license: https://github.com/facebook/immersive-web-sdk/blob/a3f9011096818777d16b423a6c17e40c82074e65/LICENSE",
+      "attribution": "Copyright (c) Meta Platforms, Inc. and affiliates."
+    }
   },
   {
     "id": "plant-sansevieria",
@@ -76,6 +132,7 @@
     "sourcePath": "assets/plant-sansevieria",
     "entryFile": "plantSansevieria.gltf",
     "publicPath": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf",
+    "byteSize": 2748817,
     "tags": ["plant", "decor"],
     "bounds": {
       "min": [
@@ -86,20 +143,45 @@
     "files": [
       {
         "path": "74dfc45d02dc82b12e5f78f746595698.png",
+        "bytes": 1121015,
+        "mimeType": "image/png",
         "sha256": "c080422a4ac9d99d50cf0d72ad34b33a552f32fa7f221c09fe26c4301dbe6cc4"
       },
       {
         "path": "d4978425948a18d0f8e31f98232b81c1.png",
+        "bytes": 904353,
+        "mimeType": "image/png",
         "sha256": "276721495d199450ba4b34dec7ec26e6815a7fd392597cfd08bc2244080fd8cd"
       },
       {
         "path": "f1569237527b16131ce98cd7bc94c74e.png",
+        "bytes": 648915,
+        "mimeType": "image/png",
         "sha256": "d68e00cbe4ece25bc9a13966b4cad596a0ac6df94ece5cc4bbefb0f3ebad5c75"
       },
       {
         "path": "plantSansevieria.gltf",
+        "bytes": 74534,
+        "mimeType": "model/gltf+json",
         "sha256": "683ebf4fca9b3c61de9f8c3762f86a8ef762691b88d385494c2ff6ae2e0fcdd2"
       }
-    ]
+    ],
+    "custody": {
+      "kind": "repository-history",
+      "repositoryUrl": "https://github.com/facebook/immersive-web-sdk",
+      "commit": "a3f9011096818777d16b423a6c17e40c82074e65",
+      "path": "packages/starter-assets/starter-template/public/gltf/plantSansevieria"
+    },
+    "origin": {
+      "status": "verified",
+      "sourceUrl": "https://github.com/facebook/immersive-web-sdk/tree/a3f9011096818777d16b423a6c17e40c82074e65/packages/starter-assets/starter-template/public/gltf/plantSansevieria",
+      "author": "Meta Platforms, Inc. and affiliates"
+    },
+    "license": {
+      "status": "verified",
+      "spdx": "MIT",
+      "evidence": "First-party authorship and MIT redistribution terms confirmed by the IWSDK maintainer on 2026-07-31; repository license: https://github.com/facebook/immersive-web-sdk/blob/a3f9011096818777d16b423a6c17e40c82074e65/LICENSE",
+      "attribution": "Copyright (c) Meta Platforms, Inc. and affiliates."
+    }
   }
 ]

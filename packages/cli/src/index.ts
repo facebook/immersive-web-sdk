@@ -14,6 +14,7 @@ import {
 } from './cli-results.js';
 import type { CliCommandResult, CliIo, ResolvedCliIo } from './cli-types.js';
 import {
+  handleAdapterPrompt,
   handleAdapterPrune,
   handleAdapterStatus,
   handleAdapterSync,
@@ -36,9 +37,11 @@ import {
 import { handleRuntimeOperation } from './commands/runtime.js';
 import { handleStatus } from './commands/status.js';
 import {
+  buildDevCommandHelp,
   buildMcpInspectHelp,
   buildReferenceCommandHelp,
   buildRuntimeCommandHelp,
+  buildRuntimeDomainHelp,
   usageLines,
 } from './help.js';
 import {
@@ -66,6 +69,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
     }
 
     if (parsed.options.help) {
+      if (command === 'dev') {
+        stdout.write(`${buildDevCommandHelp(subcommand).join('\n')}\n`);
+        return 0;
+      }
+
       if (command === 'mcp' && subcommand === 'inspect') {
         stdout.write(`${buildMcpInspectHelp().join('\n')}\n`);
         return 0;
@@ -77,15 +85,17 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       }
 
       if (
-        (command === 'xr' ||
-          command === 'browser' ||
-          command === 'scene' ||
-          command === 'ui' ||
-          command === 'ecs') &&
-        subcommand
+        command === 'xr' ||
+        command === 'browser' ||
+        command === 'scene' ||
+        command === 'ui' ||
+        command === 'ecs'
       ) {
         stdout.write(
-          `${buildRuntimeCommandHelp(command, subcommand).join('\n')}\n`,
+          `${(subcommand
+            ? buildRuntimeCommandHelp(command, subcommand)
+            : buildRuntimeDomainHelp(command)
+          ).join('\n')}\n`,
         );
         return 0;
       }
@@ -122,8 +132,10 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
           result = await handleAdapterPrune(parsed.options, context);
         } else if (subcommand === 'status') {
           result = await handleAdapterStatus(parsed.options, context);
+        } else if (subcommand === 'prompt') {
+          result = await handleAdapterPrompt(parsed.options, context);
         } else {
-          throw new Error('Usage: iwsdk adapter sync|status|prune');
+          throw new Error('Usage: iwsdk adapter sync|status|prune|prompt');
         }
         break;
       case 'reference':

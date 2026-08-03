@@ -27,13 +27,11 @@ describe('promptFlow', () => {
     expect(questionNames()).toEqual(['target', 'setup']);
     expect(result).toMatchObject({
       name: 'browser-app',
-      id: 'browser-manual-ts',
       target: 'browser',
       language: 'ts',
       xrEnabled: false,
       installNow: true,
       gitInit: true,
-      aiTools: [],
       xrFeatureStates: {},
       featureFlags: {
         locomotionEnabled: true,
@@ -55,7 +53,6 @@ describe('promptFlow', () => {
       .mockResolvedValueOnce({ enabled: true })
       .mockResolvedValueOnce({ enabled: true })
       .mockResolvedValueOnce({ enabled: true })
-      .mockResolvedValueOnce({ aiTools: ['codex'] })
       .mockResolvedValueOnce({ gitInit: false, installNow: false });
 
     const result = await promptFlow('advanced-ar-app');
@@ -68,7 +65,6 @@ describe('promptFlow', () => {
       'enabled',
       'enabled',
       'enabled',
-      'aiTools',
       'gitInit',
       'installNow',
     ]);
@@ -83,14 +79,13 @@ describe('promptFlow', () => {
     expect(questionMessages().join('\n')).not.toMatch(
       /Enable (?:Hand Tracking|Anchors|Hit Test|Plane Detection|Mesh Detection|WebXR Layers)/,
     );
+    expect(questionNames()).not.toContain('aiTools');
     expect(result).toMatchObject({
-      id: 'ar-manual-js',
       target: 'ar',
       mode: 'ar',
       language: 'js',
       installNow: false,
       gitInit: false,
-      aiTools: ['codex'],
       featureFlags: {
         locomotionEnabled: false,
         grabbingEnabled: false,
@@ -114,14 +109,18 @@ describe('promptFlow', () => {
     const result = await promptFlow('vr-app', { target: 'vr' });
 
     expect(questionNames()).toEqual(['setup']);
-    expect(result).toMatchObject({ target: 'vr', id: 'vr-manual-ts' });
+    expect(result).toMatchObject({ target: 'vr', language: 'ts' });
   });
 });
 
 function questions() {
   return promptMock.mock.calls.flatMap(([question]) =>
     Array.isArray(question) ? question : [question],
-  ) as Array<{ message?: string; name?: string }>;
+  ) as Array<{
+    choices?: Array<{ value?: string }>;
+    message?: string;
+    name?: string;
+  }>;
 }
 
 function questionNames() {

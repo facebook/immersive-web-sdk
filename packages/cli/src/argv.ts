@@ -64,3 +64,21 @@ export function parseIntegerOption(
 
   return parsed;
 }
+
+export function parseOptionalPositiveIntegerOption(
+  value: CliOptionValue | undefined,
+  label: string,
+): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`${label} requires a positive integer value`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return parsed;
+}

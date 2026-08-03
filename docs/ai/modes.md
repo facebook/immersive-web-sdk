@@ -10,7 +10,7 @@ only changes whether that workspace is visible and how screenshots are sized.
 
 ## Collaborate Mode
 
-**Config:** `ai: {}` or `ai: { mode: 'collaborate' }` (default)
+**Command:** `npx iwsdk dev up --ai-mode collaborate`
 
 You and the AI share one visible Playwright-managed workspace. It opens at the
 clean application URL in runtime view; use the Runtime and Editor controls to
@@ -24,18 +24,8 @@ switch views without opening another browser.
 | Normal browser | Does not open                      |
 | Screenshots    | Downscaled to fit `screenshotSize` |
 
-```typescript
-import { defineConfig } from 'vite';
-import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
-
-export default defineConfig({
-  plugins: [
-    iwsdkDev({
-      emulator: { device: 'metaQuest3' },
-      ai: {},
-    }),
-  ],
-});
+```bash
+npx iwsdk dev up --ai-mode collaborate
 ```
 
 This is the normal development mode. Manual edits and agent actions operate on
@@ -43,7 +33,7 @@ the same page and scene document.
 
 ## Agent Mode
 
-**Config:** `ai: { mode: 'agent' }`
+**Command:** `npx iwsdk dev up --ai-mode agent`
 
 The AI works autonomously in the same managed workspace architecture, but the
 Playwright browser is headless and has a fixed viewport. No second browser is
@@ -58,31 +48,24 @@ separate manual runtime view.
 | Normal browser | Does not open                               |
 | Screenshots    | Exact viewport size                         |
 
-```typescript
-iwsdkDev({
-  emulator: { device: 'metaQuest3' },
-  ai: {
-    mode: 'agent',
-    screenshotSize: { width: 500, height: 500 },
-  },
-});
+```bash
+npx iwsdk dev up --ai-mode agent \
+  --screenshot-width 500 --screenshot-height 500
 ```
 
 Use this mode for unattended automation or deterministic screenshot dimensions.
 
 ## Workspace-Only Mode
 
-You can launch the managed runtime/editor without declaring an AI mode:
+Launch the managed runtime/editor without declaring an AI mode:
 
-```typescript
-iwsdkDev({
-  workspace: { enabled: true },
-});
+```bash
+npx iwsdk dev up
 ```
 
 This is useful for manual native scene editing, including browser-only projects
-that disable IWER. Set `workspace.open: false` to register the workspace without
-opening Playwright at startup; browser commands can launch it lazily.
+that disable IWER. Add `--no-open` to register the workspace without opening
+Playwright at startup; browser commands can launch it lazily.
 
 ## Settings Matrix
 
@@ -94,20 +77,12 @@ opening Playwright at startup; browser commands can launch it lazily.
 | `server.open` | `false`                  | `false`                  |
 | Screenshot    | Downscaled to fit bounds | Exact size               |
 
-## Configuration Reference
+## Session Flag Reference
 
-```typescript
-interface AiOptions {
-  mode?: 'agent' | 'collaborate'; // default: 'collaborate'
-  screenshotSize?: { width?: number; height?: number }; // default: 800x800
-}
+- `--ai-mode agent|collaborate`
+- `--headed` / `--headless`
+- `--open` / `--no-open`
+- `--screenshot-width <pixels>` / `--screenshot-height <pixels>`
 
-interface WorkspaceOptions {
-  enabled?: boolean; // default: false unless ai is configured
-  open?: boolean; // default: true
-  headless?: boolean; // default: false for workspace-only
-  screenshotSize?: { width?: number; height?: number }; // default: 800x800
-}
-```
-
-Omit both `ai` and `workspace` to disable managed Playwright and MCP features.
+The managed workspace and MCP endpoint remain available for every
+manifest-first development server even when no AI mode is selected.

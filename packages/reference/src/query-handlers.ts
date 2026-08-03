@@ -229,8 +229,13 @@ function getIwsdkPathPriority(filePath: string): number {
     return 0;
   }
   if (
+    normalized.startsWith('packages/create/template/') ||
+    normalized.startsWith('packages/create/guidance/')
+  ) {
+    return 4;
+  }
+  if (
     normalized.startsWith('packages/') &&
-    !normalized.startsWith('packages/starter-assets/') &&
     !normalized.startsWith('packages/reference-assets/')
   ) {
     return 1;
@@ -240,9 +245,6 @@ function getIwsdkPathPriority(filePath: string): number {
   }
   if (normalized.startsWith('playground/')) {
     return 3;
-  }
-  if (normalized.startsWith('packages/starter-assets/')) {
-    return 4;
   }
   if (normalized.startsWith('packages/reference-assets/')) {
     return 5;

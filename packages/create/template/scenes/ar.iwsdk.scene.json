@@ -1,0 +1,96 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {},
+  "resources": {},
+  "nodes": [
+    {
+      "id": "plant-sansevieria",
+      "name": "Plant Sansevieria",
+      "metadata": {
+        "iwsdk.validation": {
+          "allowFloating": true
+        }
+      },
+      "content": {
+        "type": "asset",
+        "asset": "plant-sansevieria"
+      },
+      "transform": {
+        "position": [1.2, 0.2, -1.8],
+        "scale": 2
+      },
+      "components": {
+        "RayInteractable": {},
+        "DistanceGrabbable": {
+          "movementMode": "MoveFromTarget"
+        }
+      }
+    },
+    {
+      "id": "robot",
+      "name": "Robot",
+      "metadata": {
+        "iwsdk.validation": {
+          "allowFloating": true
+        }
+      },
+      "content": {
+        "type": "asset",
+        "asset": "robot"
+      },
+      "transform": {
+        "position": [-1.2, 0.4, -1.8]
+      },
+      "components": {
+        "AudioSource": {
+          "src": "./audio/chime.mp3",
+          "maxInstances": 3,
+          "playbackMode": "fade-restart"
+        },
+        "RayInteractable": {},
+        "Robot": {}
+      }
+    },
+    {
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "content": {
+        "type": "asset",
+        "asset": "welcome-panel"
+      },
+      "transform": {
+        "position": [0, 1.6, -2],
+        "scale": 0.4
+      },
+      "components": {
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "top": "20px",
+          "left": "20px",
+          "width": "25vw",
+          "height": "40%"
+        }
+      }
+    },
+    {
+      "id": "webxr-banner",
+      "name": "WebXR Banner",
+      "metadata": {
+        "iwsdk.validation": {
+          "allowFloating": true
+        }
+      },
+      "content": {
+        "type": "asset",
+        "asset": "webxr-banner"
+      },
+      "transform": {
+        "position": [0, 1, 1.8],
+        "rotationDeg": [0, 180, 0],
+        "scale": [1, -1, 1]
+      },
+      "components": {}
+    }
+  ]
+}

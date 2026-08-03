@@ -133,6 +133,53 @@ export async function installDependenciesFromBundle(
   }
 }
 
+/** Initialize the shared reference corpus/model cache after dependencies exist. */
+export async function warmupReference(outDir: string) {
+  const spinner: Ora = ora({
+    text: 'Initializing IWSDK reference tools (one-time shared download) ...',
+    stream: process.stderr,
+    discardStdin: false,
+    hideCursor: false,
+    isEnabled: process.stderr.isTTY,
+  }).start();
+  const cliEntrypoint = path.join(
+    outDir,
+    'node_modules',
+    '@iwsdk',
+    'cli',
+    'dist',
+    'cli.js',
+  );
+  try {
+    const child = spawn(
+      process.execPath,
+      [cliEntrypoint, 'reference', 'warmup'],
+      {
+        cwd: outDir,
+        stdio: 'inherit',
+      },
+    );
+    await new Promise<void>((resolve, reject) => {
+      child.on('error', reject);
+      child.on('exit', (code) =>
+        code === 0
+          ? resolve()
+          : reject(new Error(`Reference initialization failed (${code})`)),
+      );
+    });
+    spinner.stopAndPersist({
+      symbol: stderrColor.green('✔'),
+      text: 'IWSDK reference tools ready',
+    });
+  } catch (error) {
+    spinner.stopAndPersist({
+      symbol: stderrColor.red('✖'),
+      text: 'IWSDK reference initialization failed',
+    });
+    throw error;
+  }
+}
+
 function printReferenceWarmupGuidance() {
   console.log(
     stdoutColor.gray(
@@ -157,6 +204,7 @@ export function printNextSteps(
   installed: boolean,
   actionItems: ActionItem[] = [],
   inPlace = false,
+  referenceReady = false,
 ) {
   const startCmd = 'npm run dev';
   console.log('\nNext steps:');
@@ -182,7 +230,9 @@ export function printNextSteps(
   if (!installed) {
     console.log(stdoutColor.gray('  npm install'));
   }
-  printReferenceWarmupGuidance();
+  if (!referenceReady) {
+    printReferenceWarmupGuidance();
+  }
   console.log(stdoutColor.gray(`  ${startCmd}`));
 }
 

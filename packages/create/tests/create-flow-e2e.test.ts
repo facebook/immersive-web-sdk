@@ -33,12 +33,11 @@ import {
   test,
   vi,
 } from 'vitest';
+import { isExampleAssetRequest } from '../../../scripts/development-url.mjs';
+import { createPackedExampleAssetFixture } from '../../../scripts/example-asset-package-fixture.mjs';
 import { iwsdkDev } from '../../vite-plugin-dev/src/index.js';
-import {
-  formatAppFeatures,
-  formatXRConfiguration,
-  getRecommendedConfiguration,
-} from '../src/catalog.js';
+import { getRecommendedConfiguration } from '../src/catalog.js';
+import { VERSION } from '../src/version.js';
 
 type Middleware = (
   request: Readable & {
@@ -60,7 +59,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CREATE_CLI = path.join(REPO_ROOT, 'packages', 'create', 'dist', 'cli.js');
-const STARTER_DIST = path.join(REPO_ROOT, 'packages', 'starter-assets', 'dist');
 const CREATE_E2E_EVIDENCE_DIR =
   process.env.IWSDK_CREATE_E2E_EVIDENCE_DIR == null
     ? undefined
@@ -87,7 +85,6 @@ const MANAGED_WORKSPACE_HEADERS = {
 const BUNDLE_PACKAGE_PATHS: Record<string, string> = {
   '@iwsdk/cli': 'packages/cli/iwsdk-cli.tgz',
   '@iwsdk/core': 'packages/core/iwsdk-core.tgz',
-  '@iwsdk/example-assets': 'packages/example-assets/iwsdk-example-assets.tgz',
   '@iwsdk/locomotor': 'packages/locomotor/iwsdk-locomotor.tgz',
   '@iwsdk/reference': 'packages/reference/iwsdk-reference.tgz',
   '@iwsdk/scene-composition':
@@ -112,7 +109,6 @@ beforeAll(async () => {
     process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN;
   process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN = TEST_MANAGED_WORKSPACE_TOKEN;
   await stat(CREATE_CLI);
-  await stat(path.join(STARTER_DIST, 'recipes', 'index.json'));
 });
 
 afterAll(() => {
@@ -148,8 +144,6 @@ describe('create-iwsdk scene flow E2E', () => {
           'browser',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -211,8 +205,6 @@ describe('create-iwsdk scene flow E2E', () => {
           'browser',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -251,8 +243,6 @@ describe('create-iwsdk scene flow E2E', () => {
           'browser',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -290,8 +280,6 @@ describe('create-iwsdk scene flow E2E', () => {
           'browser',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -332,8 +320,6 @@ describe('create-iwsdk scene flow E2E', () => {
           '--target',
           'browser',
           '--no-install',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -376,8 +362,6 @@ describe('create-iwsdk scene flow E2E', () => {
               language,
               '--no-install',
               '--no-git',
-              '--ai-tools',
-              'none',
               '--canary',
               bundleServer.origin,
             ],
@@ -394,9 +378,12 @@ describe('create-iwsdk scene flow E2E', () => {
             appRoot,
             'public',
             'scenes',
-            `${target}.iwsdk.scene.json`,
+            'main.iwsdk.scene.json',
           );
           const scene = JSON.parse(await readFile(sceneFile, 'utf8'));
+          const projectManifest = JSON.parse(
+            await readFile(path.join(appRoot, 'iwsdk.config.json'), 'utf8'),
+          );
           const generatedScenes = (
             await readdir(path.join(appRoot, 'public', 'scenes'))
           ).filter((file) => file.endsWith('.iwsdk.scene.json'));
@@ -422,31 +409,34 @@ describe('create-iwsdk scene flow E2E', () => {
             units: 'meters',
             version: 'iwsdk.scene.v1',
           });
-          expect(generatedScenes).toEqual([`${target}.iwsdk.scene.json`]);
-          expect(source).toContain(`./scenes/${target}.iwsdk.scene.json`);
-          if (target === 'browser') {
-            expect(viteConfig).toContain('workspace: { enabled: true }');
-          } else {
-            expect(viteConfig).toContain('ai: {}');
-            expect(viteConfig).not.toContain("mode: 'agent'");
+          expect(generatedScenes).toEqual(['main.iwsdk.scene.json']);
+          expect(source).toContain("from 'virtual:iwsdk-project'");
+          expect(source).not.toMatch(/SessionMode|\bxr:\s*(?:false|\{)/u);
+          expect(viteConfig).toContain('iwsdkDev()');
+          expect(viteConfig).not.toMatch(
+            /assetManifest|componentManifest|workspace:|\bai:/u,
+          );
+          expect(projectManifest).toMatchObject({
+            version: 'iwsdk.project.v1',
+            scene: './public/scenes/main.iwsdk.scene.json',
+            world: {
+              xr:
+                target === 'browser'
+                  ? false
+                  : expect.objectContaining({ mode: target }),
+            },
+          });
+          for (const demoPath of [
+            path.join('src', `robot.${language}`),
+            path.join('src', `panel.${language}`),
+            path.join('public', 'ui', 'welcome.uikitml'),
+            path.join('public', 'audio'),
+            path.join('public', 'textures'),
+          ]) {
+            await expect(
+              stat(path.join(appRoot, demoPath)),
+            ).resolves.toBeDefined();
           }
-          assertGeneratedSettings(source, viteConfig, result.stdout, target);
-          if (target === 'browser') {
-            expect(scene).toMatchObject({ nodes: [], resources: {} });
-            for (const demoPath of [
-              path.join('src', `mouselook.${language}`),
-              path.join('src', `robot.${language}`),
-              path.join('src', `panel.${language}`),
-              path.join('public', 'ui', 'welcome.uikitml'),
-              path.join('public', 'audio'),
-              path.join('public', 'textures'),
-            ]) {
-              await expect(
-                stat(path.join(appRoot, demoPath)),
-              ).rejects.toMatchObject({ code: 'ENOENT' });
-            }
-          }
-          expect(viteConfig).toContain('iwsdkDev');
           expect(viteConfig).not.toMatch(
             new RegExp(
               `${LEGACY_GENERATE_EXPORT}|${LEGACY_DISCOVER_EXPORT}`,
@@ -461,7 +451,7 @@ describe('create-iwsdk scene flow E2E', () => {
           const documentResponse = await runMiddleware(
             editorMiddleware,
             'GET',
-            `/__iwsdk/editor/document?scene=public/scenes/${target}.iwsdk.scene.json`,
+            '/__iwsdk/editor/document?scene=public/scenes/main.iwsdk.scene.json',
             '',
             MANAGED_WORKSPACE_HEADERS,
           );
@@ -474,7 +464,7 @@ describe('create-iwsdk scene flow E2E', () => {
           const editorShell = await runMiddleware(
             editorMiddleware,
             'GET',
-            `/__iwsdk/workspace?scene=public/scenes/${target}.iwsdk.scene.json`,
+            '/__iwsdk/workspace?scene=public/scenes/main.iwsdk.scene.json',
             '',
             MANAGED_WORKSPACE_HEADERS,
           );
@@ -484,7 +474,7 @@ describe('create-iwsdk scene flow E2E', () => {
             'documentUrl: "/__iwsdk/editor/document"',
           );
           expect(editorShell.body).not.toContain(
-            `scene=public/scenes/${target}.iwsdk.scene.json`,
+            'scene=public/scenes/main.iwsdk.scene.json',
           );
         }
       }
@@ -493,7 +483,7 @@ describe('create-iwsdk scene flow E2E', () => {
     }
   }, 30000);
 
-  test('does not advertise or accept legacy editor flags', async () => {
+  test('does not advertise or accept retired setup flags', async () => {
     const workspace = await makeTempDir();
     const help = await runCreate(['--help'], workspace);
 
@@ -503,6 +493,7 @@ describe('create-iwsdk scene flow E2E', () => {
     );
     expect(help.stdout).toContain('--force');
     expect(help.stdout).toContain('Use the desktop 3D starting point');
+    expect(help.stdout).not.toContain('--ai-tools');
     expect(help.stdout).not.toMatch(
       new RegExp(
         `${LEGACY_EDITOR_LABEL}|${LEGACY_FLAGS.map(escapeRegex).join('|')}`,
@@ -524,6 +515,18 @@ describe('create-iwsdk scene flow E2E', () => {
         /Preparing SDK bundle/i,
       );
     }
+
+    const retiredToolSelection = await runCreate(
+      ['retired-ai-tools-app', '-y', '--no-install', '--ai-tools', 'none'],
+      workspace,
+    );
+    expect(retiredToolSelection.exitCode).not.toBe(0);
+    expect(retiredToolSelection.stderr + retiredToolSelection.stdout).toMatch(
+      /unknown option.*--ai-tools/i,
+    );
+    expect(
+      retiredToolSelection.stderr + retiredToolSelection.stdout,
+    ).not.toMatch(/Preparing SDK bundle/i);
   });
 
   test('applies noninteractive browser feature flags deterministically', async () => {
@@ -545,8 +548,6 @@ describe('create-iwsdk scene flow E2E', () => {
           '--physics',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'none',
           '--canary',
           bundleServer.origin,
         ],
@@ -554,6 +555,12 @@ describe('create-iwsdk scene flow E2E', () => {
       );
 
       expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      const manifest = JSON.parse(
+        await readFile(
+          path.join(workspace, appName, 'iwsdk.config.json'),
+          'utf8',
+        ),
+      );
       const source = await readFile(
         path.join(workspace, appName, 'src', 'index.ts'),
         'utf8',
@@ -563,18 +570,16 @@ describe('create-iwsdk scene flow E2E', () => {
         grabbingEnabled: false,
         physicsEnabled: true,
       });
-      const expectedFeatures = formatAppFeatures(configuration.featureFlags);
-      const expectedXR = formatXRConfiguration(configuration);
-
-      expect(normalizeWhitespace(source)).toContain(
-        normalizeWhitespace(`features: ${expectedFeatures}`),
-      );
-      expect(normalizeWhitespace(source)).toContain(
-        normalizeWhitespace(`xr: ${expectedXR}`),
-      );
-      expect(normalizeWhitespace(result.stdout)).toContain(
-        normalizeWhitespace(`features: ${expectedFeatures}`),
-      );
+      expect(source).toContain("from 'virtual:iwsdk-project'");
+      expect(manifest.world).toMatchObject({
+        xr: false,
+        features: {
+          locomotion: false,
+          grabbing: false,
+          physics: true,
+        },
+      });
+      expect(configuration.featureFlags.physicsEnabled).toBe(true);
     } finally {
       await bundleServer.close();
     }
@@ -611,10 +616,11 @@ describe('create-iwsdk scene flow E2E', () => {
     }
   });
 
-  test('reports accurate recovery when an AI guidance recipe is unavailable', async () => {
+  test('embeds all coding-harness guidance without template network requests', async () => {
     const workspace = await makeTempDir();
+    const requests: string[] = [];
     const bundleServer = await startBundleServer({
-      missingPaths: ['recipes/base-agents-config.recipe.json'],
+      onRequest: (relativePath) => requests.push(relativePath),
     });
 
     try {
@@ -627,8 +633,6 @@ describe('create-iwsdk scene flow E2E', () => {
           'vr',
           '--no-install',
           '--no-git',
-          '--ai-tools',
-          'codex',
           '--canary',
           bundleServer.origin,
         ],
@@ -637,12 +641,37 @@ describe('create-iwsdk scene flow E2E', () => {
       const output = result.stderr + result.stdout;
 
       expect(result.exitCode, output).toBe(0);
-      expect(output).toContain('Could not configure Codex guidance');
-      expect(output).toContain(
-        'Re-run this create command in a new directory to retry',
-      );
+      expect(output).not.toContain('Could not configure');
       expect(output).not.toContain('iwsdk adapter sync');
       await stat(path.join(workspace, appName, 'package.json'));
+      await stat(path.join(workspace, appName, 'AGENTS.md'));
+      await stat(path.join(workspace, appName, 'CLAUDE.md'));
+      await stat(path.join(workspace, appName, '.claude', 'settings.json'));
+      await stat(
+        path.join(
+          workspace,
+          appName,
+          '.agents',
+          'skills',
+          'iwsdk-planner',
+          'SKILL.md',
+        ),
+      );
+      await stat(path.join(workspace, appName, '.codex', 'config.toml'));
+      await stat(
+        path.join(workspace, appName, '.cursor', 'rules', 'scene-json.mdc'),
+      );
+      await stat(
+        path.join(
+          workspace,
+          appName,
+          '.github',
+          'instructions',
+          'scene-json.instructions.md',
+        ),
+      );
+      await stat(path.join(workspace, appName, 'src', 'AGENTS.md'));
+      expect(requests).toEqual(['bundle.json']);
     } finally {
       await bundleServer.close();
     }
@@ -652,11 +681,16 @@ describe('create-iwsdk scene flow E2E', () => {
     'installs, builds, and serves every generated starter with the native editor route',
     async () => {
       const workspace = await makeTempDir();
-      const bundleServer = await startBundleServer({
-        packages: BUNDLE_PACKAGE_PATHS,
-      });
+      let packedAssetFixture: Awaited<
+        ReturnType<typeof createPackedExampleAssetFixture>
+      > | null = null;
+      let bundleServer: TestBundleServer | null = null;
 
       try {
+        packedAssetFixture = await createPackedExampleAssetFixture();
+        bundleServer = await startBundleServer({
+          packages: BUNDLE_PACKAGE_PATHS,
+        });
         await assertBundleTarballsExist();
         for (const target of EXPERIENCE_TARGETS) {
           for (const language of ['ts', 'js'] as const) {
@@ -670,8 +704,6 @@ describe('create-iwsdk scene flow E2E', () => {
                 '--language',
                 language,
                 '--no-git',
-                '--ai-tools',
-                'none',
                 '--canary',
                 bundleServer.origin,
               ],
@@ -731,6 +763,18 @@ describe('create-iwsdk scene flow E2E', () => {
                 '--strictPort',
               ],
               appRoot,
+              {
+                env: {
+                  // Automated coverage is explicitly headless. Product and
+                  // generated-project defaults remain headed.
+                  IWSDK_DEV_AI_MODE: '',
+                  IWSDK_DEV_HEADLESS: 'true',
+                  IWSDK_DEV_OPEN: 'true',
+                  IWSDK_DEV_SCREENSHOT_HEIGHT: '',
+                  IWSDK_DEV_SCREENSHOT_WIDTH: '',
+                  VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: packedAssetFixture.baseUrl,
+                },
+              },
             );
 
             try {
@@ -738,9 +782,9 @@ describe('create-iwsdk scene flow E2E', () => {
               const appPage = await waitForHttpOk(`${baseUrl}/`, devServer);
               expect(await appPage.text()).toContain('scene-container');
 
-              const scenePath = `public/scenes/${target}.iwsdk.scene.json`;
+              const scenePath = 'public/scenes/main.iwsdk.scene.json';
               const editorPage = await waitForHttpOk(
-                `${baseUrl}/__iwsdk/editor?scene=${scenePath}`,
+                `${baseUrl}/__iwsdk/editor`,
                 devServer,
                 45000,
                 MANAGED_WORKSPACE_HEADERS,
@@ -748,7 +792,7 @@ describe('create-iwsdk scene flow E2E', () => {
               expect(await editorPage.text()).toContain('IWSDK Scene Editor');
 
               const documentResponse = await waitForHttpOk(
-                `${baseUrl}/__iwsdk/editor/document?scene=${scenePath}`,
+                `${baseUrl}/__iwsdk/editor/document`,
                 devServer,
                 45000,
                 MANAGED_WORKSPACE_HEADERS,
@@ -762,13 +806,13 @@ describe('create-iwsdk scene flow E2E', () => {
                 appRoot,
                 devServer,
               );
+              expect(runtimeSession.aiMode).toBeUndefined();
+              expect(runtimeSession.browser).toMatchObject({
+                commandReady: true,
+                connected: true,
+                status: 'connected',
+              });
               if (target === 'browser') {
-                expect(runtimeSession.aiMode).toBeUndefined();
-                expect(runtimeSession.browser).toMatchObject({
-                  commandReady: true,
-                  connected: true,
-                  status: 'connected',
-                });
                 if (language === 'ts') {
                   const workspaceStatus = await runCommand(
                     'npx',
@@ -793,26 +837,24 @@ describe('create-iwsdk scene flow E2E', () => {
                     },
                   });
                 }
-              } else {
-                expect(runtimeSession.aiMode).toBe('collaborate');
               }
 
-              if (language === 'ts') {
-                await smokeGeneratedAppEditorFlow({
-                  appRoot,
-                  baseUrl,
-                  language,
-                  target,
-                  scenePath,
-                });
-              }
+              await smokeGeneratedAppEditorFlow({
+                appRoot,
+                baseUrl,
+                language,
+                target,
+                scenePath,
+                packedAssetFixture,
+              });
             } finally {
               await devServer.close();
             }
           }
         }
       } finally {
-        await bundleServer.close();
+        await bundleServer?.close();
+        await packedAssetFixture?.close();
       }
     },
     900000,
@@ -825,12 +867,16 @@ async function smokeGeneratedAppEditorFlow({
   language,
   target,
   scenePath,
+  packedAssetFixture,
 }: {
   appRoot: string;
   baseUrl: string;
   language: 'js' | 'ts';
   target: ExperienceTarget;
   scenePath: string;
+  packedAssetFixture: Awaited<
+    ReturnType<typeof createPackedExampleAssetFixture>
+  >;
 }) {
   const scenePublicUrl = scenePath.replace(/^public\//, '');
   browser ??= await launchChromium();
@@ -845,7 +891,7 @@ async function smokeGeneratedAppEditorFlow({
     ['environment-desk', 'plant-sansevieria', 'robot'].includes(assetId),
   );
   const evidenceDir =
-    CREATE_E2E_EVIDENCE_DIR == null
+    CREATE_E2E_EVIDENCE_DIR == null || language !== 'ts'
       ? undefined
       : path.join(CREATE_E2E_EVIDENCE_DIR, `generated-${target}`);
   if (evidenceDir != null) {
@@ -857,10 +903,17 @@ async function smokeGeneratedAppEditorFlow({
     viewport: { height: 720, width: 960 },
   });
   const editorPage = await browser.newPage({
-    extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
     ignoreHTTPSErrors: true,
     viewport: { height: 720, width: 960 },
   });
+  const appAssetRoute = await packedAssetFixture.installRoute(appPage, {
+    assetIds: sharedAssetIds,
+  });
+  // Runtime fetches only assets referenced by the active scene. The editor
+  // owns the complete authoring catalog and may load every lazy stock model to
+  // render asset-drawer previews, including assets not yet placed.
+  const editorAssetRoute = await packedAssetFixture.installRoute(editorPage);
+  await installManagedWorkspaceRoute(editorPage, baseUrl);
   const appDiagnostics = collectPageDiagnostics(appPage, sharedAssetIds);
   const editorDiagnostics = collectPageDiagnostics(editorPage, sharedAssetIds);
 
@@ -888,35 +941,30 @@ async function smokeGeneratedAppEditorFlow({
       undefined,
       { timeout: 30000 },
     );
-    let appScreenshotStats = await getPageScreenshotStats(
+    const appScreenshotStats = await waitForNonblankScreenshot(
       appPage,
       evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
     );
-    if (target !== 'browser') {
-      const renderDeadline = Date.now() + 30000;
-      while (
-        appScreenshotStats.uniqueColors <= 8 &&
-        Date.now() < renderDeadline
-      ) {
-        await appPage.waitForTimeout(250);
-        appScreenshotStats = await getPageScreenshotStats(
-          appPage,
-          evidenceDir == null ? undefined : path.join(evidenceDir, 'app.png'),
-        );
-      }
-      expect(
-        appScreenshotStats.uniqueColors,
-        `generated ${target} app should render a nonblank frame\n${JSON.stringify(
-          appDiagnostics.snapshot(),
-          null,
-          2,
-        )}`,
-      ).toBeGreaterThan(8);
-    } else {
-      expect(appScreenshotStats.sampledPixels).toBeGreaterThan(0);
-    }
+    expect(
+      appScreenshotStats.uniqueColors,
+      `generated ${target} app should render a nonblank frame\n${JSON.stringify(
+        appDiagnostics.snapshot(),
+        null,
+        2,
+      )}`,
+    ).toBeGreaterThan(8);
+    const systems = (await dispatchRuntime(
+      appPage,
+      'ecs_list_systems',
+      {},
+    )) as {
+      systems: Array<{ name: string }>;
+    };
+    expect(systems.systems.map((system) => system.name)).not.toContain(
+      'BrowserMouseLookSystem',
+    );
 
-    await editorPage.goto(`${baseUrl}/__iwsdk/editor?scene=${scenePath}`, {
+    await editorPage.goto(`${baseUrl}/__iwsdk/workspace`, {
       waitUntil: 'domcontentloaded',
     });
     expect(await editorPage.evaluate(() => window.isSecureContext)).toBe(true);
@@ -1097,17 +1145,13 @@ async function smokeGeneratedAppEditorFlow({
       appPage,
       savedComponentIds,
     );
-    const appAfterReloadScreenshotStats = await getPageScreenshotStats(
+    const appAfterReloadScreenshotStats = await waitForNonblankScreenshot(
       appPage,
       evidenceDir == null
         ? undefined
         : path.join(evidenceDir, 'app-after-reload.png'),
     );
-    if (target === 'browser') {
-      expect(appAfterReloadScreenshotStats.sampledPixels).toBeGreaterThan(0);
-    } else {
-      expect(appAfterReloadScreenshotStats.uniqueColors).toBeGreaterThan(8);
-    }
+    expect(appAfterReloadScreenshotStats.uniqueColors).toBeGreaterThan(8);
 
     const appSnapshot = appDiagnostics.snapshot();
     const editorSnapshot = editorDiagnostics.snapshot();
@@ -1115,11 +1159,11 @@ async function smokeGeneratedAppEditorFlow({
     expect(filterIgnorableBrowserErrors(editorSnapshot.consoleErrors)).toEqual(
       [],
     );
-    expect(filterIgnorableRequestFailures(appSnapshot.failedRequests)).toEqual(
-      [],
-    );
     expect(
-      filterIgnorableRequestFailures(editorSnapshot.failedRequests),
+      filterIgnorableRequestFailures(appSnapshot.failedRequests, baseUrl),
+    ).toEqual([]);
+    expect(
+      filterIgnorableRequestFailures(editorSnapshot.failedRequests, baseUrl),
     ).toEqual([]);
     expect(filterIgnorableBadResponses(appSnapshot.badResponses)).toEqual([]);
     expect(filterIgnorableBadResponses(editorSnapshot.badResponses)).toEqual(
@@ -1127,6 +1171,18 @@ async function smokeGeneratedAppEditorFlow({
     );
     assertAssetResponses(appSnapshot.assetResponses, sharedAssetIds);
     assertAssetResponses(editorSnapshot.assetResponses, sharedAssetIds);
+    for (const assetId of sharedAssetIds) {
+      expect(
+        appAssetRoute.requests.some((request) => request.assetId === assetId),
+        `packed app CDN route request for ${assetId}`,
+      ).toBe(true);
+      expect(
+        editorAssetRoute.requests.some(
+          (request) => request.assetId === assetId,
+        ),
+        `packed editor CDN route request for ${assetId}`,
+      ).toBe(true);
+    }
 
     if (evidenceDir != null) {
       await writeFile(
@@ -1135,12 +1191,12 @@ async function smokeGeneratedAppEditorFlow({
           {
             app: {
               afterReloadScreenshot: {
-                path: path.join(evidenceDir, 'app-after-reload.png'),
+                path: 'app-after-reload.png',
                 stats: appAfterReloadScreenshotStats,
               },
               hierarchy,
               initialScreenshot: {
-                path: path.join(evidenceDir, 'app.png'),
+                path: 'app.png',
                 stats: appScreenshotStats,
               },
               runtimeComponents: componentSummary,
@@ -1154,7 +1210,7 @@ async function smokeGeneratedAppEditorFlow({
             editor: {
               proofBefore: editorProofBefore,
               screenshot: {
-                path: path.join(evidenceDir, 'editor.png'),
+                path: 'editor.png',
                 stats: editorScreenshotStats,
               },
               toolResult: {
@@ -1269,47 +1325,7 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function assertGeneratedSettings(
-  source: string,
-  viteConfig: string,
-  output: string,
-  target: ExperienceTarget,
-) {
-  const configuration = getRecommendedConfiguration(target);
-  const expectedFeatures = formatAppFeatures(configuration.featureFlags);
-  const expectedXR = formatXRConfiguration(configuration);
-  expect(normalizeWhitespace(source)).toContain(
-    normalizeWhitespace(`features: ${expectedFeatures}`),
-  );
-  expect(normalizeWhitespace(output)).toContain(
-    normalizeWhitespace(`xr: ${expectedXR}`),
-  );
-  expect(normalizeWhitespace(output)).toContain(
-    normalizeWhitespace(`features: ${expectedFeatures}`),
-  );
-
-  if (target === 'browser') {
-    expect(source).toMatch(/\bxr:\s*false\b/);
-    expect(source).toMatch(/canvasPointerEvents:\s*true/);
-    expect(source).not.toMatch(/SessionMode\.Immersive(?:AR|VR)/);
-    expect(viteConfig).toMatch(/iwer:\s*false/);
-    return;
-  }
-
-  expect(source).toMatch(
-    new RegExp(
-      `sessionMode:\\s*SessionMode\\.Immersive${target === 'ar' ? 'AR' : 'VR'}`,
-    ),
-  );
-  expect(source).not.toMatch(/\bxr:\s*false\b/);
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, ' ').replace(/,\s*}/g, ' }').trim();
-}
-
 type BundleServerOptions = {
-  missingPaths?: readonly string[];
   onRequest?: (relativePath: string) => Promise<void> | void;
   packages?: Record<string, string>;
 };
@@ -1322,7 +1338,6 @@ type TestBundleServer = {
 async function startBundleServer(
   options: BundleServerOptions = {},
 ): Promise<TestBundleServer> {
-  const missingPaths = new Set(options?.missingPaths ?? []);
   const packages = options?.packages ?? {};
   const server: Server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -1332,25 +1347,18 @@ async function startBundleServer(
     );
     await options?.onRequest?.(relativePath);
 
-    if (missingPaths.has(relativePath)) {
-      response.writeHead(404).end();
-      return;
-    }
-
     if (relativePath === 'bundle.json') {
       response.writeHead(200, { 'content-type': 'application/json' }).end(
         JSON.stringify({
           packages,
           schemaVersion: 1,
-          sdkVersion: '0.0.0-test',
+          sdkVersion: VERSION,
         }),
       );
       return;
     }
 
-    const serveRoot = relativePath.startsWith('packages/')
-      ? REPO_ROOT
-      : STARTER_DIST;
+    const serveRoot = REPO_ROOT;
     const filePath = path.resolve(serveRoot, relativePath);
     if (
       filePath !== serveRoot &&
@@ -1416,7 +1424,12 @@ async function getFreePort(): Promise<number> {
   return address.port;
 }
 
-function startLongRunningCommand(command: string, args: string[], cwd: string) {
+function startLongRunningCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  options: { env?: Record<string, string> } = {},
+) {
   const child = spawn(command, args, {
     cwd,
     detached: true,
@@ -1424,6 +1437,7 @@ function startLongRunningCommand(command: string, args: string[], cwd: string) {
       ...process.env,
       BROWSER: 'none',
       NO_COLOR: '1',
+      ...options.env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -1702,7 +1716,7 @@ function collectPageDiagnostics(page: any, assetIds: string[]) {
       badResponses.push(`${response.status()} ${url}`);
     }
     for (const assetId of assetIds) {
-      if (url.includes(`/iwsdk-assets/${assetId}/`)) {
+      if (isExampleAssetRequest(url, assetId)) {
         assetResponses.get(assetId)?.push(response.status());
       }
     }
@@ -1724,9 +1738,6 @@ function filterIgnorableBrowserErrors(errors: string[]): string[] {
       // Chromium can surface an empty pageerror for a rejected browser API
       // without an Error payload. Keep diagnostics that contain a message.
       error.trim().length > 0 &&
-      !error.includes(
-        'Failed to load resource: the server responded with a status of 404',
-      ) &&
       !error.includes('Outdated Optimize Dep') &&
       !error.includes(
         'Error loading environment living_room from CDN TypeError: Failed to fetch',
@@ -1734,18 +1745,25 @@ function filterIgnorableBrowserErrors(errors: string[]): string[] {
   );
 }
 
-function filterIgnorableRequestFailures(failures: string[]): string[] {
+function filterIgnorableRequestFailures(
+  failures: string[],
+  baseUrl: string,
+): string[] {
+  const managedOrigin = `${new URL(baseUrl).origin}/`;
   return failures.filter(
     (failure) =>
       !failure.includes('/favicon.ico') &&
       !failure.includes('/.well-known/') &&
+      // The managed workspace intentionally replaces its runtime iframe with
+      // the editor. Chromium reports in-flight module GETs canceled by that
+      // navigation as ERR_ABORTED even though the destination is healthy.
+      !(
+        failure.startsWith(`GET ${managedOrigin}`) &&
+        failure.endsWith(' net::ERR_ABORTED')
+      ) &&
       !(
         failure.includes('@iwer/sem@') &&
         failure.includes('/captures/living_room.json')
-      ) &&
-      !(
-        failure.includes('/node_modules/.vite/deps/') &&
-        failure.includes('net::ERR_ABORTED')
       ),
   );
 }
@@ -1823,6 +1841,36 @@ async function getPageScreenshotStats(
 
     return { sampledPixels, uniqueColors: colors.size };
   }, screenshot.toString('base64'));
+}
+
+async function waitForNonblankScreenshot(
+  page: any,
+  screenshotPath?: string,
+  timeoutMs = 30000,
+): Promise<{ sampledPixels: number; uniqueColors: number }> {
+  const deadline = Date.now() + timeoutMs;
+  let stats = await getPageScreenshotStats(page, screenshotPath);
+  while (stats.uniqueColors <= 8 && Date.now() < deadline) {
+    await page.waitForTimeout(250);
+    stats = await getPageScreenshotStats(page, screenshotPath);
+  }
+  return stats;
+}
+
+async function installManagedWorkspaceRoute(
+  page: any,
+  baseUrl: string,
+): Promise<void> {
+  const managedOrigin = new URL(baseUrl).origin;
+  await page.route(`${managedOrigin}/**`, async (route: any) => {
+    const request = route.request();
+    await route.continue({
+      headers: {
+        ...request.headers(),
+        ...MANAGED_WORKSPACE_HEADERS,
+      },
+    });
+  });
 }
 
 async function dispatchRuntime(

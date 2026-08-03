@@ -11,11 +11,9 @@ import {
   FEATURE_CATALOG,
   FeatureKey,
   getRecommendedConfiguration,
-  getVariantId,
 } from './catalog.js';
 import { isValidProjectTarget } from './project-target.js';
 import {
-  AiTool,
   ExperienceTarget,
   FeatureFlags,
   Language,
@@ -113,7 +111,6 @@ export async function promptFlow(
   assertNotCancelled();
 
   let language: Language = 'ts';
-  let aiTools: AiTool[] = [];
   let gitInit = true;
   let installNow = true;
   let configuration = getRecommendedConfiguration(target);
@@ -159,24 +156,6 @@ export async function promptFlow(
     }
     configuration = getRecommendedConfiguration(target, overrides);
 
-    const aiAnswer = await prompts(
-      {
-        type: 'multiselect',
-        name: 'aiTools',
-        message: 'Configure coding-tool integrations?',
-        choices: [
-          { title: 'Claude Code (Anthropic)', value: 'claude' },
-          { title: 'Cursor', value: 'cursor' },
-          { title: 'GitHub Copilot', value: 'copilot' },
-          { title: 'OpenAI Codex', value: 'codex' },
-        ],
-        hint: '- Space to select, Enter to continue with none',
-      },
-      { onCancel },
-    );
-    assertNotCancelled();
-    aiTools = (aiAnswer.aiTools as AiTool[]) || [];
-
     const operationalAnswers = await prompts(
       [
         {
@@ -205,16 +184,13 @@ export async function promptFlow(
 
   return {
     name,
-    id: getVariantId(target, language),
     installNow,
     target,
     xrEnabled: configuration.xrEnabled,
     mode: configuration.mode,
     language,
-    features: [],
     featureFlags: configuration.featureFlags,
     gitInit,
-    aiTools,
     xrFeatureStates: configuration.xrFeatureStates,
     actionItems: [],
     prerequisites: [],

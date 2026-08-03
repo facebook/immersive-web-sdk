@@ -1,39 +1,55 @@
 {
-  "checkedAt": "2026-07-25T07:02:47.376Z",
+  "checkedAt": "2026-07-31T19:11:04.733Z",
   "command": "pnpm test:native-scene-starter-evidence",
   "files": [
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app.png",
-      "sha256": "273a1583608427b3bd3150d678df0bc1ad549ca4b38f6097a1d23274cb44c9e1"
+      "sha256": "d3a196bdb20bfaddb57fd80d4c9a08da6140746234258b216e62e3e2a66bdffe"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/editor.png",
-      "sha256": "45bf4ec035edf99f2a9e0ae116b4ab120a9e00ca7d98d2394708da626285286c"
+      "sha256": "4a96868625b15760938e048d716fd5310b01a60438afaeef0c0ee1d971540505"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/app-after-reload.png",
-      "sha256": "3dad4e3cf695762fd05239d7d603dc94c9d9143d26add55e671da6c325830086"
+      "sha256": "bd5978cb581674f06f7de75812867dfb6c0dec619f8f758e2a504c6d65c67d74"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-vr/proof.json",
-      "sha256": "a23be5b53cae6e0d8315d9675a69fd7882cd5622ad9b3a37ab21b3aaa3f8e425"
+      "sha256": "43332d50c312646e939a06975e7d904670b33daa7e96021796df894726f31c01"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app.png",
-      "sha256": "eaa8333052f511d191cb9dd9f94800b5a22bcf068b16e354e73deb0d819694ea"
+      "sha256": "31877d5977489e6454863837df22add76a53c1ffe7efff2f022cf8093f8291a1"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/editor.png",
-      "sha256": "ca4dfa7ae0937a3b45ad1b4143a60b06038aac34329e7f3bd8ef4b92bde51d09"
+      "sha256": "266fd0e3aca966b33a1b466cabd1e8bb4f78af1857a2a85fa86b83e89ced588c"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/app-after-reload.png",
-      "sha256": "625596f356192152dbe0de2da29a3ac4e00dea54a1818207003a852da3df783f"
+      "sha256": "7532c180c2388f62c910b32a89f146d924b14565498bd1132090d712dcb89423"
     },
     {
       "path": "docs/test-evidence/native-scene-starters/current/generated-ar/proof.json",
-      "sha256": "2ca5ee31d8f0df5aba3248e2f73d42db83db182e5e9a7d89952c2b46aa85ee9a"
+      "sha256": "7ff04fc98d49a8000f89e05a7a3c03a436e2d47cbf5a720893fafd73b84b443b"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-browser/app.png",
+      "sha256": "3f35f70fc63b79a5885bf754ce45576d92d95ced62789257237f51a4c025d9aa"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-browser/editor.png",
+      "sha256": "49f544a10f73218909f3ae2754d5d67f060486655c1bb0d45037ae8446f306b4"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-browser/app-after-reload.png",
+      "sha256": "63f54f564bbd7af1c81ae34c87c59bcb0e901b43418b492fa20fa7e21fc89548"
+    },
+    {
+      "path": "docs/test-evidence/native-scene-starters/current/generated-browser/proof.json",
+      "sha256": "ce66106045f016f97a4943de2fd641feec7cbefb6a1a369053cef192c66409a2"
     }
   ],
-  "targets": ["generated-vr", "generated-ar"]
+  "targets": ["generated-vr", "generated-ar", "generated-browser"]
 }

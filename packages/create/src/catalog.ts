@@ -5,14 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  ExperienceTarget,
-  FeatureFlags,
-  Language,
-  TriState,
-  VariantId,
-  XRMode,
-} from './types.js';
+import { ExperienceTarget, FeatureFlags, TriState, XRMode } from './types.js';
 
 export type ExperienceDefinition = {
   label: string;
@@ -220,44 +213,4 @@ export function getRecommendedConfiguration(
     featureFlags: features,
     xrFeatureStates: deriveXRFeatureStates(target, features),
   };
-}
-
-export function getVariantId(
-  target: ExperienceTarget,
-  language: Language,
-): VariantId {
-  return `${target}-manual-${language}`;
-}
-
-function toXRFlag(state: TriState): string {
-  return state === 'required'
-    ? '{ required: true }'
-    : state === 'optional'
-      ? 'true'
-      : 'false';
-}
-
-export function formatXRFeatures(states: Record<string, TriState>): string {
-  const entries = Object.entries(states).map(
-    ([key, state]) => `${key}: ${toXRFlag(state)}`,
-  );
-  return `{ ${entries.join(', ')} }`;
-}
-
-export function formatAppFeatures(features: FeatureFlags): string {
-  const locomotion = features.locomotionEnabled
-    ? `{ useWorker: ${features.locomotionUseWorker !== false ? 'true' : 'false'}${features.locomotionBrowserControls ? ', browserControls: true, initialPlayerPosition: [-4, 0, -6]' : ''} }`
-    : 'false';
-  return `{ locomotion: ${locomotion}, grabbing: ${features.grabbingEnabled}, physics: ${features.physicsEnabled}, sceneUnderstanding: ${features.sceneUnderstandingEnabled}, environmentRaycast: ${features.environmentRaycastEnabled} }`;
-}
-
-export function formatXRConfiguration(config: ScaffoldConfiguration): string {
-  if (!config.xrEnabled || !config.mode) {
-    return 'false';
-  }
-  return `{ sessionMode: SessionMode.Immersive${config.mode === 'ar' ? 'AR' : 'VR'}, offer: 'always', features: ${formatXRFeatures(config.xrFeatureStates)} }`;
-}
-
-export function formatWorldOptions(config: ScaffoldConfiguration): string {
-  return `xr: ${formatXRConfiguration(config)},\nfeatures: ${formatAppFeatures(config.featureFlags)}`;
 }

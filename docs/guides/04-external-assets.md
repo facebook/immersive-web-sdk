@@ -26,10 +26,12 @@ IWSDK includes a powerful AssetManager that handles loading, caching, and optimi
 
 ### Asset Loading Priorities
 
-IWSDK supports two loading priorities to optimize performance:
+IWSDK supports three loading priorities to optimize performance:
 
 1. **Critical**: Load before the application starts - **blocks World.create() until loaded**
 2. **Background**: Load early but don't block initialization - **prevents runtime loading hiccups**
+3. **Lazy**: Register the asset without fetching it; scene placement or an
+   explicit by-ID load fetches it on first use
 
 **Choose your loading strategy carefully:**
 
@@ -37,43 +39,74 @@ IWSDK supports two loading priorities to optimize performance:
 
 - **Background priority**: For assets you know you'll need but that shouldn't block startup (decorative objects, optional audio, extra textures). These start loading immediately after critical assets finish, so they're cached and ready when you need them - avoiding stutters caused by loading during runtime.
 
+- **Lazy priority**: For the complete authoring catalog when only the active
+  scene needs a subset. Concurrent first use is deduplicated.
+
 - **Runtime loading**: For user-specific or conditional content that may never be needed. Load these on-demand using `AssetManager.loadGLTF()` or similar methods.
+
+Every asset request has a finite 30-second load timeout. A critical failure
+rejects `World.create()` with an `AssetLoadError` that identifies the asset ID,
+URL, and underlying cause. A background failure logs that same structured
+error without stopping world creation. Lazy and explicit loads reject their
+caller, so application code can decide whether to retry or substitute a
+fallback.
 
 ## Setting Up Asset Loading
 
-Assets are configured using an `AssetManifest` object that you pass to `World.create()`. Let's look at how this works in practice.
+Assets live in the module selected by `iwsdk.config.json`. The runtime and
+editor import the exact same catalog.
 
 ### Asset Manifest Structure
 
-In your starter app's `src/index.ts`, you'll see this pattern:
+In `src/assets.ts`:
 
-```javascript
-import { AssetManifest, AssetType, World } from '@iwsdk/core';
+```typescript
+import { AssetType, defineAssets } from '@iwsdk/core';
 
-const assets: AssetManifest = {
+const publicAssetUrl = (path: string) =>
+  `${import.meta.env.BASE_URL}${path.replace(/^\/+/u, '')}`;
+
+export default defineAssets({
   robot: {
-    url: '/gltf/robot/robot.gltf',
+    url: publicAssetUrl('gltf/robot/robot.gltf'),
     type: AssetType.GLTF,
-    priority: 'critical',
+    priority: 'lazy',
   },
   webxr: {
-    url: '/textures/webxr.png',
+    url: publicAssetUrl('textures/webxr.png'),
     type: AssetType.Texture,
     priority: 'critical',
   },
   chimeSound: {
-    url: '/audio/chime.mp3',
+    url: publicAssetUrl('audio/chime.mp3'),
     type: AssetType.Audio,
     priority: 'background',
   },
-};
-
-World.create(document.getElementById('scene-container'), {
-  assets, // Pass the manifest to World.create
-  // ... other options
-}).then((world) => {
-  // Assets are now loaded and available via AssetManager
 });
+```
+
+Select it in `iwsdk.config.json`:
+
+```json
+{
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/main.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": { "xr": { "mode": "vr" } }
+}
+```
+
+Then use the virtual project options in application code:
+
+```typescript
+import { World } from '@iwsdk/core';
+import projectOptions from 'virtual:iwsdk-project';
+
+World.create(document.getElementById('scene-container'), projectOptions).then(
+  (world) => {
+    // Assets are now loaded and available via AssetManager
+  },
+);
 ```
 
 ### Supported Asset Types
@@ -84,6 +117,7 @@ IWSDK supports these asset types:
 - **`AssetType.Texture`**: Images for materials (JPG, PNG, WebP)
 - **`AssetType.HDRTexture`**: HDR environment maps (HDR format)
 - **`AssetType.Audio`**: Audio files (MP3, WAV, OGG)
+- **`AssetType.UIKitML`**: Runtime-parsed spatial UI documents
 
 ::: tip Asset Organization
 Place your assets in the `public/` directory of your project. Common patterns:
@@ -108,7 +142,7 @@ import { AssetManager } from '@iwsdk/core';
 // In your asset manifest
 const assets = {
   myRobot: {
-    url: '/gltf/robot.glb',
+    url: publicAssetUrl('gltf/robot.glb'),
     type: AssetType.GLTF,
     priority: 'critical',
   },
@@ -164,7 +198,7 @@ import {
 // In your asset manifest (already in your starter app)
 const assets = {
   webxr: {
-    url: '/textures/webxr.png',
+    url: publicAssetUrl('textures/webxr.png'),
     type: AssetType.Texture,
     priority: 'critical',
   },
@@ -212,7 +246,7 @@ You can also load assets dynamically after the app starts:
 
 ```javascript
 // Load an asset at runtime
-AssetManager.loadGLTF('/gltf/dynamic-object.glb', 'dynamicModel')
+AssetManager.loadGLTF(publicAssetUrl('gltf/dynamic-object.glb'), 'dynamicModel')
   .then(() => {
     const { scene: dynamicMesh } = AssetManager.getGLTF('dynamicModel');
     dynamicMesh.position.set(0, 2, -3);
@@ -222,6 +256,44 @@ AssetManager.loadGLTF('/gltf/dynamic-object.glb', 'dynamicModel')
     console.error('Failed to load dynamic asset:', error);
   });
 ```
+
+## Remote Stock Assets And Local Mirrors
+
+Read-only stock models are available from the verified immutable
+`@iwsdk/example-assets@0.4.2` package. Pin that exact version; do not use
+`latest` or a semver range. Keep the base URL in one place so asset IDs and
+scene files do not change when an application needs to localize the bytes:
+
+```typescript
+const configuredStockAssetBase =
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim();
+const stockAssetBase = (
+  configuredStockAssetBase ||
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets'
+).replace(/\/+$/u, '');
+
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
+```
+
+For an offline or first-party deployment, download the same exact package
+version, copy its complete `assets/` directory—including every texture and
+buffer referenced by each glTF—under your own public directory, then set:
+
+```dotenv
+VITE_IWSDK_EXAMPLE_ASSET_BASE_URL=/vendor/iwsdk-assets
+```
+
+The localized directory must preserve `assets/<asset-id>/<file>` layout. Run a
+production build and test it with the network disabled; loading only the entry
+`.gltf` file is insufficient because its relative resources are fetched
+separately. Production applications should own or mirror every critical asset
+rather than depending on a sample CDN's availability.
+
+IWSDK repository tests override the base URL with a server backed by the exact
+packed bytes for deterministic offline coverage. The named CDN release check
+separately validates the public package's CORS, MIME types, hashes, relative
+glTF resources, and browser loading.
 
 ## What's Next
 

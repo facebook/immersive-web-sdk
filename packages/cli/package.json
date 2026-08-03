@@ -28,6 +28,7 @@
   },
   "files": [
     "dist",
+    "guidance",
     "README.md"
   ],
   "scripts": {

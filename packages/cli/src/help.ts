@@ -7,6 +7,7 @@
 
 import {
   getRuntimeOperationByCliPath,
+  RUNTIME_OPERATIONS,
   type JsonSchema,
 } from './runtime-contract.js';
 
@@ -117,6 +118,26 @@ export function buildRuntimeCommandHelp(
   return lines;
 }
 
+export function buildRuntimeDomainHelp(domain: string): string[] {
+  const operations = RUNTIME_OPERATIONS.filter(
+    (operation) => operation.domain === domain,
+  );
+  if (operations.length === 0) {
+    return [`Unknown command group "${domain}".`];
+  }
+  return [
+    `Usage: iwsdk ${domain} <action>`,
+    '',
+    'Actions:',
+    ...operations.map(
+      (operation) =>
+        `  ${operation.action.padEnd(24)} ${operation.description}`,
+    ),
+    '',
+    `Run "iwsdk ${domain} <action> --help" for parameters.`,
+  ];
+}
+
 export function buildMcpInspectHelp(): string[] {
   return [
     'Usage: iwsdk mcp inspect [--tool <mcpName>]',
@@ -187,14 +208,49 @@ export function buildReferenceCommandHelp(action?: string): string[] {
   ];
 }
 
+export function buildDevCommandHelp(action?: string): string[] {
+  if (action === 'up' || action === 'restart') {
+    return [
+      `Usage: iwsdk dev ${action} [options]`,
+      '',
+      'Start the project runtime with operator-owned managed-session settings.',
+      '',
+      'Options:',
+      '  --ai-mode <mode>             AI session: agent (headless) or collaborate (headed)',
+      '  --headless                    Launch the managed browser headlessly',
+      '  --headed                      Launch the managed browser headed (default)',
+      '  --open                         Open the managed browser on startup (default)',
+      '  --no-open                      Do not open the managed browser on startup',
+      '  --screenshot-width <pixels>    Positive screenshot width; default behavior is 800px',
+      '  --screenshot-height <pixels>   Positive screenshot height; default behavior is 800px',
+      '  --foreground                   Keep the package-manager process attached',
+      '  --timeout <milliseconds>       Runtime readiness timeout (default: 60000)',
+      '  --workspace <path>             Select an IWSDK application explicitly',
+    ];
+  }
+
+  return [
+    'Usage: iwsdk dev <subcommand>',
+    '',
+    'Subcommands:',
+    '  up [options]',
+    '  restart [options]',
+    '  down [--workspace <path>]',
+    '  status [--workspace <path>]',
+    '  logs [--tail <lines>] [--workspace <path>]',
+    '  open [--workspace <path>]',
+  ];
+}
+
 export function usageLines(): string[] {
   return [
     'Usage: iwsdk <command> [subcommand] [--help]',
     '',
     'Commands:',
     '  status',
-    '  dev up|down|restart|logs|open|status [--open] [--foreground]',
-    '  adapter sync|status|prune',
+    '  dev up|restart [--ai-mode <mode>] [--headed|--headless] [--open|--no-open]',
+    '  dev down|logs|open|status',
+    '  adapter sync|status|prune|prompt',
     '  reference status|warmup|inspect|search|relationship|api|file|components|systems|dependents|examples',
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',

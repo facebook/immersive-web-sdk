@@ -195,17 +195,18 @@ Once the project is created, you'll see a structure like this:
 
 ```
 my-iwsdk-app/
+├── iwsdk.config.json   # Scene, modules, serializable world/dev authority
 ├── src/
-│   ├── index.ts         # Application entry point and world setup
+│   ├── index.ts         # World creation and explicit system registration
+│   ├── assets.ts        # Complete runtime/editor asset catalog
+│   ├── components.ts    # Custom component declarations
 │   ├── robot.ts         # Example custom component and system
 │   └── panel.ts         # UI panel interaction system
 ├── public/
+│   ├── scenes/
+│   │   └── main.iwsdk.scene.json # Authored hierarchy and component values
 │   ├── audio/           # Audio files (.mp3, .wav, etc.)
 │   │   └── chime.mp3
-│   ├── gltf/            # 3D models and textures
-│   │   ├── environmentDesk/
-│   │   ├── plantSansevieria/
-│   │   └── robot/
 │   ├── textures/        # Standalone texture files
 │   └── ui/
 │       └── welcome.uikitml  # Runtime-loaded spatial UI markup
@@ -217,12 +218,21 @@ my-iwsdk-app/
 
 ### Key Files Explained
 
-- **`src/index.ts`**: This is where your application starts. It creates the ECS world, loads assets, spawns entities, and registers systems - everything happens here.
+- **`iwsdk.config.json`**: The committed project authority shared by Vite,
+  runtime, and editor. It selects the scene and asset/component modules and
+  stores JSON-safe world and emulator options.
+- **`src/index.ts`**: Ordinary application logic. It passes
+  `virtual:iwsdk-project` to `World.create()` and keeps complete, typed system
+  registration calls in code.
+- **`src/assets.ts`** / **`src/components.ts`**: The exact catalogs consumed by
+  both runtime and editor.
 - **`src/robot.ts`** & **`src/panel.ts`**: Example custom components and systems showing how to create interactive behaviors.
 - **`public/ui/welcome.uikitml`**: Spatial UI markup parsed directly by the runtime for the 3D interface panel. We'll learn more about UIKitML in [Chapter 10: Spatial UI with UIKitML](./10-spatial-ui-uikitml.md).
-- **`public/gltf/`**: Organized folder structure for 3D models, with each model in its own subfolder alongside its textures.
+- **`public/scenes/main.iwsdk.scene.json`**: Static scene hierarchy,
+  transforms, assets, environment, and component values.
 - **`public/audio/`**: Audio files used for sound effects and spatial audio.
-- **`vite.config.ts`**: Build configuration that includes IWSDK-specific plugins for WebXR emulation and project assets.
+- **`vite.config.ts`**: Build configuration with bare `iwsdkDev()`; project
+  metadata does not need to be duplicated here.
 
 ## Starter Dev Commands
 

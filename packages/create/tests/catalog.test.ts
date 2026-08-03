@@ -10,9 +10,7 @@ import {
   EXPERIENCE_TARGETS,
   FEATURE_CATALOG,
   deriveXRFeatureStates,
-  formatWorldOptions,
   getRecommendedConfiguration,
-  getVariantId,
 } from '../src/catalog.js';
 import type { FeatureFlags } from '../src/types.js';
 
@@ -159,31 +157,5 @@ describe('experience catalog', () => {
       meshDetection: 'optional',
       hitTest: 'optional',
     });
-  });
-
-  it('maps every target and language to a recipe id', () => {
-    expect(
-      (['browser', 'vr', 'ar'] as const).flatMap((target) =>
-        (['ts', 'js'] as const).map((language) =>
-          getVariantId(target, language),
-        ),
-      ),
-    ).toEqual([
-      'browser-manual-ts',
-      'browser-manual-js',
-      'vr-manual-ts',
-      'vr-manual-js',
-      'ar-manual-ts',
-      'ar-manual-js',
-    ]);
-  });
-
-  it('formats browser and XR world options from the normalized configuration', () => {
-    expect(formatWorldOptions(getRecommendedConfiguration('browser'))).toBe(
-      'xr: false,\nfeatures: { locomotion: { useWorker: true, browserControls: true, initialPlayerPosition: [-4, 0, -6] }, grabbing: true, physics: false, sceneUnderstanding: false, environmentRaycast: false }',
-    );
-    expect(formatWorldOptions(getRecommendedConfiguration('vr'))).toBe(
-      "xr: { sessionMode: SessionMode.ImmersiveVR, offer: 'always', features: { handTracking: true } },\nfeatures: { locomotion: { useWorker: true }, grabbing: true, physics: false, sceneUnderstanding: false, environmentRaycast: false }",
-    );
   });
 });

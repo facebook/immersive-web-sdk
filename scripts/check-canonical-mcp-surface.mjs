@@ -19,11 +19,10 @@ const MCP_SURFACE_MARKERS_PATH = path.join(
 );
 const INCLUDE_TARGETS = [
   'docs/ai',
+  'packages/create/guidance',
+  'packages/create/template',
   'packages/create/src/installer.ts',
   'packages/cli/src/help.ts',
-  'packages/starter-assets/PROJECT_AGENTS.md',
-  'packages/starter-assets/PROJECT_CLAUDE.md',
-  'packages/starter-assets/starter-template',
 ];
 const INCLUDE_EXTENSIONS = new Set([
   '.json',

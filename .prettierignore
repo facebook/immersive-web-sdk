@@ -16,4 +16,5 @@ packages/reference-assets/data/
 packages/reference-assets/dist-tools/
 packages/xr-input/src/gamepad/generated-profiles.ts
 docs/test-evidence/native-scene-starters/current/generated-*/proof.json
+docs/test-evidence/project-manifest-baseline/create-flow/generated-*/proof.json
 package-lock.json

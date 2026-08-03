@@ -1,0 +1,60 @@
+name: Example Assets CDN Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact published @iwsdk/example-assets version
+        required: true
+        type: string
+      base_url:
+        description: Optional assets/ base URL override
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cdn-release:
+    name: Published npm and CDN verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @iwsdk/vite-plugin-dev exec playwright install --with-deps chromium
+
+      - name: Verify published package CDN
+        env:
+          ASSET_BASE_URL: ${{ inputs.base_url }}
+          ASSET_VERSION: ${{ inputs.version }}
+        run: |
+          args=(--version "$ASSET_VERSION" --report "example-assets-cdn-report.json")
+          if [[ -n "$ASSET_BASE_URL" ]]; then
+            args+=(--base-url "$ASSET_BASE_URL")
+          fi
+          node scripts/check-example-assets-cdn.mjs "${args[@]}"
+
+      - name: Upload CDN release report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: example-assets-cdn-${{ inputs.version }}
+          path: example-assets-cdn-report.json

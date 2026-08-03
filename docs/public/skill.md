@@ -99,7 +99,7 @@ agent-facing scaffolding flags.
 
 | Flag | Effect |
 |------|--------|
-| *(none)* | Default npm source selected by the current `@iwsdk/create` package and starter-assets recipe. |
+| *(none)* | Matching SDK packages from npm; starter source is embedded in `@iwsdk/create`. |
 | `--canary` | Baked-in CloudFront CDN canary bundle. |
 | `--canary <url>` | Custom bundle URL for internal builds. |
 
@@ -324,9 +324,10 @@ npx iwsdk dev logs           # View recorded background server logs
 npx iwsdk dev open           # Open in browser
 ```
 
-Generated apps use `iwsdkDev({ ai: {} })`, which launches the visible managed
-Playwright runtime/editor workspace in collaborate mode, registers the MCP
-WebSocket endpoint, and records runtime state. Use `npx iwsdk dev status` for the resolved `localUrl`;
+Generated apps use bare `iwsdkDev()` and the CLI launches the visible managed
+Playwright runtime/editor workspace, registers the MCP WebSocket endpoint, and
+records runtime state. AI, headed/headless, open, and screenshot behavior are
+launch-time `iwsdk dev up` flags. Use `npx iwsdk dev status` for the resolved `localUrl`;
 the generated starter template defaults to `https://localhost:8081/`, but
 examples or existing apps may use another Vite port.
 
@@ -644,9 +645,9 @@ assets.
 
 ## 11. Bundled AI Skills
 
-The generated Claude config recipe bundles 8 Claude Code skills from
-`packages/starter-assets/claude-injections/skills/`. The portable scene
-composer is also emitted to `.agents/skills/` by the Codex recipe:
+Generated coding-tool configurations copy their skills from the canonical
+sources packaged under `@iwsdk/create`. The portable scene composer is emitted
+for both Claude and Codex:
 
 | Skill | Purpose |
 |-------|---------|

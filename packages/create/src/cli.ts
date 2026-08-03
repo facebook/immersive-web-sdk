@@ -10,7 +10,6 @@ import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import type { Recipe } from '@pmndrs/chef';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import ora from 'ora';
@@ -19,12 +18,7 @@ import {
   EXPERIENCE_TARGETS,
   FEATURE_CATALOG,
   ScaffoldConfiguration,
-  formatAppFeatures,
-  formatWorldOptions,
-  formatXRConfiguration,
-  formatXRFeatures,
   getRecommendedConfiguration,
-  getVariantId,
 } from './catalog.js';
 import {
   hasCliOption,
@@ -35,7 +29,10 @@ import {
   installDependenciesFromBundle,
   printNextSteps,
   printPrerequisites,
+  warmupReference,
 } from './installer.js';
+import { buildStarterProjectFiles } from './project-files.js';
+import { createProjectManifest } from './project-manifest.js';
 import {
   isValidProjectTarget,
   resolveProjectTarget,
@@ -45,7 +42,6 @@ import { promptFlow } from './prompts.js';
 import { scaffoldProject } from './scaffold.js';
 import { resolveSource, SDK_PACKAGES_DIR } from './source.js';
 import {
-  AiTool,
   ExperienceTarget,
   FeatureFlags,
   Language,
@@ -69,10 +65,7 @@ type CliOptions = {
   physics?: boolean;
   sceneUnderstanding?: boolean;
   environmentRaycast?: boolean;
-  aiTools?: string;
 };
-
-const VALID_AI_TOOLS: AiTool[] = ['claude', 'cursor', 'copilot', 'codex'];
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
@@ -145,26 +138,6 @@ function resolveExplicitTarget(
   return undefined;
 }
 
-function parseAiTools(raw: string | undefined): AiTool[] {
-  if (!raw || raw.trim() === '' || raw.trim() === 'none') {
-    return [];
-  }
-  const requested = raw
-    .split(',')
-    .map((tool) => tool.trim())
-    .filter(Boolean);
-  if (requested.includes('none')) {
-    throw new Error('--ai-tools none cannot be combined with other tools.');
-  }
-  const invalid = requested.filter(
-    (tool) => !VALID_AI_TOOLS.includes(tool as AiTool),
-  );
-  if (invalid.length > 0) {
-    throw new Error(`Unsupported AI tools: ${invalid.join(', ')}.`);
-  }
-  return Array.from(new Set(requested)) as AiTool[];
-}
-
 function isInsideGitWorkTree(directory: string): boolean {
   try {
     return (
@@ -199,13 +172,13 @@ function printConfigurationSummary(result: PromptResult): void {
   console.log(
     `  SDK features: ${enabledFeatures.length > 0 ? enabledFeatures.join(', ') : 'none'}`,
   );
-  console.log('  Generated World.create options:');
-  for (const line of formatWorldOptions(config).split('\n')) {
-    console.log(`    ${line}`);
-  }
+  const manifest = createProjectManifest(config);
+  console.log(
+    `  Runtime: ${manifest.world.xr === false ? 'Desktop 3D' : manifest.world.xr.mode.toUpperCase()}`,
+  );
   console.log(
     chalk.dim(
-      '  Change these later in src/index.ts; no re-scaffold is required.\n',
+      '  Change declarative settings later in iwsdk.config.json; keep systems in src/index.ts.\n',
     ),
   );
 }
@@ -282,10 +255,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--no-scene-understanding', 'Disable scene understanding')
     .option('--environment-raycast', 'Enable environment raycast (AR mode)')
     .option('--no-environment-raycast', 'Disable environment raycast')
-    .option(
-      '--ai-tools <tools>',
-      'AI tools to configure (comma-separated: claude,cursor,copilot,codex; or "none")',
-    )
     .action((n: string | undefined, opts: CliOptions) => {
       nameArg = n;
       cliOpts = opts;
@@ -341,7 +310,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       '--no-scene-understanding',
       '--environment-raycast',
       '--no-environment-raycast',
-      '--ai-tools',
     ];
     const hasExplicitFlags = explicitFlags.some((flag) =>
       hasCliOption(process.argv, flag),
@@ -406,17 +374,14 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
 
       res = {
         name: nameArg || 'iwsdk-app',
-        id: getVariantId(target, language),
         installNow:
           resolveBooleanFlag(process.argv, '--install', '--no-install') ?? true,
         target,
         xrEnabled: configuration.xrEnabled,
         mode: configuration.mode,
         language,
-        features: [],
         featureFlags: configuration.featureFlags,
         gitInit: resolveBooleanFlag(process.argv, '--git', '--no-git') ?? true,
-        aiTools: parseAiTools(cliOpts.aiTools),
         xrFeatureStates: configuration.xrFeatureStates,
       };
     } else {
@@ -477,22 +442,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     }
 
     try {
-      // Fetch Chef recipes index and the chosen recipe
-      const index = await source.fetchIndex();
-      const found = index.find((r) => r.id === res.id);
-      if (!found) {
-        throw new Error(`Recipe id ${res.id} not found in index`);
-      }
-      const recipe = await source.fetchRecipe(found.recipe);
-
-      // Resolve relative asset URLs in the recipe
-      const resolvedRecipe = source.resolveRecipeUrls(recipe);
-
-      // Override Chef variables from prompts
-      // Ensure edits exists
-      resolvedRecipe.edits = resolvedRecipe.edits || {};
-      // Project name
-      resolvedRecipe.edits['@appName'] = res.name;
       const configuration: ScaffoldConfiguration = {
         target: res.target,
         xrEnabled: res.xrEnabled,
@@ -500,61 +449,14 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         featureFlags: res.featureFlags,
         xrFeatureStates: res.xrFeatureStates,
       };
-      resolvedRecipe.edits['@appFeaturesStr'] = formatAppFeatures(
-        configuration.featureFlags,
-      );
-      resolvedRecipe.edits['@xrFeaturesStr'] = formatXRFeatures(
-        configuration.xrFeatureStates,
-      );
-      resolvedRecipe.edits['@xrConfigStr'] =
-        formatXRConfiguration(configuration);
-
       const outDir = projectTarget.outDir;
-
-      // Load AI tool configuration recipes based on user selection
-      const aiRecipes: Recipe[] = [];
-      const loadAiRecipe = async (fileName: string, label: string) => {
-        try {
-          const recipe = await source.fetchRecipe(fileName);
-          aiRecipes.push(source.resolveRecipeUrls(recipe));
-        } catch (error) {
-          console.warn(
-            chalk.yellow(
-              `Could not configure ${label}: ${error instanceof Error ? error.message : String(error)}. ` +
-                'Project creation will continue without it. Re-run this create command in a new directory to retry, or add the missing configuration manually.',
-            ),
-          );
-        }
-      };
-
-      if (res.aiTools.includes('codex')) {
-        // AGENTS.md recipe — Codex reads AGENTS.md natively; other tools have
-        // their own config files with equivalent content.
-        await loadAiRecipe('base-agents-config.recipe.json', 'Codex guidance');
-      }
-
-      // Claude Code recipe (conditional)
-      if (res.aiTools.includes('claude')) {
-        await loadAiRecipe('base-claude-config.recipe.json', 'Claude Code');
-      }
-
-      // Cursor recipe (conditional)
-      if (res.aiTools.includes('cursor')) {
-        await loadAiRecipe('base-cursor-config.recipe.json', 'Cursor');
-      }
-
-      // Copilot recipe (conditional)
-      if (res.aiTools.includes('copilot')) {
-        await loadAiRecipe('base-copilot-config.recipe.json', 'GitHub Copilot');
-      }
-
-      // Codex recipe (conditional)
-      if (res.aiTools.includes('codex')) {
-        await loadAiRecipe('base-codex-config.recipe.json', 'Codex adapter');
-      }
-
-      const recipes: Recipe[] = [resolvedRecipe, ...aiRecipes];
-      await scaffoldProject(recipes, outDir, { force: cliOpts.force });
+      const projectFiles = await buildStarterProjectFiles({
+        appName: res.name,
+        configuration,
+        language: res.language,
+        packageSource: source,
+      });
+      await scaffoldProject(projectFiles, outDir, { force: cliOpts.force });
 
       // Git init
       if (
@@ -605,10 +507,11 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         } else {
           await installDependencies(outDir);
         }
+        await warmupReference(outDir);
       }
 
-      // Write MCP adapter configs for the selected AI tools
-      if (res.installNow && res.aiTools.length > 0) {
+      // Write MCP adapter configs for every supported coding harness.
+      if (res.installNow) {
         try {
           execFileSync(
             process.execPath,
@@ -616,8 +519,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
               join(outDir, 'node_modules/@iwsdk/cli/dist/cli.js'),
               'adapter',
               'sync',
-              '--tools',
-              res.aiTools.join(','),
             ],
             { cwd: outDir, stdio: 'ignore', timeout: 15000 },
           );
@@ -625,7 +526,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
           console.warn(
             chalk.yellow(
               `Project created, but coding-tool adapter sync failed: ${error instanceof Error ? error.message : String(error)}. ` +
-                `Run "npx iwsdk adapter sync --tools ${res.aiTools.join(',')}" from the project directory.`,
+                'Run "npx iwsdk adapter sync" from the project directory.',
             ),
           );
         }
@@ -639,6 +540,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         res.installNow,
         res.actionItems || [],
         projectTarget.inPlace,
+        res.installNow,
       );
     } finally {
       await source.cleanup();

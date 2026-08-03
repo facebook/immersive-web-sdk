@@ -16,7 +16,6 @@ import {
 } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import type { Recipe } from '@pmndrs/chef';
 import { afterEach, describe, expect, it } from 'vitest';
 import { scaffoldProject } from '../src/scaffold.js';
 
@@ -37,21 +36,19 @@ async function makeTempDir() {
 }
 
 describe('scaffoldProject safety', () => {
-  it('rejects recipe paths outside the target before writing', async () => {
+  it('rejects generated paths outside the target before writing', async () => {
     const workspace = await makeTempDir();
     const target = path.join(workspace, 'target');
     const outsidePath = path.join(workspace, 'outside.ts');
     await mkdir(target);
-    const recipe: Recipe = {
-      edits: {
-        '../outside.ts': 'outside',
-        'README.md': 'generated',
-      },
-    };
+    const files = [
+      { path: '../outside.ts', contents: 'outside' },
+      { path: 'README.md', contents: 'generated' },
+    ];
 
     await expect(
-      scaffoldProject(recipe, target, { force: true }),
-    ).rejects.toThrow('Recipe output path "../outside.ts" is not safe.');
+      scaffoldProject(files, target, { force: true }),
+    ).rejects.toThrow('Generated output path "../outside.ts" is not safe.');
     await expect(stat(outsidePath)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(stat(path.join(target, 'README.md'))).rejects.toMatchObject({
       code: 'ENOENT',
@@ -66,9 +63,9 @@ describe('scaffoldProject safety', () => {
     const targetPath = path.join(target, 'README.md');
     await writeFile(externalPath, 'preserve me', 'utf8');
     await link(externalPath, targetPath);
-    const recipe: Recipe = { edits: { 'README.md': 'generated' } };
+    const files = [{ path: 'README.md', contents: 'generated' }];
 
-    await scaffoldProject(recipe, target, { force: true });
+    await scaffoldProject(files, target, { force: true });
 
     expect(await readFile(externalPath, 'utf8')).toBe('preserve me');
     expect(await readFile(targetPath, 'utf8')).toBe('generated');

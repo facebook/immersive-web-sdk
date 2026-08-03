@@ -52,6 +52,9 @@ describe('@iwsdk/example-assets clean output E2E', () => {
           `${server.origin}${asset.publicPath}`,
         );
         expect(entryResponse.status).toBe(200);
+        expect(entryResponse.headers.get('content-type')).toBe(
+          asset.files.find((file) => file.path === asset.entryFile)?.mimeType,
+        );
         await expect(hashResponse(entryResponse)).resolves.toBe(
           asset.files.find((file) => file.path === asset.entryFile)?.sha256,
         );
@@ -61,6 +64,7 @@ describe('@iwsdk/example-assets clean output E2E', () => {
             `${server.origin}/iwsdk-assets/${asset.id}/${file.path}`,
           );
           expect(response.status).toBe(200);
+          expect(response.headers.get('content-type')).toBe(file.mimeType);
           await expect(hashResponse(response)).resolves.toBe(file.sha256);
         }
       }
@@ -94,6 +98,14 @@ async function startStaticServer(rootDir: string): Promise<{
   origin: string;
 }> {
   const root = path.resolve(rootDir);
+  const mimeTypes = new Map(
+    EXAMPLE_ASSET_CATALOG.flatMap((asset) =>
+      asset.files.map(
+        (file) =>
+          [`iwsdk-assets/${asset.id}/${file.path}`, file.mimeType] as const,
+      ),
+    ),
+  );
   const server: Server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
     const relativePath = decodeURIComponent(requestUrl.pathname).replace(
@@ -109,6 +121,10 @@ async function startStaticServer(rootDir: string): Promise<{
 
     try {
       const body = await readFile(filePath);
+      const mimeType = mimeTypes.get(relativePath);
+      if (mimeType != null) {
+        response.setHeader('Content-Type', mimeType);
+      }
       response.writeHead(200).end(body);
     } catch {
       if (!response.headersSent && !response.destroyed) {

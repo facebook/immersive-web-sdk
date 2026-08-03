@@ -6,6 +6,7 @@
  */
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
@@ -47,6 +48,61 @@ describe('iwsdkExampleAssets Vite plugin', () => {
         'utf8',
       ),
     ).resolves.toContain('"asset"');
+  });
+
+  test('serves catalog-declared MIME types from the existing dev URL', async () => {
+    const plugin = iwsdkExampleAssets({ assetIds: ['robot'] });
+    let middleware:
+      | ((
+          request: IncomingMessage,
+          response: ServerResponse,
+          next: () => void,
+        ) => void | Promise<void>)
+      | undefined;
+    plugin.configureServer({
+      middlewares: {
+        use(handler) {
+          middleware = handler;
+        },
+      },
+    });
+    if (middleware == null) {
+      throw new Error('Expected Vite middleware to be registered');
+    }
+
+    const headers = new Map<string, string>();
+    let body: Buffer | undefined;
+    let status: number | undefined;
+    let nextCalled = false;
+    const response = {
+      end(chunk?: Buffer) {
+        body = chunk;
+        return this;
+      },
+      setHeader(name: string, value: string) {
+        headers.set(name.toLowerCase(), value);
+        return this;
+      },
+      writeHead(statusCode: number) {
+        status = statusCode;
+        return this;
+      },
+    } as unknown as ServerResponse;
+
+    await middleware(
+      {
+        url: '/iwsdk-assets/robot/robot.gltf',
+      } as IncomingMessage,
+      response,
+      () => {
+        nextCalled = true;
+      },
+    );
+
+    expect(status).toBe(200);
+    expect(headers.get('content-type')).toBe('model/gltf+json');
+    expect(body?.toString('utf8')).toContain('"asset"');
+    expect(nextCalled).toBe(false);
   });
 });
 

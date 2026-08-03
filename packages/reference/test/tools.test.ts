@@ -68,14 +68,14 @@ describe('tool ranking', () => {
     expect(text).not.toContain('## assets');
   });
 
-  it('prioritizes core ECS systems over starter template systems', async () => {
+  it('prioritizes core ECS systems over Create template systems', async () => {
     const searchService = {
       getAllChunks() {
         return [
           makeChunk('RobotSystem', 'export class RobotSystem {}', {
             chunk_type: 'system',
             ecs_system: true,
-            file_path: 'packages/starter-assets/starter-template/src/robot.ts',
+            file_path: 'packages/create/template/common/src/robot.ts',
           }),
           makeChunk('LevelSystem', 'export class LevelSystem {}', {
             chunk_type: 'system',

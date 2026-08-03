@@ -18,8 +18,6 @@ const external = [
   'child_process',
   'url',
   'module',
-  // keep prettier external (installed as a dependency)
-  'prettier',
 ];
 
 const plugins = [

@@ -1,0 +1,983 @@
+{
+  "app": {
+    "afterReloadScreenshot": {
+      "path": "app-after-reload.png",
+      "stats": {
+        "sampledPixels": 4019,
+        "uniqueColors": 1
+      }
+    },
+    "hierarchy": {
+      "name": "(unnamed)",
+      "uuid": "3ab920fc-aaa2-460d-b33b-b81bca849d6f",
+      "objectType": "Scene",
+      "environment": {
+        "exposure": 1,
+        "toneMapping": "aces"
+      },
+      "entityIndex": 0,
+      "children": [
+        {
+          "name": "(unnamed)",
+          "uuid": "fb5cf169-9a92-4275-8a8d-3a6e7a0f3e3a",
+          "objectType": "Group",
+          "entityIndex": 2,
+          "children": [
+            {
+              "name": "xr-origin-head",
+              "uuid": "19ff47d8-a4e9-48e1-b43b-8313925852c9",
+              "objectType": "Group",
+              "entityIndex": 4,
+              "children": [
+                {
+                  "name": "(unnamed)",
+                  "uuid": "361635cc-ac68-43c7-8d05-1d44cb73230f",
+                  "objectType": "AudioListener"
+                }
+              ]
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "39f0082d-79c4-41af-a081-67efc0f8e69f",
+              "objectType": "Group",
+              "entityIndex": 5,
+              "children": [
+                {
+                  "name": "(unnamed)",
+                  "uuid": "6f8e45da-fb42-47d6-bf50-181d3ad8d864",
+                  "objectType": "Mesh"
+                }
+              ]
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "c5eb280f-2dd6-4176-a46b-5e01a5fca579",
+              "objectType": "Group",
+              "entityIndex": 6,
+              "children": [
+                {
+                  "name": "(unnamed)",
+                  "uuid": "bc30e1bc-e592-4437-8c96-9ad75f5ac410",
+                  "objectType": "Mesh"
+                },
+                {
+                  "name": "(unnamed)",
+                  "uuid": "0c2fee64-5a11-4a6c-be4b-04470f338152",
+                  "objectType": "Group",
+                  "children": [
+                    {
+                      "name": "(unnamed)",
+                      "uuid": "7352b849-0eea-4e3a-a337-15fbebd98784",
+                      "objectType": "Mesh"
+                    },
+                    {
+                      "name": "(unnamed)",
+                      "uuid": "5519f095-a473-4ee0-9673-1b7e0ded9ba6",
+                      "objectType": "Mesh"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "02e6b577-9750-4cc2-9c60-ba57f25a070d",
+              "objectType": "Group",
+              "entityIndex": 7
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "fa5c0032-6659-4715-8f23-afcb386cfd11",
+              "objectType": "Group",
+              "entityIndex": 8
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "dfe50969-dc9c-429b-9b19-a902d0f73790",
+              "objectType": "Group",
+              "entityIndex": 9
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "65e4f379-aa66-4fbc-baba-7a870f1a0dd3",
+              "objectType": "Group",
+              "entityIndex": 10
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "ac723bab-7553-4967-bb90-727eb8a17f42",
+              "objectType": "Mesh"
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "5befc497-61b2-4cba-8e7f-84fa940036eb",
+              "objectType": "Mesh"
+            },
+            {
+              "name": "(unnamed)",
+              "uuid": "cff69014-25ea-4c11-8c5b-d1e2bd9110ac",
+              "objectType": "PerspectiveCamera",
+              "entityIndex": 3,
+              "children": [
+                {
+                  "name": "(unnamed)",
+                  "uuid": "a5e0ebd7-5fb6-4301-9ef0-6bf93df74a57",
+                  "objectType": "Mesh"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "LevelRoot",
+          "uuid": "f5065f92-248e-4efd-b7a4-e3e6fbe1dee6",
+          "objectType": "Object3D",
+          "runtimeHash": "sha256:dd4a97824a7ec4b2b7a4e7163fbabf833f4e874fc715e1926bbb964c99d0a519",
+          "resources": {},
+          "environment": {
+            "exposure": 1,
+            "toneMapping": "aces"
+          },
+          "entityIndex": 11,
+          "children": [
+            {
+              "name": "Scaffold Added Group",
+              "uuid": "d900f3d0-9722-42cd-9890-9a289ef4cbec",
+              "objectType": "Object3D",
+              "sceneNodeId": "scaffold-added-group",
+              "sourceNodeId": "scaffold-added-group",
+              "runtimeHash": "sha256:dd4a97824a7ec4b2b7a4e7163fbabf833f4e874fc715e1926bbb964c99d0a519",
+              "contentType": "group",
+              "content": {
+                "type": "group"
+              },
+              "framingRole": "content",
+              "entityIndex": 12
+            }
+          ]
+        },
+        {
+          "name": "(unnamed)",
+          "uuid": "b1d6432f-702e-4def-834c-34e256326347",
+          "objectType": "Mesh"
+        },
+        {
+          "name": "(unnamed)",
+          "uuid": "047d2d81-9320-4959-9151-564f21a3cb86",
+          "objectType": "Line2"
+        },
+        {
+          "name": "(unnamed)",
+          "uuid": "880818db-722e-49ce-aebe-b83a3883220d",
+          "objectType": "Mesh"
+        }
+      ]
+    },
+    "initialScreenshot": {
+      "path": "app.png",
+      "stats": {
+        "sampledPixels": 4019,
+        "uniqueColors": 1
+      }
+    },
+    "runtimeComponents": {}
+  },
+  "browser": {
+    "baseUrl": "https://127.0.0.1:59852",
+    "mode": "browser",
+    "target": "browser",
+    "scenePath": "public/scenes/browser.iwsdk.scene.json"
+  },
+  "editor": {
+    "proofBefore": {
+      "assetLoads": [],
+      "builtInObjects": [
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 7,
+          "target": "player",
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "level-root",
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "camera",
+          "transform": {
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "head",
+          "transform": {
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "left-target-ray",
+          "transform": {
+            "position": [
+              -0.26,
+              1.35,
+              -0.32
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "left-grip",
+          "transform": {
+            "position": [
+              -0.24,
+              1.28,
+              -0.24
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "right-target-ray",
+          "transform": {
+            "position": [
+              0.26,
+              1.35,
+              -0.32
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        },
+        {
+          "materialOpacity": 0.32,
+          "meshCount": 1,
+          "target": "right-grip",
+          "transform": {
+            "position": [
+              0.24,
+              1.28,
+              -0.24
+            ],
+            "rotationDeg": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ]
+          },
+          "wireframeMaterialCount": 0
+        }
+      ],
+      "canvasHeight": 720,
+      "canvasWidth": 960,
+      "cameraHeight": null,
+      "cameraLookAt": [
+        0,
+        0,
+        0
+      ],
+      "cameraPosition": [
+        4,
+        3,
+        4
+      ],
+      "cameraProjection": "perspective",
+      "cameraViewId": null,
+      "contributions": {
+        "count": 0,
+        "items": [],
+        "slots": {
+          "bottomPanel.tab": 0,
+          "inspector.global": 0,
+          "inspector.pinned": 0,
+          "inspector.section": 0,
+          "sidebar.bottom": 0,
+          "sidebar.top": 0,
+          "toolbar.center": 0,
+          "toolbar.left": 0,
+          "toolbar.right": 0,
+          "viewport.overlay": 0
+        }
+      },
+      "documentHash": "sha256:56adfce01d242c3f95d0b5b58425f0c1ba1022d7fabbff46e265d6323c7f564b",
+      "layout": {
+        "canvas": {
+          "bottom": 720,
+          "height": 720,
+          "left": 0,
+          "pointerEvents": "auto",
+          "position": "static",
+          "resize": "none",
+          "right": 960,
+          "top": 0,
+          "width": 960,
+          "zIndex": "auto"
+        },
+        "bottomPanel": {
+          "bottom": 720,
+          "height": 210,
+          "left": 0,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 660,
+          "top": 510,
+          "width": 660,
+          "zIndex": "4"
+        },
+        "contributionSlots": {
+          "bottomPanel.tab": null,
+          "inspector.global": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "inspector.pinned": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "inspector.section": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "sidebar.bottom": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "sidebar.top": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "toolbar.center": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "toolbar.left": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "toolbar.right": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "auto",
+            "position": "static",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "auto"
+          },
+          "viewport.overlay": {
+            "bottom": 0,
+            "height": 0,
+            "left": 0,
+            "pointerEvents": "none",
+            "position": "absolute",
+            "resize": "none",
+            "right": 0,
+            "top": 0,
+            "width": 0,
+            "zIndex": "3"
+          }
+        },
+        "leftPanel": {
+          "bottom": 510,
+          "height": 510,
+          "left": 0,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 250,
+          "top": 0,
+          "width": 250,
+          "zIndex": "5"
+        },
+        "orientationGizmo": {
+          "bottom": 150,
+          "height": 112,
+          "left": 538,
+          "pointerEvents": "none",
+          "position": "absolute",
+          "resize": "none",
+          "right": 650,
+          "top": 38,
+          "width": 112,
+          "zIndex": "6"
+        },
+        "rightPanel": {
+          "bottom": 720,
+          "height": 720,
+          "left": 660,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 960,
+          "top": 0,
+          "width": 300,
+          "zIndex": "5"
+        },
+        "statusStrip": {
+          "bottom": 510,
+          "height": 27,
+          "left": 250,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 660,
+          "top": 483,
+          "width": 410,
+          "zIndex": "4"
+        },
+        "toolbar": {
+          "bottom": 30,
+          "height": 30,
+          "left": 250,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 660,
+          "top": 0,
+          "width": 410,
+          "zIndex": "4"
+        },
+        "viewport": {
+          "bottom": 720,
+          "height": 720,
+          "left": 0,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 960,
+          "top": 0,
+          "width": 960,
+          "zIndex": "auto"
+        },
+        "window": {
+          "height": 720,
+          "width": 960
+        }
+      },
+      "materialCount": 8,
+      "meshCount": 8,
+      "nodeObjectCount": 0,
+      "objectHierarchy": [],
+      "orbitControls": true,
+      "orientationGizmo": {
+        "animating": false,
+        "axisCount": 6,
+        "clickTargets": [
+          {
+            "view": "right",
+            "x": 84.5985412968837,
+            "y": 69.39902507534208
+          },
+          {
+            "view": "top",
+            "x": 55.9999999858559,
+            "y": 20.26926625465097
+          },
+          {
+            "view": "front",
+            "x": 27.401458793905213,
+            "y": 69.39902586737854
+          },
+          {
+            "view": "left",
+            "x": 27.401458703116308,
+            "y": 42.60097492465792
+          },
+          {
+            "view": "bottom",
+            "x": 56.00000001414409,
+            "y": 91.73073374534904
+          },
+          {
+            "view": "back",
+            "x": 84.59854120609478,
+            "y": 42.60097413262146
+          }
+        ],
+        "draggable": true,
+        "renderer": "shared-webgl",
+        "widget": {
+          "bottom": 150,
+          "height": 112,
+          "left": 538,
+          "pointerEvents": "auto",
+          "position": "absolute",
+          "resize": "none",
+          "right": 650,
+          "top": 38,
+          "width": 112,
+          "zIndex": "1000"
+        },
+        "webgl": true
+      },
+      "renderer": "iwsdk-webgl",
+      "rendererCamera": {
+        "isOrthographicCamera": false,
+        "isPerspectiveCamera": true,
+        "type": "PerspectiveCamera"
+      },
+      "renderStats": {
+        "available": true,
+        "calls": 10,
+        "frameTimeSamplesMs": [
+          8.4,
+          4.4,
+          0.4
+        ],
+        "lines": 50,
+        "environment": {
+          "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.0.0 Safari/537.36",
+          "devicePixelRatio": 1,
+          "emulatedUserAgent": null,
+          "emulationProfile": {
+            "active": false,
+            "device": null,
+            "runtime": null
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "hostPlatform": "macOS",
+          "hostUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.0.0 Safari/537.36",
+          "renderer": "IWSDK WebGL",
+          "visibility": {
+            "method": "threejs-first-hit-sampling-v1",
+            "occlusion": "conservative-cpu-first-hit",
+            "sampleGrid": "3x3-projected-bounds+overhead-lower-frame",
+            "uncertainObjectsIncluded": false
+          }
+        },
+        "geometryCount": 0,
+        "points": 0,
+        "programs": 11,
+        "materialCount": 0,
+        "meshCount": 0,
+        "nodeCount": 0,
+        "objectCount": 8,
+        "shadowCasters": 0,
+        "sceneAssets": [],
+        "textures": 3,
+        "triangles": 5056,
+        "visibleNodeIds": [],
+        "framingBounds": null,
+        "worldBounds": null
+      },
+      "referenceMode": "hidden",
+      "rendererGlobals": {
+        "background": null,
+        "clearAlpha": 1,
+        "clearColor": "#101418",
+        "exposure": 1,
+        "fog": null,
+        "shadows": false,
+        "toneMapping": 4
+      },
+      "resourceState": {
+        "proof": [],
+        "staged": null
+      },
+      "reviewLens": "final",
+      "runtimeHash": "sha256:56adfce01d242c3f95d0b5b58425f0c1ba1022d7fabbff46e265d6323c7f564b",
+      "hoverBounds": null,
+      "selectionBounds": null,
+      "selectedRuntime": {
+        "assetStatus": "none",
+        "assetUrl": null,
+        "bounds": null,
+        "componentCount": 0,
+        "components": [],
+        "fallback": null,
+        "helperType": null,
+        "materialCount": 0,
+        "meshCount": 0,
+        "nodeId": null,
+        "objectCount": 0,
+        "ready": false
+      },
+      "transformControls": {
+        "attachedNodeId": null,
+        "mode": "translate",
+        "snapping": {
+          "applied": {
+            "rotationSnapDeg": null,
+            "scaleSnap": null,
+            "translationSnap": null
+          },
+          "enabled": false,
+          "rotationDeg": 15,
+          "scale": 0.1,
+          "translation": 0.25
+        },
+        "dragging": false,
+        "space": "local",
+        "visible": false
+      },
+      "uses2DRenderer": false,
+      "webgl": true,
+      "webglContextType": "WebGL2RenderingContext",
+      "worldReady": true
+    },
+    "screenshot": {
+      "path": "editor.png",
+      "stats": {
+        "sampledPixels": 290,
+        "uniqueColors": 32
+      }
+    },
+    "toolResult": {
+      "saved": {
+        "bytes": 980,
+        "correction": null,
+        "documentHash": "sha256:dd4a97824a7ec4b2b7a4e7163fbabf833f4e874fc715e1926bbb964c99d0a519",
+        "path": "public/scenes/browser.iwsdk.scene.json",
+        "previousRevision": "sha256:869ace8e65f2a91569ac214f0fad7e22e0090fdc910b6257edf6147e7f574388",
+        "revision": "sha256:869ace8e65f2a91569ac214f0fad7e22e0090fdc910b6257edf6147e7f574388",
+        "runtimeHash": "sha256:dd4a97824a7ec4b2b7a4e7163fbabf833f4e874fc715e1926bbb964c99d0a519",
+        "savedAt": "2026-07-31T06:52:56.243Z",
+        "workflowPhase": null,
+        "writtenRevision": "sha256:869ace8e65f2a91569ac214f0fad7e22e0090fdc910b6257edf6147e7f574388",
+        "dirty": false,
+        "lifecycle": {
+          "schemaValid": "passed",
+          "capabilityCompatible": "passed",
+          "resourcesReady": "not-run",
+          "editorCommitted": "not-run",
+          "runtimeProven": "not-run"
+        }
+      },
+      "screenshotViews": [
+        {
+          "imageDataLength": 3412,
+          "mimeType": "image/png",
+          "view": "top"
+        },
+        {
+          "imageDataLength": 3412,
+          "mimeType": "image/png",
+          "view": "front"
+        },
+        {
+          "imageDataLength": 3412,
+          "mimeType": "image/png",
+          "view": "right"
+        },
+        {
+          "imageDataLength": 3412,
+          "mimeType": "image/png",
+          "view": "quarter"
+        }
+      ],
+      "validation": {
+        "valid": true,
+        "issues": [],
+        "lifecycle": {
+          "schemaValid": "passed",
+          "capabilityCompatible": "passed",
+          "resourcesReady": "not-run",
+          "editorCommitted": "not-run",
+          "runtimeProven": "not-run"
+        }
+      }
+    }
+  },
+  "network": {
+    "app": {
+      "assetResponses": {},
+      "badResponses": [],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()"
+      ],
+      "failedRequests": []
+    },
+    "editor": {
+      "assetResponses": {},
+      "badResponses": [],
+      "consoleErrors": [],
+      "failedRequests": []
+    }
+  },
+  "scene": {
+    "after": {
+      "components": {
+        "com.iwsdk.components.DomeGradient": {
+          "equator": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ],
+          "ground": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ],
+          "intensity": 1,
+          "sky": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ]
+        },
+        "com.iwsdk.components.IBLGradient": {
+          "equator": [
+            0.6584,
+            0.7084,
+            0.7913,
+            1
+          ],
+          "ground": [
+            0.807,
+            0.7758,
+            0.7454,
+            1
+          ],
+          "intensity": 1,
+          "sky": [
+            0.6902,
+            0.749,
+            0.7843,
+            1
+          ]
+        }
+      },
+      "environment": {
+        "exposure": 1,
+        "toneMapping": "aces"
+      },
+      "nodes": [
+        {
+          "content": {
+            "type": "group"
+          },
+          "id": "scaffold-added-group",
+          "name": "Scaffold Added Group"
+        }
+      ],
+      "resources": {},
+      "units": "meters",
+      "version": "iwsdk.scene.v1"
+    },
+    "before": {
+      "version": "iwsdk.scene.v1",
+      "units": "meters",
+      "components": {
+        "com.iwsdk.components.DomeGradient": {
+          "sky": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ],
+          "equator": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ],
+          "ground": [
+            0.12549,
+            0.141176,
+            0.164706,
+            1
+          ],
+          "intensity": 1
+        },
+        "com.iwsdk.components.IBLGradient": {
+          "sky": [
+            0.6902,
+            0.749,
+            0.7843,
+            1
+          ],
+          "equator": [
+            0.6584,
+            0.7084,
+            0.7913,
+            1
+          ],
+          "ground": [
+            0.807,
+            0.7758,
+            0.7454,
+            1
+          ],
+          "intensity": 1
+        }
+      },
+      "resources": {},
+      "nodes": [],
+      "environment": {
+        "toneMapping": "aces",
+        "exposure": 1
+      }
+    }
+  }
+}

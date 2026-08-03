@@ -11,7 +11,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { reportToolCall } from './hzdb-telemetry.js';
+import { reportToolCall } from './metavr-telemetry.js';
 import {
   isRuntimeBrowserCommandReady,
   RUNTIME_MCP_TOOLS,

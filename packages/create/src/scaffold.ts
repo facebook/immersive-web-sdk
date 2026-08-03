@@ -9,15 +9,17 @@ import { randomUUID } from 'crypto';
 import { constants } from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
-import type { Recipe } from '@pmndrs/chef';
-import { buildProject } from '@pmndrs/chef';
 import chalk from 'chalk';
 import ora from 'ora';
 import { Ora } from 'ora';
-import prettier from 'prettier';
 
 export type ScaffoldOptions = {
   force?: boolean;
+};
+
+export type ProjectFileInput = {
+  contents: Buffer | Uint8Array | string;
+  path: string;
 };
 
 type ProjectFile = {
@@ -42,19 +44,19 @@ async function getStat(targetPath: string) {
   }
 }
 
-function resolveOutputPath(outDir: string, recipePath: string) {
-  const invalidSegment = recipePath
+function resolveOutputPath(outDir: string, sourcePath: string) {
+  const invalidSegment = sourcePath
     .split('/')
     .some((segment) => segment === '' || segment === '.' || segment === '..');
   if (
-    recipePath.includes('\0') ||
-    recipePath.includes('\\') ||
+    sourcePath.includes('\0') ||
+    sourcePath.includes('\\') ||
     invalidSegment ||
-    /^[a-zA-Z]:/.test(recipePath)
+    /^[a-zA-Z]:/.test(sourcePath)
   ) {
-    throw new Error(`Recipe output path "${recipePath}" is not safe.`);
+    throw new Error(`Generated output path "${sourcePath}" is not safe.`);
   }
-  const outPath = path.resolve(outDir, ...recipePath.split('/'));
+  const outPath = path.resolve(outDir, ...sourcePath.split('/'));
   const relativePath = path.relative(outDir, outPath);
   if (
     relativePath === '' ||
@@ -62,7 +64,9 @@ function resolveOutputPath(outDir: string, recipePath: string) {
     relativePath.startsWith(`..${path.sep}`) ||
     path.isAbsolute(relativePath)
   ) {
-    throw new Error(`Recipe output path "${recipePath}" escapes the target.`);
+    throw new Error(
+      `Generated output path "${sourcePath}" escapes the target.`,
+    );
   }
   return {
     collisionKey: relativePath.normalize('NFC').toLowerCase(),
@@ -71,54 +75,33 @@ function resolveOutputPath(outDir: string, recipePath: string) {
   };
 }
 
-async function buildProjectFiles(
-  recipes: Recipe | Recipe[],
+function buildProjectFiles(
+  sources: readonly ProjectFileInput[],
   outDir: string,
-): Promise<ProjectFile[]> {
-  const recipeArray = Array.isArray(recipes) ? recipes : [recipes];
-  const result = await buildProject(recipeArray, undefined, { allowUrl: true });
-  const decoder = new TextDecoder('utf-8');
+): ProjectFile[] {
   const files: ProjectFile[] = [];
   const outputPaths = new Set<string>();
-  for (const [rel, bytes] of Object.entries(result)) {
+  for (const source of sources) {
+    const rel = source.path;
     const { collisionKey, outPath, relativePath } = resolveOutputPath(
       outDir,
       rel,
     );
     if (outputPaths.has(collisionKey)) {
-      throw new Error(`Recipe output path "${rel}" resolves more than once.`);
+      throw new Error(
+        `Generated output path "${rel}" resolves more than once.`,
+      );
     }
     outputPaths.add(collisionKey);
-    const ext = path.extname(relativePath).toLowerCase();
-    const isTs = ext === '.ts' || ext === '.tsx' || ext === '.d.ts';
-    if (!isTs) {
-      files.push({
-        collisionKey,
-        contents: Buffer.from(bytes),
-        outPath,
-        relativePath,
-      });
-      continue;
-    }
-    // Attempt to format TS content with Prettier; fall back on error
-    try {
-      const formatted = await prettier.format(decoder.decode(bytes), {
-        filepath: relativePath,
-      });
-      files.push({
-        collisionKey,
-        contents: Buffer.from(formatted, 'utf8'),
-        outPath,
-        relativePath,
-      });
-    } catch {
-      files.push({
-        collisionKey,
-        contents: Buffer.from(bytes),
-        outPath,
-        relativePath,
-      });
-    }
+    files.push({
+      collisionKey,
+      contents:
+        typeof source.contents === 'string'
+          ? Buffer.from(source.contents, 'utf8')
+          : Buffer.from(source.contents),
+      outPath,
+      relativePath,
+    });
   }
   return files;
 }
@@ -130,7 +113,7 @@ function assertManifestPaths(files: ProjectFile[]) {
     while (ancestor !== '.') {
       if (outputPaths.has(ancestor.normalize('NFC').toLowerCase())) {
         throw new Error(
-          `Recipe output "${ancestor}" cannot be both a file and a directory.`,
+          `Generated output "${ancestor}" cannot be both a file and a directory.`,
         );
       }
       ancestor = path.dirname(ancestor);
@@ -242,7 +225,7 @@ async function commitProjectFiles(files: StagedProjectFile[], force: boolean) {
 }
 
 export async function scaffoldProject(
-  recipes: Recipe | Recipe[],
+  sources: readonly ProjectFileInput[],
   outDir: string,
   options: ScaffoldOptions = {},
 ) {
@@ -256,7 +239,7 @@ export async function scaffoldProject(
   try {
     const resolvedOutDir = path.resolve(outDir);
     const force = options.force === true;
-    const files = await buildProjectFiles(recipes, resolvedOutDir);
+    const files = buildProjectFiles(sources, resolvedOutDir);
     assertManifestPaths(files);
     await ensureTargetDirectory(resolvedOutDir, force);
     await assertOutputPaths(files, resolvedOutDir);

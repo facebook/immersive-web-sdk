@@ -1,0 +1,268 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import { execFile } from 'node:child_process';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
+
+const execFileAsync = promisify(execFile);
+const PACKAGE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
+const REPO_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
+const PLANNER_FILES = [
+  'SKILL.md',
+  'references/api-reference.md',
+  'references/build-milestones.md',
+  'references/design-deck.md',
+  'references/grounding.md',
+  'references/ideation.md',
+  'references/verification.md',
+] as const;
+const PORTABLE_SKILL_NAMES = [
+  'iwsdk-debug',
+  'iwsdk-depth-occlusion',
+  'iwsdk-grab',
+  'iwsdk-physics',
+  'iwsdk-planner',
+  'iwsdk-ray',
+  'iwsdk-scene-composer',
+  'iwsdk-ui',
+] as const;
+
+describe('@iwsdk/create packed contract', () => {
+  it('accepts publication after the immutable asset CDN migration', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'),
+    ) as { files?: string[]; scripts?: Record<string, string> };
+
+    expect(packageJson.files).toContain('scripts/verify-release-ready.mjs');
+    expect(packageJson.scripts?.prepublishOnly).toContain(
+      'verify:release-ready',
+    );
+    await expect(
+      execFileAsync(process.execPath, ['scripts/verify-release-ready.mjs'], {
+        cwd: PACKAGE_ROOT,
+      }),
+    ).resolves.toMatchObject({
+      stdout: expect.stringContaining('@iwsdk/create release contract passed.'),
+    });
+  });
+
+  it('ships common TS/JS templates, scenes, dotfile aliases, and guidance', async () => {
+    const { stdout } = await execFileAsync(
+      'npm',
+      ['pack', '--dry-run', '--json', '--ignore-scripts'],
+      { cwd: PACKAGE_ROOT, maxBuffer: 10 * 1024 * 1024 },
+    );
+    const [pack] = JSON.parse(stdout) as Array<{
+      files: Array<{ path: string }>;
+    }>;
+    const files = new Set(pack.files.map((file) => file.path));
+
+    for (const required of [
+      'dist/cli.js',
+      'dist/template/common/src/index.ts',
+      'dist/template/common-js/src/index.js',
+      'dist/template/common/gitignore.template',
+      'dist/template/common/nvmrc.template',
+      'dist/template/common/public/audio/chime.mp3',
+      'dist/template/common/public/gltf/webxr-banner/banner.gltf',
+      'dist/template/common/public/textures/webxr.png',
+      'dist/template/scenes/ar.iwsdk.scene.json',
+      'dist/template/scenes/immersive.iwsdk.scene.json',
+      'dist/guidance/common/AGENTS.md',
+      'dist/guidance/agents/.agents/skills/iwsdk-debug/SKILL.md',
+      'dist/guidance/agents/.agents/skills/iwsdk-ui/SKILL.md',
+      'dist/guidance/claude/CLAUDE.md',
+      'dist/guidance/claude/.claude/rules/scene-json.md',
+      'dist/guidance/cursor/.cursor/rules/scene-json.mdc',
+      'dist/guidance/copilot/.github/instructions/scene-json.instructions.md',
+      'dist/guidance/scoped-agents/public/scenes/AGENTS.md',
+      'scripts/verify-release-ready.mjs',
+    ]) {
+      expect(files, required).toContain(required);
+    }
+    expect([...files].some((file) => file.includes('iwsdk-migrate-0-5'))).toBe(
+      false,
+    );
+  }, 15_000);
+
+  it.each(PORTABLE_SKILL_NAMES)(
+    'derives the portable %s skill from the canonical Claude skill bytes',
+    async (skillName) => {
+      const [claudeSkill, codexSkill] = await Promise.all([
+        readFile(
+          path.join(
+            PACKAGE_ROOT,
+            'dist',
+            'guidance',
+            'claude',
+            '.claude',
+            'skills',
+            skillName,
+            'SKILL.md',
+          ),
+        ),
+        readFile(
+          path.join(
+            PACKAGE_ROOT,
+            'dist',
+            'guidance',
+            'agents',
+            '.agents',
+            'skills',
+            skillName,
+            'SKILL.md',
+          ),
+        ),
+      ]);
+
+      expect(codexSkill).toEqual(claudeSkill);
+    },
+  );
+
+  it('keeps every portable skill file byte-identical to the canonical Claude tree', async () => {
+    const claudeRoot = path.join(
+      PACKAGE_ROOT,
+      'dist',
+      'guidance',
+      'claude',
+      '.claude',
+      'skills',
+    );
+    const portableRoot = path.join(
+      PACKAGE_ROOT,
+      'dist',
+      'guidance',
+      'agents',
+      '.agents',
+      'skills',
+    );
+    const [claudeFiles, portableFiles] = await Promise.all([
+      listRelativeFiles(claudeRoot),
+      listRelativeFiles(portableRoot),
+    ]);
+    expect(portableFiles).toEqual(claudeFiles);
+    for (const relativePath of claudeFiles) {
+      const [claudeFile, portableFile] = await Promise.all([
+        readFile(path.join(claudeRoot, relativePath)),
+        readFile(path.join(portableRoot, relativePath)),
+      ]);
+      expect(portableFile, relativePath).toEqual(claudeFile);
+    }
+  });
+
+  it('keeps root instructions below the Codex limit and emits native scoped rules', async () => {
+    const agents = await readFile(
+      path.join(PACKAGE_ROOT, 'dist', 'guidance', 'common', 'AGENTS.md'),
+      'utf8',
+    );
+    expect(Buffer.byteLength(agents)).toBeLessThan(32 * 1024);
+    expect(agents).toContain('browser_not_launched');
+    expect(agents).toContain('npx iwsdk scene flatten');
+
+    const cursorRule = await readFile(
+      path.join(
+        PACKAGE_ROOT,
+        'dist',
+        'guidance',
+        'cursor',
+        '.cursor',
+        'rules',
+        'scene-json.mdc',
+      ),
+      'utf8',
+    );
+    const copilotRule = await readFile(
+      path.join(
+        PACKAGE_ROOT,
+        'dist',
+        'guidance',
+        'copilot',
+        '.github',
+        'instructions',
+        'scene-json.instructions.md',
+      ),
+      'utf8',
+    );
+    const cursorEcsRule = await readFile(
+      path.join(
+        PACKAGE_ROOT,
+        'dist',
+        'guidance',
+        'cursor',
+        '.cursor',
+        'rules',
+        'ecs-api.mdc',
+      ),
+      'utf8',
+    );
+    expect(cursorRule).toContain('globs:');
+    expect(cursorRule).toContain('public/scenes/**');
+    expect(cursorEcsRule).toContain('src/**/*.ts');
+    expect(cursorEcsRule).toContain('src/**/*.js');
+    expect(copilotRule).toContain('applyTo: "public/scenes/**"');
+  });
+
+  it.each(PLANNER_FILES)(
+    'keeps repository and starter planner guidance synchronized: %s',
+    async (relativePath) => {
+      const [repositoryCopy, starterCopy] = await Promise.all([
+        readFile(
+          path.join(
+            REPO_ROOT,
+            '.claude',
+            'skills',
+            'iwsdk-planner',
+            relativePath,
+          ),
+          'utf8',
+        ),
+        readFile(
+          path.join(
+            PACKAGE_ROOT,
+            'guidance',
+            'claude',
+            '.claude',
+            'skills',
+            'iwsdk-planner',
+            relativePath,
+          ),
+          'utf8',
+        ),
+      ]);
+
+      expect(repositoryCopy.trimEnd()).toBe(starterCopy.trimEnd());
+    },
+  );
+});
+
+async function listRelativeFiles(
+  root: string,
+  relative = '',
+): Promise<string[]> {
+  const entries = await readdir(path.join(root, relative), {
+    withFileTypes: true,
+  });
+  const files: string[] = [];
+  for (const entry of entries.sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
+    const child = path.posix.join(relative, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listRelativeFiles(root, child)));
+    } else if (entry.isFile()) {
+      files.push(child);
+    }
+  }
+  return files;
+}

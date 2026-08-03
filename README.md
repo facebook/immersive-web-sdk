@@ -41,12 +41,6 @@ For guides, concepts, and API reference, visit: **[https://iwsdk.dev](https://iw
 | [@iwsdk/xr-input](./packages/xr-input)               | WebXR input system for Three.js                   |
 | [@iwsdk/vite-plugin-dev](./packages/vite-plugin-dev) | XR emulation, AI agent tooling, and dev browser   |
 
-### Internal Packages
-
-| Package                                            | Description                             |
-| -------------------------------------------------- | --------------------------------------- |
-| [@iwsdk/starter-assets](./packages/starter-assets) | CDN-hosted templates and assets for CLI |
-
 ## Development
 
 ```bash

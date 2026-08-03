@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex';
+export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex' | 'opencode';
 
 export type JsonSchema = {
   type?: string;
@@ -29,7 +29,7 @@ export type JsonSchema = {
 export interface McpConfigTarget {
   file: string;
   jsonKey: string | null;
-  format: 'json' | 'toml';
+  format: 'json' | 'toml' | 'opencode';
 }
 
 export interface McpToolDefinition {
@@ -185,6 +185,7 @@ export const SUPPORTED_AI_TOOLS: AiTool[] = [
   'cursor',
   'copilot',
   'codex',
+  'opencode',
 ];
 
 export const MCP_CONFIG_TARGETS: Record<AiTool, McpConfigTarget> = {
@@ -192,6 +193,7 @@ export const MCP_CONFIG_TARGETS: Record<AiTool, McpConfigTarget> = {
   cursor: { file: '.cursor/mcp.json', jsonKey: 'mcpServers', format: 'json' },
   copilot: { file: '.vscode/mcp.json', jsonKey: 'servers', format: 'json' },
   codex: { file: '.codex/config.toml', jsonKey: null, format: 'toml' },
+  opencode: { file: 'opencode.json', jsonKey: 'mcp', format: 'opencode' },
 };
 
 const VECTOR3_SCHEMA: JsonSchema = {

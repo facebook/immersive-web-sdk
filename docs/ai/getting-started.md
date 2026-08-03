@@ -9,30 +9,24 @@ This guide gets you from zero to a working AI-assisted dev session in about 5 mi
 ## Prerequisites
 
 - An IWSDK project (see [Chapter 1: Project Setup](/guides/01-project-setup) if you don't have one)
-- An AI tool that supports MCP: [Claude Code](https://claude.ai), [Cursor](https://cursor.sh), [GitHub Copilot](https://github.com/features/copilot), or [Codex](https://openai.com/codex)
+- An AI tool that supports MCP: [Claude Code](https://claude.ai), [Cursor](https://cursor.sh), [GitHub Copilot](https://github.com/features/copilot), [Codex](https://openai.com/codex), or [OpenCode](https://opencode.ai)
 
-## Enable AI
+## Enable the Managed Workspace
 
-Add `ai: {}` to your `iwsdkDev()` plugin config in `vite.config.ts`:
+Manifest-first projects use a bare development plugin:
 
 ```typescript
 import { defineConfig } from 'vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 
 export default defineConfig({
-  plugins: [
-    iwsdkDev({
-      emulator: {
-        device: 'metaQuest3',
-      },
-      ai: {}, // enables the visible collaborate workspace by default
-      verbose: true, // shows startup details (optional, helpful for first run)
-    }),
-  ],
+  plugins: [iwsdkDev()],
 });
 ```
 
-That's it. No extra packages, no separate server — everything is handled by the plugin/runtime stack, and starter projects already ship the `iwsdk` CLI through `@iwsdk/cli`.
+The managed runtime/editor is always available in development. Browser launch
+and AI mode are per-session CLI choices rather than committed project settings.
+Starter projects already ship the `iwsdk` CLI through `@iwsdk/cli`.
 
 ## Start the Dev Server
 
@@ -40,22 +34,21 @@ That's it. No extra packages, no separate server — everything is handled by th
 npm run dev
 ```
 
+Use `npx iwsdk dev up --ai-mode agent` for a headless agent session, or
+`--ai-mode collaborate` to select the visible collaboration behavior
+explicitly.
+
 ::: tip
-Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle, MCP adapter sync, and browser opening. Vite still chooses the real port, so treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
+Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle and browser opening. Vite still chooses the real port, so treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
 :::
 
 When the server starts, several things happen automatically:
 
 1. A visible Playwright workspace opens at the clean application URL
 2. Runtime and editor views share that one managed browser session
-3. Canonical project-local MCP configs are synchronized
-4. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
+3. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
 
 If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx iwsdk dev status`. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
-
-::: tip MCP config files are refreshed, not deleted
-The managed config files (`.mcp.json`, `.cursor/mcp.json`, etc.) are intentionally left on disk and refreshed on the next run. `npm run dev` and `iwsdk adapter sync` both write the same canonical workspace-based entries.
-:::
 
 ::: tip Optional reference warmup
 If your project installs `@iwsdk/reference`, run `npx iwsdk reference warmup` once after install. That step prepares the pinned reference corpus under your project's `.iwsdk/reference` state, populates the shared corpus store, and eagerly downloads the pinned model into the shared model cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of relying on the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host it separately before warmup. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.
@@ -63,9 +56,26 @@ If your project installs `@iwsdk/reference`, run `npx iwsdk reference warmup` on
 
 ## Connect Your AI Tool
 
+Every starter contains one canonical `AGENTS.md`. Codex, Cursor, Copilot, and
+OpenCode read it natively. Claude Code uses a small `CLAUDE.md` shim that imports
+`AGENTS.md`, avoiding divergent copies of the same project instructions.
+
+After dependencies are installed, configure the selected harness:
+
+```bash
+npx iwsdk adapter sync --tools claude
+```
+
+Create runs this command automatically for tools selected during an installed
+scaffold. The command merges project-local MCP and permission settings without
+removing unrelated user configuration. Run `npx iwsdk adapter status` to inspect
+the instruction, MCP, and permission layers separately.
+
 ### Claude Code
 
-Claude Code automatically discovers the `.mcp.json` file in your project root. Just open Claude Code in your project directory and it will discover the MCP server entry.
+Claude Code reads `CLAUDE.md`, `.mcp.json`, and `.claude/settings.json`. Adapter
+sync explicitly enables the IWSDK project servers and narrowly preapproves only
+their `mcp__<server>__*` tool namespaces.
 
 In environments that lazily load MCP tool schemas, discovery is not the same as runtime readiness:
 
@@ -81,6 +91,10 @@ Cursor reads from `.cursor/mcp.json`.
 npx iwsdk adapter sync --tools cursor
 ```
 
+The generated `.cursor/permissions.json` supplies the repository-level
+Auto-run instruction for IWSDK-managed MCP tools. Cursor still controls the
+active Run Mode in its UI.
+
 ### GitHub Copilot
 
 Copilot reads from `.vscode/mcp.json`:
@@ -88,6 +102,10 @@ Copilot reads from `.vscode/mcp.json`:
 ```bash
 npx iwsdk adapter sync --tools copilot
 ```
+
+VS Code stores MCP tool approval through its interactive **Chat: Manage Tool
+Approval** flow. There is no supported repository file that IWSDK can honestly
+use to force that approval, so `adapter status` reports this step as manual.
 
 ### Codex
 
@@ -97,6 +115,18 @@ Codex reads from `.codex/config.toml`:
 npx iwsdk adapter sync --tools codex
 ```
 
+Each managed Codex MCP server uses
+`default_tools_approval_mode = "approve"`; unrelated tools keep the user's
+normal approval policy.
+
+### OpenCode
+
+OpenCode reads MCP servers and narrow tool permissions from `opencode.json`:
+
+```bash
+npx iwsdk adapter sync --tools opencode
+```
+
 You can select multiple adapters if you use more than one tool:
 
 ```bash
@@ -104,8 +134,21 @@ npx iwsdk adapter sync --tools claude,cursor
 ```
 
 ::: tip Adapter default
-`npx iwsdk adapter sync` writes every supported adapter. Use `--tools` only when you want to limit the generated configs.
+`npx iwsdk adapter sync` writes every supported adapter. Use `--tools` only when you want to limit the generated configs. Managed config entries are refreshed, not deleted; `adapter prune` removes only IWSDK-managed MCP and permission entries.
 :::
+
+### Other Agent Harnesses
+
+For a harness that IWSDK does not recognize, print a self-contained setup prompt:
+
+```bash
+npx iwsdk adapter prompt
+```
+
+Paste the output into that harness. It includes the exact local MCP commands,
+asks the harness to load `AGENTS.md`, requests narrow IWSDK-only approval, and
+requires a manual-approval explanation when repository-scoped permissions are
+not supported.
 
 ## First Interaction
 
@@ -133,11 +176,9 @@ The agent will call `xr_set_transform` to move the controller, then `browser_scr
 
 By default, screenshots are 800x800 pixels. You can adjust this to control token usage:
 
-```typescript
-ai: {
-  mode: 'agent',
-  screenshotSize: { width: 500, height: 500 },  // smaller = fewer tokens
-},
+```bash
+npx iwsdk dev up --ai-mode agent \
+  --screenshot-width 500 --screenshot-height 500
 ```
 
 ## What's Next

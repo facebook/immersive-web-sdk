@@ -116,10 +116,15 @@ export function hasManagedMcpArgToken(
   return content.includes(`"${argToken}"`);
 }
 
-function hasHzdbInstalled(workspaceRoot: string): boolean {
-  return existsSync(
-    path.join(workspaceRoot, 'node_modules', '@meta-quest', 'hzdb'),
+function getMetaVrEntrypoint(workspaceRoot: string): string | null {
+  const entrypoint = path.join(
+    workspaceRoot,
+    'node_modules',
+    '@meta-quest',
+    'metavr',
+    'bin.js',
   );
+  return existsSync(entrypoint) ? entrypoint : null;
 }
 
 export function getManagedMcpServerRegistry({
@@ -151,10 +156,11 @@ export function getManagedMcpServerRegistry({
     };
   }
 
-  if (hasHzdbInstalled(normalizedWorkspaceRoot)) {
-    entries.hzdb = {
-      command: 'npx',
-      args: ['@meta-quest/hzdb', 'mcp', 'server'],
+  const metaVrEntrypoint = getMetaVrEntrypoint(normalizedWorkspaceRoot);
+  if (metaVrEntrypoint != null) {
+    entries.metavr = {
+      command: 'node',
+      args: [metaVrEntrypoint, 'mcp', 'server'],
     };
   }
 
@@ -319,6 +325,7 @@ export async function mergeTomlConfig(
     tomlLines.push(
       `args = [${entry.args.map((arg) => JSON.stringify(arg)).join(', ')}]`,
     );
+    tomlLines.push('default_tools_approval_mode = "approve"');
     tomlLines.push('');
   }
   tomlLines.push(TOML_BLOCK_END);
@@ -330,6 +337,137 @@ export async function mergeTomlConfig(
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, newContent);
   return created;
+}
+
+function openCodeServerEntries(
+  serverEntries: StableMcpEntryMap,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(serverEntries).map(([name, entry]) => [
+      name,
+      {
+        type: 'local',
+        command: [entry.command, ...entry.args],
+        enabled: true,
+      },
+    ]),
+  );
+}
+
+function openCodePermissionKey(serverName: string): string {
+  return `${serverName}_*`;
+}
+
+export async function mergeOpenCodeConfig(
+  filePath: string,
+  serverEntries: StableMcpEntryMap,
+  managedKeys: string[],
+): Promise<boolean> {
+  let existing: JsonObject = {};
+  let created = false;
+  try {
+    const parsed = JSON.parse(await readFile(filePath, 'utf8'));
+    if (!isRecord(parsed)) {
+      throw new Error(
+        `Existing OpenCode config at ${filePath} must contain a top-level object`,
+      );
+    }
+    existing = parsed;
+  } catch (error) {
+    if (!isNodeErrorWithCode(error, 'ENOENT')) {
+      if (error instanceof SyntaxError) {
+        throw new Error(
+          `Existing OpenCode config at ${filePath} is invalid JSON`,
+        );
+      }
+      throw error;
+    }
+    created = true;
+  }
+
+  const mcpValue = existing.mcp;
+  if (mcpValue != null && !isRecord(mcpValue)) {
+    throw new Error(
+      `Existing OpenCode config section "mcp" at ${filePath} must be an object`,
+    );
+  }
+  const mcp = isRecord(mcpValue) ? { ...mcpValue } : {};
+  for (const key of managedKeys) {
+    delete mcp[key];
+  }
+  Object.assign(mcp, openCodeServerEntries(serverEntries));
+  existing.mcp = mcp;
+
+  const permissionValue = existing.permission;
+  if (
+    permissionValue != null &&
+    typeof permissionValue !== 'string' &&
+    !isRecord(permissionValue)
+  ) {
+    throw new Error(
+      `Existing OpenCode config section "permission" at ${filePath} must be a string or object`,
+    );
+  }
+  const permission: JsonObject =
+    typeof permissionValue === 'string'
+      ? { '*': permissionValue }
+      : isRecord(permissionValue)
+        ? { ...permissionValue }
+        : {};
+  for (const key of managedKeys) {
+    delete permission[openCodePermissionKey(key)];
+  }
+  for (const name of Object.keys(serverEntries)) {
+    permission[openCodePermissionKey(name)] = 'allow';
+  }
+  existing.permission = permission;
+  existing.$schema ??= 'https://opencode.ai/config.json';
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(existing, null, 2)}\n`);
+  return created;
+}
+
+export async function unmergeOpenCodeConfig(
+  filePath: string,
+  managedKeys: string[],
+  weCreatedFile: boolean,
+): Promise<void> {
+  let existing: JsonObject;
+  try {
+    const parsed = JSON.parse(await readFile(filePath, 'utf8'));
+    if (!isRecord(parsed)) {
+      return;
+    }
+    existing = parsed;
+  } catch {
+    return;
+  }
+
+  if (isRecord(existing.mcp)) {
+    for (const key of managedKeys) {
+      delete existing.mcp[key];
+    }
+    if (Object.keys(existing.mcp).length === 0) {
+      delete existing.mcp;
+    }
+  }
+  if (isRecord(existing.permission)) {
+    for (const key of managedKeys) {
+      delete existing.permission[openCodePermissionKey(key)];
+    }
+    if (Object.keys(existing.permission).length === 0) {
+      delete existing.permission;
+    }
+  }
+  if (
+    weCreatedFile &&
+    Object.keys(existing).every((key) => key === '$schema')
+  ) {
+    await unlink(filePath).catch(() => {});
+    return;
+  }
+  await writeFile(filePath, `${JSON.stringify(existing, null, 2)}\n`);
 }
 
 export async function unmergeTomlConfig(
@@ -410,8 +548,10 @@ export async function syncMcpAdapters({
           managedNames,
         ),
       );
-    } else {
+    } else if (target.format === 'toml') {
       writes.push(mergeTomlConfig(filePath, serverEntries, managedNames));
+    } else {
+      writes.push(mergeOpenCodeConfig(filePath, serverEntries, managedNames));
     }
   }
 
@@ -445,8 +585,10 @@ export async function pruneMcpAdapters({
           weCreatedFile,
         ),
       );
-    } else {
+    } else if (target.format === 'toml') {
       writes.push(unmergeTomlConfig(filePath, weCreatedFile, serverKeys));
+    } else {
+      writes.push(unmergeOpenCodeConfig(filePath, serverKeys, weCreatedFile));
     }
   }
 

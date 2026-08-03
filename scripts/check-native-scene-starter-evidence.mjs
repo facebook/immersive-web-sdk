@@ -20,7 +20,12 @@ const DEFAULT_EVIDENCE_DIR = path.join(
   REPO_ROOT,
   'docs/test-evidence/native-scene-starters/current',
 );
-const TARGETS = ['generated-vr', 'generated-ar'];
+const TARGETS = ['generated-vr', 'generated-ar', 'generated-browser'];
+const MUTATION_IDS = {
+  'generated-ar': 'scaffold-added-plant',
+  'generated-browser': 'scaffold-added-group',
+  'generated-vr': 'scaffold-added-plant',
+};
 const REQUIRED_FILES = [
   'app.png',
   'editor.png',
@@ -173,8 +178,20 @@ function validateTarget({ checkedFiles, evidenceDir, failures, target }) {
   validateRuntimeComponents(failures, target, proof.app?.runtimeComponents);
   validateAssetResponses(failures, target, 'app', proof.network?.app);
   validateAssetResponses(failures, target, 'editor', proof.network?.editor);
-  validateBrowserSignals(failures, target, 'app', proof.network?.app);
-  validateBrowserSignals(failures, target, 'editor', proof.network?.editor);
+  validateBrowserSignals(
+    failures,
+    target,
+    'app',
+    proof.network?.app,
+    proof.browser?.baseUrl,
+  );
+  validateBrowserSignals(
+    failures,
+    target,
+    'editor',
+    proof.network?.editor,
+    proof.browser?.baseUrl,
+  );
 }
 
 function validatePng(failures, target, file, fullPath) {
@@ -225,6 +242,7 @@ function validateEditorProof(failures, target, proof) {
 function validateSceneMutation(failures, target, scene) {
   const beforeCount = scene?.before?.nodes?.length;
   const afterNodes = scene?.after?.nodes;
+  const mutationId = MUTATION_IDS[target];
   assert(
     failures,
     Number.isFinite(beforeCount) && Array.isArray(afterNodes),
@@ -240,8 +258,8 @@ function validateSceneMutation(failures, target, scene) {
   );
   assert(
     failures,
-    afterNodes.some((node) => node?.id === 'scaffold-added-plant'),
-    `${target} saved scene is missing scaffold-added-plant`,
+    afterNodes.some((node) => node?.id === mutationId),
+    `${target} saved scene is missing ${mutationId}`,
   );
 }
 
@@ -292,43 +310,53 @@ function validateAssetResponses(failures, target, label, network) {
   }
 }
 
-function validateBrowserSignals(failures, target, label, network) {
+function validateBrowserSignals(failures, target, label, network, baseUrl) {
   for (const error of network?.consoleErrors ?? []) {
     assert(
       failures,
-      isAllowedBrowserSignal(error),
+      isAllowedBrowserSignal(error, baseUrl),
       `${target} ${label} console error: ${error}`,
     );
   }
   for (const failure of network?.failedRequests ?? []) {
     assert(
       failures,
-      isAllowedBrowserSignal(failure),
+      isAllowedBrowserSignal(failure, baseUrl),
       `${target} ${label} failed request: ${failure}`,
     );
   }
   for (const response of network?.badResponses ?? []) {
     assert(
       failures,
-      isAllowedBrowserSignal(response),
+      isAllowedBrowserSignal(response, baseUrl),
       `${target} ${label} bad response: ${response}`,
     );
   }
 }
 
-function isAllowedBrowserSignal(value) {
+function isAllowedBrowserSignal(value, baseUrl) {
   return (
     value.includes('/favicon.ico') ||
     value.includes('/.well-known/') ||
-    value.includes(
-      'Failed to load resource: the server responded with a status of 404',
-    ) ||
     value.includes('Error loading environment living_room from CDN') ||
     value.includes('Outdated Optimize Dep') ||
     value.includes('@iwer/sem@0.2.4/captures/living_room.json') ||
+    isAllowedLocalNavigationAbort(value, baseUrl) ||
     (value.includes('/node_modules/.vite/deps/') &&
       (value.includes('net::ERR_ABORTED') || value.startsWith('504 ')))
   );
+}
+
+function isAllowedLocalNavigationAbort(value, baseUrl) {
+  const match = /^GET (\S+) net::ERR_ABORTED$/u.exec(value);
+  if (match == null || typeof baseUrl !== 'string') {
+    return false;
+  }
+  try {
+    return new URL(match[1]).origin === new URL(baseUrl).origin;
+  } catch {
+    return false;
+  }
 }
 
 function assert(failures, condition, message) {

@@ -713,12 +713,7 @@ async function main() {
       validateSceneDocument,
     });
   }
-  const hasCreateSeeds = fileExists(
-    'packages/create/template/common/src/assets.ts',
-  );
-  if (hasCreateSeeds) {
-    assertCreateSeeds(failures, validateSceneDocument);
-  }
+  assertCreateSeeds(failures, validateSceneDocument);
   assertRemovedDirectories(failures);
 
   if (failures.length > 0) {
@@ -731,7 +726,7 @@ async function main() {
   }
 
   console.log(
-    `Native scene/project-manifest migration check passed: ${EXAMPLES.length} examples${hasCreateSeeds ? ' and 2 Create scene seeds' : ''} are valid.`,
+    `Native scene/project-manifest migration check passed: ${EXAMPLES.length} examples and 2 Create scene seeds are valid.`,
   );
 }
 

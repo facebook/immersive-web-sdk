@@ -8,9 +8,12 @@
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import crossSpawn from 'cross-spawn';
+import crossSpawn, { spawn as mockedSpawn } from 'cross-spawn';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { installDependenciesFromBundle } from '../src/installer.js';
+import {
+  installDependenciesFromBundle,
+  warmupReference,
+} from '../src/installer.js';
 import type { ResolvedSource } from '../src/source.js';
 
 // Mock cross-spawn before importing installer
@@ -40,12 +43,9 @@ function makeFakeSource(packageMap: Record<string, string>): ResolvedSource {
   return {
     isBundleMode: true,
     prepare: async () => {},
-    fetchIndex: async () => [],
-    fetchRecipe: async () => ({ name: 'fake' }),
     getPackageInstallSpec: (name: string) => packageMap[name],
     getPackageInstallSpecs: () => packageMap,
     downloadPackages: async () => {},
-    resolveRecipeUrls: (recipe) => recipe,
     cleanup: async () => {},
   };
 }
@@ -58,7 +58,7 @@ describe('installDependenciesFromBundle', () => {
     name: 'test-app',
     dependencies: {
       '@iwsdk/core': '^0.1.0',
-      '@iwsdk/starter-assets': '^0.1.0',
+      '@iwsdk/locomotor': '^0.1.0',
       three: '^0.165.0',
       vite: '^5.0.0',
     },
@@ -87,8 +87,7 @@ describe('installDependenciesFromBundle', () => {
   it('rewrites @iwsdk/* deps in both dependencies and devDependencies to file: paths', async () => {
     const source = makeFakeSource({
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
-      '@iwsdk/starter-assets':
-        'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
+      '@iwsdk/locomotor': 'file:.sdk-packages/locomotor/iwsdk-locomotor.tgz',
       '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
@@ -100,8 +99,8 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.dependencies['@iwsdk/core']).toBe(
       'file:.sdk-packages/core/iwsdk-core.tgz',
     );
-    expect(pkg.dependencies['@iwsdk/starter-assets']).toBe(
-      'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
+    expect(pkg.dependencies['@iwsdk/locomotor']).toBe(
+      'file:.sdk-packages/locomotor/iwsdk-locomotor.tgz',
     );
     expect(pkg.devDependencies['@iwsdk/cli']).toBe(
       'file:.sdk-packages/cli/iwsdk-cli.tgz',
@@ -114,8 +113,7 @@ describe('installDependenciesFromBundle', () => {
   it('leaves non-@iwsdk/* deps untouched', async () => {
     const source = makeFakeSource({
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
-      '@iwsdk/starter-assets':
-        'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
+      '@iwsdk/locomotor': 'file:.sdk-packages/locomotor/iwsdk-locomotor.tgz',
       '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
@@ -190,7 +188,7 @@ describe('installDependenciesFromBundle', () => {
   });
 
   it('skips @iwsdk/* deps when source returns undefined', async () => {
-    // Source only knows about core, not starter-assets or devDeps
+    // Source only knows about core, not locomotor or devDeps
     const source = makeFakeSource({
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
     });
@@ -201,10 +199,28 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.dependencies['@iwsdk/core']).toBe(
       'file:.sdk-packages/core/iwsdk-core.tgz',
     );
-    // starter-assets should remain unchanged since source doesn't know it
-    expect(pkg.dependencies['@iwsdk/starter-assets']).toBe('^0.1.0');
+    // locomotor should remain unchanged since source doesn't know it
+    expect(pkg.dependencies['@iwsdk/locomotor']).toBe('^0.1.0');
     // devDeps should also remain unchanged
     expect(pkg.devDependencies['@iwsdk/cli']).toBe('^0.1.0');
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe('^0.1.0');
+  });
+});
+
+describe('warmupReference', () => {
+  it('runs the installed IWSDK reference warmup as part of creation', async () => {
+    await warmupReference('/tmp/generated-iwsdk-app');
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '/tmp/generated-iwsdk-app/node_modules/@iwsdk/cli/dist/cli.js',
+        'reference',
+        'warmup',
+      ],
+      {
+        cwd: '/tmp/generated-iwsdk-app',
+        stdio: 'inherit',
+      },
+    );
   });
 });

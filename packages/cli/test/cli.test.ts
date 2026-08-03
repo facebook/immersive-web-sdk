@@ -29,6 +29,7 @@ const CLI_PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
+const WORKSPACE_ROOT = path.resolve(CLI_PACKAGE_ROOT, '..', '..');
 const CLI_PATH = path.join(CLI_PACKAGE_ROOT, 'dist', 'cli.js');
 const CLI_PACKAGE_JSON_PATH = path.join(CLI_PACKAGE_ROOT, 'package.json');
 
@@ -260,6 +261,23 @@ async function waitForSessionFile(
   throw new Error(`Timed out waiting for ${sessionFile}`);
 }
 
+async function waitForOutput(
+  readOutput: () => string,
+  expected: string,
+  timeoutMs = 15000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (readOutput().includes(expected)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(
+    `Timed out waiting for output ${JSON.stringify(expected)}. Last output:\n${readOutput()}`,
+  );
+}
+
 async function startRuntimeFixture(
   workspaceRoot: string,
   options: {
@@ -346,6 +364,7 @@ function createBrowserState(
 function buildManagedRuntimeScript(
   sessionId: string,
   options: {
+    environmentCapturePath?: string;
     initialBrowserStatus?: RuntimeBrowserState['status'];
     finalBrowserStatus?: RuntimeBrowserState['status'];
     finalBrowserDelayMs?: number;
@@ -386,6 +405,20 @@ const require = createRequire(${JSON.stringify(CLI_PACKAGE_JSON_PATH)});
 const { WebSocketServer } = require('ws');
 
 const workspaceRoot = realpathSync.native(process.cwd());
+const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
+if (environmentCapturePath) {
+  await writeFile(
+    environmentCapturePath,
+    JSON.stringify({
+      aiMode: process.env.IWSDK_DEV_AI_MODE,
+      headless: process.env.IWSDK_DEV_HEADLESS,
+      open: process.env.IWSDK_DEV_OPEN,
+      screenshotHeight: process.env.IWSDK_DEV_SCREENSHOT_HEIGHT,
+      screenshotWidth: process.env.IWSDK_DEV_SCREENSHOT_WIDTH,
+    }) + '\\n',
+    'utf8',
+  );
+}
 const sessionFile = path.join(workspaceRoot, '.iwsdk', 'runtime', 'session.json');
 const server = http.createServer((_, res) => res.end('ok'));
 const wss = new WebSocketServer({ server });
@@ -631,6 +664,33 @@ describe('runtime introspection and raw output', () => {
     expect(parsed.data.state.session.browser.status).toBe('connected');
   });
 
+  test('explains an intentional --no-open session in dev status', async () => {
+    await registerRuntimeSession({
+      sessionId: 'session-no-browser',
+      workspaceRoot: appA,
+      pid: process.pid,
+      port: 5191,
+      localUrl: 'http://localhost:5191',
+      browser: createBrowserState('not_launched', {
+        lastError: {
+          cause: 'browser_not_launched',
+          message:
+            'No managed browser was launched because the dev server was started with --no-open.',
+          at: new Date().toISOString(),
+        },
+      }),
+    });
+
+    const status = await runCli(['dev', 'status'], appA);
+    const parsed = JSON.parse(status.stdout);
+    expect(parsed.data.state).toMatchObject({
+      browserConnected: false,
+      browserCommandReady: false,
+      browserIssue: { cause: 'browser_not_launched' },
+      session: { browser: { status: 'not_launched' } },
+    });
+  });
+
   test('inspects one runtime tool schema', async () => {
     const inspect = await runCli(
       ['mcp', 'inspect', '--tool', 'xr_look_at'],
@@ -645,6 +705,17 @@ describe('runtime introspection and raw output', () => {
   });
 
   test('prints schema-backed help for runtime commands', async () => {
+    const sceneDomainHelp = await runCli(['scene', '--help'], appA);
+    expect(sceneDomainHelp.exitCode).toBe(0);
+    expect(sceneDomainHelp.stdout).toContain('Usage: iwsdk scene <action>');
+    expect(sceneDomainHelp.stdout).toContain('render-file');
+    expect(sceneDomainHelp.stdout).toContain('flatten');
+
+    const uiDomainHelp = await runCli(['ui', '--help'], appA);
+    expect(uiDomainHelp.exitCode).toBe(0);
+    expect(uiDomainHelp.stdout).toContain('Usage: iwsdk ui <action>');
+    expect(uiDomainHelp.stdout).toContain('render-preview');
+
     const xrHelp = await runCli(['xr', 'look-at', '--help'], appA);
     expect(xrHelp.exitCode).toBe(0);
     expect(xrHelp.stdout).toContain('Usage: iwsdk xr look-at');
@@ -857,6 +928,17 @@ describe('adapter management', () => {
     expect(codex).not.toContain('--workspace');
   });
 
+  test('prints a self-contained fallback prompt for unsupported harnesses', async () => {
+    const result = await runCli(['adapter', 'prompt'], appA);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Treat AGENTS.md as the canonical');
+    expect(result.stdout).toContain('iwsdk-runtime');
+    expect(result.stdout).toContain('"mcp","stdio"');
+    expect(result.stdout).toContain('Do not disable approvals or sandboxing');
+    expect(() => JSON.parse(result.stdout)).toThrow();
+  });
+
   test('ignores legacy-looking args on unrelated user-owned MCP entries', async () => {
     const sync = await runCli(['adapter', 'sync'], appA);
     expect(sync.exitCode).toBe(0);
@@ -912,27 +994,37 @@ describe('adapter management', () => {
     expect(adapterStatuses.codex).toBe('configured');
   });
 
-  test('works against the real starter-template app shape', async () => {
+  test('works against the manifest-first starter app shape', async () => {
     const starterApp = path.join(tempDir, 'starter-app');
     await mkdir(starterApp, { recursive: true });
 
-    const starterPackageJson = await readFile(
-      path.join(
-        '/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk',
-        'packages',
-        'starter-assets',
-        'starter-template',
-        'package.json',
-      ),
-      'utf8',
-    );
+    const starterPackageJson = `${JSON.stringify(
+      {
+        name: 'starter-app',
+        private: true,
+        scripts: {
+          dev: 'iwsdk dev up --open --foreground',
+          'dev:runtime': 'vite',
+          'dev:down': 'iwsdk dev down',
+          'dev:status': 'iwsdk dev status',
+        },
+        devDependencies: {
+          '@iwsdk/cli': '0.5.0',
+          '@iwsdk/vite-plugin-dev': '0.5.0',
+          vite: '^7.1.4',
+        },
+      },
+      null,
+      2,
+    )}\n`;
     const starterViteConfig = await readFile(
       path.join(
-        '/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk',
+        WORKSPACE_ROOT,
         'packages',
-        'starter-assets',
-        'starter-template',
-        'vite.config.template.ts',
+        'create',
+        'template',
+        'common',
+        'vite.config.ts',
       ),
       'utf8',
     );
@@ -946,9 +1038,10 @@ describe('adapter management', () => {
     expect(parsedStarterPackageJson.scripts['dev:status']).toBe(
       'iwsdk dev status',
     );
-    expect(parsedStarterPackageJson.devDependencies['@iwsdk/cli']).toContain(
-      'iwsdk-cli.tgz',
+    expect(parsedStarterPackageJson.devDependencies['@iwsdk/cli']).toBe(
+      '0.5.0',
     );
+    expect(starterViteConfig).toContain('iwsdkDev()');
     expect(starterViteConfig).not.toContain('IWSDK_DEV_PORT');
     expect(starterViteConfig).not.toContain('IWSDK_DEV_OPEN');
     expect(starterViteConfig).not.toContain('strictPort');
@@ -961,6 +1054,11 @@ describe('adapter management', () => {
     await writeFile(
       path.join(starterApp, 'vite.config.ts'),
       starterViteConfig,
+      'utf8',
+    );
+    await writeFile(
+      path.join(starterApp, 'iwsdk.config.json'),
+      '{"version":"iwsdk.project.v1","scene":"./public/scenes/main.iwsdk.scene.json","world":{"xr":false}}\n',
       'utf8',
     );
 
@@ -981,6 +1079,56 @@ describe('adapter management', () => {
 });
 
 describe('dev lifecycle', () => {
+  test('propagates CLI-owned session settings into a manifest-first dev process', async () => {
+    const fixtureScript = path.join(appA, 'dev-session-env.mjs');
+    const environmentCapturePath = path.join(appA, 'dev-session-env.json');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-session-env', {
+        environmentCapturePath,
+      }),
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: { 'dev:runtime': 'node dev-session-env.mjs' },
+    });
+    await rm(path.join(appA, 'vite.config.ts'));
+    await writeFile(
+      path.join(appA, 'iwsdk.config.json'),
+      '{"version":"iwsdk.project.v1"}\n',
+      'utf8',
+    );
+
+    const up = await runCli(
+      [
+        'dev',
+        'up',
+        '--ai-mode',
+        'agent',
+        '--headless',
+        '--no-open',
+        '--screenshot-width',
+        '1280',
+        '--screenshot-height',
+        '720',
+        '--timeout',
+        '15000',
+      ],
+      appA,
+    );
+    expect(up.exitCode, up.stderr).toBe(0);
+    expect(JSON.parse(await readFile(environmentCapturePath, 'utf8'))).toEqual({
+      aiMode: 'agent',
+      headless: 'true',
+      open: 'false',
+      screenshotHeight: '720',
+      screenshotWidth: '1280',
+    });
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode, down.stderr).toBe(0);
+  });
+
   test('requires dev:runtime and records observed launch state', async () => {
     const fixtureScript = path.join(appA, 'dev-runtime.mjs');
     const fallbackScript = path.join(appA, 'dev-should-not-run.mjs');
@@ -1019,7 +1167,7 @@ process.exit(1);
 
     const launch = parsedUp.data.launch;
     expect(launch.scriptName).toBe('dev:runtime');
-    expect(launch.openBrowser).toBe(false);
+    expect(launch.openBrowser).toBe(true);
     expect(typeof launch.port).toBe('number');
     expect(parsedUp.data.session.port).toBe(launch.port);
     expect(typeof parsedUp.data.logPath).toBe('string');
@@ -1101,13 +1249,17 @@ process.exit(1);
       foreground.on('close', (exitCode) => resolve(exitCode ?? 1));
     });
 
-    await waitForSessionFile(getRuntimeSessionFilePath(appA));
+    await waitForOutput(() => stdout, '[IWSDK] Runtime ready at');
     const attached = await runCli(['dev', 'up', '--timeout', '15000'], appA);
     expect(attached.exitCode, attached.stderr).toBe(0);
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode, down.stderr).toBe(0);
 
-    await expect(foregroundExit).resolves.toBe(0);
+    const foregroundExitCode = await foregroundExit;
+    expect(
+      foregroundExitCode,
+      `foreground stdout:\n${stdout}\nforeground stderr:\n${stderr}`,
+    ).toBe(0);
     expect(stdout).toContain('[IWSDK] Runtime ready at');
     expect(stderr).not.toContain('dev_up_exit');
   });

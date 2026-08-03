@@ -9,7 +9,11 @@ import { spawn, type ChildProcess } from 'child_process';
 import { closeSync, existsSync, openSync } from 'fs';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { parseIntegerOption, safeJsonParse } from '../argv.js';
+import {
+  parseIntegerOption,
+  parseOptionalPositiveIntegerOption,
+  safeJsonParse,
+} from '../argv.js';
 import { createFailure, createSuccess } from '../cli-results.js';
 import type {
   CliFailure,
@@ -47,6 +51,24 @@ interface PackageJsonManifest {
   packageManager?: string;
   scripts?: Record<string, string>;
 }
+
+export type DevAiMode = 'agent' | 'collaborate';
+
+export interface ResolvedDevSessionOptions {
+  aiMode?: DevAiMode;
+  headless: boolean;
+  open: boolean;
+  screenshotWidth?: number;
+  screenshotHeight?: number;
+}
+
+const DEV_SESSION_ENV_NAMES = {
+  aiMode: 'IWSDK_DEV_AI_MODE',
+  headless: 'IWSDK_DEV_HEADLESS',
+  open: 'IWSDK_DEV_OPEN',
+  screenshotHeight: 'IWSDK_DEV_SCREENSHOT_HEIGHT',
+  screenshotWidth: 'IWSDK_DEV_SCREENSHOT_WIDTH',
+} as const;
 
 export interface ProcessExitResult {
   exitCode: number | null;
@@ -238,8 +260,101 @@ async function resolveDevRuntimeScript(workspaceRoot: string): Promise<string> {
   );
 }
 
-function isOpenRequested(options: CliOptions): boolean {
-  return options.open === true;
+function readBooleanFlag(
+  value: CliOptions[string] | undefined,
+  label: string,
+): boolean {
+  if (value == null || value === false) {
+    return false;
+  }
+  if (value !== true) {
+    throw new Error(`${label} does not take a value`);
+  }
+  return true;
+}
+
+function readAiMode(
+  value: CliOptions[string] | undefined,
+): DevAiMode | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (value === 'agent' || value === 'collaborate') {
+    return value;
+  }
+  throw new Error('--ai-mode must be either "agent" or "collaborate"');
+}
+
+/** Parse and validate launch-time choices owned by the dev command. */
+export function resolveDevSessionOptions(
+  options: CliOptions,
+): ResolvedDevSessionOptions {
+  const aiMode = readAiMode(options.aiMode);
+  const headlessRequested = readBooleanFlag(options.headless, '--headless');
+  const headedRequested = readBooleanFlag(options.headed, '--headed');
+  const openRequested = readBooleanFlag(options.open, '--open');
+  const noOpenRequested = readBooleanFlag(options.noOpen, '--no-open');
+
+  if (headlessRequested && headedRequested) {
+    throw new Error('--headless and --headed cannot be used together');
+  }
+  if (openRequested && noOpenRequested) {
+    throw new Error('--open and --no-open cannot be used together');
+  }
+  if (aiMode === 'agent' && headedRequested) {
+    throw new Error('--ai-mode agent is headless and cannot use --headed');
+  }
+  if (aiMode === 'collaborate' && headlessRequested) {
+    throw new Error(
+      '--ai-mode collaborate is headed and cannot use --headless',
+    );
+  }
+
+  const screenshotWidth = parseOptionalPositiveIntegerOption(
+    options.screenshotWidth,
+    '--screenshot-width',
+  );
+  const screenshotHeight = parseOptionalPositiveIntegerOption(
+    options.screenshotHeight,
+    '--screenshot-height',
+  );
+
+  return {
+    ...(aiMode == null ? {} : { aiMode }),
+    headless: headlessRequested || aiMode === 'agent',
+    open: !noOpenRequested,
+    ...(screenshotWidth == null ? {} : { screenshotWidth }),
+    ...(screenshotHeight == null ? {} : { screenshotHeight }),
+  };
+}
+
+/** Build the child environment without retaining stale session overrides. */
+export function buildDevRuntimeEnvironment(
+  options: CliOptions,
+  baseEnvironment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const session = resolveDevSessionOptions(options);
+  const environment = { ...baseEnvironment };
+  for (const name of Object.values(DEV_SESSION_ENV_NAMES)) {
+    delete environment[name];
+  }
+
+  environment[DEV_SESSION_ENV_NAMES.headless] = String(session.headless);
+  environment[DEV_SESSION_ENV_NAMES.open] = String(session.open);
+  if (session.aiMode != null) {
+    environment[DEV_SESSION_ENV_NAMES.aiMode] = session.aiMode;
+  }
+  if (session.screenshotWidth != null) {
+    environment[DEV_SESSION_ENV_NAMES.screenshotWidth] = String(
+      session.screenshotWidth,
+    );
+  }
+  if (session.screenshotHeight != null) {
+    environment[DEV_SESSION_ENV_NAMES.screenshotHeight] = String(
+      session.screenshotHeight,
+    );
+  }
+  return environment;
 }
 
 export function shouldOpenExternalBrowser(
@@ -289,6 +404,16 @@ async function waitForRuntimeSession(
       lastSession = session;
       if (!session.browser || isRuntimeBrowserCommandReady(session)) {
         return { session, exit: null, browserReady: true };
+      }
+      if (session.browser.status === 'not_launched') {
+        return {
+          session,
+          exit: null,
+          // The server is ready; browser-dependent commands remain explicitly
+          // unavailable by operator choice.
+          browserReady: true,
+          browserIssue: session.browser.lastError,
+        };
       }
       if (session.browser.status === 'launch_failed') {
         return {
@@ -468,6 +593,7 @@ export async function handleDevUp(
   options: CliOptions,
   io: ResolvedCliIo,
 ): Promise<CliSuccess<unknown> | CliFailure | null> {
+  const devSessionOptions = resolveDevSessionOptions(options);
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
     workspace:
@@ -477,7 +603,7 @@ export async function handleDevUp(
 
   const timeoutMs = parseIntegerOption(options.timeout, '--timeout', 60000);
   const foreground = isForegroundLaunch(options);
-  const openBrowser = isOpenRequested(options);
+  const openBrowser = devSessionOptions.open;
   const existingSession = await getRuntimeSession(workspaceRoot);
   if (existingSession) {
     const waitResult = await waitForRuntimeSession(workspaceRoot, timeoutMs);
@@ -536,7 +662,7 @@ export async function handleDevUp(
     cwd: workspaceRoot,
     detached: !foreground,
     stdio: foreground ? 'inherit' : ['ignore', stdoutFd, stdoutFd],
-    env: process.env,
+    env: buildDevRuntimeEnvironment(options),
     // npm/pnpm/yarn are .cmd shims on Windows; Node cannot spawn them without a shell.
     shell: process.platform === 'win32',
   });
@@ -748,6 +874,12 @@ export async function handleDevOpen(
     browserConnected: Boolean(session.browser?.connected),
     browserCommandReady: isRuntimeBrowserCommandReady(session),
     browser: session.browser ?? null,
+    ...(session.browser?.status === 'not_launched'
+      ? {
+          actionRequired:
+            'Run "iwsdk dev restart --open" to launch the managed browser.',
+        }
+      : {}),
   });
 }
 

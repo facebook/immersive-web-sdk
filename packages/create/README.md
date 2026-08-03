@@ -53,10 +53,13 @@ dependencies. They also apply a small target-specific baseline:
 | Desktop 3D                  | Dedicated non-XR scene with browser camera, input, locomotion, and interaction behavior; physics disabled |
 
 Choose **Customize setup...** to select JavaScript, change applicable SDK
-features, configure coding-tool integrations, or opt out of Git initialization
-and dependency installation. The CLI derives low-level WebXR feature settings
-from those choices instead of asking for raw `No` / `Optional` / `Required`
-states.
+features, or opt out of Git initialization and dependency installation. The CLI
+derives low-level WebXR feature settings from those choices instead of asking
+for raw `No` / `Optional` / `Required` states.
+
+Every project includes guidance and configuration for Claude Code, Codex,
+Cursor, GitHub Copilot/VS Code, and OpenCode. Delete integrations you do not use;
+there is no tool-selection step during scaffolding.
 
 Before writing files, Create prints the resolved starting point, language, SDK
 features, and generated `World.create` options. These settings remain editable
@@ -111,8 +114,7 @@ npm create @iwsdk@latest -- --canary
 
 Use `-y` / `--yes` for deterministic non-interactive scaffolding. Without it,
 `--target` and its compatibility aliases can preselect the starting point, but
-the interactive setup controls language, features, coding-tool integrations,
-Git, and installation.
+the interactive setup controls language, features, Git, and installation.
 
 | Flag                                                 | Description                                                                                      |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -128,7 +130,6 @@ Git, and installation.
 | `--physics` / `--no-physics`                         | Enable or disable physics                                                                        |
 | `--scene-understanding` / `--no-scene-understanding` | Enable or disable MR room surfaces and anchors                                                   |
 | `--environment-raycast` / `--no-environment-raycast` | Enable or disable MR real-world placement                                                        |
-| `--ai-tools <tools>`                                 | Comma-separated `claude`, `cursor`, `copilot`, and `codex`, or `none`                            |
 | `--install` / `--no-install`                         | Install or skip dependencies                                                                     |
 | `--git` / `--no-git`                                 | Initialize or skip a Git repository                                                              |
 | `--canary`                                           | Use the default canary SDK bundle                                                                |
@@ -154,7 +155,9 @@ Based on your choices, one of these variants is generated:
 | `browser-manual-js` | Desktop 3D + JavaScript + native workflow     |
 
 The scaffolded project includes native scene JSON under `public/scenes/` and is
-ready for declarative scene authoring through the IWSDK managed workspace.
+ready for declarative scene authoring through the IWSDK managed workspace. It
+also includes one canonical `AGENTS.md`; selected tool adapters add only their
+native MCP, permission, skill, or import-shim files.
 
 ## Requirements
 
@@ -188,13 +191,21 @@ pnpm --filter @iwsdk/create dev
 - `src/cli.ts` — Entrypoint: parses flags, runs prompts, scaffolds project
 - `src/prompts.ts` — Interactive questions and defaults
 - `src/project-target.ts` — Target-directory validation and in-place resolution
-- `src/recipes.ts` — Fetch helpers for CDN-hosted recipes
-- `src/scaffold.ts` — Wraps Chef's `buildProject` and writes files
+- `src/project-files.ts` — Builds the common source plus target manifest/scene
+- `src/project-manifest.ts` — Generates the project manifest authority
+- `src/scaffold.ts` — Safely writes the generated `ProjectFile[]`
 - `src/installer.ts` — Dependency installation and next steps
 - `src/types.ts` — Shared types (`VariantId`, `TriState`, `PromptResult`)
 
 ### How It Works
 
-The CLI uses [@pmndrs/chef](https://github.com/pmndrs/chef) to apply recipes fetched from jsDelivr CDN. Recipes and assets live in the `@iwsdk/starter-assets` package.
+The CLI ships one common TypeScript source tree, mechanically generated
+JavaScript output, target scene seeds, and agent guidance in its own package.
+It writes `iwsdk.config.json` and the selected `main.iwsdk.scene.json` locally;
+scaffolding does not fetch a remote recipe.
+
+Claude guidance is the canonical Agent Skills source. The package build derives
+the `.agents/skills` tree used by Codex, Cursor, Copilot, and OpenCode and
+translates path-scoped rules into each selected harness's native format.
 
 </details>
