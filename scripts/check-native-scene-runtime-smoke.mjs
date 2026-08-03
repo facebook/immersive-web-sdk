@@ -11,6 +11,11 @@ import { createRequire } from 'module';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  fetchDevelopmentUrl,
+  isExampleAssetRequest,
+} from './development-url.mjs';
+import { createPackedExampleAssetFixture } from './example-asset-package-fixture.mjs';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -26,18 +31,45 @@ const { chromium } = requireFromPlugin('playwright');
 const SMOKE_TARGETS = [
   {
     assetIds: ['environment-desk', 'robot'],
-    componentIds: [
-      'AudioSource',
-      'LocomotionEnvironment',
-      'PanelUI',
-      'RayInteractable',
-    ],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'RayInteractable'],
     id: 'audio',
-    names: ['Environment', 'Robot Center', 'Robot Left', 'Robot Right'],
+    names: [
+      'Environment',
+      'Robot Center',
+      'Robot Left',
+      'Robot Right',
+      'Welcome Panel',
+    ],
     root: 'examples/audio',
   },
   {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
+    assetIds: ['environment-desk'],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'PhysicsBody'],
+    id: 'browser-first',
+    names: ['Environment', 'Physics Ball', 'Welcome Panel', 'Player Avatar'],
+    root: 'examples/browser-first',
+  },
+  {
+    assetIds: ['plant-sansevieria', 'robot'],
+    componentIds: ['DepthOccludable', 'DistanceGrabbable', 'XRAnchor'],
+    id: 'depth-occlusion',
+    names: [
+      'Soft Occlusion Sphere',
+      'Occludable Plant',
+      'Occludable Robot',
+      'Welcome Panel',
+    ],
+    root: 'examples/depth-occlusion',
+  },
+  {
+    assetIds: ['plant-sansevieria'],
+    componentIds: ['EnvironmentRaycastTarget', 'RayInteractable'],
+    id: 'environment-raycast',
+    names: ['Plant Preview', 'Welcome Panel'],
+    root: 'examples/environment-raycast',
+  },
+  {
+    assetIds: ['environment-desk'],
     componentIds: [
       'DistanceGrabbable',
       'LocomotionEnvironment',
@@ -47,11 +79,30 @@ const SMOKE_TARGETS = [
     ],
     id: 'grab',
     names: [
-      'Distance Grabbable Robot',
-      'One Hand Grabbable Plant',
-      'Two Hands Grabbable Plant',
+      'Earth',
+      'Map Pin 1',
+      'Two-Hand Grabbable Pyramid',
+      'Welcome Panel',
     ],
     root: 'examples/grab',
+  },
+  {
+    assetIds: [],
+    componentIds: ['PokeInteractable', 'RayInteractable', 'ScreenSpace'],
+    id: 'layers',
+    names: ['Grid', 'Orb', 'Quad Layer Anchor', 'Welcome Panel'],
+    root: 'examples/layers',
+  },
+  {
+    assetIds: ['environment-desk'],
+    componentIds: [
+      'Elevator',
+      'LocomotionEnvironment',
+      'LocomotionSettingsPanel',
+    ],
+    id: 'locomotion',
+    names: ['Environment', 'Elevator', 'Welcome Panel', 'Settings Panel'],
+    root: 'examples/locomotion',
   },
   {
     assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
@@ -68,18 +119,34 @@ const SMOKE_TARGETS = [
     physicsStep: true,
     root: 'examples/physics',
   },
+  {
+    assetIds: ['environment-desk', 'robot'],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'Robot'],
+    id: 'poke',
+    names: ['Environment', 'Robot', 'Welcome Panel', 'WebXR Banner'],
+    root: 'examples/poke',
+  },
+  {
+    assetIds: [],
+    componentIds: ['DistanceGrabbable', 'RayInteractable', 'XRAnchor'],
+    id: 'scene-understanding',
+    names: ['Anchor', 'Welcome Panel'],
+    root: 'examples/scene-understanding',
+  },
 ];
 
 async function main() {
   const failures = [];
   let browser;
+  let packedAssetFixture;
 
   try {
+    packedAssetFixture = await createPackedExampleAssetFixture();
     browser = await launchChromium();
 
     for (const target of SMOKE_TARGETS) {
       try {
-        await smokeTarget(browser, target);
+        await smokeTarget(browser, target, packedAssetFixture);
         console.log(`Native scene runtime smoke passed: ${target.id}`);
       } catch (error) {
         failures.push(
@@ -89,6 +156,7 @@ async function main() {
     }
   } finally {
     await browser?.close();
+    await packedAssetFixture?.close();
   }
 
   if (failures.length > 0) {
@@ -105,11 +173,17 @@ async function main() {
   );
 }
 
-async function smokeTarget(browser, target) {
+async function smokeTarget(browser, target, packedAssetFixture) {
   const root = path.join(REPO_ROOT, target.root);
   const port = await getFreePort();
-  const server = startDevServer(root, port);
-  const page = await browser.newPage({ viewport: { height: 720, width: 960 } });
+  const server = startDevServer(root, port, packedAssetFixture.baseUrl);
+  const page = await browser.newPage({
+    ignoreHTTPSErrors: true,
+    viewport: { height: 720, width: 960 },
+  });
+  const assetRoute = await packedAssetFixture.installRoute(page, {
+    assetIds: target.assetIds,
+  });
   const pageErrors = [];
   const failedRequests = [];
   const badResponses = [];
@@ -134,7 +208,7 @@ async function smokeTarget(browser, target) {
       badResponses.push(`${response.status()} ${url}`);
     }
     for (const assetId of target.assetIds) {
-      if (url.includes(`/iwsdk-assets/${assetId}/`)) {
+      if (isExampleAssetRequest(url, assetId)) {
         const statuses = assetResponses.get(assetId) ?? [];
         statuses.push(response.status());
         assetResponses.set(assetId, statuses);
@@ -143,25 +217,28 @@ async function smokeTarget(browser, target) {
   });
 
   try {
-    const baseUrl = `http://127.0.0.1:${port}/`;
+    const baseUrl = `https://127.0.0.1:${port}/`;
     await waitForHttpOk(baseUrl, server);
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(
-      () => Boolean(window.FRAMEWORK_MCP_RUNTIME),
-      undefined,
-      { timeout: 90000 },
-    );
+    try {
+      await page.waitForFunction(
+        () => Boolean(window.FRAMEWORK_MCP_RUNTIME),
+        undefined,
+        { timeout: 90000 },
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n` +
+          `console/page errors:\n${pageErrors.join('\n') || '(none)'}\n` +
+          `server output:\n${server.output()}`,
+      );
+    }
     await page.waitForFunction(
       () => document.querySelectorAll('canvas').length > 0,
       undefined,
       { timeout: 30000 },
     );
-    await page.waitForTimeout(1000);
-
-    const hierarchy = await dispatch(page, 'get_scene_hierarchy', {
-      maxChildren: 100,
-      maxDepth: 10,
-    });
+    const hierarchy = await waitForHierarchyNames(page, target.names);
     const hierarchyNames = new Set(flattenHierarchyNames(hierarchy));
     for (const name of target.names) {
       if (!hierarchyNames.has(name)) {
@@ -198,6 +275,11 @@ async function smokeTarget(browser, target) {
           `shared asset ${assetId} returned HTTP ${badStatus}; statuses: ${statuses.join(
             ', ',
           )}`,
+        );
+      }
+      if (!assetRoute.requests.some((request) => request.assetId === assetId)) {
+        throw new Error(
+          `packed CDN route did not fulfill a request for ${assetId}`,
         );
       }
     }
@@ -308,6 +390,31 @@ function flattenHierarchyNames(node) {
   ];
 }
 
+async function waitForHierarchyNames(page, expectedNames, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let hierarchy = null;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      hierarchy = await dispatch(page, 'get_scene_hierarchy', {
+        maxChildren: 100,
+        maxDepth: 10,
+      });
+      const names = new Set(flattenHierarchyNames(hierarchy));
+      if (expectedNames.every((name) => names.has(name))) {
+        return hierarchy;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await page.waitForTimeout(100);
+  }
+  if (lastError != null) {
+    throw lastError;
+  }
+  return hierarchy;
+}
+
 function findHierarchyByEntityIndex(node, entityIndex) {
   if (node.entityIndex === entityIndex) {
     return node;
@@ -372,7 +479,7 @@ async function getScreenshotStats(page) {
   }, screenshot.toString('base64'));
 }
 
-function startDevServer(cwd, port) {
+function startDevServer(cwd, port, stockAssetBaseUrl) {
   const child = spawn(
     'npm',
     [
@@ -391,7 +498,9 @@ function startDevServer(cwd, port) {
       env: {
         ...process.env,
         BROWSER: 'none',
+        IWSDK_DEV_OPEN: 'false',
         NO_COLOR: '1',
+        VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: stockAssetBaseUrl,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -443,7 +552,7 @@ async function waitForHttpOk(url, processHandle, timeoutMs = 60000) {
       );
     }
     try {
-      const response = await fetch(url, { cache: 'no-store' });
+      const response = await fetchDevelopmentUrl(url);
       if (response.ok) {
         return response;
       }
@@ -477,7 +586,11 @@ async function getFreePort() {
 }
 
 async function launchChromium() {
-  return chromium.launch({ headless: true });
+  return chromium.launch({
+    args: ['--enable-webgl', '--use-angle=metal'],
+    channel: 'chromium',
+    headless: true,
+  });
 }
 
 function sleep(ms) {

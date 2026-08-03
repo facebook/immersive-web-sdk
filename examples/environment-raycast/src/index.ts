@@ -5,36 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { SessionMode, UIKitMLAsset, World } from '@iwsdk/core';
-import assets from './assets.js';
+import { UIKitMLAsset, World } from '@iwsdk/core';
+import projectOptions from 'virtual:iwsdk-project';
 import { configureWelcomePanel } from './panel.js';
 import { RaycastPlantSystem } from './raycast-plant.js';
 
-World.create(document.getElementById('scene-container') as HTMLDivElement, {
-  assets,
-  level: './scenes/environment-raycast.iwsdk.scene.json',
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    offer: 'always',
-    features: {
-      handTracking: true,
-      anchors: false,
-      hitTest: { required: true },
-      planeDetection: false,
-      meshDetection: false,
-      layers: true,
-    },
-  },
-  features: {
-    locomotion: false,
-    grabbing: false,
-    physics: false,
-    sceneUnderstanding: false,
-    environmentRaycast: true,
-  },
-}).then((world) => {
-  world.camera.position.set(0, 1, 0.5);
-
+World.create(
+  document.getElementById('scene-container') as HTMLDivElement,
+  projectOptions,
+).then((world) => {
   configureWelcomePanel(
     world,
     world.requireSceneObject<UIKitMLAsset>('welcome-panel'),

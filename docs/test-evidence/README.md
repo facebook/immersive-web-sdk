@@ -94,3 +94,29 @@ success it writes `evidence-manifest.json` with command, browser, package, and
 file hash metadata.
 The release rehearsal regenerates that directory during the native
 editor/browser test step before running this verifier.
+
+Release package and documentation artifacts are recorded by:
+
+```bash
+pnpm test:native-scene-release-artifacts
+```
+
+After scanning the actual tarballs and built documentation, that command writes
+`project-manifest-release/current/artifact-manifest.json`. The manifest records
+every packaged file path, tarball hashes, the built-docs tree hash, hashes or
+missing status for the other evidence bundles, the exact browser-console
+allowlist, and any gate that still prevents combined release signoff. A missing
+physical-headset evidence file is reported as a blocked gate rather than being
+silently treated as an automated pass.
+
+The independently published stock-asset package is verified with:
+
+```bash
+pnpm --filter @iwsdk/example-assets verify:cdn -- \
+  --version 0.4.2 \
+  --report /absolute/path/to/docs/test-evidence/project-manifest-release/current/example-assets-cdn-report.json
+```
+
+The report records the exact jsDelivr URL, CORS/MIME responses, byte sizes and
+SHA-256 values for all 14 files, and the three cold Chromium model loads. The
+release artifact manifest includes its hash.

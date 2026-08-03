@@ -9,19 +9,7 @@ import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [
-    iwsdkDev({
-      assetManifest: './src/assets.ts',
-      emulator: {
-        device: 'metaQuest3',
-        environment: 'living_room',
-        activation: 'always',
-        injectOnBuild: true,
-      },
-      ai: { screenshotSize: { width: 500, height: 500 } },
-      verbose: true,
-    }),
-  ],
+  plugins: [iwsdkDev()],
   server: { host: '0.0.0.0' },
   build: {
     outDir: 'dist',

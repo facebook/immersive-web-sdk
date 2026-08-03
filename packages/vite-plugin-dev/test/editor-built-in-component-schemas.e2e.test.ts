@@ -154,6 +154,14 @@ describe('editor built-in component schemas', () => {
     await componentRow(editor, 'DistanceGrabbable')
       .locator('[data-component-field="moveSpeedFactor"]')
       .fill('0.2');
+    await componentRow(editor, 'DistanceGrabbable')
+      .locator(
+        '[data-component-vector-field="targetPositionOffset"][data-component-vector-index="0"]',
+      )
+      .focus();
+    await expect
+      .poll(() => componentValue(editor, 'DistanceGrabbable'))
+      .toMatchObject({ moveSpeedFactor: 0.2, translate: false });
     await fillVectorField(
       editor,
       'DistanceGrabbable',

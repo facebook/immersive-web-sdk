@@ -1046,11 +1046,70 @@ describe('native editor route middleware', () => {
     expect(JSON.parse(listed.body)).toMatchObject({
       files: [
         expect.objectContaining({
+          hasImports: false,
           path: 'public/scenes/nested/new-scene.iwsdk.scene.json',
           revision: expect.any(String),
         }),
       ],
     });
+  });
+
+  test('flattens an authoring composition only when runtime semantics are preserved', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    const sceneRoot = path.join(tempRoot, 'public', 'scenes');
+    await mkdir(path.join(sceneRoot, 'modules'), { recursive: true });
+    await writeFile(
+      path.join(sceneRoot, 'modules', 'chair.iwsdk.scene.json'),
+      JSON.stringify(sceneDocument('chair')),
+      'utf8',
+    );
+    await writeFile(
+      path.join(sceneRoot, 'room.composition.iwsdk.scene.json'),
+      JSON.stringify({
+        version: 'iwsdk.scene.v1',
+        units: 'meters',
+        imports: [
+          {
+            id: 'reading-nook',
+            src: './modules/chair.iwsdk.scene.json',
+            transform: { position: [2, 0, 0] },
+          },
+        ],
+        resources: {},
+        nodes: [],
+      }),
+      'utf8',
+    );
+
+    const response = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        path: 'public/scenes/room.composition.iwsdk.scene.json',
+        outputPath: 'public/scenes/room.iwsdk.scene.json',
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(response.statusCode).toBe(200);
+    const result = JSON.parse(response.body);
+    expect(result).toMatchObject({
+      outputPath: 'public/scenes/room.iwsdk.scene.json',
+      sourcePath: 'public/scenes/room.composition.iwsdk.scene.json',
+      written: true,
+    });
+    expect(result.outputRuntimeHash).toBe(result.sourceRuntimeHash);
+    const flattened = JSON.parse(
+      await readFile(path.join(sceneRoot, 'room.iwsdk.scene.json'), 'utf8'),
+    );
+    expect(flattened.imports).toBeUndefined();
+    expect(flattened.nodes).toEqual([
+      expect.objectContaining({
+        id: 'reading-nook',
+        children: [expect.objectContaining({ id: 'reading-nook/chair' })],
+      }),
+    ]);
   });
 
   test('lists public project files within the requested schema constraints', async () => {
@@ -1103,27 +1162,26 @@ describe('native editor route middleware', () => {
     expect(unmanaged.statusCode).toBe(403);
   });
 
-  test('rejects scene-file mutations through the managed list endpoint', async () => {
+  test('rejects unsupported scene-file actions through the managed list endpoint', async () => {
     const middleware = createEditorMiddleware(tempRoot);
 
     const outside = await runMiddleware(
       middleware,
       'POST',
       '/__iwsdk/workspace/scenes',
-      JSON.stringify({ path: '../outside.iwsdk.scene.json' }),
+      JSON.stringify({ action: 'delete', path: '../outside.iwsdk.scene.json' }),
       MANAGED_WORKSPACE_HEADERS,
     );
-    expect(outside.statusCode).toBe(405);
-    expect(outside.headers.Allow).toBe('GET, HEAD');
+    expect(outside.statusCode).toBe(400);
 
     const wrongSuffix = await runMiddleware(
       middleware,
       'POST',
       '/__iwsdk/workspace/scenes',
-      JSON.stringify({ path: 'public/scenes/scene.json' }),
+      JSON.stringify({ action: 'delete', path: 'public/scenes/scene.json' }),
       MANAGED_WORKSPACE_HEADERS,
     );
-    expect(wrongSuffix.statusCode).toBe(405);
+    expect(wrongSuffix.statusCode).toBe(400);
   });
 
   test('rejects unmanaged editor document access', async () => {

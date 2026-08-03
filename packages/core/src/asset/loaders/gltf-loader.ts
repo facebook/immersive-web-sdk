@@ -23,6 +23,10 @@ import {
   WebGLRenderer,
 } from '../../runtime/index.js';
 import { CacheManager } from '../cache-manager.js';
+import {
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  loadCachedAsset,
+} from './cached-asset-load.js';
 
 /** Default maximum combined response size for one staged model. */
 export const DEFAULT_MAX_MODEL_PAYLOAD_BYTES = MAX_SCENE_MODEL_PAYLOAD_BYTES;
@@ -114,44 +118,28 @@ export class GLTFAssetLoader {
    * suitable for placing into multiple entities, call {@link GLTFAssetLoader.getGLTF}
    * (or `AssetManager.getGLTF`) by key after the load resolves.
    */
-  static loadGLTF(url: string, key?: string): Promise<GLTF> {
-    // Always use URL as cache key for consistent caching
-    if (CacheManager.hasPromise(url)) {
-      return CacheManager.getPromise<GLTF>(url)!;
-    } else {
-      // If a key is provided, store the key->URL mapping
-      if (key) {
-        CacheManager.setKeyToUrl(key, url);
-      }
-
-      // If the asset is already cached, return it directly. Registering a
-      // promise on the cached path leaks: the synchronous deletePromise()
-      // inside the executor runs before setPromise() stores the promise, so the
-      // resolved promise would linger in promiseCache for the life of the
-      // process (and be returned by the hasPromise() branch on every reload).
-      if (CacheManager.hasAsset(url)) {
-        return Promise.resolve(CacheManager.getAsset<GLTF>(url)!);
-      }
-
-      const loadingPromise = new Promise<GLTF>((resolve, reject) => {
+  static loadGLTF(
+    urlOrKey: string,
+    key?: string,
+    timeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  ): Promise<GLTF> {
+    const url = CacheManager.resolveUrl(urlOrKey);
+    if (key) {
+      CacheManager.setKeyToUrl(key, url);
+    }
+    return loadCachedAsset({
+      discard: disposeGLTFResources,
+      load: (resolve, reject) => {
         this.gltfLoader.load(
           url,
-          (gltf) => {
-            CacheManager.setAsset(url, gltf);
-            resolve(gltf);
-            CacheManager.deletePromise(url);
-          },
+          resolve,
           () => {}, // progress callback
-          (error) => {
-            reject(error);
-            CacheManager.deletePromise(url);
-          },
+          reject,
         );
-      });
-
-      CacheManager.setPromise(url, loadingPromise);
-      return loadingPromise;
-    }
+      },
+      timeoutMs,
+      url,
+    });
   }
 
   /**

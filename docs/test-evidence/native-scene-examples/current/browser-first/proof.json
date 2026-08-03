@@ -1,0 +1,176 @@
+{
+  "app": {
+    "assets": { "environment-desk": [200, 200, 200, 200] },
+    "components": {
+      "AudioSource": 1,
+      "LocomotionEnvironment": 1,
+      "PhysicsBody": 2
+    },
+    "hierarchyNameCount": 12,
+    "performance": {
+      "gotoMs": 1853,
+      "runtimeReadyMs": 92,
+      "canvasReadyMs": 28,
+      "screenshotCaptureMs": 94
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/app.png",
+      "sampledPixels": 159,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "https://127.0.0.1:63118/",
+  "editor": {
+    "performance": {
+      "gotoMs": 173,
+      "worldReadyMs": 826,
+      "screenshotCaptureMs": 81
+    },
+    "sceneDocument": { "assetCount": 0, "nodeCount": 5 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/editor.png",
+      "sampledPixels": 198,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [],
+      "meshCount": 18,
+      "nodeObjectCount": 5,
+      "objectHierarchy": [
+        {
+          "assetId": "environment-desk",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, -0.107, 0],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:a14b6bdae226d1c1f5f2371bfde5b0bf5438424d5bf1f8d54e82af99068c496c",
+          "sourceNodeId": "environment",
+          "worldPosition": [0, -0.107, 0]
+        },
+        {
+          "assetId": "browser-first-ray-target",
+          "contentType": "asset",
+          "fallback": "audio-source-helper",
+          "helperType": "audio-source",
+          "localPosition": [-0.55, 0.93, -2.25],
+          "nodeId": "ray-target",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:a14b6bdae226d1c1f5f2371bfde5b0bf5438424d5bf1f8d54e82af99068c496c",
+          "sourceNodeId": "ray-target",
+          "worldPosition": [-0.55, 0.93, -2.25]
+        },
+        {
+          "assetId": "browser-first-physics-ball",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.55, 2.1, -2.25],
+          "nodeId": "physics-ball",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:a14b6bdae226d1c1f5f2371bfde5b0bf5438424d5bf1f8d54e82af99068c496c",
+          "sourceNodeId": "physics-ball",
+          "worldPosition": [0.55, 2.1, -2.25]
+        },
+        {
+          "assetId": "browser-first-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 2, -2.25],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:a14b6bdae226d1c1f5f2371bfde5b0bf5438424d5bf1f8d54e82af99068c496c",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 2, -2.25]
+        },
+        {
+          "assetId": "browser-first-player-avatar",
+          "builtinParent": "player",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0.8, 0],
+          "nodeId": "player-avatar",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:a14b6bdae226d1c1f5f2371bfde5b0bf5438424d5bf1f8d54e82af99068c496c",
+          "sourceNodeId": "player-avatar",
+          "worldPosition": [0, 0.8, 0]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 1853,
+      "runtimeReadyMs": 92,
+      "canvasReadyMs": 28,
+      "screenshotCaptureMs": 94
+    },
+    "editor": { "gotoMs": 173, "worldReadyMs": 826, "screenshotCaptureMs": 81 },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 5443
+  },
+  "scene": "public/scenes/browser-first.iwsdk.scene.json",
+  "target": "browser-first"
+}

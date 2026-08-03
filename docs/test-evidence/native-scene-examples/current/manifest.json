@@ -1,6 +1,6 @@
 {
-  "artifactRoot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current",
-  "generatedAt": "2026-07-25T09:43:06.981Z",
+  "artifactRoot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current",
+  "generatedAt": "2026-07-31T14:49:49.074Z",
   "performanceThresholds": {
     "appCanvasReadyMs": 30000,
     "appRuntimeReadyMs": 60000,
@@ -12,54 +12,173 @@
   "summaries": [
     {
       "app": {
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
         "uniqueColors": 32
       },
       "editor": {
-        "meshCount": 66,
-        "nodeObjectCount": 6,
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png"
+        "meshCount": 73,
+        "nodeObjectCount": 5,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 462,
-        "editorWorldReadyMs": 1224,
-        "totalMs": 10717
+        "appRuntimeReadyMs": 261,
+        "editorWorldReadyMs": 2061,
+        "totalMs": 6724
       },
       "target": "audio"
     },
     {
       "app": {
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/app.png",
         "uniqueColors": 32
       },
       "editor": {
-        "meshCount": 42,
+        "meshCount": 18,
         "nodeObjectCount": 5,
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png"
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/browser-first/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 177,
-        "editorWorldReadyMs": 1102,
-        "totalMs": 9665
+        "appRuntimeReadyMs": 92,
+        "editorWorldReadyMs": 826,
+        "totalMs": 5443
+      },
+      "target": "browser-first"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 31,
+        "nodeObjectCount": 6,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 77,
+        "editorWorldReadyMs": 930,
+        "totalMs": 5677
+      },
+      "target": "depth-occlusion"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 10,
+        "nodeObjectCount": 2,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 72,
+        "editorWorldReadyMs": 1551,
+        "totalMs": 6396
+      },
+      "target": "environment-raycast"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 23,
+        "nodeObjectCount": 11,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 79,
+        "editorWorldReadyMs": 1254,
+        "totalMs": 5449
       },
       "target": "grab"
     },
     {
       "app": {
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/layers/app.png",
         "uniqueColors": 32
       },
       "editor": {
-        "meshCount": 41,
-        "nodeObjectCount": 5,
-        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png"
+        "meshCount": 13,
+        "nodeObjectCount": 8,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/layers/editor.png"
       },
       "performance": {
-        "appRuntimeReadyMs": 156,
-        "editorWorldReadyMs": 2446,
-        "totalMs": 10689
+        "appRuntimeReadyMs": 72,
+        "editorWorldReadyMs": 1437,
+        "totalMs": 6110
+      },
+      "target": "layers"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 20,
+        "nodeObjectCount": 4,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 76,
+        "editorWorldReadyMs": 873,
+        "totalMs": 5576
+      },
+      "target": "locomotion"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 34,
+        "nodeObjectCount": 7,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 75,
+        "editorWorldReadyMs": 1042,
+        "totalMs": 5118
       },
       "target": "physics"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/poke/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 36,
+        "nodeObjectCount": 4,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/poke/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 84,
+        "editorWorldReadyMs": 1161,
+        "totalMs": 6189
+      },
+      "target": "poke"
+    },
+    {
+      "app": {
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/app.png",
+        "uniqueColors": 32
+      },
+      "editor": {
+        "meshCount": 10,
+        "nodeObjectCount": 2,
+        "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/editor.png"
+      },
+      "performance": {
+        "appRuntimeReadyMs": 73,
+        "editorWorldReadyMs": 724,
+        "totalMs": 5356
+      },
+      "target": "scene-understanding"
     }
   ]
 }

@@ -1,0 +1,250 @@
+{
+  "app": {
+    "assets": {
+      "plant-sansevieria": [200, 200, 200, 200],
+      "robot": [200, 200, 200, 200, 200, 200]
+    },
+    "components": {
+      "DepthOccludable": 4,
+      "DistanceGrabbable": 5,
+      "XRAnchor": 5
+    },
+    "hierarchyNameCount": 32,
+    "performance": {
+      "gotoMs": 2061,
+      "runtimeReadyMs": 77,
+      "canvasReadyMs": 16,
+      "screenshotCaptureMs": 84
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/app.png",
+      "sampledPixels": 477,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "https://127.0.0.1:63171/",
+  "editor": {
+    "performance": {
+      "gotoMs": 179,
+      "worldReadyMs": 930,
+      "screenshotCaptureMs": 61
+    },
+    "sceneDocument": { "assetCount": 0, "nodeCount": 6 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/depth-occlusion/editor.png",
+      "sampledPixels": 266,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [],
+      "meshCount": 31,
+      "nodeObjectCount": 6,
+      "objectHierarchy": [
+        {
+          "assetId": "depth-soft-sphere",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0.8, -0.8],
+          "nodeId": "soft-occlusion-sphere",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "soft-occlusion-sphere",
+          "worldPosition": [0, 0.8, -0.8]
+        },
+        {
+          "assetId": "depth-hard-cube",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-1.2441, 0.8, -0.6],
+          "nodeId": "hard-occlusion-cube",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "hard-occlusion-cube",
+          "worldPosition": [-1.2441, 0.8, -0.6]
+        },
+        {
+          "assetId": "depth-reference-cylinder",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.4, 0.8, -0.6],
+          "nodeId": "reference-cylinder",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "reference-cylinder",
+          "worldPosition": [0.4, 0.8, -0.6]
+        },
+        {
+          "assetId": "plant-sansevieria",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-0.6, 0, -1],
+          "nodeId": "occludable-plant",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "occludable-plant",
+          "worldPosition": [-0.6, 0, -1]
+        },
+        {
+          "assetId": "robot",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.6, 0, -1],
+          "nodeId": "occludable-robot",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "occludable-robot",
+          "worldPosition": [0.6, 0, -1]
+        },
+        {
+          "assetId": "depth-occlusion-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1.5, -1.4],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:4475c22e0c33f37bfae5ddf812fe4cd83f8dcfe46e5e3056d0008c03080ea67c",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 1.5, -1.4]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 2061,
+      "runtimeReadyMs": 77,
+      "canvasReadyMs": 16,
+      "screenshotCaptureMs": 84
+    },
+    "editor": { "gotoMs": 179, "worldReadyMs": 930, "screenshotCaptureMs": 61 },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 5677
+  },
+  "scene": "public/scenes/depth-occlusion.iwsdk.scene.json",
+  "target": "depth-occlusion"
+}

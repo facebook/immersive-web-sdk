@@ -21,7 +21,7 @@ vi.mock('../src/headless-browser.js', () => ({
   launchManagedBrowser: mocks.launchManagedBrowser,
 }));
 
-vi.mock('../src/hzdb-telemetry.js', () => ({
+vi.mock('../src/metavr-telemetry.js', () => ({
   reportSessionEnd: mocks.reportSessionEnd,
   reportSessionStart: mocks.reportSessionStart,
 }));
@@ -256,7 +256,7 @@ describe('managed workspace lifecycle', () => {
     handlers.get('close')?.[0]?.();
   });
 
-  test('registers no browser startup state when workspace.open is false', async () => {
+  test('registers an explicit not-launched state when workspace.open is false', async () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
@@ -291,7 +291,15 @@ describe('managed workspace lifecycle', () => {
     expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
       expect.objectContaining({
         aiMode: undefined,
-        browser: undefined,
+        browser: expect.objectContaining({
+          status: 'not_launched',
+          connected: false,
+          commandReady: false,
+          connectedClientCount: 0,
+          lastError: expect.objectContaining({
+            cause: 'browser_not_launched',
+          }),
+        }),
         port: 4173,
       }),
     );

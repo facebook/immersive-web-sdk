@@ -20,6 +20,7 @@ import {
 } from '../../src/level/level-scene-environment.js';
 import { SceneJSONImporter } from '../../src/level/level-scene-json-importer.js';
 import {
+  applySceneTransform,
   deriveScenePatternNodeId,
   disposeLoweredSceneNodes,
   generateScenePatternTransforms,
@@ -94,6 +95,14 @@ function lowerSceneDocumentObjects(
 }
 
 describe('scene geometry lowering', () => {
+  it('applies zero and mirrored authored scale without clamping', () => {
+    const object = new Object3D();
+
+    applySceneTransform(object, { scale: [0, -2, 3] });
+
+    expect(object.scale.toArray()).toEqual([0, -2, 3]);
+  });
+
   it('creates extrude holes, capsule, tube, lathe, torus, and rounded box geometry', () => {
     const recipes = [
       { length: 2, radius: 0.5, type: 'capsule' },

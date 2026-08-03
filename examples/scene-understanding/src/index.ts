@@ -9,14 +9,12 @@ import {
   createSystem,
   eq,
   RayInteractable,
-  ReferenceSpaceType,
-  SessionMode,
   UIKitMLAsset,
   World,
   XRMesh,
   XRPlane,
 } from '@iwsdk/core';
-import assets from './assets.js';
+import projectOptions from 'virtual:iwsdk-project';
 import { configureWelcomePanel } from './panel.js';
 
 export class SceneShowSystem extends createSystem({
@@ -63,26 +61,10 @@ export class SceneShowSystem extends createSystem({
   }
 }
 
-World.create(document.getElementById('scene-container') as HTMLDivElement, {
-  assets,
-  level: './scenes/scene-understanding.iwsdk.scene.json',
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    referenceSpace: ReferenceSpaceType.Unbounded,
-    features: {
-      hitTest: { required: true },
-      planeDetection: { required: true },
-      meshDetection: { required: true },
-      anchors: { required: true },
-      unbounded: { required: true },
-    },
-  },
-  features: {
-    grabbing: true,
-    sceneUnderstanding: true,
-    spatialUI: true,
-  },
-}).then((world) => {
+World.create(
+  document.getElementById('scene-container') as HTMLDivElement,
+  projectOptions,
+).then((world) => {
   world.registerSystem(SceneShowSystem);
   configureWelcomePanel(
     world,

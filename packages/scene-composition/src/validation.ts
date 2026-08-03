@@ -51,6 +51,12 @@ export interface SceneDocumentValidationOptions {
   /** Runtime component definitions used to validate component property maps. */
   componentCatalog?: SceneComponentCatalog;
   /**
+   * Asset IDs declared by the application's complete asset manifest. Omit to
+   * disable asset-reference validation; an empty catalog rejects every asset
+   * reference.
+   */
+  knownAssetIds?: ReadonlySet<string> | readonly string[];
+  /**
    * Validate composition contracts, review bindings, and other authoring-only
    * semantics. Disable this for runtime/editor document-integrity checks.
    */
@@ -71,6 +77,9 @@ export function validateSceneDocument(
       options.componentCatalog,
       options.validateAuthoringWorkflow !== false,
       options.validateComponentLinks !== false,
+      options.knownAssetIds == null
+        ? undefined
+        : new Set(options.knownAssetIds),
     );
   }
   return { valid: issues.length === 0, issues };
@@ -606,6 +615,7 @@ function validateSceneSemantics(
   componentCatalog: SceneComponentCatalog | undefined,
   validateAuthoringWorkflow: boolean,
   validateLinkedComponentFields: boolean,
+  knownAssetIds: ReadonlySet<string> | undefined,
 ) {
   validateSceneImports(document.imports ?? [], issues);
   validateMetadataNamespaces(document.metadata, '$.metadata', issues);
@@ -671,6 +681,7 @@ function validateSceneSemantics(
       prefabNodeIds,
       schemas,
       componentCatalog != null,
+      knownAssetIds,
       issues,
       false,
     );
@@ -690,6 +701,7 @@ function validateSceneSemantics(
     prefabNodeIds,
     schemas,
     componentCatalog != null,
+    knownAssetIds,
     issues,
     true,
   );
@@ -799,6 +811,7 @@ function validateNodes(
   prefabNodeIds: Map<string, Set<string>>,
   schemas: Map<string, SceneComponentSchema>,
   validateComponentFields: boolean,
+  knownAssetIds: ReadonlySet<string> | undefined,
   issues: ValidationIssue[],
   allowPlayerParent: boolean,
 ) {
@@ -820,6 +833,18 @@ function validateNodes(
     }
     validateMetadataNamespaces(node.metadata, `${nodePath}.metadata`, issues);
     const content = node.content;
+    if (
+      content?.type === 'asset' &&
+      knownAssetIds != null &&
+      !knownAssetIds.has(content.asset)
+    ) {
+      addIssue(
+        issues,
+        `${nodePath}.content.asset`,
+        `asset "${content.asset}" is not declared in the project asset catalog; add "${content.asset}" to the asset manifest or replace this reference with a declared asset id`,
+        'reference',
+      );
+    }
     if (content?.type === 'instance' || content?.type === 'pattern') {
       if (!prefabIds.has(content.prefab)) {
         addIssue(
@@ -863,6 +888,7 @@ function validateNodes(
       prefabNodeIds,
       schemas,
       validateComponentFields,
+      knownAssetIds,
       issues,
       false,
     );

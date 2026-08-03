@@ -21,7 +21,6 @@
   },
   "devDependencies": {
     "@iwsdk/cli": "file:../../packages/cli/iwsdk-cli.tgz",
-    "@iwsdk/example-assets": "file:../../packages/example-assets/iwsdk-example-assets.tgz",
     "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
     "@types/three": "^0.181.0",
     "typescript": "^5.5.0",

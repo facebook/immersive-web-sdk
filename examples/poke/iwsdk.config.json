@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/poke.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "components": { "module": "./src/components" },
+  "world": {
+    "xr": {
+      "mode": "vr",
+      "offer": "always",
+      "features": { "handTracking": true, "layers": true }
+    },
+    "render": {
+      "camera": {
+        "position": [-4, 1.5, -6],
+        "rotation": [0, -2.356194490192345, 0]
+      }
+    },
+    "features": {
+      "locomotion": { "useWorker": true },
+      "grabbing": true,
+      "physics": false,
+      "sceneUnderstanding": false,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

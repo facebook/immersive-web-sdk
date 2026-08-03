@@ -1,0 +1,97 @@
+{
+  "app": {
+    "assets": {},
+    "components": {
+      "DistanceGrabbable": 1,
+      "RayInteractable": 2,
+      "XRAnchor": 1
+    },
+    "hierarchyNameCount": 5,
+    "performance": {
+      "gotoMs": 1830,
+      "runtimeReadyMs": 73,
+      "canvasReadyMs": 59,
+      "screenshotCaptureMs": 171
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/app.png",
+      "sampledPixels": 35,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "https://127.0.0.1:63489/",
+  "editor": {
+    "performance": {
+      "gotoMs": 180,
+      "worldReadyMs": 724,
+      "screenshotCaptureMs": 98
+    },
+    "sceneDocument": { "assetCount": 0, "nodeCount": 2 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/scene-understanding/editor.png",
+      "sampledPixels": 166,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [],
+      "meshCount": 10,
+      "nodeObjectCount": 2,
+      "objectHierarchy": [
+        {
+          "assetId": "scene-understanding-anchor",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1, -1],
+          "nodeId": "anchor",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:92cf8410f388156805d2abb0df985d26a464a702769f3833d9e3765aa706bae2",
+          "sourceNodeId": "anchor",
+          "worldPosition": [0, 1, -1]
+        },
+        {
+          "assetId": "scene-understanding-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1.5, -1.4],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:92cf8410f388156805d2abb0df985d26a464a702769f3833d9e3765aa706bae2",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 1.5, -1.4]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "packedAssets": {
+    "appRequests": [],
+    "editorRequests": [],
+    "packageVersion": "0.4.2"
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 1830,
+      "runtimeReadyMs": 73,
+      "canvasReadyMs": 59,
+      "screenshotCaptureMs": 171
+    },
+    "editor": { "gotoMs": 180, "worldReadyMs": 724, "screenshotCaptureMs": 98 },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 5356
+  },
+  "scene": "public/scenes/scene-understanding.iwsdk.scene.json",
+  "target": "scene-understanding"
+}

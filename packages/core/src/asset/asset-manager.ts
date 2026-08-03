@@ -25,6 +25,10 @@ import {
 import { CacheManager } from './cache-manager.js';
 import { AudioAssetLoader } from './loaders/audio-loader.js';
 import {
+  assertAssetLoadTimeout,
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+} from './loaders/cached-asset-load.js';
+import {
   DEFAULT_MAX_MODEL_PAYLOAD_BYTES,
   DEFAULT_MAX_TOTAL_MODEL_PAYLOAD_BYTES,
   disposeGLTFResources,
@@ -41,6 +45,10 @@ export {
   DEFAULT_MAX_TOTAL_MODEL_PAYLOAD_BYTES,
   GLTFPayloadLimitError,
 } from './loaders/gltf-loader.js';
+export {
+  AssetLoadTimeoutError,
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+} from './loaders/cached-asset-load.js';
 
 /** Payload ceilings applied to detached model resource preflight. */
 export interface GLTFLoadTransactionLimits {
@@ -70,7 +78,7 @@ export enum AssetType {
 export interface LoadableAssetManifestEntry {
   url: string;
   type: AssetType;
-  priority?: 'critical' | 'background';
+  priority?: 'critical' | 'background' | 'lazy';
   /** Human-readable label used by authoring tools. */
   name?: string;
 }
@@ -84,6 +92,57 @@ export type AssetManifestEntry = LoadableAssetManifestEntry | Object3D;
  */
 export interface AssetManifest {
   [key: string]: AssetManifestEntry;
+}
+
+/** Non-enumerable marker carried by manifests created with defineAssets. */
+export const ASSET_MANIFEST_BRAND: unique symbol = Symbol(
+  '@iwsdk/core/asset-manifest/v1',
+);
+
+export type DefinedAssetManifest<T extends AssetManifest = AssetManifest> =
+  Readonly<T> & {
+    readonly [ASSET_MANIFEST_BRAND]: 1;
+  };
+
+/**
+ * Declare the complete application asset catalog shared by runtime/editor.
+ * The returned container is frozen; entry objects and Three.js prototypes are
+ * intentionally left mutable and retain their original identities.
+ */
+export function defineAssets<const T extends AssetManifest>(
+  assets: T,
+): DefinedAssetManifest<T> {
+  if (assets == null || typeof assets !== 'object' || Array.isArray(assets)) {
+    throw new Error('Asset manifest must be an object');
+  }
+  for (const [id, entry] of Object.entries(assets)) {
+    if (id.trim().length === 0) {
+      throw new Error('Asset IDs must not be blank');
+    }
+    assertAssetManifestEntry(id, entry);
+  }
+  const manifest = { ...assets } as DefinedAssetManifest<T>;
+  Object.defineProperty(manifest, ASSET_MANIFEST_BRAND, {
+    configurable: false,
+    enumerable: false,
+    value: 1,
+    writable: false,
+  });
+  return Object.freeze(manifest);
+}
+
+/** Structured identity for critical, background, and on-demand failures. */
+export class AssetLoadError extends Error {
+  constructor(
+    readonly assetId: string,
+    readonly url: string,
+    readonly cause: unknown,
+  ) {
+    super(
+      `Failed to load asset "${assetId}" from "${url}": ${errorMessage(cause)}`,
+    );
+    this.name = 'AssetLoadError';
+  }
 }
 
 export interface RenderableAssetInfo {
@@ -147,6 +206,7 @@ export class RenderableAssetRegistry {
         );
       }
     }
+    AssetManager.registerManifest(this.manifest);
   }
 
   async preload(): Promise<void> {
@@ -250,12 +310,15 @@ export class RenderableAssetRegistry {
       if (this.options.instantiateUIKitML == null) {
         throw new Error(`UIKitML asset "${id}" requires the spatialUI feature`);
       }
+      if (entry.priority === 'lazy') {
+        await AssetManager.loadUIKitMLById(id);
+      }
       return this.options.instantiateUIKitML(id) as Promise<T>;
     }
     if (entry.type !== AssetType.GLTF) {
       throw new Error(`Manifest entry "${id}" is not a renderable asset`);
     }
-    await AssetManager.loadGLTF(entry.url, id);
+    await AssetManager.loadGLTFById(id);
     const gltf = AssetManager.getGLTF(id);
     if (gltf == null) {
       throw new Error(`Renderable glTF asset "${id}" failed to load`);
@@ -268,6 +331,8 @@ export class RenderableAssetRegistry {
 export interface AssetManagerOptions {
   dracoDecoderPath: string;
   ktx2TranscoderPath: string;
+  /** Finite upper bound for every critical/background/on-demand load. */
+  loadTimeoutMs: number;
 }
 
 /**
@@ -282,6 +347,11 @@ export interface AssetManagerOptions {
 export class AssetManager {
   static loadingManager: LoadingManager;
   static world: World;
+  private static loadTimeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS;
+  private static readonly manifestEntries = new Map<
+    string,
+    LoadableAssetManifestEntry
+  >();
 
   /**
    * Initialize loaders and bind to the current world/renderer.
@@ -293,6 +363,9 @@ export class AssetManager {
   ) {
     this.world = world;
     this.loadingManager = new LoadingManager();
+    this.manifestEntries.clear();
+    this.loadTimeoutMs = options.loadTimeoutMs ?? DEFAULT_ASSET_LOAD_TIMEOUT_MS;
+    assertAssetLoadTimeout(this.loadTimeoutMs);
 
     // Initialize all specialized loaders
     AudioAssetLoader.init(this.loadingManager);
@@ -301,31 +374,45 @@ export class AssetManager {
     HDRTextureAssetLoader.init(this.loadingManager);
   }
 
+  /** Configure the finite timeout used by subsequent asset loads. */
+  static setLoadTimeout(timeoutMs: number): void {
+    assertAssetLoadTimeout(timeoutMs);
+    this.loadTimeoutMs = timeoutMs;
+  }
+
+  /** Register catalog identity without starting network requests. */
+  static registerManifest(manifest: AssetManifest): void {
+    this.manifestEntries.clear();
+    for (const [id, entry] of Object.entries(manifest)) {
+      if (isObject3DManifestEntry(entry)) {
+        continue;
+      }
+      this.manifestEntries.set(id, entry);
+      CacheManager.setKeyToUrl(id, entry.url);
+    }
+  }
+
   /** Preload assets with critical/background prioritization. */
   static async preloadAssets(manifest: AssetManifest): Promise<void> {
-    // Separate by priority
+    this.registerManifest(manifest);
     const loadableAssets = Object.entries(manifest).filter(
       (entry): entry is [string, LoadableAssetManifestEntry] =>
         !isObject3DManifestEntry(entry[1]),
     );
     const criticalAssets = loadableAssets.filter(([_, config]) => {
-      return config.priority !== 'background';
+      return config.priority !== 'background' && config.priority !== 'lazy';
     });
 
     const backgroundAssets = loadableAssets.filter(([_, config]) => {
       return config.priority === 'background';
     });
 
-    // Phase 1: Load critical assets (blocking)
     const criticalPromises = criticalAssets.map(([key, config]) => {
-      CacheManager.setKeyToUrl(key, config.url);
       return this.loadAssetByType(config.url, config.type, key);
     });
     await Promise.all(criticalPromises);
 
-    // Phase 2: Start background loading (non-blocking)
     backgroundAssets.forEach(([key, config]) => {
-      CacheManager.setKeyToUrl(key, config.url);
       this.loadAssetByType(config.url, config.type, key).catch((err) =>
         console.warn(`Background asset failed: ${key}`, err),
       );
@@ -335,22 +422,108 @@ export class AssetManager {
   private static async loadAssetByType(
     url: string,
     type: AssetType,
-    key?: string,
-  ): Promise<any> {
-    switch (type) {
-      case AssetType.GLTF:
-        return GLTFAssetLoader.loadGLTF(url, key);
-      case AssetType.Audio:
-        return AudioAssetLoader.loadAudio(url);
-      case AssetType.Texture:
-        return TextureAssetLoader.loadTexture(url);
-      case AssetType.HDRTexture:
-        return HDRTextureAssetLoader.loadHDRTexture(url);
-      case AssetType.UIKitML:
-        return UIKitMLAssetLoader.loadUIKitML(url, key);
-      default:
-        throw new Error(`Unsupported asset type: ${type}`);
+    assetId: string = url,
+  ): Promise<GLTF | AudioBuffer | Texture | string> {
+    CacheManager.setKeyToUrl(assetId, url);
+    try {
+      switch (type) {
+        case AssetType.GLTF:
+          return await GLTFAssetLoader.loadGLTF(
+            url,
+            assetId,
+            this.loadTimeoutMs,
+          );
+        case AssetType.Audio:
+          return await AudioAssetLoader.loadAudio(url, this.loadTimeoutMs);
+        case AssetType.Texture:
+          return await TextureAssetLoader.loadTexture(url, this.loadTimeoutMs);
+        case AssetType.HDRTexture:
+          return await HDRTextureAssetLoader.loadHDRTexture(
+            url,
+            this.loadTimeoutMs,
+          );
+        case AssetType.UIKitML:
+          return await UIKitMLAssetLoader.loadUIKitML(
+            url,
+            assetId,
+            false,
+            this.loadTimeoutMs,
+          );
+        default:
+          throw new Error(`Unsupported asset type: ${type}`);
+      }
+    } catch (cause) {
+      if (cause instanceof AssetLoadError) {
+        throw cause;
+      }
+      throw new AssetLoadError(assetId, url, cause);
     }
+  }
+
+  /** Load one registered manifest entry by asset ID. */
+  static async loadAsset(
+    assetId: string,
+  ): Promise<GLTF | AudioBuffer | Texture | string> {
+    const entry = this.requireManifestEntry(assetId);
+    return this.loadAssetByType(entry.url, entry.type, assetId);
+  }
+
+  static async loadGLTFById(assetId: string): Promise<GLTF> {
+    return this.loadTypedManifestAsset(
+      assetId,
+      AssetType.GLTF,
+    ) as Promise<GLTF>;
+  }
+
+  static async loadAudioById(assetId: string): Promise<AudioBuffer> {
+    return this.loadTypedManifestAsset(
+      assetId,
+      AssetType.Audio,
+    ) as Promise<AudioBuffer>;
+  }
+
+  static async loadTextureById(assetId: string): Promise<Texture> {
+    return this.loadTypedManifestAsset(
+      assetId,
+      AssetType.Texture,
+    ) as Promise<Texture>;
+  }
+
+  static async loadHDRTextureById(assetId: string): Promise<Texture> {
+    return this.loadTypedManifestAsset(
+      assetId,
+      AssetType.HDRTexture,
+    ) as Promise<Texture>;
+  }
+
+  static async loadUIKitMLById(assetId: string): Promise<string> {
+    return this.loadTypedManifestAsset(
+      assetId,
+      AssetType.UIKitML,
+    ) as Promise<string>;
+  }
+
+  private static loadTypedManifestAsset(
+    assetId: string,
+    expectedType: AssetType,
+  ): Promise<GLTF | AudioBuffer | Texture | string> {
+    const entry = this.requireManifestEntry(assetId);
+    if (entry.type !== expectedType) {
+      throw new Error(
+        `Asset "${assetId}" has type "${entry.type}", expected "${expectedType}"`,
+      );
+    }
+    return this.loadAssetByType(entry.url, entry.type, assetId);
+  }
+
+  private static requireManifestEntry(
+    assetId: string,
+  ): LoadableAssetManifestEntry {
+    const entry = this.manifestEntries.get(assetId);
+    if (entry == null) {
+      throw new Error(`Unknown loadable asset "${assetId}"`);
+    }
+    return entry;
   }
 
   /**
@@ -361,8 +534,13 @@ export class AssetManager {
    * after the load resolves to retrieve a clone suitable for placing into
    * multiple entities.
    */
-  static loadGLTF(url: string, key?: string): Promise<GLTF> {
-    return GLTFAssetLoader.loadGLTF(url, key);
+  static loadGLTF(urlOrKey: string, key?: string): Promise<GLTF> {
+    const url = key == null ? CacheManager.resolveUrl(urlOrKey) : urlOrKey;
+    return this.loadAssetByType(
+      url,
+      AssetType.GLTF,
+      key ?? urlOrKey,
+    ) as Promise<GLTF>;
   }
 
   /** Create an isolated glTF load transaction for scene resource preflight. */
@@ -382,12 +560,12 @@ export class AssetManager {
   // Public API Methods - delegate to specialized loaders
   /** Load an AudioBuffer by URL; optionally register a logical key. */
   static async loadAudio(url: string, key?: string): Promise<AudioBuffer> {
-    if (key) {
-      CacheManager.setKeyToUrl(key, url);
-    } else {
-      CacheManager.setKeyToUrl(url, url);
-    }
-    return AudioAssetLoader.loadAudio(url);
+    const resolvedUrl = key == null ? CacheManager.resolveUrl(url) : url;
+    return this.loadAssetByType(
+      resolvedUrl,
+      AssetType.Audio,
+      key ?? url,
+    ) as Promise<AudioBuffer>;
   }
 
   /** Get a cached AudioBuffer by logical key. */
@@ -397,12 +575,12 @@ export class AssetManager {
 
   /** Load a Texture by URL; optionally register a logical key. */
   static async loadTexture(url: string, key?: string): Promise<Texture> {
-    if (key) {
-      CacheManager.setKeyToUrl(key, url);
-    } else {
-      CacheManager.setKeyToUrl(url, url);
-    }
-    return TextureAssetLoader.loadTexture(url);
+    const resolvedUrl = key == null ? CacheManager.resolveUrl(url) : url;
+    return this.loadAssetByType(
+      resolvedUrl,
+      AssetType.Texture,
+      key ?? url,
+    ) as Promise<Texture>;
   }
 
   /** Get a cached Texture by logical key. */
@@ -416,7 +594,19 @@ export class AssetManager {
     key?: string,
     forceReload = false,
   ): Promise<string> {
-    return UIKitMLAssetLoader.loadUIKitML(urlOrKey, key, forceReload);
+    const url = key == null ? CacheManager.resolveUrl(urlOrKey) : urlOrKey;
+    const assetId = key ?? urlOrKey;
+    CacheManager.setKeyToUrl(assetId, url);
+    return UIKitMLAssetLoader.loadUIKitML(
+      url,
+      assetId,
+      forceReload,
+      this.loadTimeoutMs,
+    ).catch((cause) => {
+      throw cause instanceof AssetLoadError
+        ? cause
+        : new AssetLoadError(assetId, url, cause);
+    });
   }
 
   /** Get cached UIKitML source by URL or manifest key. */
@@ -426,12 +616,12 @@ export class AssetManager {
 
   /** Load an HDR equirectangular texture; optionally register a logical key. */
   static async loadHDRTexture(url: string, key?: string): Promise<Texture> {
-    if (key) {
-      CacheManager.setKeyToUrl(key, url);
-    } else {
-      CacheManager.setKeyToUrl(url, url);
-    }
-    return HDRTextureAssetLoader.loadHDRTexture(url);
+    const resolvedUrl = key == null ? CacheManager.resolveUrl(url) : url;
+    return this.loadAssetByType(
+      resolvedUrl,
+      AssetType.HDRTexture,
+      key ?? url,
+    ) as Promise<Texture>;
   }
 
   /**
@@ -450,6 +640,56 @@ export class AssetManager {
 
 function isObject3DManifestEntry(entry: AssetManifestEntry): entry is Object3D {
   return (entry as Object3D | undefined)?.isObject3D === true;
+}
+
+const SUPPORTED_ASSET_TYPES = new Set<string>(Object.values(AssetType));
+const SUPPORTED_ASSET_PRIORITIES = new Set<string>([
+  'critical',
+  'background',
+  'lazy',
+]);
+
+function assertAssetManifestEntry(id: string, entry: unknown): void {
+  if (isObject3DManifestEntry(entry as AssetManifestEntry)) {
+    if ((entry as Object3D).parent != null) {
+      throw new Error(
+        `Renderable asset prototype "${id}" must not have a parent`,
+      );
+    }
+    return;
+  }
+  if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new Error(
+      `Asset manifest entry "${id}" must be a URL entry or Object3D prototype`,
+    );
+  }
+  const candidate = entry as Partial<LoadableAssetManifestEntry>;
+  if (typeof candidate.url !== 'string' || candidate.url.trim().length === 0) {
+    throw new Error(`Asset manifest entry "${id}" must have a nonblank URL`);
+  }
+  if (
+    typeof candidate.type !== 'string' ||
+    !SUPPORTED_ASSET_TYPES.has(candidate.type)
+  ) {
+    throw new Error(
+      `Asset manifest entry "${id}" has unsupported type "${String(candidate.type)}"`,
+    );
+  }
+  if (
+    candidate.priority !== undefined &&
+    !SUPPORTED_ASSET_PRIORITIES.has(candidate.priority)
+  ) {
+    throw new Error(
+      `Asset manifest entry "${id}" has unsupported priority "${String(candidate.priority)}"`,
+    );
+  }
+  if (candidate.name !== undefined && typeof candidate.name !== 'string') {
+    throw new Error(`Asset manifest entry "${id}" name must be a string`);
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function createPrimitivePrototype(

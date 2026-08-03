@@ -29,6 +29,16 @@ export function createUnavailableBrowserRpcError(
     };
   }
 
+  if (browser?.status === 'not_launched') {
+    return {
+      code: RUNTIME_RPC_ERROR_CODE,
+      message:
+        browser.lastError?.message ??
+        'No managed browser was launched because the dev server was started with --no-open. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',
+      cause: 'browser_not_launched',
+    };
+  }
+
   if (browser?.status === 'disconnected') {
     return {
       code: RUNTIME_RPC_ERROR_CODE,

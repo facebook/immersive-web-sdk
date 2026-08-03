@@ -91,15 +91,19 @@ describe('editor multi-select inspector', () => {
     await editor.page.locator('[data-transform-field="scale.1"]').fill('0');
     await editor.page.locator('[data-transform-field="scale.2"]').focus();
     await expect
-      .poll(() =>
-        editor.page.locator('#transform-editor-message').textContent(),
-      )
-      .toContain('Scale values must be greater than 0');
+      .poll(() => transformSummary(editor))
+      .toMatchObject({
+        'table-1': { scale: [1.25, 0, 1] },
+        'vase-1': { scale: [1.25, 0, 1] },
+      });
+
+    await editor.page.locator('[data-transform-field="scale.2"]').fill('-0.75');
+    await editor.page.locator('[data-transform-field="scale.0"]').focus();
     await expect
       .poll(() => transformSummary(editor))
       .toMatchObject({
-        'table-1': { scale: [1.25, 1, 1] },
-        'vase-1': { scale: [1.25, 1, 1] },
+        'table-1': { scale: [1.25, 0, -0.75] },
+        'vase-1': { scale: [1.25, 0, -0.75] },
       });
 
     await expect(
@@ -111,8 +115,8 @@ describe('editor multi-select inspector', () => {
         savedScene.nodes.map((node: any) => [node.id, node.transform]),
       ),
     ).toMatchObject({
-      'table-1': { position: [0.5, 0, 0], scale: [1.25, 1, 1] },
-      'vase-1': { position: [0.5, 0, 0], scale: [1.25, 1, 1] },
+      'table-1': { position: [0.5, 0, 0], scale: [1.25, 0, -0.75] },
+      'vase-1': { position: [0.5, 0, 0], scale: [1.25, 0, -0.75] },
     });
 
     const reloadedEditor = await harness.openEditor();
@@ -134,6 +138,20 @@ describe('editor multi-select inspector', () => {
           .inputValue(),
       )
       .toBe('1.25');
+    await expect
+      .poll(() =>
+        reloadedEditor.page
+          .locator('[data-transform-field="scale.1"]')
+          .inputValue(),
+      )
+      .toBe('0');
+    await expect
+      .poll(() =>
+        reloadedEditor.page
+          .locator('[data-transform-field="scale.2"]')
+          .inputValue(),
+      )
+      .toBe('-0.75');
   }, 45000);
 });
 

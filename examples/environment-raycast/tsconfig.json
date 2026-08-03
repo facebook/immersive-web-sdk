@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": []
+    "types": ["vite/client", "@iwsdk/vite-plugin-dev/client"]
   },
   "include": ["src/**/*.ts"]
 }

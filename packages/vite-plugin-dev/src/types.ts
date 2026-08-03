@@ -166,20 +166,6 @@ export interface DevelopmentHttpsOptions {
  */
 export interface DevPluginOptions {
   /**
-   * Project module whose default export is the AssetManifest passed to
-   * World.create. The managed editor imports the same module in its own realm.
-   * @example './src/assets.ts'
-   */
-  assetManifest?: string;
-
-  /**
-   * System-free module whose default export is the ComponentManifest passed to
-   * World.create. The managed editor imports the same module in its own realm.
-   * @example './src/components.ts'
-   */
-  componentManifest?: string;
-
-  /**
    * XR emulator configuration
    */
   emulator?: EmulatorOptions;

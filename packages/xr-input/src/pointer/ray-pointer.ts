@@ -10,12 +10,14 @@ import {
   Color,
   CylinderGeometry,
   Intersection,
+  MathUtils,
   Mesh,
   PerspectiveCamera,
   ShaderMaterial,
 } from 'three';
-import { lerp } from 'three/src/math/MathUtils.js';
 import { XROrigin } from '../rig/xr-origin.js';
+
+const { lerp } = MathUtils;
 
 const vertexShader = `
   varying float vPosition;

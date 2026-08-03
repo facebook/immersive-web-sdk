@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/scene-understanding.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "referenceSpace": "unbounded",
+      "features": {
+        "hitTest": { "required": true },
+        "planeDetection": { "required": true },
+        "meshDetection": { "required": true },
+        "anchors": { "required": true },
+        "unbounded": { "required": true }
+      }
+    },
+    "features": {
+      "grabbing": true,
+      "sceneUnderstanding": true,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "environment": "living_room",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

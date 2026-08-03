@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/environment-raycast.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "offer": "always",
+      "features": {
+        "handTracking": true,
+        "anchors": false,
+        "hitTest": { "required": true },
+        "planeDetection": false,
+        "meshDetection": false,
+        "layers": true
+      }
+    },
+    "render": { "camera": { "position": [0, 1, 0.5] } },
+    "features": {
+      "locomotion": false,
+      "grabbing": false,
+      "physics": false,
+      "sceneUnderstanding": false,
+      "environmentRaycast": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "environment": "living_room",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

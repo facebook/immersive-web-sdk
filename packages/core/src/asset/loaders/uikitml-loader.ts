@@ -6,6 +6,10 @@
  */
 
 import { CacheManager } from '../cache-manager.js';
+import {
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  loadCachedAsset,
+} from './cached-asset-load.js';
 
 /** Cached text loader for UIKitML source assets. */
 export class UIKitMLAssetLoader {
@@ -13,6 +17,7 @@ export class UIKitMLAssetLoader {
     urlOrKey: string,
     key?: string,
     forceReload = false,
+    timeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS,
   ): Promise<string> {
     if (key) {
       CacheManager.setKeyToUrl(key, urlOrKey);
@@ -20,37 +25,24 @@ export class UIKitMLAssetLoader {
     const url = CacheManager.resolveUrl(urlOrKey);
     if (forceReload) {
       CacheManager.deleteAsset(url);
-    } else {
-      const cached = CacheManager.getAsset<string>(url);
-      if (cached != null) {
-        return cached;
-      }
     }
-
-    const pending = CacheManager.getPromise<string>(url);
-    if (pending && !forceReload) {
-      return pending;
-    }
-
-    let promise: Promise<string>;
-    promise = (forceReload ? fetch(url, { cache: 'no-store' }) : fetch(url))
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Failed to load UIKitML: ${url} (${response.status} ${response.statusText})`,
-          );
-        }
-        const source = await response.text();
-        // A forced reload may supersede an older request for the same URL.
-        // Only the newest request may publish into the shared source cache.
-        if (CacheManager.getPromise(url) === promise) {
-          CacheManager.setAsset(url, source);
-        }
-        return source;
-      })
-      .finally(() => CacheManager.deletePromise(url, promise));
-    CacheManager.setPromise(url, promise);
-    return promise;
+    return loadCachedAsset({
+      load: (resolve, reject) => {
+        (forceReload ? fetch(url, { cache: 'no-store' }) : fetch(url))
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error(
+                `Failed to load UIKitML: ${url} (${response.status} ${response.statusText})`,
+              );
+            }
+            resolve(await response.text());
+          })
+          .catch(reject);
+      },
+      replacePending: forceReload,
+      timeoutMs,
+      url,
+    });
   }
 
   static getUIKitML(keyOrUrl: string): string | null {

@@ -9,7 +9,8 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts && node scripts/generate-input-profiles.js",
+    "prebuild": "npm run clean && node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts && node scripts/generate-input-profiles.js",
+    "clean": "node -e \"require('fs').rmSync('dist', { force: true, recursive: true })\"",
     "generate:profiles": "node scripts/generate-input-profiles.js",
     "generate:profiles:force": "node scripts/generate-input-profiles.js --force",
     "generate:profiles:offline": "node scripts/generate-input-profiles.js --offline",

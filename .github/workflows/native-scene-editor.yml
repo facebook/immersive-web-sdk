@@ -12,7 +12,6 @@ on:
       - 'packages/create/**'
       - 'packages/example-assets/**'
       - 'packages/scene-composition/**'
-      - 'packages/starter-assets/**'
       - 'packages/vite-plugin-dev/**'
       - 'pnpm-lock.yaml'
       - 'scripts/**'
@@ -29,7 +28,6 @@ on:
       - 'packages/create/**'
       - 'packages/example-assets/**'
       - 'packages/scene-composition/**'
-      - 'packages/starter-assets/**'
       - 'packages/vite-plugin-dev/**'
       - 'pnpm-lock.yaml'
       - 'scripts/**'
@@ -73,6 +71,12 @@ jobs:
 
       - name: Check migrated native scene examples
         run: pnpm test:native-scene-examples
+
+      - name: Smoke all examples through the packed CDN route fixture
+        run: pnpm test:native-scene-example-runtime
+
+      - name: Exercise immutable asset CDN verifier against packed archive bytes
+        run: pnpm --filter @iwsdk/example-assets verify:cdn-tooling
 
       - name: Collect native scene render proof
         run: pnpm test:native-scene-render-proof

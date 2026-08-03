@@ -6,12 +6,15 @@
  */
 
 import {
-  type AssetManifest,
   AssetType,
   Mesh,
   MeshStandardMaterial,
   SphereGeometry,
+  defineAssets,
 } from '@iwsdk/core';
+
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
 
 const anchor = new Mesh(
   new SphereGeometry(0.2),
@@ -19,18 +22,18 @@ const anchor = new Mesh(
 );
 anchor.name = 'Anchor';
 
-const assets = {
+const assets = defineAssets({
   'venice-sunset': {
     name: 'Venice Sunset',
     type: AssetType.HDRTexture,
-    url: './textures/venice_sunset_1k.exr',
+    url: publicAssetUrl('textures/venice_sunset_1k.exr'),
   },
   'scene-understanding-welcome-panel': {
     name: 'Scene Understanding Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   'scene-understanding-anchor': anchor,
-} satisfies AssetManifest;
+});
 
 export default assets;

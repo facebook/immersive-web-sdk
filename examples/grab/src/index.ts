@@ -5,28 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { SessionMode, UIKitMLAsset, World } from '@iwsdk/core';
-import assets from './assets.js';
+import { UIKitMLAsset, World } from '@iwsdk/core';
+import projectOptions from 'virtual:iwsdk-project';
 import { configureWelcomePanel } from './panel.js';
 
-World.create(document.getElementById('scene-container') as HTMLDivElement, {
-  assets,
-  xr: {
-    sessionMode: SessionMode.ImmersiveVR,
-    features: {
-      handTracking: { required: true },
-    },
-  },
-  level: './scenes/grab.iwsdk.scene.json',
-  features: {
-    grabbing: { useHandPinchForGrab: true },
-    locomotion: true,
-    spatialUI: true,
-  },
-}).then((world) => {
-  const { camera } = world;
-  camera.position.set(0, 1.3, 0);
-
+World.create(
+  document.getElementById('scene-container') as HTMLDivElement,
+  projectOptions,
+).then((world) => {
   configureWelcomePanel(
     world,
     world.requireSceneObject<UIKitMLAsset>('welcome-panel'),

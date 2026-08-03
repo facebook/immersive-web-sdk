@@ -26,6 +26,7 @@ const session = readFileSync(
 const expected = [
   'scene_open',
   'scene_render_file',
+  'scene_flatten_file',
   'scene_get_state',
   'scene_get_capabilities',
   'scene_screenshot',

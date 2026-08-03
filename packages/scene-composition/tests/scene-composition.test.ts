@@ -32,6 +32,7 @@ import {
   parseSceneReview,
   projectRuntimeSceneDocument,
   resolveLookAtYawDeg,
+  resolveReparentTransform,
   resolveSceneAuthoringTransforms,
   serializeSceneDocument,
   serializeSceneReview,
@@ -1803,6 +1804,75 @@ describe('@iwsdk/scene-composition v1', () => {
 
   it('retains deterministic transform helpers on scene nodes', () => {
     expect(resolveLookAtYawDeg([0, 0, 0], [1, 0, 0])).toBe(90);
+  });
+
+  it('accepts zero and mirrored scene scales', () => {
+    for (const scale of [0, -1, [1, 0, -2]] as const) {
+      const scene: SceneDocument = {
+        version: CURRENT_SCENE_VERSION,
+        units: 'meters',
+        resources: {},
+        nodes: [
+          {
+            id: 'scaled-node',
+            content: { type: 'group' },
+            transform: { scale },
+          },
+        ],
+      };
+
+      expect(validateSceneDocument(scene)).toEqual({ issues: [], valid: true });
+    }
+  });
+
+  it('preserves mirrored scale when resolving a world-preserving reparent', () => {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'parent',
+          content: { type: 'group' },
+          transform: { position: [2, 0, 0] },
+          children: [
+            {
+              id: 'mirrored-child',
+              content: { type: 'group' },
+              transform: { scale: [-1, 1, 1] },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(resolveReparentTransform(scene, 'mirrored-child', null)).toEqual({
+      position: [2, 0, 0],
+      scale: [-1, 1, 1],
+    });
+  });
+
+  it('rejects only world-preserving reparent operations that must decompose a zero-scale node', () => {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'parent',
+          children: [
+            {
+              id: 'zero-scale-child',
+              transform: { scale: [0, 1, 1] },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() =>
+      resolveReparentTransform(scene, 'zero-scale-child', null),
+    ).toThrow('Cannot preserve the world transform of a zero-scale node');
   });
 
   it('aggregates transformed group children for bounds without mutation', () => {

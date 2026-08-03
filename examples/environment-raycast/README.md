@@ -26,8 +26,9 @@ environment-raycast/
 └── package.json           # Dependencies
 ```
 
-The plant model is served from the shared `@iwsdk/example-assets` catalog at
-`/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf`.
+The plant model comes from the shared `@iwsdk/example-assets` catalog. Its base
+URL defaults to the exact `0.4.2` jsDelivr package and can be replaced through
+`VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` for a local mirror.
 
 ## Quick Start
 
@@ -74,21 +75,18 @@ The development server will start on the HTTPS local URL reported by Vite or `np
 
 ### Main Application (src/index.ts)
 
-The application initializes a WebXR AR world with hit-test enabled:
+The project manifest initializes a WebXR AR world with hit-test enabled:
 
-```typescript
-World.create(document.getElementById('scene-container'), {
-  assets,
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    features: {
-      hitTest: { required: true },
+```json
+{
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "features": { "hitTest": { "required": true } }
     },
-  },
-  features: {
-    environmentRaycast: true,
-  },
-});
+    "features": { "environmentRaycast": true }
+  }
+}
 ```
 
 ### EnvironmentRaycastTarget Component

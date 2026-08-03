@@ -6,13 +6,24 @@
  */
 
 import {
-  type AssetManifest,
   AssetType,
   CylinderGeometry,
   Mesh,
   MeshStandardMaterial,
   SphereGeometry,
+  defineAssets,
 } from '@iwsdk/core';
+
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
 
 const dynamicSphere = new Mesh(
   new SphereGeometry(0.2),
@@ -26,29 +37,29 @@ const dynamicCylinder = new Mesh(
 );
 dynamicCylinder.name = 'Dynamic Cylinder';
 
-const assets = {
+const assets = defineAssets({
   'environment-desk': {
     name: 'Environment Desk',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    url: stockAssetUrl('environment-desk', 'environmentDesk.gltf'),
   },
   'plant-sansevieria': {
     name: 'Plant Sansevieria',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
+    url: stockAssetUrl('plant-sansevieria', 'plantSansevieria.gltf'),
   },
   robot: {
     name: 'Robot',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/robot/robot.gltf',
+    url: stockAssetUrl('robot', 'robot.gltf'),
   },
   'physics-welcome-panel': {
     name: 'Physics Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   'physics-dynamic-sphere': dynamicSphere,
   'physics-dynamic-cylinder': dynamicCylinder,
-} satisfies AssetManifest;
+});
 
 export default assets;

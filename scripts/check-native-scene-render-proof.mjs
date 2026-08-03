@@ -8,11 +8,16 @@
 
 import { spawn } from 'child_process';
 import { createRequire } from 'module';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, readdirSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import path from 'path';
 import { format as formatWithPrettier } from 'prettier';
 import { fileURLToPath } from 'url';
+import {
+  fetchDevelopmentUrl,
+  isExampleAssetRequest,
+} from './development-url.mjs';
+import { createPackedExampleAssetFixture } from './example-asset-package-fixture.mjs';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -51,19 +56,49 @@ async function writeJsonFile(filePath, value) {
 const TARGETS = [
   {
     assetIds: ['environment-desk', 'robot'],
-    componentIds: [
-      'AudioSource',
-      'LocomotionEnvironment',
-      'PanelUI',
-      'RayInteractable',
-    ],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'RayInteractable'],
     id: 'audio',
-    names: ['Environment', 'Robot Center', 'Robot Left', 'Robot Right'],
+    names: [
+      'Environment',
+      'Robot Center',
+      'Robot Left',
+      'Robot Right',
+      'Welcome Panel',
+    ],
     root: 'examples/audio',
     scene: 'public/scenes/audio.iwsdk.scene.json',
   },
   {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
+    assetIds: ['environment-desk'],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'PhysicsBody'],
+    id: 'browser-first',
+    names: ['Environment', 'Physics Ball', 'Welcome Panel', 'Player Avatar'],
+    root: 'examples/browser-first',
+    scene: 'public/scenes/browser-first.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['plant-sansevieria', 'robot'],
+    componentIds: ['DepthOccludable', 'DistanceGrabbable', 'XRAnchor'],
+    id: 'depth-occlusion',
+    names: [
+      'Soft Occlusion Sphere',
+      'Occludable Plant',
+      'Occludable Robot',
+      'Welcome Panel',
+    ],
+    root: 'examples/depth-occlusion',
+    scene: 'public/scenes/depth-occlusion.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['plant-sansevieria'],
+    componentIds: ['EnvironmentRaycastTarget', 'RayInteractable'],
+    id: 'environment-raycast',
+    names: ['Plant Preview', 'Welcome Panel'],
+    root: 'examples/environment-raycast',
+    scene: 'public/scenes/environment-raycast.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['environment-desk'],
     componentIds: [
       'DistanceGrabbable',
       'LocomotionEnvironment',
@@ -73,12 +108,33 @@ const TARGETS = [
     ],
     id: 'grab',
     names: [
-      'Distance Grabbable Robot',
-      'One Hand Grabbable Plant',
-      'Two Hands Grabbable Plant',
+      'Earth',
+      'Map Pin 1',
+      'Two-Hand Grabbable Pyramid',
+      'Welcome Panel',
     ],
     root: 'examples/grab',
     scene: 'public/scenes/grab.iwsdk.scene.json',
+  },
+  {
+    assetIds: [],
+    componentIds: ['PokeInteractable', 'RayInteractable', 'ScreenSpace'],
+    id: 'layers',
+    names: ['Grid', 'Orb', 'Quad Layer Anchor', 'Welcome Panel'],
+    root: 'examples/layers',
+    scene: 'public/scenes/layers.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['environment-desk'],
+    componentIds: [
+      'Elevator',
+      'LocomotionEnvironment',
+      'LocomotionSettingsPanel',
+    ],
+    id: 'locomotion',
+    names: ['Environment', 'Elevator', 'Welcome Panel', 'Settings Panel'],
+    root: 'examples/locomotion',
+    scene: 'public/scenes/locomotion.iwsdk.scene.json',
   },
   {
     assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
@@ -94,6 +150,22 @@ const TARGETS = [
     names: ['Environment', 'Plant', 'One Hand Physics Robot'],
     root: 'examples/physics',
     scene: 'public/scenes/physics.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['environment-desk', 'robot'],
+    componentIds: ['AudioSource', 'LocomotionEnvironment', 'Robot'],
+    id: 'poke',
+    names: ['Environment', 'Robot', 'Welcome Panel', 'WebXR Banner'],
+    root: 'examples/poke',
+    scene: 'public/scenes/poke.iwsdk.scene.json',
+  },
+  {
+    assetIds: [],
+    componentIds: ['DistanceGrabbable', 'RayInteractable', 'XRAnchor'],
+    id: 'scene-understanding',
+    names: ['Anchor', 'Welcome Panel'],
+    root: 'examples/scene-understanding',
+    scene: 'public/scenes/scene-understanding.iwsdk.scene.json',
   },
 ];
 
@@ -136,12 +208,13 @@ function printHelp() {
 Options:
   --artifact-root <path>  Directory for screenshots and proof JSON.
                           Defaults to docs/test-evidence/native-scene-examples/current.
-  --target <ids>          Comma-separated target ids: audio,grab,physics.
+  --target <ids>          Comma-separated target ids. Defaults to all examples.
   -h, --help              Show this help.
 `);
 }
 
 async function main() {
+  assertAllExamplesHaveRenderProofTargets();
   const options = parseArgs(process.argv.slice(2));
   const selectedTargets = TARGETS.filter((target) =>
     options.targets.includes(target.id),
@@ -159,8 +232,10 @@ async function main() {
   const failures = [];
   const summaries = [];
   let browser;
+  let packedAssetFixture;
 
   try {
+    packedAssetFixture = await createPackedExampleAssetFixture();
     browser = await launchChromium();
     for (const target of selectedTargets) {
       try {
@@ -168,6 +243,7 @@ async function main() {
           browser,
           target,
           options.artifactRoot,
+          packedAssetFixture,
         );
         summaries.push(summary);
         console.log(
@@ -181,6 +257,7 @@ async function main() {
     }
   } finally {
     await browser?.close();
+    await packedAssetFixture?.close();
   }
 
   const manifest = {
@@ -208,17 +285,36 @@ async function main() {
   );
 }
 
-async function proveTarget(browser, target, artifactRoot) {
+function assertAllExamplesHaveRenderProofTargets() {
+  const exampleIds = readdirSync(path.join(REPO_ROOT, 'examples'), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  const targetIds = TARGETS.map((target) => target.id).sort();
+  if (JSON.stringify(exampleIds) !== JSON.stringify(targetIds)) {
+    throw new Error(
+      `Render-proof targets must cover every example exactly; examples=${exampleIds.join(',')} targets=${targetIds.join(',')}`,
+    );
+  }
+}
+
+async function proveTarget(browser, target, artifactRoot, packedAssetFixture) {
   const targetStartMs = Date.now();
   const root = path.join(REPO_ROOT, target.root);
   const targetArtifactRoot = path.join(artifactRoot, target.id);
   mkdirSync(targetArtifactRoot, { recursive: true });
 
   const port = await getFreePort();
-  const server = startDevServer(root, port);
-  const baseUrl = `http://127.0.0.1:${port}/`;
+  const server = startDevServer(root, port, packedAssetFixture.baseUrl);
+  const baseUrl = `https://127.0.0.1:${port}/`;
   const appPage = await newInstrumentedPage(browser);
+  const appAssetRoute = await packedAssetFixture.installRoute(appPage.page, {
+    assetIds: target.assetIds,
+  });
   let editorPage;
+  let editorAssetRoute;
 
   try {
     await waitForHttpOk(baseUrl, server);
@@ -229,7 +325,11 @@ async function proveTarget(browser, target, artifactRoot) {
       target,
     });
     editorPage = await newInstrumentedPage(browser, {
+      baseUrl,
       managedWorkspace: true,
+    });
+    editorAssetRoute = await packedAssetFixture.installRoute(editorPage.page, {
+      assetIds: target.assetIds,
     });
     const editorProof = await proveEditorPage({
       baseUrl,
@@ -237,6 +337,8 @@ async function proveTarget(browser, target, artifactRoot) {
       screenshotPath: path.join(targetArtifactRoot, 'editor.png'),
       target,
     });
+    assertPackedAssetRequests('app', appAssetRoute, target.assetIds);
+    assertPackedAssetRequests('editor', editorAssetRoute, target.assetIds);
 
     const performance = {
       app: appProof.performance,
@@ -254,6 +356,11 @@ async function proveTarget(browser, target, artifactRoot) {
       app: appProof,
       baseUrl,
       editor: editorProof,
+      packedAssets: {
+        appRequests: appAssetRoute.requests,
+        editorRequests: editorAssetRoute.requests,
+        packageVersion: packedAssetFixture.version,
+      },
       performance,
       scene: target.scene,
       target: target.id,
@@ -289,7 +396,7 @@ async function proveAppPage({ baseUrl, pageContext, screenshotPath, target }) {
   page.on('response', (response) => {
     const url = response.url();
     for (const assetId of target.assetIds) {
-      if (url.includes(`/iwsdk-assets/${assetId}/`)) {
+      if (isExampleAssetRequest(url, assetId)) {
         const statuses = assetResponses.get(assetId) ?? [];
         statuses.push(response.status());
         assetResponses.set(assetId, statuses);
@@ -569,11 +676,19 @@ async function waitForEditorRuntime(pageContext, screenshotPath) {
 
 async function newInstrumentedPage(browser, options = {}) {
   const page = await browser.newPage({
+    ignoreHTTPSErrors: true,
     viewport: { height: 768, width: 1180 },
   });
   if (options.managedWorkspace === true) {
-    await page.setExtraHTTPHeaders({
-      [MANAGED_WORKSPACE_HEADER]: RENDER_PROOF_MANAGED_WORKSPACE_TOKEN,
+    const managedOrigin = new URL(options.baseUrl).origin;
+    await page.route(`${managedOrigin}/**`, async (route) => {
+      const request = route.request();
+      await route.continue({
+        headers: {
+          ...request.headers(),
+          [MANAGED_WORKSPACE_HEADER]: RENDER_PROOF_MANAGED_WORKSPACE_TOKEN,
+        },
+      });
     });
   }
   const consoleErrors = [];
@@ -744,7 +859,17 @@ async function getScreenshotStats(page, screenshotBase64, screenshotPath) {
   );
 }
 
-function startDevServer(cwd, port) {
+function assertPackedAssetRequests(label, assetRoute, assetIds) {
+  for (const assetId of assetIds) {
+    if (!assetRoute.requests.some((request) => request.assetId === assetId)) {
+      throw new Error(
+        `${label} packed CDN route did not fulfill a request for ${assetId}`,
+      );
+    }
+  }
+}
+
+function startDevServer(cwd, port, stockAssetBaseUrl) {
   const child = spawn(
     'npm',
     [
@@ -764,10 +889,12 @@ function startDevServer(cwd, port) {
       env: {
         ...process.env,
         BROWSER: 'none',
+        IWSDK_DEV_OPEN: 'false',
         IWSDK_TEST_MANAGED_WORKSPACE_TOKEN:
           RENDER_PROOF_MANAGED_WORKSPACE_TOKEN,
         NODE_ENV: process.env.NODE_ENV ?? 'test',
         NO_COLOR: '1',
+        VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: stockAssetBaseUrl,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -819,7 +946,7 @@ async function waitForHttpOk(url, processHandle, timeoutMs = 60000) {
       );
     }
     try {
-      const response = await fetch(url, { cache: 'no-store' });
+      const response = await fetchDevelopmentUrl(url);
       if (response.ok) {
         return response;
       }
@@ -853,7 +980,11 @@ async function getFreePort() {
 }
 
 async function launchChromium() {
-  return chromium.launch({ headless: true });
+  return chromium.launch({
+    args: ['--enable-webgl', '--use-angle=metal'],
+    channel: 'chromium',
+    headless: true,
+  });
 }
 
 function sleep(ms) {

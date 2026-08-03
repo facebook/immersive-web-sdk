@@ -5,39 +5,50 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { type AssetManifest, AssetType } from '@iwsdk/core';
+import { AssetType, defineAssets } from '@iwsdk/core';
 
-const assets = {
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
+
+const assets = defineAssets({
   'environment-desk': {
     name: 'Environment Desk',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    url: stockAssetUrl('environment-desk', 'environmentDesk.gltf'),
   },
   robot: {
     name: 'Robot',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/robot/robot.gltf',
+    url: stockAssetUrl('robot', 'robot.gltf'),
   },
   'spatial-audio-panel': {
     name: 'Spatial Audio Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   song: {
     priority: 'background',
     type: AssetType.Audio,
-    url: './audio/beepboop.mp3',
+    url: publicAssetUrl('audio/beepboop.mp3'),
   },
   switchSound: {
     priority: 'background',
     type: AssetType.Audio,
-    url: './audio/switch.mp3',
+    url: publicAssetUrl('audio/switch.mp3'),
   },
   webxrLogo: {
     priority: 'critical',
     type: AssetType.Texture,
-    url: './textures/webxr.jpg',
+    url: publicAssetUrl('textures/webxr.jpg'),
   },
-} satisfies AssetManifest;
+});
 
 export default assets;

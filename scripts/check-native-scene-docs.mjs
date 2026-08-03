@@ -213,17 +213,20 @@ function resolveMarkdownTarget(sourceRelativePath, href) {
   }
 
   const sourceDir = path.dirname(path.join(REPO_ROOT, sourceRelativePath));
-  const absoluteBase = withoutQuery.startsWith('/')
-    ? path.join(DOCS_ROOT, withoutQuery)
-    : path.resolve(sourceDir, withoutQuery);
-
+  const absoluteBases = withoutQuery.startsWith('/')
+    ? [
+        path.join(DOCS_ROOT, withoutQuery),
+        path.join(DOCS_ROOT, 'public', withoutQuery),
+      ]
+    : [path.resolve(sourceDir, withoutQuery)];
   const candidates = [];
-
-  if (path.extname(absoluteBase) === '') {
-    candidates.push(`${absoluteBase}.md`);
-    candidates.push(path.join(absoluteBase, 'index.md'));
-  } else {
-    candidates.push(absoluteBase);
+  for (const absoluteBase of absoluteBases) {
+    if (path.extname(absoluteBase) === '') {
+      candidates.push(`${absoluteBase}.md`);
+      candidates.push(path.join(absoluteBase, 'index.md'));
+    } else {
+      candidates.push(absoluteBase);
+    }
   }
 
   return candidates;

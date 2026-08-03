@@ -83,6 +83,41 @@ describe('workspace detection', () => {
     expect(isIwsdkAppRoot(nonIwsdkViteApp)).toBe(false);
     expect(findNearestIwsdkAppRoot(tempDir)).toBeNull();
   });
+
+  test('accepts a manifest-first IWSDK app without a Vite config', async () => {
+    const manifestApp = path.join(tempDir, 'apps', 'manifest-app');
+    await createAppFixture(manifestApp);
+    await rm(path.join(manifestApp, 'vite.config.ts'));
+    await writeFile(
+      path.join(manifestApp, 'iwsdk.config.json'),
+      '{"version":"iwsdk.project.v1"}\n',
+      'utf8',
+    );
+
+    expect(isIwsdkAppRoot(manifestApp)).toBe(true);
+    expect(findNearestIwsdkAppRoot(path.join(manifestApp, 'src'))).toBe(
+      await realpath(manifestApp),
+    );
+  });
+
+  test('does not treat an unrelated project manifest as an IWSDK app', async () => {
+    await writeFile(
+      path.join(nonIwsdkViteApp, 'iwsdk.config.json'),
+      '{"version":"iwsdk.project.v1"}\n',
+      'utf8',
+    );
+    await rm(path.join(nonIwsdkViteApp, 'vite.config.ts'));
+
+    expect(isIwsdkAppRoot(nonIwsdkViteApp)).toBe(false);
+  });
+
+  test('still requires a project or Vite config beside the IWSDK dependency', async () => {
+    const packageOnlyApp = path.join(tempDir, 'apps', 'package-only');
+    await createAppFixture(packageOnlyApp);
+    await rm(path.join(packageOnlyApp, 'vite.config.ts'));
+
+    expect(isIwsdkAppRoot(packageOnlyApp)).toBe(false);
+  });
 });
 
 describe('project-local runtime state', () => {
@@ -178,6 +213,36 @@ describe('project-local runtime state', () => {
     expect(session?.browser?.status).toBe('connected');
     expect(state.browserConnected).toBe(true);
     expect(state.browserCommandReady).toBe(true);
+  });
+
+  test('surfaces the reason a managed browser was intentionally not launched', async () => {
+    const issue = {
+      cause: 'browser_not_launched' as const,
+      message: 'Started with --no-open; run iwsdk dev restart --open.',
+      at: new Date().toISOString(),
+    };
+    await registerRuntimeSession({
+      sessionId: 'session-no-open',
+      workspaceRoot: appA,
+      pid: process.pid,
+      port: 5173,
+      localUrl: 'http://localhost:5173',
+      browser: {
+        status: 'not_launched',
+        connected: false,
+        commandReady: false,
+        connectedClientCount: 0,
+        lastTransitionAt: new Date().toISOString(),
+        lastError: issue,
+      },
+    });
+
+    expect(await getWorkspaceRuntimeState(appA)).toMatchObject({
+      running: true,
+      browserConnected: false,
+      browserCommandReady: false,
+      browserIssue: issue,
+    });
   });
 
   test('treats legacy connected browser sessions as command ready', async () => {

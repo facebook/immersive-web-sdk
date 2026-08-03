@@ -295,9 +295,50 @@ describe('createRelayHandler', () => {
       id: 'stale-target',
       error: {
         code: -32004,
+        data: { code: 'stale_browser_tab' },
       },
     });
     expect(relay.pendingCount()).toBe(0);
+  });
+
+  test('never routes a later command or response through an older generation of the same tab', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const oldPage = createMockWs();
+    const currentPage = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, oldPage, currentPage]);
+    relay.registerBrowserClient(oldPage, {
+      pageId: 'stable-tab',
+      role: 'app',
+      tabGeneration: 3,
+    });
+    relay.registerBrowserClient(currentPage, {
+      pageId: 'stable-tab',
+      role: 'app',
+      tabGeneration: 5,
+    });
+
+    const request = JSON.stringify({
+      id: 'monotonic-generation',
+      method: 'get_session_status',
+      params: {},
+    });
+    relay.onMessage(command, request, clients);
+    expect(oldPage.send).not.toHaveBeenCalled();
+    expect(currentPage.send).toHaveBeenCalledWith(request);
+
+    relay.onMessage(
+      oldPage,
+      JSON.stringify({ id: 'monotonic-generation', result: { old: true } }),
+      clients,
+    );
+    expect(command.send).not.toHaveBeenCalled();
+    relay.onMessage(
+      currentPage,
+      JSON.stringify({ id: 'monotonic-generation', result: { current: true } }),
+      clients,
+    );
+    expect(command.send).toHaveBeenCalledTimes(1);
   });
 
   test('drops responses from non-target browser clients', () => {

@@ -12,7 +12,7 @@ import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
 
 export default {
-  input: ['src/index.ts', 'src/lighting/index.ts'],
+  input: ['src/index.ts', 'src/lighting/index.ts', 'src/project/index.ts'],
   external: (id) => {
     // Mark three.js and all its subpaths as external
     if (id === 'three' || id.startsWith('three/')) {
@@ -53,6 +53,10 @@ export default {
             'node_modules/three/examples/jsm/libs/draco',
           ],
           dest: 'dist/vendor',
+        },
+        {
+          src: 'schemas/iwsdk-project.v1.schema.json',
+          dest: 'dist/schemas',
         },
       ],
     }),

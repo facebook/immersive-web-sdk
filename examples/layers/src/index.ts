@@ -14,17 +14,16 @@ import {
   MeshStandardMaterial,
   OrthographicCamera,
   Scene,
-  SessionMode,
   Shape,
   ShapeGeometry,
   SphereGeometry,
   TorusGeometry,
-  UIKitMLAsset,
-  World,
   XRCylinderLayer,
   XRQuadLayer,
+  UIKitMLAsset,
+  World,
 } from '@iwsdk/core';
-import assets from './assets.js';
+import projectOptions from 'virtual:iwsdk-project';
 import { configureWelcomePanel } from './panel.js';
 
 // ---------------------------------------------------------------------------
@@ -142,18 +141,10 @@ cylScene.add(sphere);
 // Main app
 // ---------------------------------------------------------------------------
 
-World.create(document.getElementById('scene-container') as HTMLDivElement, {
-  assets,
-  level: './scenes/layers.iwsdk.scene.json',
-  xr: {
-    sessionMode: SessionMode.ImmersiveVR,
-    features: { layers: true },
-  },
-  features: {
-    spatialUI: true,
-  },
-}).then((world) => {
-  world.camera.position.set(0, 1.5, 0);
+World.create(
+  document.getElementById('scene-container') as HTMLDivElement,
+  projectOptions,
+).then((world) => {
   const orb = world.requireSceneObject<Mesh>('orb');
 
   configureWelcomePanel(

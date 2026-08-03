@@ -8,6 +8,7 @@
 import {
   BufferAttribute,
   Group,
+  MathUtils,
   Matrix4,
   Object3D,
   PerspectiveCamera,
@@ -16,11 +17,12 @@ import {
   SkinnedMesh,
   Vector3,
 } from 'three';
-import { lerp } from 'three/src/math/MathUtils.js';
 import { InputLayout } from '../../gamepad/input-profiles.js';
 import { HandPose } from '../adapter/base-visual-adapter.js';
 import { outlineMaterial, stencilMaterial } from './animated-hand.js';
 import { BaseControllerVisual } from './base-impl.js';
+
+const { lerp } = MathUtils;
 
 const defaultPose: HandPose = {
   wrist: [

@@ -7,6 +7,10 @@
 
 import { LoadingManager, Texture, TextureLoader } from '../../runtime/index.js';
 import { CacheManager } from '../cache-manager.js';
+import {
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  loadCachedAsset,
+} from './cached-asset-load.js';
 
 /**
  * Texture loader with de-duplication and caching.
@@ -21,41 +25,19 @@ export class TextureAssetLoader {
   }
 
   /** Load a texture (URL or logical key), returning a cached instance when possible. */
-  static async loadTexture(urlOrKey: string): Promise<Texture> {
-    // Resolve URL from key if needed
+  static loadTexture(
+    urlOrKey: string,
+    timeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  ): Promise<Texture> {
     const url = CacheManager.resolveUrl(urlOrKey);
-
-    // Check promise cache (prevent duplicate requests)
-    if (CacheManager.hasPromise(url)) {
-      return CacheManager.getPromise<Texture>(url)!;
-    }
-
-    // Return a cached texture directly. Registering a promise on the cached
-    // path leaks: deletePromise() inside the executor runs before setPromise()
-    // stores the promise, so the resolved promise would never be evicted.
-    if (CacheManager.hasAsset(url)) {
-      return CacheManager.getAsset<Texture>(url)!;
-    }
-
-    const loadingPromise = new Promise<Texture>((resolve, reject) => {
-      // Load using Three.js TextureLoader
-      this.textureLoader.load(
-        url,
-        (texture) => {
-          CacheManager.setAsset(url, texture);
-          resolve(texture);
-          CacheManager.deletePromise(url);
-        },
-        undefined, // progress callback
-        (error) => {
-          reject(error);
-          CacheManager.deletePromise(url);
-        },
-      );
+    return loadCachedAsset({
+      discard: (texture) => texture.dispose(),
+      load: (resolve, reject) => {
+        this.textureLoader.load(url, resolve, undefined, reject);
+      },
+      timeoutMs,
+      url,
     });
-
-    CacheManager.setPromise(url, loadingPromise);
-    return loadingPromise;
   }
 
   /** Get a cached texture by logical key. */

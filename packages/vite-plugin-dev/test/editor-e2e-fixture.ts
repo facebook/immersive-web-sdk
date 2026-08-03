@@ -35,6 +35,10 @@ const MSDF_GENERATOR_ENTRY = path.join(
 const SCENE_COMPOSITION_ENTRY = fixtureRequire.resolve(
   '@iwsdk/scene-composition',
 );
+const CORE_PROJECT_ENTRY = path.join(
+  REPO_ROOT,
+  'packages/core/src/project/index.ts',
+);
 const THREE_PACKAGE_ROOT = path.resolve(
   path.dirname(fixtureRequire.resolve('three')),
   '..',
@@ -103,56 +107,80 @@ export async function createEditorTestHarness(
     `iwsdk-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN = TEST_MANAGED_WORKSPACE_TOKEN;
-  await writeFixtureProject(tempRoot);
-  const server = await createServer({
-    cacheDir: path.join(tempRoot, '.vite'),
-    logLevel: 'silent',
-    plugins: [
-      iwsdkDev({
-        assetManifest: './src/assets.js',
-        componentManifest: './src/components.js',
-        ...(options.managedBrowser ? { ai: { mode: 'agent' } } : {}),
-      }),
-    ],
-    resolve: {
-      // The fixture uses IWSDK source from outside its temporary app root,
-      // whereas a real installed app resolves this transitive dependency from
-      // its own node_modules directory.
-      alias: [
-        {
-          find: '@iwsdk/scene-composition',
-          replacement: SCENE_COMPOSITION_ENTRY,
-        },
-        {
-          find: 'three-viewport-gizmo',
-          replacement: THREE_VIEWPORT_GIZMO_ENTRY,
-        },
-        {
-          find: 'three/examples/jsm/controls/OrbitControls.js',
-          replacement: ORBIT_CONTROLS_ENTRY,
-        },
-        {
-          find: 'three/examples/jsm/controls/TransformControls.js',
-          replacement: TRANSFORM_CONTROLS_ENTRY,
-        },
-        {
-          find: /^three\/(.*)$/,
-          replacement: `${THREE_PACKAGE_ROOT}/$1`,
-        },
-        { find: /^three$/, replacement: THREE_ENTRY },
-        { find: '@zappar/msdf-generator', replacement: MSDF_GENERATOR_ENTRY },
-      ],
-    },
-    root: tempRoot,
-    server: {
-      fs: {
-        allow: [tempRoot, REPO_ROOT],
+  await writeFixtureProject(tempRoot, options);
+  const previousAiMode = process.env.IWSDK_DEV_AI_MODE;
+  const previousOpen = process.env.IWSDK_DEV_OPEN;
+  if (options.managedBrowser) {
+    process.env.IWSDK_DEV_AI_MODE = 'agent';
+    delete process.env.IWSDK_DEV_OPEN;
+  } else {
+    delete process.env.IWSDK_DEV_AI_MODE;
+    process.env.IWSDK_DEV_OPEN = 'false';
+  }
+  let server: Awaited<ReturnType<typeof createServer>>;
+  try {
+    server = await createServer({
+      cacheDir: path.join(tempRoot, '.vite'),
+      logLevel: 'silent',
+      plugins: [iwsdkDev()],
+      resolve: {
+        // The fixture uses IWSDK source from outside its temporary app root,
+        // whereas a real installed app resolves this transitive dependency from
+        // its own node_modules directory.
+        alias: [
+          {
+            find: '@iwsdk/core/project',
+            replacement: CORE_PROJECT_ENTRY,
+          },
+          {
+            find: '@iwsdk/scene-composition',
+            replacement: SCENE_COMPOSITION_ENTRY,
+          },
+          {
+            find: 'three-viewport-gizmo',
+            replacement: THREE_VIEWPORT_GIZMO_ENTRY,
+          },
+          {
+            find: 'three/examples/jsm/controls/OrbitControls.js',
+            replacement: ORBIT_CONTROLS_ENTRY,
+          },
+          {
+            find: 'three/examples/jsm/controls/TransformControls.js',
+            replacement: TRANSFORM_CONTROLS_ENTRY,
+          },
+          {
+            find: /^three\/(.*)$/,
+            replacement: `${THREE_PACKAGE_ROOT}/$1`,
+          },
+          { find: /^three$/, replacement: THREE_ENTRY },
+          {
+            find: '@zappar/msdf-generator',
+            replacement: MSDF_GENERATOR_ENTRY,
+          },
+        ],
       },
-      host: '127.0.0.1',
-      port: 0,
-      strictPort: false,
-    },
-  });
+      root: tempRoot,
+      server: {
+        fs: {
+          allow: [tempRoot, REPO_ROOT],
+        },
+        host: '127.0.0.1',
+        port: 0,
+        strictPort: false,
+      },
+    });
+  } finally {
+    if (previousAiMode == null) {
+      delete process.env.IWSDK_DEV_AI_MODE;
+    } else {
+      process.env.IWSDK_DEV_AI_MODE = previousAiMode;
+    }
+    if (previousOpen == null) {
+      delete process.env.IWSDK_DEV_OPEN;
+    } else {
+      process.env.IWSDK_DEV_OPEN = previousOpen;
+    }
+  }
   await server.listen();
   const baseUrl = server.resolvedUrls?.local[0];
   if (!baseUrl) {
@@ -172,21 +200,28 @@ export async function createEditorTestHarness(
     async openApp() {
       const context = await newPageContext(browser);
       await context.page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-      await context.page.waitForFunction(
-        () => (window as any).__APP_RUNTIME_PROOF != null,
-        undefined,
-        { timeout: 30000 },
-      );
+      await context.page
+        .waitForFunction(
+          () => (window as any).__APP_RUNTIME_PROOF != null,
+          undefined,
+          { timeout: 30000 },
+        )
+        .catch((error) => {
+          throw new Error(
+            `App fixture did not become ready: ${String(error)}\n${context
+              .errors()
+              .join('\n')}\n${context.failedRequests.join('\n')}`,
+          );
+        });
       return context;
     },
     async openEditor() {
       const context = await newPageContext(browser, {
         managedWorkspace: true,
       });
-      await context.page.goto(
-        `${baseUrl}__iwsdk/workspace?scene=${EDITOR_SCENE_RELATIVE_PATH}`,
-        { waitUntil: 'domcontentloaded' },
-      );
+      await context.page.goto(`${baseUrl}__iwsdk/workspace`, {
+        waitUntil: 'domcontentloaded',
+      });
       await waitForEditorReady(context.page, context.errors);
       await context.page
         .locator('[data-workspace-view-button="editor"]')
@@ -320,7 +355,10 @@ export function hashImageData(imageData: string): string {
   return createHash('sha256').update(imageData).digest('hex');
 }
 
-async function writeFixtureProject(tempRoot: string): Promise<void> {
+async function writeFixtureProject(
+  tempRoot: string,
+  _options: EditorTestHarnessOptions,
+): Promise<void> {
   await mkdir(path.join(tempRoot, 'public', 'audio'), { recursive: true });
   await mkdir(path.join(tempRoot, 'public', 'assets'), { recursive: true });
   await mkdir(path.join(tempRoot, 'public', 'scenes'), { recursive: true });
@@ -451,6 +489,39 @@ async function writeFixtureProject(tempRoot: string): Promise<void> {
     appFixtureSource(),
     'utf8',
   );
+  await writeFile(
+    path.join(tempRoot, 'iwsdk.config.json'),
+    `${JSON.stringify(
+      {
+        version: 'iwsdk.project.v1',
+        scene: `./${EDITOR_SCENE_RELATIVE_PATH}`,
+        assets: { module: './src/assets' },
+        components: { module: './src/components' },
+        world: {
+          xr: false,
+          input: { canvasPointerEvents: false },
+          render: {
+            camera: { lookAt: [0, 0, 0], position: [3, 2.5, 5] },
+          },
+          features: {
+            camera: false,
+            environmentRaycast: false,
+            grabbing: false,
+            locomotion: false,
+            physics: false,
+            sceneUnderstanding: false,
+            spatialUI: true,
+          },
+        },
+        dev: {
+          emulator: { iwer: true },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
 }
 
 function componentManifestFixtureSource(): string {
@@ -479,6 +550,7 @@ function assetManifestFixtureSource(): string {
 import {
   AssetType,
   BoxGeometry,
+  defineAssets,
   Mesh,
   MeshStandardMaterial,
 } from ${JSON.stringify(coreImportUrl)};
@@ -489,7 +561,7 @@ const proceduralPlinth = new Mesh(
 );
 proceduralPlinth.name = 'Procedural plinth';
 
-export default {
+export default defineAssets({
   table: {
     name: 'Table',
     type: AssetType.GLTF,
@@ -506,7 +578,7 @@ export default {
     url: '/ui/welcome.uikitml',
   },
   'procedural-plinth': proceduralPlinth,
-};
+});
 `;
 }
 
@@ -543,8 +615,7 @@ function appFixtureSource(): string {
     .replace(/\\/g, '/')}`;
   return `
 import { LevelTag, Transform, World } from ${JSON.stringify(coreImportUrl)};
-import assets from './assets.js';
-import components from './components.js';
+import projectOptions from 'virtual:iwsdk-project';
 
 const host = document.getElementById('app-root');
 const status = document.getElementById('app-status');
@@ -654,25 +725,7 @@ function collectProof(world) {
 }
 
 try {
-  const world = await World.create(host, {
-    assets,
-    components,
-    features: {
-      camera: false,
-      environmentRaycast: false,
-      grabbing: false,
-      locomotion: false,
-      physics: false,
-      sceneUnderstanding: false,
-      spatialUI: true,
-    },
-    input: { canvasPointerEvents: false },
-    level: '/scenes/editor-smoke.iwsdk.scene.json',
-    render: {
-      camera: { lookAt: [0, 0, 0], position: [3, 2.5, 5] },
-    },
-    xr: false,
-  });
+  const world = await World.create(host, projectOptions);
   world.renderer.domElement.id = 'app-canvas';
   world.renderer.domElement.dataset.renderer = 'iwsdk-webgl';
   window.__APP_WORLD = world;

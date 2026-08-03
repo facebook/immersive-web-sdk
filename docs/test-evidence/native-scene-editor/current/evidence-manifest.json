@@ -1,17 +1,17 @@
 {
   "browser": {
-    "chromeVersion": "Google Chrome 150.0.7871.182"
+    "engine": "playwright-chromium"
   },
   "commandLog": {
     "argv": [],
-    "cwd": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk",
-    "script": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/scripts/check-native-scene-editor-evidence.mjs"
+    "cwd": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk",
+    "script": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/scripts/check-native-scene-editor-evidence.mjs"
   },
   "device": {
     "editorFixtureDevice": "metaQuest3 default IWSDK dev runtime",
     "physicalDevice": "not required for automated editor evidence"
   },
-  "evidenceDir": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-editor/current",
+  "evidenceDir": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-editor/current",
   "files": {
     "json": [
       {
@@ -30,14 +30,14 @@
         "sha256": "2a61ea4ec8968fb0828a41af12a8e6c525246122dba1ef1b0df34f491658b213"
       },
       {
-        "bytes": 725,
+        "bytes": 728,
         "file": "scene-before.json",
-        "sha256": "5589e755bc77fa4e79f4a2100a5ae1ccd2e6b3d3ff2cf7b2675e559bae82a0ae"
+        "sha256": "a7ccce7f85288d51a2c31243dd7a3775c21f2418f1f17c058acd4e9e16836a60"
       },
       {
-        "bytes": 1113,
+        "bytes": 1116,
         "file": "scene-after.json",
-        "sha256": "b3f23b3884c71042bd2f1a1facf9c8a852298abd45c0142e62a2e5be74c7996d"
+        "sha256": "f541c9a95dff087bacf5668055b9b342537df31298ef06c9932f4987c7474c96"
       },
       {
         "bytes": 158,
@@ -55,9 +55,9 @@
         "sha256": "86f0f343944548b14f359b8d783b1dcccc1918180a2476e6e05d2620f39c04b5"
       },
       {
-        "bytes": 990,
+        "bytes": 993,
         "file": "app-after-reload-proof.json",
-        "sha256": "540574d860586a9af82e5c43f42e7eee5e061357a36a0f51018519603a539cbd"
+        "sha256": "9015946226fb9c3acc20e8e9f8ac39bb1b73d8807e166b208aca392528879b73"
       },
       {
         "bytes": 3153,
@@ -133,7 +133,7 @@
       }
     ]
   },
-  "generatedAt": "2026-07-25T07:02:47.417Z",
+  "generatedAt": "2026-07-31T19:11:04.937Z",
   "packageVersions": {
     "root": null,
     "@iwsdk/cli": "0.4.2",
@@ -141,7 +141,6 @@
     "@iwsdk/create": "0.4.2",
     "@iwsdk/example-assets": "0.4.2",
     "@iwsdk/scene-composition": "0.4.2",
-    "@iwsdk/starter-assets": "0.4.2",
     "@iwsdk/vite-plugin-dev": "0.4.2"
   },
   "checks": [

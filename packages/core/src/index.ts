@@ -30,6 +30,7 @@ export * from './depth/index.js';
 export * from './layers/index.js';
 export * from './lighting/index.js';
 export * from './mcp/index.js';
+export * from './project/index.js';
 
 // re-exports
 export * from '@iwsdk/xr-input';

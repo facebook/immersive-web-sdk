@@ -28,6 +28,7 @@ const VITE_CONFIG_NAMES = [
   'vite.config.cts',
   'vite.config.cjs',
 ];
+const IWSDK_PROJECT_CONFIG_NAME = 'iwsdk.config.json';
 
 const IWSDK_APP_PACKAGE_NAMES = [
   '@iwsdk/cli',
@@ -179,11 +180,13 @@ export function isIwsdkAppRoot(dirPath: string): boolean {
     return false;
   }
 
-  if (
-    !VITE_CONFIG_NAMES.some((name) =>
-      existsSync(path.join(normalizedDir, name)),
-    )
-  ) {
+  const hasProjectConfig = existsSync(
+    path.join(normalizedDir, IWSDK_PROJECT_CONFIG_NAME),
+  );
+  const hasViteConfig = VITE_CONFIG_NAMES.some((name) =>
+    existsSync(path.join(normalizedDir, name)),
+  );
+  if (!hasProjectConfig && !hasViteConfig) {
     return false;
   }
 
@@ -337,6 +340,9 @@ export async function getWorkspaceRuntimeState(
     starting: !session && Boolean(launch),
     browserConnected: Boolean(session?.browser?.connected),
     browserCommandReady: isRuntimeBrowserCommandReady(session),
+    ...(session?.browser?.lastError == null
+      ? {}
+      : { browserIssue: session.browser.lastError }),
     session,
     launch,
   };

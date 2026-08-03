@@ -28,8 +28,9 @@ audio/
 └── package.json
 ```
 
-The robot and environment meshes are served from the shared example asset
-catalog at `/iwsdk-assets/...`.
+The robot and environment meshes load from the immutable
+`@iwsdk/example-assets@0.4.2` CDN catalog. Set
+`VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` to use a local mirror.
 
 ## Run
 

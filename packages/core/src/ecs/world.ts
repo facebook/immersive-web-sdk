@@ -115,6 +115,8 @@ export class World extends ElicsWorld {
   public renderer!: WebGLRenderer;
   public session: XRSession | undefined;
   public visibilityState = signal(VisibilityState.NonImmersive);
+  /** Whether this world was created with XR support enabled. */
+  public xrEnabled = true;
   public requestedLevelUrl: string | undefined;
   public requestedLevelDocument: SceneDocument | undefined;
   public _resolveLevelLoad: (() => void) | undefined;

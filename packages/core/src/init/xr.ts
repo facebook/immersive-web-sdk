@@ -264,6 +264,12 @@ export async function resolveReferenceSpaceType(
  * @category Runtime
  */
 export function launchXR(world: World, options?: Partial<XROptions>) {
+  if (world.xrEnabled === false) {
+    throw new Error(
+      'XR is disabled for this world. Create it with an XR configuration instead of { xr: false } before calling launchXR().',
+    );
+  }
+
   const merged = mergeXROptions(world.xrDefaults, options);
   const { sessionMode = SessionMode.ImmersiveVR } = merged;
   const refSpec = normalizeReferenceSpec(merged.referenceSpace);

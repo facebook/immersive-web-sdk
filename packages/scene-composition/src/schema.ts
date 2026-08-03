@@ -166,10 +166,7 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
         position: { $ref: '#/$defs/vec3' },
         rotationDeg: { $ref: '#/$defs/vec3' },
         scale: {
-          oneOf: [
-            { type: 'number', exclusiveMinimum: 0 },
-            { $ref: '#/$defs/positiveVec3' },
-          ],
+          oneOf: [{ type: 'number' }, { $ref: '#/$defs/vec3' }],
         },
       },
     },

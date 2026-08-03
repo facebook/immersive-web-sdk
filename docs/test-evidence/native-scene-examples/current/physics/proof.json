@@ -6,75 +6,55 @@
       "robot": [200, 200, 200, 200, 200, 200]
     },
     "components": {
-      "DistanceGrabbable": 3,
+      "DistanceGrabbable": 2,
       "LocomotionEnvironment": 1,
       "OneHandGrabbable": 1,
       "PhysicsBody": 5,
       "PhysicsShape": 5,
-      "RayInteractable": 4
+      "RayInteractable": 3
     },
-    "hierarchyNameCount": 36,
+    "hierarchyNameCount": 37,
     "performance": {
-      "gotoMs": 4197,
-      "runtimeReadyMs": 156,
-      "canvasReadyMs": 17,
-      "screenshotCaptureMs": 183
+      "gotoMs": 1282,
+      "runtimeReadyMs": 75,
+      "canvasReadyMs": 33,
+      "screenshotCaptureMs": 133
     },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
-      "sampledPixels": 74,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/app.png",
+      "sampledPixels": 54,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:51822/",
+  "baseUrl": "https://127.0.0.1:63401/",
   "editor": {
     "performance": {
-      "gotoMs": 336,
-      "worldReadyMs": 2446,
-      "screenshotCaptureMs": 140
+      "gotoMs": 180,
+      "worldReadyMs": 1042,
+      "screenshotCaptureMs": 80
     },
-    "sceneDocument": { "assetCount": 3, "nodeCount": 2 },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
+    "sceneDocument": { "assetCount": 0, "nodeCount": 5 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
-      "sampledPixels": 193,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/physics/editor.png",
+      "sampledPixels": 250,
       "uniqueColors": 32
     },
     "viewport": {
-      "assetLoads": [
-        {
-          "assetId": "environment-desk",
-          "loadedAt": 1784972570381,
-          "status": "loaded",
-          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
-        },
-        {
-          "assetId": "robot",
-          "loadedAt": 1784972570551,
-          "status": "loaded",
-          "url": "/iwsdk-assets/robot/robot.gltf"
-        },
-        {
-          "assetId": "plant-sansevieria",
-          "loadedAt": 1784972570748,
-          "status": "loaded",
-          "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
-        }
-      ],
-      "meshCount": 41,
-      "nodeObjectCount": 5,
+      "assetLoads": [],
+      "meshCount": 34,
+      "nodeObjectCount": 7,
       "objectHierarchy": [
         {
           "assetId": "environment-desk",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
           "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
@@ -86,49 +66,69 @@
           "localPosition": [0, 0, 0],
           "nodeId": "spawnable-objects",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
           "sourceNodeId": "spawnable-objects",
           "worldPosition": [0, 0, 0]
         },
         {
-          "assetId": "robot",
-          "contentType": "model",
-          "fallback": null,
-          "helperType": null,
-          "localPosition": [0, 0.9455, 2],
-          "nodeId": "robot",
-          "parentNodeId": "spawnable-objects",
-          "primitiveType": null,
-          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
-          "sourceNodeId": "robot",
-          "worldPosition": [0, 0.9455, 2]
-        },
-        {
           "assetId": "plant-sansevieria",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [-1, 1.4114, 1.5066],
+          "localPosition": [0.5, 0.8476, -1.75],
           "nodeId": "plant",
           "parentNodeId": "spawnable-objects",
-          "primitiveType": null,
-          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
           "sourceNodeId": "plant",
-          "worldPosition": [-1, 1.4114, 1.5066]
+          "worldPosition": [0.5, 0.8476, -1.75]
         },
         {
           "assetId": "robot",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [1, 0.8207, 0.9333],
+          "localPosition": [1, 1, -1.75],
           "nodeId": "robot-one-hand",
           "parentNodeId": "spawnable-objects",
-          "primitiveType": null,
-          "runtimeHash": "sha256:da22f8ec864fcf12e10f2597b93cc97c2f7842a50907572ef8782ab7bfe2200d",
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
           "sourceNodeId": "robot-one-hand",
-          "worldPosition": [1, 0.8207, 0.9333]
+          "worldPosition": [1, 1, -1.75]
+        },
+        {
+          "assetId": "physics-dynamic-sphere",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-1, 0.9497, -1.75],
+          "nodeId": "dynamic-sphere",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
+          "sourceNodeId": "dynamic-sphere",
+          "worldPosition": [-1, 0.9497, -1.75]
+        },
+        {
+          "assetId": "physics-dynamic-cylinder",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-0.5, 1, -1.75],
+          "nodeId": "dynamic-cylinder",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
+          "sourceNodeId": "dynamic-cylinder",
+          "worldPosition": [-0.5, 1, -1.75]
+        },
+        {
+          "assetId": "physics-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1.5, -2.4082],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:490e0548c41bcb39f115e9bde213eb6820fae68c203f58555719eea71c58ae63",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 1.5, -2.4082]
         }
       ],
       "renderer": "iwsdk-webgl",
@@ -136,17 +136,164 @@
       "worldReady": true
     }
   },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
   "performance": {
     "app": {
-      "gotoMs": 4197,
-      "runtimeReadyMs": 156,
-      "canvasReadyMs": 17,
-      "screenshotCaptureMs": 183
+      "gotoMs": 1282,
+      "runtimeReadyMs": 75,
+      "canvasReadyMs": 33,
+      "screenshotCaptureMs": 133
     },
     "editor": {
-      "gotoMs": 336,
-      "worldReadyMs": 2446,
-      "screenshotCaptureMs": 140
+      "gotoMs": 180,
+      "worldReadyMs": 1042,
+      "screenshotCaptureMs": 80
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -156,7 +303,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 10689
+    "totalMs": 5118
   },
   "scene": "public/scenes/physics.iwsdk.scene.json",
   "target": "physics"

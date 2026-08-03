@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/depth-occlusion.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "referenceSpace": "unbounded",
+      "features": {
+        "depthSensing": {
+          "required": true,
+          "usage": "gpu-optimized",
+          "format": "float32"
+        },
+        "hitTest": { "required": true },
+        "anchors": { "required": true },
+        "unbounded": { "required": true }
+      }
+    },
+    "render": { "camera": { "position": [0, 1.6, 0] } },
+    "features": { "grabbing": true, "spatialUI": true }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "environment": "living_room",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

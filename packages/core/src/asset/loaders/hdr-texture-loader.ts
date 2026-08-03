@@ -13,6 +13,10 @@ import {
   Texture,
 } from '../../runtime/index.js';
 import { CacheManager } from '../cache-manager.js';
+import {
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  loadCachedAsset,
+} from './cached-asset-load.js';
 
 /** HDR equirectangular texture loader with de-duplication and caching.
  * @category Assets
@@ -27,7 +31,11 @@ export class HDRTextureAssetLoader {
   }
 
   /** Load an HDR `.hdr`/`.exr` texture by URL, returning a cached instance when possible. */
-  static async loadHDRTexture(url: string): Promise<Texture> {
+  static loadHDRTexture(
+    urlOrKey: string,
+    timeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  ): Promise<Texture> {
+    const url = CacheManager.resolveUrl(urlOrKey);
     // Normalize extension
     const u = url.toLowerCase();
     const isEXR = u.endsWith('.exr');
@@ -41,39 +49,21 @@ export class HDRTextureAssetLoader {
       );
     }
 
-    if (CacheManager.hasPromise(url)) {
-      return CacheManager.getPromise<Texture>(url)!;
-    }
-
-    // Return a cached texture directly. Registering a promise on the cached
-    // path leaks: deletePromise() inside the executor runs before setPromise()
-    // stores the promise, so the resolved promise would never be evicted.
-    if (CacheManager.hasAsset(url)) {
-      return CacheManager.getAsset<Texture>(url)!;
-    }
-
-    const loadingPromise = new Promise<Texture>((resolve, reject) => {
-      const onLoad = (texture: Texture) => {
-        // Ensure world-locked mapping for equirectangular HDR/EXR
-        texture.mapping = EquirectangularReflectionMapping;
-        CacheManager.setAsset(url, texture);
-        resolve(texture);
-        CacheManager.deletePromise(url);
-      };
-
-      const onError = (error: unknown) => {
-        reject(error as Error);
-        CacheManager.deletePromise(url);
-      };
-
-      if (isEXR) {
-        this.exrLoader.load(url, onLoad, undefined, onError);
-      } else {
-        this.hdrLoader.load(url, onLoad, undefined, onError);
-      }
+    return loadCachedAsset({
+      discard: (texture) => texture.dispose(),
+      load: (resolve, reject) => {
+        const onLoad = (texture: Texture) => {
+          texture.mapping = EquirectangularReflectionMapping;
+          resolve(texture);
+        };
+        if (isEXR) {
+          this.exrLoader.load(url, onLoad, undefined, reject);
+        } else {
+          this.hdrLoader.load(url, onLoad, undefined, reject);
+        }
+      },
+      timeoutMs,
+      url,
     });
-
-    CacheManager.setPromise(url, loadingPromise);
-    return loadingPromise;
   }
 }

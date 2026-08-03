@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iwsdk.dev/schemas/iwsdk-project.v1.schema.json",
+  "title": "IWSDK Project Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "scene", "world"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "iwsdk.project.v1" },
+    "scene": {
+      "type": "string",
+      "pattern": "^(?:\\./)?public/scenes/(?!\\.\\.?/)(?!.*(?:/\\.\\.?/|//))[^?#\\\\]+\\.iwsdk\\.scene\\.json$"
+    },
+    "assets": { "$ref": "#/$defs/moduleDeclaration" },
+    "components": { "$ref": "#/$defs/moduleDeclaration" },
+    "world": { "$ref": "#/$defs/world" },
+    "dev": { "$ref": "#/$defs/dev" }
+  },
+  "$defs": {
+    "moduleDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module"],
+      "properties": {
+        "module": {
+          "type": "string",
+          "pattern": "^(?!\\s)(?!.*\\s$)(?:\\./)?(?!\\.\\.?/)(?!.*(?:/\\.\\.?/|//|[?#\\\\]))(?:[^/]+/)*[^/.]+$"
+        }
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "vec4": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number" }
+    },
+    "featureFlag": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "required": { "type": "boolean" } }
+        }
+      ]
+    },
+    "depthSensing": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": { "type": "boolean" },
+            "usage": {
+              "enum": ["cpu-optimized", "gpu-optimized"]
+            },
+            "format": {
+              "enum": ["luminance-alpha", "float32"]
+            }
+          }
+        }
+      ]
+    },
+    "referenceSpaceType": {
+      "enum": ["bounded-floor", "local", "local-floor", "unbounded", "viewer"]
+    },
+    "referenceSpace": {
+      "oneOf": [
+        { "$ref": "#/$defs/referenceSpaceType" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "$ref": "#/$defs/referenceSpaceType" },
+            "required": { "type": "boolean" },
+            "fallbackOrder": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/referenceSpaceType" }
+            }
+          }
+        }
+      ]
+    },
+    "xrFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handTracking": { "$ref": "#/$defs/featureFlag" },
+        "anchors": { "$ref": "#/$defs/featureFlag" },
+        "hitTest": { "$ref": "#/$defs/featureFlag" },
+        "planeDetection": { "$ref": "#/$defs/featureFlag" },
+        "meshDetection": { "$ref": "#/$defs/featureFlag" },
+        "depthSensing": { "$ref": "#/$defs/depthSensing" },
+        "layers": { "$ref": "#/$defs/featureFlag" },
+        "unbounded": { "$ref": "#/$defs/featureFlag" }
+      }
+    },
+    "xr": {
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["vr", "ar"] },
+            "offer": { "enum": ["none", "once", "always"] },
+            "referenceSpace": { "$ref": "#/$defs/referenceSpace" },
+            "restoreCameraOnExit": { "type": "boolean" },
+            "features": { "$ref": "#/$defs/xrFeatures" }
+          }
+        }
+      ]
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "position": { "$ref": "#/$defs/vec3" },
+        "rotation": { "$ref": "#/$defs/vec3" },
+        "quaternion": { "$ref": "#/$defs/vec4" },
+        "lookAt": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fov": { "type": "number" },
+        "near": { "type": "number" },
+        "far": { "type": "number" },
+        "stencil": { "type": "boolean" },
+        "camera": { "$ref": "#/$defs/camera" }
+      }
+    },
+    "canvasPointerEvents": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "activeDuringXR": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "canvasPointerEvents": {
+          "$ref": "#/$defs/canvasPointerEvents"
+        }
+      }
+    },
+    "browserControls": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keyboard": { "type": "boolean" },
+            "gamepad": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "locomotion": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "useWorker": { "type": "boolean" },
+            "initialPlayerPosition": { "$ref": "#/$defs/vec3" },
+            "comfortAssistLevel": { "type": "number" },
+            "turningMethod": { "enum": ["snap", "smooth"] },
+            "enableJumping": { "type": "boolean" },
+            "browserControls": { "$ref": "#/$defs/browserControls" }
+          }
+        }
+      ]
+    },
+    "grabbing": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "useHandPinchForGrab": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "sceneUnderstanding": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "showWireFrame": { "type": "boolean" } }
+        }
+      ]
+    },
+    "spatialUI": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "forwardHtmlEvents": { "type": "boolean" },
+            "kit": { "enum": ["default", "horizon"] },
+            "preferredColorScheme": {
+              "enum": ["system", "light", "dark"]
+            }
+          }
+        }
+      ]
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locomotion": { "$ref": "#/$defs/locomotion" },
+        "grabbing": { "$ref": "#/$defs/grabbing" },
+        "physics": { "type": "boolean" },
+        "sceneUnderstanding": { "$ref": "#/$defs/sceneUnderstanding" },
+        "environmentRaycast": { "type": "boolean" },
+        "camera": { "type": "boolean" },
+        "spatialUI": { "$ref": "#/$defs/spatialUI" }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xr"],
+      "properties": {
+        "xr": { "$ref": "#/$defs/xr" },
+        "input": { "$ref": "#/$defs/input" },
+        "render": { "$ref": "#/$defs/render" },
+        "features": { "$ref": "#/$defs/features" }
+      }
+    },
+    "regex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "flags": {
+          "type": "string",
+          "pattern": "^(?!.*d.*d)(?!.*g.*g)(?!.*i.*i)(?!.*m.*m)(?!.*s.*s)(?!.*u.*u)(?!.*v.*v)(?!.*y.*y)(?!.*u.*v)(?!.*v.*u)[dgimsuvy]*$"
+        }
+      }
+    },
+    "emulator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "enum": ["metaQuest2", "metaQuest3", "metaQuestPro", "oculusQuest1"]
+        },
+        "iwer": { "type": "boolean" },
+        "environment": {
+          "enum": [
+            "living_room",
+            "meeting_room",
+            "music_room",
+            "office_large",
+            "office_small"
+          ]
+        },
+        "activation": {
+          "oneOf": [
+            { "enum": ["localhost", "always"] },
+            { "$ref": "#/$defs/regex" }
+          ]
+        },
+        "injectOnBuild": { "type": "boolean" },
+        "userAgentException": { "$ref": "#/$defs/regex" }
+      }
+    },
+    "dev": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emulator": { "$ref": "#/$defs/emulator" }
+      }
+    }
+  }
+}

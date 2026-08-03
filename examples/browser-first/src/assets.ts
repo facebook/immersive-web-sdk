@@ -6,14 +6,25 @@
  */
 
 import {
-  type AssetManifest,
   AssetType,
   BoxGeometry,
   CapsuleGeometry,
   Mesh,
   MeshStandardMaterial,
   SphereGeometry,
+  defineAssets,
 } from '@iwsdk/core';
+
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
 
 const rayTarget = new Mesh(
   new BoxGeometry(0.36, 0.36, 0.36),
@@ -33,20 +44,20 @@ const playerAvatar = new Mesh(
 );
 playerAvatar.name = 'Player Avatar';
 
-const assets = {
+const assets = defineAssets({
   'environment-desk': {
     name: 'Environment Desk',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    url: stockAssetUrl('environment-desk', 'environmentDesk.gltf'),
   },
   'browser-first-welcome-panel': {
     name: 'Browser-First Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   'browser-first-ray-target': rayTarget,
   'browser-first-physics-ball': physicsBall,
   'browser-first-player-avatar': playerAvatar,
-} satisfies AssetManifest;
+});
 
 export default assets;

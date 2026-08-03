@@ -7,7 +7,6 @@
 
 import {
   assertValidSceneDocument,
-  composeSceneDocument,
   hashRuntimeSceneDocument,
   type JsonObject,
   type SceneDocument,
@@ -115,48 +114,28 @@ export class SceneJSONImporter {
     _options: SceneJSONImportOptions = {},
   ): Promise<SceneJSONLoadResult> {
     const sourceDocument = structuredClone(document);
+    const authoringAssets = world.assets?.catalog?.();
     const validationOptions = {
       componentCatalog: world.componentCatalog,
+      ...(authoringAssets == null
+        ? {}
+        : { knownAssetIds: authoringAssets.map((asset) => asset.id) }),
       // Authoring review completeness is not part of the runtime projection.
       // Draft scenes that the editor can render must remain runtime-loadable.
       validateAuthoringWorkflow: false,
       validateComponentLinks: false,
     };
     assertValidSceneDocument(sourceDocument, validationOptions);
-    if ((sourceDocument.imports?.length ?? 0) > 0 && documentUrl == null) {
+    if ((sourceDocument.imports?.length ?? 0) > 0) {
       throw new Error(
-        'Scene documents with imports require a document URL for relative resolution',
+        'Scene imports are supported only by IWSDK authoring tools. Flatten this document before loading it at runtime with "iwsdk scene flatten --input-json \'{\"path\":\"public/scenes/source.iwsdk.scene.json\"}\'".',
       );
     }
-    const compositionSource =
-      documentUrl == null ? undefined : canonicalSceneSource(documentUrl);
-    const composed = await composeSceneDocument(sourceDocument, {
-      ...validationOptions,
-      ...(compositionSource == null ? {} : { source: compositionSource }),
-      resolve: async ({ importer, src }) => {
-        if (importer == null) {
-          throw new Error(
-            `Cannot resolve scene import "${src}" without an importer URL`,
-          );
-        }
-        const source = new URL(src, importer).href;
-        const response = await fetch(source);
-        if (!response.ok) {
-          throw new Error(
-            `Failed to load IWSDK scene module "${source}": ${response.status} ${response.statusText}`,
-          );
-        }
-        return {
-          document: await response.json(),
-          source: response.url || source,
-        };
-      },
-    });
-    const runtimeHash = hashRuntimeSceneDocument(composed.document);
-    const resolvedDocument = resolveSceneDocumentForLowering(composed.document);
+    const runtimeHash = hashRuntimeSceneDocument(sourceDocument);
+    const resolvedDocument = resolveSceneDocumentForLowering(sourceDocument);
     assertValidSceneDocument(resolvedDocument, validationOptions);
     const result: SceneJSONLoadResult = {
-      dependencies: composed.dependencies,
+      dependencies: [],
       document: resolvedDocument,
       nodes: new Map(),
       playerAttachments: [],
@@ -427,12 +406,6 @@ function parsePathname(url: string): string {
   } catch {
     return url.split(/[?#]/, 1)[0].toLowerCase();
   }
-}
-
-function canonicalSceneSource(source: string): string {
-  const browserBase = (globalThis as { location?: { href?: string } }).location
-    ?.href;
-  return new URL(source, browserBase ?? 'https://iwsdk.local/').href;
 }
 
 function cloneJson<T>(value: T): T {

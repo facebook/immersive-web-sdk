@@ -61,40 +61,42 @@ pnpm preview
 
 ### 1. Configure Depth Sensing
 
-Enable depth sensing in the WebXR session features:
+Declare depth sensing in `iwsdk.config.json`:
 
-```javascript
-World.create(document.getElementById('scene-container'), {
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    referenceSpace: ReferenceSpaceType.Unbounded,
-    features: {
-      depthSensing: {
-        required: true,
-        usage: 'gpu-optimized',
-        format: 'float32',
-      },
-      hitTest: { required: true },
-      anchors: { required: true },
-      unbounded: { required: true },
+```json
+{
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "referenceSpace": "unbounded",
+      "features": {
+        "depthSensing": {
+          "required": true,
+          "usage": "gpu-optimized",
+          "format": "float32"
+        },
+        "hitTest": { "required": true },
+        "anchors": { "required": true },
+        "unbounded": { "required": true }
+      }
     },
-  },
-  features: {
-    grabbing: true,
-  },
-});
+    "features": {
+      "grabbing": true
+    }
+  }
+}
 ```
 
 ### 2. Register the DepthSensingSystem
 
 ```javascript
 world.registerSystem(DepthSensingSystem, {
-  enabled: true,
-  enableDepthTexture: true,
-  enableOcclusion: true,
-  useFloat32: true,
+  configData: {
+    enableDepthTexture: true,
+    enableOcclusion: true,
+    useFloat32: true,
+  },
 });
-world.registerComponent(DepthOccludable);
 ```
 
 ### 3. Mark Entities as Occludable

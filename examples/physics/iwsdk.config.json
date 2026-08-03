@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/physics.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": { "mode": "vr", "features": { "handTracking": true } },
+    "render": {
+      "camera": {
+        "position": [5, 2, 5],
+        "rotation": [0, 0.7853981633974483, 0]
+      }
+    },
+    "features": {
+      "grabbing": true,
+      "locomotion": true,
+      "physics": true,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

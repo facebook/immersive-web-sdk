@@ -6,14 +6,25 @@
  */
 
 import {
-  type AssetManifest,
   AssetType,
   BoxGeometry,
   CylinderGeometry,
   Mesh,
   MeshStandardMaterial,
   SphereGeometry,
+  defineAssets,
 } from '@iwsdk/core';
+
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
 
 function occlusionMaterial(color: number): MeshStandardMaterial {
   return new MeshStandardMaterial({
@@ -39,25 +50,25 @@ const cylinder = new Mesh(
 );
 cylinder.name = 'Non-Occludable Cylinder';
 
-const assets = {
+const assets = defineAssets({
   robot: {
     name: 'Robot',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/robot/robot.gltf',
+    url: stockAssetUrl('robot', 'robot.gltf'),
   },
   'plant-sansevieria': {
     name: 'Plant Sansevieria',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
+    url: stockAssetUrl('plant-sansevieria', 'plantSansevieria.gltf'),
   },
   'depth-occlusion-welcome-panel': {
     name: 'Depth Occlusion Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   'depth-soft-sphere': sphere,
   'depth-hard-cube': cube,
   'depth-reference-cylinder': cylinder,
-} satisfies AssetManifest;
+});
 
 export default assets;

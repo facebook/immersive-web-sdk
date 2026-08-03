@@ -85,6 +85,7 @@ export interface RuntimeIssueInfo {
 }
 
 export type RuntimeBrowserStatus =
+  | 'not_launched'
   | 'launching'
   | 'waiting_for_connection'
   | 'connected'
@@ -142,6 +143,7 @@ export interface WorkspaceRuntimeState {
   starting: boolean;
   browserConnected: boolean;
   browserCommandReady: boolean;
+  browserIssue?: RuntimeIssueInfo;
   session: RuntimeSession | null;
   launch: LaunchMetadata | null;
 }
@@ -1202,6 +1204,32 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
         },
         width: { type: 'number', minimum: 1 },
         height: { type: 'number', minimum: 1 },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'scene_flatten_file',
+    description:
+      'Resolve an authoring-only imported scene into one editable, runtime-loadable scene file. The write is refused unless runtime semantics are unchanged.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Import-bearing source scene path under public/scenes',
+        },
+        outputPath: {
+          type: 'string',
+          description:
+            'Flat destination under public/scenes. Defaults to <source>.flat.iwsdk.scene.json.',
+        },
+        overwrite: {
+          type: 'boolean',
+          description:
+            'Allow replacing an existing destination, including an explicit in-place flatten.',
+        },
       },
       required: ['path'],
     },
@@ -2543,6 +2571,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
 export const SCENE_MCP_TOOL_NAMES = [
   'scene_open',
   'scene_render_file',
+  'scene_flatten_file',
   'scene_get_state',
   'scene_get_capabilities',
   'scene_screenshot',
@@ -2568,13 +2597,42 @@ const REMOVED_WORKSPACE_MCP_TOOL_NAME_SET = new Set([
   'workspace_open_scene',
 ]);
 
+const EXPECTED_TAB_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'Optional stale-state precondition. Pass the _tab object from an earlier result; the call fails if that browser tab has reloaded or changed.',
+  properties: {
+    id: { type: 'string', description: 'Browser tab id from result._tab.id' },
+    generation: {
+      type: 'number',
+      minimum: 1,
+      description: 'Browser tab generation from result._tab.generation',
+    },
+  },
+  required: ['id', 'generation'],
+};
+
+function withExpectedTabPrecondition(schema: JsonSchema): JsonSchema {
+  return {
+    ...schema,
+    properties: {
+      ...(schema.properties ?? {}),
+      expectedTab: EXPECTED_TAB_SCHEMA,
+    },
+  };
+}
+
 export const RUNTIME_MCP_TOOLS: McpToolDefinition[] =
   ALL_RUNTIME_MCP_TOOLS.filter(
     (tool) =>
       (!tool.name.startsWith('scene_') ||
         PUBLIC_SCENE_MCP_TOOL_NAME_SET.has(tool.name)) &&
       !REMOVED_WORKSPACE_MCP_TOOL_NAME_SET.has(tool.name),
-  );
+  ).map((tool) => ({
+    ...tool,
+    inputSchema: withExpectedTabPrecondition(tool.inputSchema),
+  }));
 
 export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_get_session_status: 'get_session_status',
@@ -2627,6 +2685,7 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_list_files: ['scene', 'files'],
   scene_open: ['scene', 'open'],
   scene_render_file: ['scene', 'render-file'],
+  scene_flatten_file: ['scene', 'flatten'],
   scene_get_state: ['scene', 'state'],
   scene_create: ['scene', 'create'],
   scene_get_capabilities: ['scene', 'capabilities'],
@@ -2712,6 +2771,7 @@ export const SCENE_EDITOR_MCP_TOOL_NAMES = [
 export const SCENE_FILE_MCP_TOOL_NAMES = [
   'scene_open',
   'scene_render_file',
+  'scene_flatten_file',
 ] as const;
 
 export const PROJECT_ASSET_MCP_TOOL_NAMES = [] as const;
@@ -2788,16 +2848,46 @@ export function resolveRuntimeOperationRequest(
     }
   }
 
+  const paramsRecord = isRecord(params) ? params : null;
+  const expectedTab = paramsRecord?.expectedTab;
+  if (
+    expectedTab !== undefined &&
+    (!isRecord(expectedTab) ||
+      typeof expectedTab.id !== 'string' ||
+      !Number.isInteger(expectedTab.generation) ||
+      (expectedTab.generation as number) < 1)
+  ) {
+    throw new Error(
+      `${operation.mcpName}.expectedTab requires the { id, generation } object returned as result._tab`,
+    );
+  }
+
   if (
     operation.mcpName === 'browser_screenshot' &&
-    isRecord(params) &&
-    Object.keys(params).length > 0
+    paramsRecord != null &&
+    Object.keys(paramsRecord).some((key) => key !== 'expectedTab')
   ) {
     throw new Error(
       'browser_screenshot does not accept parameters; it always captures the application runtime',
     );
   }
-  return { params, target: operation.target };
+  const commandParams =
+    paramsRecord == null
+      ? params
+      : Object.fromEntries(
+          Object.entries(paramsRecord).filter(([key]) => key !== 'expectedTab'),
+        );
+  const target =
+    isRecord(expectedTab) &&
+    typeof expectedTab.id === 'string' &&
+    typeof expectedTab.generation === 'number'
+      ? {
+          ...(operation.target ?? {}),
+          pageId: expectedTab.id,
+          tabGeneration: expectedTab.generation,
+        }
+      : operation.target;
+  return { params: commandParams, target };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

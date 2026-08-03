@@ -985,6 +985,11 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       ...(this.componentCatalog == null
         ? {}
         : { componentCatalog: this.componentCatalog }),
+      ...(this.options.listAssets == null
+        ? {}
+        : {
+            knownAssetIds: this.options.listAssets().map((asset) => asset.id),
+          }),
       validateAuthoringWorkflow: false,
       validateComponentLinks: options.validateComponentLinks !== false,
     };
@@ -1005,20 +1010,9 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
             : []),
         ]
       : [];
-    const semanticIssues = base.valid
-      ? [
-          ...(this.options.listAssets == null
-            ? []
-            : validateManifestAssetReferences(
-                document,
-                this.options.listAssets(),
-              )),
-        ]
-      : [];
     const issues: SceneEditorValidationIssue[] = [
       ...schemaIssues,
       ...capabilityIssues,
-      ...semanticIssues,
     ];
     const lifecycle: SceneEditorLifecycleReport = {
       schemaValid: schemaIssues.length === 0 ? 'passed' : 'failed',
@@ -1660,35 +1654,6 @@ function enrichBaseValidationIssues(
   });
 }
 
-function validateManifestAssetReferences(
-  document: SceneDocument,
-  assets: readonly SceneEditorAssetInfo[],
-): SceneEditorValidationIssue[] {
-  const known = new Set(assets.map((asset) => asset.id));
-  const issues: SceneEditorValidationIssue[] = [];
-  const visit = (nodes: readonly SceneNode[], path: string) => {
-    nodes.forEach((node, index) => {
-      const nodePath = `${path}[${index}]`;
-      if (node.content?.type === 'asset' && !known.has(node.content.asset)) {
-        issues.push({
-          code: 'reference',
-          message: `unknown manifest asset "${node.content.asset}"`,
-          nodeId: node.id,
-          path: `${nodePath}.content.asset`,
-          suggestedFix:
-            'Register the asset in the project asset manifest or choose a registered asset.',
-        });
-      }
-      visit(node.children ?? [], `${nodePath}.children`);
-    });
-  };
-  visit(document.nodes, '$.nodes');
-  document.resources.prefabs?.forEach((prefab, index) =>
-    visit([prefab.root], `$.resources.prefabs[${index}].root`),
-  );
-  return issues;
-}
-
 function validateComponentTypes(
   document: SceneDocument,
   knownComponents: Set<string>,
@@ -1799,10 +1764,7 @@ function suggestFixForIssue(issue: ValidationIssue): string | undefined {
   if (issue.code === 'review-visibility') {
     return 'Add a manifest asset that resolves to the layout layer, or move the layout annotation to a subtree with visible renderable content.';
   }
-  if (
-    issue.path.endsWith('.content.asset') &&
-    issue.message.includes('unknown asset')
-  ) {
+  if (issue.path.endsWith('.content.asset') && issue.code === 'reference') {
     return 'Call scene_list_assets, then update the node to a registered manifest asset id.';
   }
   if (issue.message.includes('duplicate node id')) {
@@ -1813,7 +1775,7 @@ function suggestFixForIssue(issue: ValidationIssue): string | undefined {
     issue.message.includes('[x, y, z]') ||
     issue.message.includes('scale')
   ) {
-    return 'Set transform values to finite numeric tuples and keep scale values greater than 0.';
+    return 'Set transform values to finite numeric tuples.';
   }
   if (issue.path.includes('.components')) {
     const missingComponent = issue.message.match(

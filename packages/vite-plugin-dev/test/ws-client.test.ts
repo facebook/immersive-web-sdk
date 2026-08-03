@@ -262,12 +262,61 @@ describe('MCPWebSocketClient', () => {
       const messages = getParsedSentMessages(mockWebSocketInstance!);
       expect(messages[0]).toMatchObject({
         type: 'iwsdk_browser_hello',
+        commandReady: false,
         pageId: client.tabId,
         pageRole: 'app',
         role: 'app',
         tabId: client.tabId,
         tabGeneration: client.tabGeneration,
       });
+    });
+
+    test('reports an already-installed framework runtime in the browser hello', async () => {
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {};
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      expect(getParsedSentMessages(mockWebSocketInstance!)[0]).toMatchObject({
+        type: 'iwsdk_browser_hello',
+        commandReady: true,
+      });
+    });
+
+    test('announces readiness when the framework runtime becomes available after connecting', async () => {
+      let runtimeReadyListener: (() => void) | undefined;
+      (globalThis as any).window.addEventListener = vi.fn(
+        (type: string, listener: () => void) => {
+          if (type === 'iwsdk:mcp-runtime-ready') {
+            runtimeReadyListener = listener;
+          }
+        },
+      );
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      expect(runtimeReadyListener).toBeDefined();
+      runtimeReadyListener!();
+
+      expect(getParsedSentMessages(mockWebSocketInstance!)).toContainEqual(
+        expect.objectContaining({
+          type: 'iwsdk_browser_ready',
+          pageId: client.tabId,
+          pageRole: 'app',
+          tabGeneration: client.tabGeneration,
+        }),
+      );
     });
 
     test('sends editor page role metadata for workspace route pages', async () => {
@@ -797,12 +846,12 @@ describe('MCPWebSocketClient', () => {
     });
 
     test('tabId is read from sessionStorage when present', () => {
-      store['iwer-mcp-tab-id'] = 'existing-tab-123';
+      store['iwer-mcp-tab-id:app'] = 'existing-tab-123';
       client = new MCPWebSocketClient(mockDevice as any);
       expect(client.tabId).toBe('existing-tab-123');
       // Should NOT overwrite the existing value
       expect(sessionStorage.setItem).not.toHaveBeenCalledWith(
-        'iwer-mcp-tab-id',
+        'iwer-mcp-tab-id:app',
         expect.not.stringContaining('existing-tab-123'),
       );
     });
@@ -811,7 +860,7 @@ describe('MCPWebSocketClient', () => {
       client = new MCPWebSocketClient(mockDevice as any);
       expect(client.tabId).toMatch(/^tab-/);
       expect(sessionStorage.setItem).toHaveBeenCalledWith(
-        'iwer-mcp-tab-id',
+        'iwer-mcp-tab-id:app',
         client.tabId,
       );
     });
@@ -824,16 +873,22 @@ describe('MCPWebSocketClient', () => {
     });
 
     test('tabGeneration increments from stored value', () => {
-      store['iwer-mcp-gen'] = '3';
+      store['iwer-mcp-gen:app'] = '3';
       client = new MCPWebSocketClient(mockDevice as any);
       expect(client.tabGeneration).toBe(4);
-      expect(sessionStorage.setItem).toHaveBeenCalledWith('iwer-mcp-gen', '4');
+      expect(sessionStorage.setItem).toHaveBeenCalledWith(
+        'iwer-mcp-gen:app',
+        '4',
+      );
     });
 
     test('tabGeneration starts at 1 when no prior value', () => {
       client = new MCPWebSocketClient(mockDevice as any);
       expect(client.tabGeneration).toBe(1);
-      expect(sessionStorage.setItem).toHaveBeenCalledWith('iwer-mcp-gen', '1');
+      expect(sessionStorage.setItem).toHaveBeenCalledWith(
+        'iwer-mcp-gen:app',
+        '1',
+      );
     });
 
     test('tabGeneration starts at 1 when sessionStorage unavailable', () => {

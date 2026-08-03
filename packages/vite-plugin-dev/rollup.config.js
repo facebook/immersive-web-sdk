@@ -51,6 +51,7 @@ const pluginConfig = {
     'sharp',
     'os',
     'crypto',
+    '@iwsdk/core/project',
   ],
   plugins: [
     nodeResolve({

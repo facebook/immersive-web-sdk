@@ -81,12 +81,15 @@ const DEFAULT_ALLOWLIST = [
   /(^|\/)CHANGELOG\.md$/,
   /^docs\/guides\/09-native-scene-migration\.md$/,
   /^docs\/plans\/iwsdk-native-scene-editor-replacement-plan\.md$/,
-  /^packages\/starter-assets\/PROJECT_CLAUDE\.md$/,
-  /^packages\/starter-assets\/claude-injections\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/,
+  /^docs\/plans\/iwsdk-project-manifest-and-starter-simplification-plan\.md$/,
+  /^docs\/public\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/,
+  /^packages\/create\/guidance\/claude\/CLAUDE\.md$/,
+  /^packages\/create\/guidance\/claude\/\.claude\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/,
   /^scripts\/check-metaspatial-removal\.mjs$/,
   /^scripts\/check-metaspatial-removal-smoke\.mjs$/,
   /^scripts\/check-native-scene-docs\.mjs$/,
   /^scripts\/check-native-scene-release-artifacts\.mjs$/,
+  /^scripts\/check-native-scene-release-artifacts\.test\.mjs$/,
   /^scripts\/native-scene-release-rehearsal\.mjs$/,
 ];
 

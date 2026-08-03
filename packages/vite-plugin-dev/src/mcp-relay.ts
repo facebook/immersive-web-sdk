@@ -91,6 +91,15 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
   // Track pending request IDs for first-response-wins deduplication.
   const pendingRelayRequests = new Map<string, PendingRelayRequest>();
   const browserClients = new Map<RelayWebSocket, RelayClientMetadata>();
+  const latestGenerationByPageId = new Map<string, number>();
+
+  function isLatestBrowserClient(ws: RelayWebSocket): boolean {
+    const metadata = browserClients.get(ws);
+    return (
+      metadata != null &&
+      metadata.tabGeneration === latestGenerationByPageId.get(metadata.pageId)
+    );
+  }
 
   function onMessage(
     senderWs: RelayWebSocket,
@@ -166,6 +175,17 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
         const pending = pendingRelayRequests.get(parsed.id);
         if (pending) {
           if (
+            browserClients.has(senderWs) &&
+            !isLatestBrowserClient(senderWs)
+          ) {
+            if (verbose) {
+              console.log(
+                `[MCP-IWER] Response for ${parsed.id} dropped from stale tab generation`,
+              );
+            }
+            return;
+          }
+          if (
             pending.targetClients != null &&
             !pending.targetClients.has(senderWs)
           ) {
@@ -209,12 +229,20 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     metadata: RelayClientMetadata,
   ): void {
     browserClients.set(ws, metadata);
+    latestGenerationByPageId.set(
+      metadata.pageId,
+      Math.max(
+        latestGenerationByPageId.get(metadata.pageId) ?? 0,
+        metadata.tabGeneration,
+      ),
+    );
     for (const pending of pendingRelayRequests.values()) {
       if (
         pending.reconnectTarget == null ||
         pending.requestData == null ||
         pending.targetClients == null ||
         pending.targetClients.size !== 0 ||
+        !isLatestBrowserClient(ws) ||
         !matchesTarget(metadata, pending.reconnectTarget)
       ) {
         continue;
@@ -229,7 +257,16 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
   }
 
   function unregisterClient(ws: RelayWebSocket): void {
+    const removedMetadata = browserClients.get(ws);
     browserClients.delete(ws);
+    if (removedMetadata != null) {
+      const remainingGenerations = [...browserClients.values()]
+        .filter((metadata) => metadata.pageId === removedMetadata.pageId)
+        .map((metadata) => metadata.tabGeneration);
+      if (remainingGenerations.length === 0) {
+        latestGenerationByPageId.delete(removedMetadata.pageId);
+      }
+    }
     for (const [id, pending] of pendingRelayRequests) {
       if (pending.sourceWs === ws) {
         if (pending.reconnectTimer != null) {
@@ -288,7 +325,7 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       (client) => client !== senderWs && client.readyState === WS_OPEN,
     );
     const browserCandidates = candidates.filter((client) =>
-      browserClients.has(client),
+      isLatestBrowserClient(client),
     );
     const target = getRequestTarget(parsed);
 
@@ -355,14 +392,24 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     if (sourceWs.readyState !== WS_OPEN) {
       return;
     }
+    const stalePrecondition =
+      parsed.target?.pageId != null || parsed.target?.tabGeneration != null;
     sourceWs.send(
       JSON.stringify({
         id: requestId,
         error: {
           code: -32004,
-          message: `No connected browser page matches target ${JSON.stringify(
-            parsed.target ?? {},
-          )}`,
+          message: stalePrecondition
+            ? `Browser tab precondition failed; no current page matches ${JSON.stringify(parsed.target ?? {})}. Re-query state and retry with its _tab value.`
+            : `No connected browser page matches target ${JSON.stringify(parsed.target ?? {})}`,
+          ...(stalePrecondition
+            ? {
+                data: {
+                  code: 'stale_browser_tab',
+                  expectedTab: parsed.target,
+                },
+              }
+            : {}),
         },
       }),
     );

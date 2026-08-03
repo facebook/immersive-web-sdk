@@ -72,24 +72,23 @@ The development server will start on the HTTPS local URL reported by Vite or `np
 
 ### Enabling Scene Understanding
 
-Configure your WebXR AR session with scene understanding features:
+Configure the WebXR AR session in `iwsdk.config.json`:
 
-```javascript
-World.create(document.getElementById('scene-container'), {
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    features: {
-      hitTest: true,
-      planeDetection: { required: true }, // Enable plane detection
-      meshDetection: { required: true }, // Enable mesh detection
-      anchors: { required: true }, // Enable spatial anchors
+```json
+{
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "features": {
+        "hitTest": true,
+        "planeDetection": { "required": true },
+        "meshDetection": { "required": true },
+        "anchors": { "required": true }
+      }
     },
-  },
-  features: {
-    grabbing: true,
-    sceneUnderstanding: true, // Enable IWSDK scene understanding system
-  },
-});
+    "features": { "grabbing": true, "sceneUnderstanding": true }
+  }
+}
 ```
 
 ### Scene Understanding Components
@@ -247,21 +246,15 @@ https://YOUR_LOCAL_IP:<PORT>
 
 The `SceneUnderstandingSystem` has a built-in `showWireFrame` config option:
 
-```javascript
-World.create(document.getElementById('scene-container'), {
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    features: {
-      hitTest: true,
-      planeDetection: { required: true }, // Enable plane detection
-      meshDetection: { required: true }, // Enable mesh detection
-      anchors: { required: true }, // Enable spatial anchors
-    },
-  },
-  features: {
-    sceneUnderstanding: { showWireFrame: true }, // Enable IWSDK scene understanding system with wireframe enabled
-  },
-});
+```json
+{
+  "world": {
+    "xr": { "mode": "ar" },
+    "features": {
+      "sceneUnderstanding": { "showWireFrame": true }
+    }
+  }
+}
 ```
 
 ## 📋 Scripts

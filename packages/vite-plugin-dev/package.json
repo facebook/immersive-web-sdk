@@ -10,6 +10,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./client": {
+      "types": "./client.d.ts"
+    },
     "./editor/session": {
       "types": "./dist/editor/scene-editor-session.d.ts",
       "import": "./dist/editor/scene-editor-session.js"
@@ -21,6 +24,7 @@
   },
   "files": [
     "dist",
+    "client.d.ts",
     "README.md"
   ],
   "scripts": {
@@ -29,7 +33,7 @@
     "build": "rollup -c rollup.injection.config.js && rollup -c rollup.config.js",
     "build:plugin": "rollup -c rollup.config.js",
     "build:injection": "rollup -c rollup.injection.config.js",
-    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 run build:injection && vitest run",
+    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/core build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 run build:injection && rollup -c rollup.config.js && vitest run",
     "test:watch": "vitest",
     "dev": "rollup -c --watch",
     "clean": "rm -rf dist"
@@ -49,12 +53,12 @@
   "author": "Felix Zhang <fe1ix@meta.com>",
   "license": "MIT",
   "dependencies": {
-    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@iwer/devui": "^2.3.0",
     "@iwer/sem": "^2.3.0",
     "@iwsdk/core": "workspace:*",
     "@iwsdk/scene-composition": "workspace:*",
     "@preact/signals-core": "^1.12.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "iwer": "^2.3.0",
     "lucide": "^0.468.0",
     "playwright": "^1.58.2",

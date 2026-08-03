@@ -12,6 +12,8 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -26,6 +28,10 @@ import {
   type RuntimeIssueCause,
   type RuntimeIssueInfo,
 } from '@iwsdk/cli/contract';
+import {
+  normalizeProjectDevOptions,
+  type IwsdkProjectManifestV1,
+} from '@iwsdk/core/project';
 import {
   canonicalizeJson,
   composeSceneDocument,
@@ -59,9 +65,14 @@ import {
   type ManagedBrowser,
   type ManagedRuntimePublishEvidence,
 } from './headless-browser.js';
-import { reportSessionStart, reportSessionEnd } from './hzdb-telemetry.js';
 import { buildInjectionBundle } from './injection-bundler.js';
 import { createRelayHandler } from './mcp-relay.js';
+import { reportSessionStart, reportSessionEnd } from './metavr-telemetry.js';
+import {
+  loadIwsdkProject,
+  resolveProjectModulePath,
+  type LoadedIwsdkProject,
+} from './project-config.js';
 import {
   assertSceneReviewWorkflowPublishable,
   beginSceneReviewWorkflow,
@@ -84,10 +95,13 @@ import {
   unregisterRuntimeSession,
 } from './runtime-session.js';
 import type {
+  AiOptions,
   DevPluginOptions,
+  EmulatorOptions,
   ProcessedDevOptions,
   InjectionBundleResult,
   AiMode,
+  WorkspaceOptions,
 } from './types.js';
 
 // Export types for users
@@ -124,6 +138,8 @@ const ASSET_MANIFEST_ID = '/@iwsdk-asset-manifest';
 const RESOLVED_ASSET_MANIFEST_ID = '\0' + ASSET_MANIFEST_ID;
 const COMPONENT_MANIFEST_ID = '/@iwsdk-component-manifest';
 const RESOLVED_COMPONENT_MANIFEST_ID = '\0' + COMPONENT_MANIFEST_ID;
+const PROJECT_MODULE_ID = 'virtual:iwsdk-project';
+const RESOLVED_PROJECT_MODULE_ID = '\0' + PROJECT_MODULE_ID;
 const EDITOR_ROUTE = '/__iwsdk/editor';
 const WORKSPACE_ROUTE = '/__iwsdk/workspace';
 const WORKSPACE_SCENES_ROUTE = `${WORKSPACE_ROUTE}/scenes`;
@@ -162,10 +178,18 @@ const MAX_ISSUED_REVIEW_CAPTURE_BYTES = 128 * 1024 * 1024;
 const MAX_ISSUED_REVIEW_CAPTURES = 64;
 const MAX_ISSUED_REVIEW_TRANSITIONS = 64;
 
+type ResolvedDevPluginOptions = DevPluginOptions & {
+  /** Internal module paths resolved exclusively from iwsdk.config.json. */
+  assetManifest?: string;
+  componentManifest?: string;
+};
+
 /**
  * Process and normalize plugin options with defaults
  */
-function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
+function processOptions(
+  options: ResolvedDevPluginOptions = {},
+): ProcessedDevOptions {
   const emulator = options.emulator ?? {};
   const processed: ProcessedDevOptions = {
     ...(options.assetManifest == null
@@ -255,11 +279,234 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
   return processed;
 }
 
+function assertNoRetiredMetadataOptions(options: DevPluginOptions): void {
+  const input = options as DevPluginOptions & Record<string, unknown>;
+  const retired = ['assetManifest', 'componentManifest'].filter(
+    (name) => input[name] != null,
+  );
+  if (retired.length === 0) {
+    return;
+  }
+  throw new Error(
+    `[IWSDK] ${retired
+      .map((name) => `iwsdkDev().${name}`)
+      .join(
+        ', ',
+      )} ${retired.length === 1 ? 'was' : 'were'} removed in IWSDK 0.5. Declare the module path in iwsdk.config.json instead.`,
+  );
+}
+
+function assertNoProjectOptionConflicts(options: DevPluginOptions): void {
+  const projectOptions = [['emulator', options.emulator]]
+    .filter(([, value]) => value != null)
+    .map(([name]) => name);
+  const sessionOptions = [
+    ['ai', options.ai],
+    ['workspace', options.workspace],
+  ]
+    .filter(([, value]) => value != null)
+    .map(([name]) => name);
+  if (projectOptions.length === 0 && sessionOptions.length === 0) {
+    return;
+  }
+  const instructions = [
+    ...(projectOptions.length === 0
+      ? []
+      : [
+          `move ${projectOptions
+            .map((name) => `iwsdkDev().${name}`)
+            .join(', ')} into iwsdk.config.json`,
+        ]),
+    ...(sessionOptions.length === 0
+      ? []
+      : [
+          `remove ${sessionOptions
+            .map((name) => `iwsdkDev().${name}`)
+            .join(
+              ', ',
+            )} and select AI/browser launch behavior through the dev command`,
+        ]),
+  ];
+  throw new Error(
+    `[IWSDK] iwsdk.config.json is the project authority: ${instructions.join('; ')}.`,
+  );
+}
+
+function projectManifestPluginOptions(
+  options: DevPluginOptions,
+  manifest: IwsdkProjectManifestV1,
+  projectRoot: string,
+  command: 'serve' | 'build',
+): ResolvedDevPluginOptions {
+  const dev = normalizeProjectDevOptions(manifest);
+  const aiMode =
+    command === 'serve'
+      ? optionalAiMode(process.env.IWSDK_DEV_AI_MODE)
+      : undefined;
+  const headless =
+    command === 'serve'
+      ? optionalBooleanEnvironment(
+          'IWSDK_DEV_HEADLESS',
+          process.env.IWSDK_DEV_HEADLESS,
+        )
+      : undefined;
+  const open =
+    command === 'serve'
+      ? optionalBooleanEnvironment('IWSDK_DEV_OPEN', process.env.IWSDK_DEV_OPEN)
+      : undefined;
+  const screenshotSize =
+    command === 'serve' ? optionalScreenshotSize() : undefined;
+  const ai: AiOptions | undefined =
+    aiMode == null
+      ? undefined
+      : {
+          mode: aiMode,
+          ...(screenshotSize == null ? {} : { screenshotSize }),
+        };
+  // A manifest-first app always exposes the managed editor and command
+  // session. Whether its browser opens immediately, and whether that browser
+  // is headed, are operator-session choices rather than project data.
+  const workspace: WorkspaceOptions | undefined =
+    command === 'serve'
+      ? {
+          enabled: true,
+          ...(headless == null ? {} : { headless }),
+          ...(open == null ? {} : { open }),
+          ...(screenshotSize == null ? {} : { screenshotSize }),
+        }
+      : undefined;
+
+  return {
+    ...(manifest.assets == null
+      ? {}
+      : {
+          assetManifest: resolveProjectModulePath(
+            projectRoot,
+            manifest.assets.module,
+            'Asset',
+          ),
+        }),
+    ...(manifest.components == null
+      ? {}
+      : {
+          componentManifest: resolveProjectModulePath(
+            projectRoot,
+            manifest.components.module,
+            'Component',
+          ),
+        }),
+    ...(dev.emulator == null
+      ? {}
+      : { emulator: dev.emulator as EmulatorOptions }),
+    ...(ai == null ? {} : { ai }),
+    ...(workspace == null ? {} : { workspace }),
+    ...(options.https == null ? {} : { https: options.https }),
+    ...(options.verbose == null ? {} : { verbose: options.verbose }),
+  };
+}
+
+function optionalAiMode(value: string | undefined): AiMode | undefined {
+  if (value == null || value.trim().length === 0) {
+    return undefined;
+  }
+  if (value === 'agent' || value === 'collaborate') {
+    return value;
+  }
+  throw new Error('IWSDK_DEV_AI_MODE must be either "agent" or "collaborate"');
+}
+
+function optionalBooleanEnvironment(
+  name: string,
+  value: string | undefined,
+): boolean | undefined {
+  if (value == null || value.trim().length === 0) {
+    return undefined;
+  }
+  if (value === 'true' || value === '1') {
+    return true;
+  }
+  if (value === 'false' || value === '0') {
+    return false;
+  }
+  throw new Error(`${name} must be true, false, 1, or 0`);
+}
+
+function optionalScreenshotSize():
+  | { width?: number; height?: number }
+  | undefined {
+  const width = optionalPositiveIntegerEnvironment(
+    'IWSDK_DEV_SCREENSHOT_WIDTH',
+    process.env.IWSDK_DEV_SCREENSHOT_WIDTH,
+  );
+  const height = optionalPositiveIntegerEnvironment(
+    'IWSDK_DEV_SCREENSHOT_HEIGHT',
+    process.env.IWSDK_DEV_SCREENSHOT_HEIGHT,
+  );
+  return width == null && height == null ? undefined : { width, height };
+}
+
+function optionalPositiveIntegerEnvironment(
+  name: string,
+  value: string | undefined,
+): number | undefined {
+  if (value == null || value.trim().length === 0) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function createProjectVirtualModuleSource(
+  manifest: IwsdkProjectManifestV1,
+): string {
+  const optionBindings = [
+    'level',
+    ...(manifest.assets == null ? [] : ['assets']),
+    ...(manifest.components == null ? [] : ['components']),
+  ];
+  return [
+    `import { normalizeProjectWorldOptions } from '@iwsdk/core/project';`,
+    `import assets from ${JSON.stringify(ASSET_MANIFEST_ID)};`,
+    `import components from ${JSON.stringify(COMPONENT_MANIFEST_ID)};`,
+    `const manifest = ${JSON.stringify(manifest)};`,
+    `const normalized = normalizeProjectWorldOptions(manifest);`,
+    `const level = import.meta.env.BASE_URL + normalized.level.replace(/^\\.\\//, '');`,
+    `const projectOptions = { ...normalized, ${optionBindings.join(', ')} };`,
+    `export { manifest };`,
+    `export default projectOptions;`,
+  ].join('\n');
+}
+
+function shouldInjectRuntime(
+  command: 'serve' | 'build',
+  options: ProcessedDevOptions,
+): boolean {
+  if (command === 'serve') {
+    return options.iwer !== false || options.workspace != null;
+  }
+  // The managed editor is a development-server capability. Production builds
+  // include only explicitly requested IWER emulation, never the workspace
+  // bridge merely because a project manifest exists.
+  return options.iwer !== false && options.injectOnBuild;
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  try {
+    return realpathSync(left) === realpathSync(right);
+  } catch {
+    return path.resolve(left) === path.resolve(right);
+  }
+}
+
 /**
  * Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwright browser
  */
 export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
-  const pluginOptions = processOptions(options);
+  let pluginOptions = processOptions(options);
+  let loadedProject: LoadedIwsdkProject | null = null;
   let injectionBundle: InjectionBundleResult | null = null;
   let config: ResolvedConfig;
   let mcpWss: WebSocketServer | null = null;
@@ -278,6 +525,21 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     name: 'iwsdk-dev',
 
     async config(userConfig, environment) {
+      assertNoRetiredMetadataOptions(options);
+      const projectRoot = path.resolve(userConfig.root ?? process.cwd());
+      loadedProject = loadIwsdkProject(projectRoot);
+      if (loadedProject != null) {
+        assertNoProjectOptionConflicts(options);
+        pluginOptions = processOptions(
+          projectManifestPluginOptions(
+            options,
+            loadedProject.manifest,
+            projectRoot,
+            environment.command,
+          ),
+        );
+      }
+
       // WebXR requires a secure context on network hosts. Generate an
       // untrusted certificate locally instead of installing a development CA
       // into the operating-system trust store. Playwright accepts it in the
@@ -290,7 +552,6 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       ) {
         const httpsOptions =
           typeof options.https === 'object' ? options.https : {};
-        const projectRoot = path.resolve(userConfig.root ?? process.cwd());
         const configuredCacheDir =
           httpsOptions.certDir ??
           path.join(userConfig.cacheDir ?? 'node_modules/.vite', 'iwsdk-https');
@@ -340,7 +601,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       ];
       // The Playwright window is the managed browser surface in every workspace
       // mode, so suppress Vite's independent browser launch.
-      if (pluginOptions.workspace && pluginOptions.workspace.open) {
+      if (pluginOptions.workspace) {
         if (userConfig.server) {
           userConfig.server.open = false;
         } else {
@@ -373,6 +634,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
+      if (loadedProject != null) {
+        server.watcher.add(loadedProject.configPath);
+      }
       const publishSceneFileChange = (
         kind: 'add' | 'change' | 'unlink',
         absolutePath: string,
@@ -440,6 +704,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             response,
             config.root,
             issuedReviewTransitions,
+            loadedProject?.manifest.scene,
           );
           return;
         }
@@ -598,6 +863,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         waitedForBridgeMs: number;
       }> | null = null;
       let browserRuntimeClients: Set<WebSocket> | null = null;
+      let browserCommandReadyClients: Set<WebSocket> | null = null;
+      const browserPageRoles = new WeakMap<
+        WebSocket,
+        'app' | 'editor' | 'preview'
+      >();
       let serverShuttingDown = false;
       let browserUrl = '';
       let consecutiveFailures = 0;
@@ -689,12 +959,38 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         };
       };
 
-      // An unopened workspace has no managed browser lifecycle yet. Omitting
-      // browser state lets `iwsdk dev up` report the registered runtime while
-      // preserving lazy launch on the first browser command.
-      currentBrowserState = pluginOptions.workspace.open
+      const isBrowserCommandPathReady = (): boolean => {
+        let appReady = false;
+        let editorReady = false;
+        for (const client of browserCommandReadyClients ?? []) {
+          if (!browserRuntimeClients?.has(client)) {
+            continue;
+          }
+          const role = browserPageRoles.get(client);
+          appReady ||= role === 'app';
+          editorReady ||= role === 'editor';
+        }
+        return appReady && editorReady;
+      };
+
+      const browserLaunchAllowed = pluginOptions.workspace.open !== false;
+      // --no-open is an explicit no-browser session. Record that state so CLI
+      // and MCP callers receive an actionable cause instead of waiting on a
+      // bridge that cannot connect.
+      currentBrowserState = browserLaunchAllowed
         ? createBrowserState('launching', { connected: false }, null)
-        : null;
+        : createBrowserState(
+            'not_launched',
+            {
+              connected: false,
+              commandReady: false,
+              lastError: createBrowserIssue(
+                'browser_not_launched',
+                'No managed browser was launched because the dev server was started with --no-open. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',
+              ),
+            },
+            null,
+          );
 
       const publishBrowserState = (browser: RuntimeBrowserState): void => {
         currentBrowserState = browser;
@@ -718,7 +1014,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
        * Stops retrying after MAX_LAUNCH_FAILURES consecutive failures.
        */
       const launchBrowser = (): Promise<void> => {
-        if (serverShuttingDown) {
+        if (serverShuttingDown || !browserLaunchAllowed) {
           return Promise.resolve();
         }
         if (browserLaunchPromise) {
@@ -773,7 +1069,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   : 'waiting_for_connection',
                 {
                   connected: (browserRuntimeClients?.size ?? 0) > 0,
-                  commandReady: (browserRuntimeClients?.size ?? 0) > 0,
+                  commandReady: isBrowserCommandPathReady(),
                   lastBridgeConnectedAt:
                     (browserRuntimeClients?.size ?? 0) > 0
                       ? new Date().toISOString()
@@ -852,7 +1148,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         browser: ManagedBrowser | null;
         relaunched: boolean;
       }> => {
-        if (serverShuttingDown) {
+        if (serverShuttingDown || !browserLaunchAllowed) {
           return { browser: null, relaunched: false };
         }
         const current = managedBrowser;
@@ -888,7 +1184,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           browserRuntimeClients: browserRuntimeClients?.size ?? 0,
         });
         while (Date.now() - startedAt < timeoutMs) {
-          if ((browserRuntimeClients?.size ?? 0) > 0) {
+          if (isBrowserCommandPathReady()) {
             const waitedForBridgeMs = Date.now() - startedAt;
             traceRuntime('bridge_wait_ready', {
               reason,
@@ -937,8 +1233,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             ? await waitForBridgeConnection(BRIDGE_READY_TIMEOUT_MS, reason)
             : 0;
           const bridgeConnected = (browserRuntimeClients?.size ?? 0) > 0;
+          const commandReady = isBrowserCommandPathReady();
 
-          if (bridgeConnected) {
+          if (commandReady) {
             publishBrowserState(
               createBrowserState('connected', {
                 connected: true,
@@ -953,9 +1250,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           } else {
             publishBrowserState(
               createBrowserState('waiting_for_connection', {
-                connected: false,
+                connected: bridgeConnected,
                 commandReady: false,
-                connectedClientCount: 0,
+                connectedClientCount: browserRuntimeClients?.size ?? 0,
                 lastError: createBrowserIssue(
                   relaunched ? 'browser_relaunched' : 'browser_not_ready',
                   relaunched
@@ -989,6 +1286,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // Initialize WebSocket server and client tracking
       mcpClients = new Set();
       browserRuntimeClients = new Set();
+      browserCommandReadyClients = new Set();
       mcpWss = new WebSocketServer({ noServer: true });
 
       // First-response-wins relay handler (extracted for testability)
@@ -1126,6 +1424,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               pageRole?: string;
               role?: string;
               sceneSessionId?: string;
+              commandReady?: boolean;
               tabId?: string;
               tabGeneration?: number;
               target?: { role?: string };
@@ -1137,6 +1436,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               const pageRole = normalizePageRole(
                 parsed.pageRole ?? parsed.role,
               );
+              browserPageRoles.set(ws, pageRole);
               relay.registerBrowserClient(ws, {
                 pageId: parsed.pageId ?? parsed.tabId ?? connectionId,
                 role: pageRole,
@@ -1145,16 +1445,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               });
               if (!browserRuntimeClients!.has(ws)) {
                 browserRuntimeClients!.add(ws);
+                if (parsed.commandReady === true) {
+                  browserCommandReadyClients!.add(ws);
+                }
+                const commandReady = isBrowserCommandPathReady();
                 publishBrowserState(
                   createBrowserState('connected', {
                     connected: true,
-                    // The hello is the transport readiness handshake. The
-                    // readiness probe below waits for this same event, so a
-                    // connected bridge is immediately command-ready.
-                    commandReady: true,
+                    commandReady,
                     connectedClientCount: browserRuntimeClients!.size,
                     lastBridgeConnectedAt: new Date().toISOString(),
-                    lastCommandReadyAt: new Date().toISOString(),
+                    lastCommandReadyAt: commandReady
+                      ? new Date().toISOString()
+                      : undefined,
                   }),
                 );
               }
@@ -1167,6 +1470,30 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 tabGeneration: parsed.tabGeneration ?? null,
                 connectedClientCount: browserRuntimeClients!.size,
               });
+              return;
+            }
+
+            if (parsed?.type === 'iwsdk_browser_ready') {
+              intercepted = true;
+              if (browserRuntimeClients!.has(ws)) {
+                browserCommandReadyClients!.add(ws);
+                const commandReady = isBrowserCommandPathReady();
+                publishBrowserState(
+                  createBrowserState('connected', {
+                    connected: true,
+                    commandReady,
+                    connectedClientCount: browserRuntimeClients!.size,
+                    lastCommandReadyAt: commandReady
+                      ? new Date().toISOString()
+                      : undefined,
+                  }),
+                );
+                traceRuntime('bridge_command_ready', {
+                  connectionId,
+                  pageRole: browserPageRoles.get(ws) ?? null,
+                  commandReady,
+                });
+              }
               return;
             }
 
@@ -1428,6 +1755,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           mcpClients!.delete(ws);
           relay.unregisterClient(ws);
           const removedBridge = browserRuntimeClients!.delete(ws);
+          browserCommandReadyClients!.delete(ws);
           if (removedBridge) {
             browserCommandReadyPromise = null;
             const remainingBridgeCount = browserRuntimeClients!.size;
@@ -1436,7 +1764,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 remainingBridgeCount > 0 ? 'connected' : 'disconnected',
                 {
                   connected: remainingBridgeCount > 0,
-                  commandReady: remainingBridgeCount > 0,
+                  commandReady: isBrowserCommandPathReady(),
                   connectedClientCount: remainingBridgeCount,
                   lastError:
                     remainingBridgeCount > 0
@@ -1554,7 +1882,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           );
         }
 
-        // Report session start to hzdb telemetry (fire-and-forget via npx)
+        // Report session start to MetaVR telemetry (fire-and-forget).
         reportSessionStart(sessionId, {
           iwsdkVersion,
           clientVersion: iwsdkVersion,
@@ -1633,6 +1961,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       if (id === COMPONENT_MANIFEST_ID) {
         return RESOLVED_COMPONENT_MANIFEST_ID;
       }
+      if (id === PROJECT_MODULE_ID) {
+        return RESOLVED_PROJECT_MODULE_ID;
+      }
     },
 
     async load(id) {
@@ -1684,12 +2015,36 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         const moduleId = resolved?.id ?? `/@fs/${manifestPath}`;
         return `export { default } from ${JSON.stringify(moduleId)};`;
       }
+      if (id === RESOLVED_PROJECT_MODULE_ID) {
+        if (loadedProject == null) {
+          throw new Error(
+            '[IWSDK] virtual:iwsdk-project requires iwsdk.config.json at the Vite project root.',
+          );
+        }
+        return createProjectVirtualModuleSource(loadedProject.manifest);
+      }
       if (id === RESOLVED_EDITOR_STYLESHEET_ID) {
         return EDITOR_SHELL_CSS;
       }
     },
 
-    handleHotUpdate(context) {
+    async handleHotUpdate(context) {
+      if (
+        loadedProject != null &&
+        pathsReferToSameFile(context.file, loadedProject.configPath)
+      ) {
+        // Restarting from inside Vite's HMR callback destroys the callback's
+        // `hot` context. Awaiting it here lets Vite resume against that torn-
+        // down object and crash (`Cannot set properties of undefined`). Defer
+        // until the watcher turn has returned, then let the new server/plugin
+        // instance relaunch and reattach the managed browser normally.
+        setTimeout(() => {
+          void context.server.restart().catch((error) => {
+            console.error('[IWSDK] Failed to reload iwsdk.config.json:', error);
+          });
+        }, 0);
+        return [];
+      }
       if (pluginOptions.componentManifest == null) {
         return;
       }
@@ -1714,18 +2069,20 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     async buildStart() {
-      // Build the managed-workspace bridge even when IWER is disabled. The
-      // bundle connects only managed editor pages in that mode and does not
-      // modify ordinary browser-first app tabs.
-      const shouldInject =
-        (pluginOptions.iwer !== false || pluginOptions.workspace != null) &&
-        (config.command === 'serve' ||
-          (config.command === 'build' && pluginOptions.injectOnBuild));
+      if (loadedProject != null) {
+        this.addWatchFile(loadedProject.configPath);
+      }
+      // Development always builds the managed-workspace bridge, even when
+      // IWER is disabled. Production builds include only explicitly enabled
+      // IWER emulation; the editor bridge is never a production side effect.
+      const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
 
       if (!shouldInject) {
         if (pluginOptions.verbose) {
-          if (pluginOptions.iwer === false && !pluginOptions.workspace) {
-            console.log('⏭️  IWSDK Dev: IWER injection disabled (iwer: false)');
+          if (config.command === 'build' && pluginOptions.iwer === false) {
+            console.log(
+              '⏭️  IWSDK Dev: Skipping build injection (IWER disabled)',
+            );
           } else if (config.command === 'build') {
             console.log(
               '⏭️  IWSDK Dev: Skipping build injection (injectOnBuild: false)',
@@ -1758,10 +2115,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       order: 'pre', // Run before other HTML transformations
       handler(html) {
         // Check if the IWER runtime or managed-workspace bridge should load.
-        const shouldInject =
-          (pluginOptions.iwer !== false || pluginOptions.workspace != null) &&
-          (config.command === 'serve' ||
-            (config.command === 'build' && pluginOptions.injectOnBuild));
+        const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
 
         if (!shouldInject || !injectionBundle) {
           return html;
@@ -1791,10 +2145,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         await closeManagedWorkspace?.();
 
         // Only show summary when the runtime/workspace bundle actually loaded.
-        const shouldInject =
-          (pluginOptions.iwer !== false || pluginOptions.workspace != null) &&
-          (config.command === 'serve' ||
-            (config.command === 'build' && pluginOptions.injectOnBuild));
+        const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
 
         if (shouldInject && injectionBundle) {
           const mode = config.command === 'serve' ? 'Development' : 'Build';
@@ -2000,9 +2351,14 @@ async function handleEditorDocumentRequest(
   response: ServerResponse,
   workspaceRoot: string,
   issuedTransitions: IssuedReviewTransitionRegistry,
+  defaultScene?: string,
 ): Promise<void> {
   try {
-    const scenePath = resolveEditorScenePath(request.url, workspaceRoot);
+    const scenePath = resolveEditorScenePath(
+      request.url,
+      workspaceRoot,
+      defaultScene,
+    );
     const relativeScenePath = path.relative(workspaceRoot, scenePath);
 
     if (request.method === 'GET' || request.method === 'HEAD') {
@@ -2231,8 +2587,118 @@ async function handleWorkspaceScenesRequest(
       return;
     }
 
+    if (request.method === 'POST') {
+      const body = JSON.parse(await readRequestBody(request, 64 * 1024)) as {
+        action?: unknown;
+        outputPath?: unknown;
+        overwrite?: unknown;
+        path?: unknown;
+      };
+      if (body.action !== 'flatten') {
+        throw new Error('Unsupported scene-file action');
+      }
+      if (typeof body.path !== 'string' || body.path.trim().length === 0) {
+        throw new Error('Scene flatten requires a source path');
+      }
+      const sourcePath = resolveManagedScenePath(body.path, workspaceRoot);
+      if (!existsSync(sourcePath)) {
+        sendJsonError(response, 404, 'Scene file does not exist.', {
+          code: 'scene_file_not_found',
+          path: toPosixPath(path.relative(workspaceRoot, sourcePath)),
+        });
+        return;
+      }
+      const sourceRelativePath = toPosixPath(
+        path.relative(workspaceRoot, sourcePath),
+      );
+      const sourceDocument = parseSceneDocument(
+        readFileSync(sourcePath, 'utf8'),
+        { validateAuthoringWorkflow: false },
+      );
+      if ((sourceDocument.imports?.length ?? 0) === 0) {
+        sendJsonError(response, 409, 'Scene is already import-free.', {
+          code: 'scene_already_flat',
+          path: sourceRelativePath,
+        });
+        return;
+      }
+      const defaultOutputPath = sourceRelativePath.replace(
+        SCENE_FILE_SUFFIX,
+        `.flat${SCENE_FILE_SUFFIX}`,
+      );
+      const outputPath = resolveManagedScenePath(
+        typeof body.outputPath === 'string' && body.outputPath.trim().length > 0
+          ? body.outputPath
+          : defaultOutputPath,
+        workspaceRoot,
+      );
+      const overwrite = body.overwrite === true;
+      if (existsSync(outputPath) && !overwrite) {
+        sendJsonError(response, 409, 'Flatten destination already exists.', {
+          code: 'scene_flatten_destination_exists',
+          outputPath: toPosixPath(path.relative(workspaceRoot, outputPath)),
+        });
+        return;
+      }
+
+      const composed = await composeWorkspaceSceneDocument(
+        sourceDocument,
+        sourcePath,
+        workspaceRoot,
+      );
+      const sourceRuntimeHash = hashRuntimeSceneDocument(composed.document);
+      const serialized = serializeSceneDocument(composed.document, {
+        validateAuthoringWorkflow: false,
+      });
+      const flatDocument = parseSceneDocument(serialized, {
+        validateAuthoringWorkflow: false,
+      });
+      const outputRuntimeHash = hashRuntimeSceneDocument(flatDocument);
+      if (sourceRuntimeHash !== outputRuntimeHash) {
+        sendJsonError(
+          response,
+          409,
+          'Flattening changed runtime semantics; no file was written.',
+          {
+            code: 'scene_flatten_runtime_hash_mismatch',
+            outputRuntimeHash,
+            sourceRuntimeHash,
+          },
+        );
+        return;
+      }
+
+      mkdirSync(path.dirname(outputPath), { recursive: true });
+      const temporaryPath = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        writeFileSync(temporaryPath, serialized, 'utf8');
+        renameSync(temporaryPath, outputPath);
+      } finally {
+        if (existsSync(temporaryPath)) {
+          unlinkSync(temporaryPath);
+        }
+      }
+      const outputRelativePath = toPosixPath(
+        path.relative(workspaceRoot, outputPath),
+      );
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(
+        JSON.stringify({
+          dependencies: composed.dependencies,
+          documentHash: hashSceneDocument(flatDocument),
+          outputPath: outputRelativePath,
+          outputRuntimeHash,
+          sourcePath: sourceRelativePath,
+          sourceRuntimeHash,
+          written: true,
+        }),
+      );
+      return;
+    }
+
     response.statusCode = 405;
-    response.setHeader('Allow', 'GET, HEAD');
+    response.setHeader('Allow', 'GET, HEAD, POST');
     response.end('Method not allowed');
   } catch (error) {
     response.statusCode = 400;
@@ -6031,22 +6497,26 @@ function sendReviewRequestError(
 function resolveEditorScenePath(
   url: string | undefined,
   workspaceRoot: string,
+  defaultScene?: string,
 ): string {
   const parsed = new URL(url ?? '', 'http://iwsdk.local');
   return resolveManagedScenePath(
     parsed.searchParams.get('scene'),
     workspaceRoot,
+    defaultScene,
   );
 }
 
 function resolveManagedScenePath(
   requestedScene: unknown,
   workspaceRoot: string,
+  defaultScene?: string,
 ): string {
   const scenePath =
     typeof requestedScene === 'string' && requestedScene.trim().length > 0
       ? requestedScene.trim()
-      : path.join(SCENE_ROOT_RELATIVE_PATH, 'scene.iwsdk.scene.json');
+      : (defaultScene ??
+        path.join(SCENE_ROOT_RELATIVE_PATH, 'scene.iwsdk.scene.json'));
   const relativeScene = scenePath.replace(/^\/+/, '');
   const resolved = path.resolve(workspaceRoot, relativeScene);
   const sceneRoot = path.resolve(workspaceRoot, SCENE_ROOT_RELATIVE_PATH);
@@ -6145,6 +6615,7 @@ function listSceneFiles(workspaceRoot: string) {
   }
 
   const files: Array<{
+    hasImports: boolean;
     modifiedAt: string;
     path: string;
     revision: string;
@@ -6161,7 +6632,15 @@ function listSceneFiles(workspaceRoot: string) {
         continue;
       }
       const stats = statSync(absolutePath);
+      let hasImports = false;
+      try {
+        const source = JSON.parse(readFileSync(absolutePath, 'utf8')) as {
+          imports?: unknown;
+        };
+        hasImports = Array.isArray(source.imports) && source.imports.length > 0;
+      } catch {}
       files.push({
+        hasImports,
         modifiedAt: stats.mtime.toISOString(),
         path: path.relative(workspaceRoot, absolutePath),
         revision: sceneFileRevisionFromContent(readFileSync(absolutePath)),

@@ -1,133 +1,177 @@
 {
   "app": {
-    "assets": {
-      "environment-desk": [200, 200, 200, 200],
-      "plant-sansevieria": [200, 200, 200, 200],
-      "robot": [200, 200, 200, 200, 200, 200]
-    },
+    "assets": { "environment-desk": [200, 200, 200, 200] },
     "components": {
-      "DistanceGrabbable": 2,
+      "DistanceGrabbable": 5,
       "LocomotionEnvironment": 1,
-      "OneHandGrabbable": 1,
-      "RayInteractable": 5,
+      "OneHandGrabbable": 3,
+      "RayInteractable": 10,
       "TwoHandsGrabbable": 1
     },
-    "hierarchyNameCount": 36,
+    "hierarchyNameCount": 25,
     "performance": {
-      "gotoMs": 3714,
-      "runtimeReadyMs": 177,
-      "canvasReadyMs": 12,
-      "screenshotCaptureMs": 153
+      "gotoMs": 1411,
+      "runtimeReadyMs": 79,
+      "canvasReadyMs": 18,
+      "screenshotCaptureMs": 119
     },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
-      "sampledPixels": 56,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/app.png",
+      "sampledPixels": 66,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:51724/",
+  "baseUrl": "https://127.0.0.1:63256/",
   "editor": {
     "performance": {
-      "gotoMs": 329,
-      "worldReadyMs": 1102,
-      "screenshotCaptureMs": 182
+      "gotoMs": 175,
+      "worldReadyMs": 1254,
+      "screenshotCaptureMs": 99
     },
-    "sceneDocument": { "assetCount": 3, "nodeCount": 5 },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
+    "sceneDocument": { "assetCount": 0, "nodeCount": 8 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
-      "sampledPixels": 193,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/grab/editor.png",
+      "sampledPixels": 187,
       "uniqueColors": 32
     },
     "viewport": {
-      "assetLoads": [
-        {
-          "assetId": "environment-desk",
-          "loadedAt": 1784972560088,
-          "status": "loaded",
-          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
-        },
-        {
-          "assetId": "robot",
-          "loadedAt": 1784972560138,
-          "status": "loaded",
-          "url": "/iwsdk-assets/robot/robot.gltf"
-        },
-        {
-          "assetId": "plant-sansevieria",
-          "loadedAt": 1784972560160,
-          "status": "loaded",
-          "url": "/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf"
-        }
-      ],
-      "meshCount": 42,
-      "nodeObjectCount": 5,
+      "assetLoads": [],
+      "meshCount": 23,
+      "nodeObjectCount": 11,
       "objectHierarchy": [
         {
           "assetId": "environment-desk",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
           "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
         {
-          "assetId": "robot",
-          "contentType": "model",
+          "assetId": "earth",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [0, 0.95, -2],
-          "nodeId": "robot-distance-grab",
+          "localPosition": [0, 1.1497, -1.6608],
+          "nodeId": "earth",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
-          "sourceNodeId": "robot-distance-grab",
-          "worldPosition": [0, 0.95, -2]
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "earth",
+          "worldPosition": [0, 1.1497, -1.6608]
         },
         {
-          "assetId": "plant-sansevieria",
-          "contentType": "model",
+          "assetId": "opera-house",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [0.65, 0.95, -1.65],
-          "nodeId": "plant-one-hand",
-          "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
-          "sourceNodeId": "plant-one-hand",
-          "worldPosition": [0.65, 0.95, -1.65]
+          "localPosition": [0.2389, -0.1417, 0.2523],
+          "nodeId": "opera-house",
+          "parentNodeId": "earth",
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "opera-house",
+          "worldPosition": [0.2389, 1.008, -1.4085]
         },
         {
-          "assetId": "plant-sansevieria",
-          "contentType": "model",
+          "assetId": "eiffel-tower",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [1.05, 0.95, -1.65],
-          "nodeId": "plant-two-hands",
-          "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
-          "sourceNodeId": "plant-two-hands",
-          "worldPosition": [1.05, 0.95, -1.65]
+          "localPosition": [-0.1155, 0.327, 0.1385],
+          "nodeId": "eiffel-tower",
+          "parentNodeId": "earth",
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "eiffel-tower",
+          "worldPosition": [-0.1155, 1.4767, -1.5223]
         },
         {
-          "assetId": "robot",
-          "contentType": "model",
+          "assetId": "chichen-itza",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
-          "localPosition": [-0.7, 0.95, -1.65],
-          "nodeId": "robot-rotate-only",
+          "localPosition": [0.0666, 0.2129, -0.2982],
+          "nodeId": "chichen-itza",
+          "parentNodeId": "earth",
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "chichen-itza",
+          "worldPosition": [0.0666, 1.3626, -1.959]
+        },
+        {
+          "assetId": "pin",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.6, 0.8, -1.5],
+          "nodeId": "pin-1",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:e025f02304d254ed8b8417378adf145184b0e5a764be8329328c98e922334cae",
-          "sourceNodeId": "robot-rotate-only",
-          "worldPosition": [-0.7, 0.95, -1.65]
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "pin-1",
+          "worldPosition": [0.6, 0.8, -1.5]
+        },
+        {
+          "assetId": "pin",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.75, 0.8, -1.5],
+          "nodeId": "pin-2",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "pin-2",
+          "worldPosition": [0.75, 0.8, -1.5]
+        },
+        {
+          "assetId": "pin",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0.9, 0.8, -1.5],
+          "nodeId": "pin-3",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "pin-3",
+          "worldPosition": [0.9, 0.8, -1.5]
+        },
+        {
+          "assetId": "pyramid",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-1, 0.75, -1.6],
+          "nodeId": "pyramid-distance-grab",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "pyramid-distance-grab",
+          "worldPosition": [-1, 0.75, -1.6]
+        },
+        {
+          "assetId": "pyramid",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [-0.6, 0.75, -1.6],
+          "nodeId": "pyramid-two-hands",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "pyramid-two-hands",
+          "worldPosition": [-0.6, 0.75, -1.6]
+        },
+        {
+          "assetId": "grab-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 2.082, -2.3648],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:0a589d8e6525c71d86aee27d1b07796ef642c44aa3a0823410533e21342176c6",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 2.082, -2.3648]
         }
       ],
       "renderer": "iwsdk-webgl",
@@ -135,17 +179,64 @@
       "worldReady": true
     }
   },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
   "performance": {
     "app": {
-      "gotoMs": 3714,
-      "runtimeReadyMs": 177,
-      "canvasReadyMs": 12,
-      "screenshotCaptureMs": 153
+      "gotoMs": 1411,
+      "runtimeReadyMs": 79,
+      "canvasReadyMs": 18,
+      "screenshotCaptureMs": 119
     },
     "editor": {
-      "gotoMs": 329,
-      "worldReadyMs": 1102,
-      "screenshotCaptureMs": 182
+      "gotoMs": 175,
+      "worldReadyMs": 1254,
+      "screenshotCaptureMs": 99
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -155,7 +246,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 9665
+    "totalMs": 5449
   },
   "scene": "public/scenes/grab.iwsdk.scene.json",
   "target": "grab"

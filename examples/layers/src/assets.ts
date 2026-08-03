@@ -6,7 +6,6 @@
  */
 
 import {
-  type AssetManifest,
   AssetType,
   BoxGeometry,
   GridHelper,
@@ -14,7 +13,11 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
   SphereGeometry,
+  defineAssets,
 } from '@iwsdk/core';
+
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
 
 const grid = new GridHelper(10, 10, 0x888888, 0x444444);
 grid.name = 'Grid';
@@ -37,7 +40,7 @@ const orb = new Mesh(
 );
 orb.name = 'Orb';
 
-const assets = {
+const assets = defineAssets({
   'layers-grid': grid,
   'layers-floor': floor,
   'layers-pillar': pillar,
@@ -45,8 +48,8 @@ const assets = {
   'layers-welcome-panel': {
     name: 'Layers Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
-} satisfies AssetManifest;
+});
 
 export default assets;

@@ -12,6 +12,32 @@ import type { RuntimeSession } from '../src/runtime-contract.js';
 import { sendRuntimeCommand } from '../src/runtime-transport.js';
 
 describe('runtime command transport', () => {
+  test('fails immediately with an actionable cause when --no-open skipped the browser', async () => {
+    const session = createTestRuntimeSession(5173);
+    session.browser = {
+      status: 'not_launched',
+      connected: false,
+      commandReady: false,
+      connectedClientCount: 0,
+      lastTransitionAt: new Date().toISOString(),
+      lastError: {
+        cause: 'browser_not_launched',
+        message: 'Started with --no-open. Run iwsdk dev restart --open.',
+        at: new Date().toISOString(),
+      },
+    };
+    await expect(
+      sendRuntimeCommand({
+        port: 5173,
+        method: 'scene_get_state',
+        runtimeSession: session,
+      }),
+    ).rejects.toMatchObject({
+      issueCause: 'browser_not_launched',
+      message: expect.stringContaining('restart --open'),
+    });
+  });
+
   test('uses one timeout budget across the WSS to WS fallback path', async () => {
     const sockets = new Set<net.Socket>();
     const server = net.createServer((socket) => {

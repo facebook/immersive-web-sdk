@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/grab.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": {
+      "mode": "vr",
+      "features": { "handTracking": { "required": true } }
+    },
+    "render": { "camera": { "position": [0, 1.3, 0] } },
+    "features": {
+      "grabbing": { "useHandPinchForGrab": true },
+      "locomotion": true,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

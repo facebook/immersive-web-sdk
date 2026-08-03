@@ -6,25 +6,45 @@
  */
 
 /**
- * hzdb telemetry integration for IWSDK.
+ * MetaVR telemetry integration for IWSDK.
  *
- * Reports MCP tool calls, session lifecycle, and errors through hzdb's
- * DeveloperTelemetry pipeline via the `hzdb xxiwsdk` subcommand.
+ * Reports MCP tool calls, session lifecycle, and errors through MetaVR's
+ * DeveloperTelemetry pipeline via the `metavr xxiwsdk` subcommand.
  * All calls are fire-and-forget — telemetry never blocks or breaks the tool.
  *
- * Uses `npx @meta-quest/hzdb` so we don't need to resolve the binary path.
- * If hzdb is not installed, npx fails and the error is silently swallowed.
+ * Executes MetaVR's JavaScript entrypoint with the current Node executable.
+ * This avoids platform shell shims and works the same way on Windows and Unix.
+ * If MetaVR is not installed in the workspace, telemetry is silently skipped.
  */
 
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
+import path from 'path';
 
-function hzdbTelemetry(args: string[], clientVersion?: string): void {
-  const globalArgs = ['@meta-quest/hzdb', 'xxiwsdk'];
+function resolveMetaVrEntrypoint(): string | null {
+  try {
+    const requireFromWorkspace = createRequire(
+      path.join(process.cwd(), 'package.json'),
+    );
+    return requireFromWorkspace.resolve('@meta-quest/metavr/bin.js');
+  } catch {
+    return null;
+  }
+}
+
+function metaVrTelemetry(args: string[], clientVersion?: string): void {
+  const entrypoint = resolveMetaVrEntrypoint();
+  if (entrypoint == null) {
+    return;
+  }
+
+  const globalArgs = ['xxiwsdk'];
   if (clientVersion) {
     globalArgs.push('--client-version', clientVersion);
   }
-  const child = spawn('npx', [...globalArgs, ...args], {
+  const child = spawn(process.execPath, [entrypoint, ...globalArgs, ...args], {
     stdio: 'ignore',
+    windowsHide: true,
   });
   child.on('error', () => {});
   child.unref();
@@ -54,7 +74,7 @@ export function reportToolCall(
   if (sessionId) {
     args.push('--session-id', sessionId);
   }
-  hzdbTelemetry(args, clientVersion);
+  metaVrTelemetry(args, clientVersion);
 }
 
 export function reportSessionStart(
@@ -76,7 +96,7 @@ export function reportSessionStart(
   if (opts?.port) {
     args.push('--port', String(opts.port));
   }
-  hzdbTelemetry(args, opts?.clientVersion);
+  metaVrTelemetry(args, opts?.clientVersion);
 }
 
 export function reportSessionEnd(
@@ -90,7 +110,7 @@ export function reportSessionEnd(
   if (opts?.reason) {
     args.push('--reason', opts.reason);
   }
-  hzdbTelemetry(args, opts?.clientVersion);
+  metaVrTelemetry(args, opts?.clientVersion);
 }
 
 export function reportError(
@@ -105,5 +125,5 @@ export function reportError(
   if (opts?.sessionId) {
     args.push('--session-id', opts.sessionId);
   }
-  hzdbTelemetry(args, opts?.clientVersion);
+  metaVrTelemetry(args, opts?.clientVersion);
 }

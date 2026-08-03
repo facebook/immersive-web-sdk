@@ -7,10 +7,16 @@ outline: [2, 4]
 Use this checklist to move generated or procedural level content into native
 `iwsdk.scene.v1` files under `public/scenes/`.
 
+For a complete `0.4.x` to `0.5.0` agent workflow, download the
+[IWSDK 0.5 migration skill](/skills/iwsdk-migrate-0-5/SKILL.md). Release
+migration skills are documentation artifacts and are intentionally not copied
+into newly scaffolded applications.
+
 ## 1. Establish One Runtime Entry Point
 
-Keep the existing `World.create` bootstrap and bind its `level` option to one root
-scene URL. Do not create a second World or renderer for authored content.
+Create `iwsdk.config.json`, bind its `scene` field to one project-root-relative
+scene source, and pass `virtual:iwsdk-project` to the existing `World.create`
+bootstrap. Do not create a second World or renderer for authored content.
 
 ## 2. Inventory Declarative Content
 

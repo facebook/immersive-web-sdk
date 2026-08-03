@@ -7,6 +7,10 @@
 
 import { AudioLoader, LoadingManager } from '../../runtime/index.js';
 import { CacheManager } from '../cache-manager.js';
+import {
+  DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  loadCachedAsset,
+} from './cached-asset-load.js';
 
 /**
  * Audio buffer loader with de-duplication and caching.
@@ -21,41 +25,18 @@ export class AudioAssetLoader {
   }
 
   /** Load an AudioBuffer (URL or logical key), returning a cached instance when possible. */
-  static async loadAudio(urlOrKey: string): Promise<AudioBuffer> {
-    // Resolve URL from key if needed
+  static loadAudio(
+    urlOrKey: string,
+    timeoutMs = DEFAULT_ASSET_LOAD_TIMEOUT_MS,
+  ): Promise<AudioBuffer> {
     const url = CacheManager.resolveUrl(urlOrKey);
-
-    // Check promise cache (prevent duplicate requests)
-    if (CacheManager.hasPromise(url)) {
-      return CacheManager.getPromise<AudioBuffer>(url)!;
-    }
-
-    // Return a cached buffer directly. Registering a promise on the cached
-    // path leaks: deletePromise() inside the executor runs before setPromise()
-    // stores the promise, so the resolved promise would never be evicted.
-    if (CacheManager.hasAsset(url)) {
-      return CacheManager.getAsset<AudioBuffer>(url)!;
-    }
-
-    const loadingPromise = new Promise<AudioBuffer>((resolve, reject) => {
-      // Load using Three.js AudioLoader
-      this.audioLoader.load(
-        url,
-        (buffer) => {
-          CacheManager.setAsset(url, buffer);
-          resolve(buffer);
-          CacheManager.deletePromise(url);
-        },
-        undefined, // progress callback
-        (error) => {
-          reject(error);
-          CacheManager.deletePromise(url);
-        },
-      );
+    return loadCachedAsset({
+      load: (resolve, reject) => {
+        this.audioLoader.load(url, resolve, undefined, reject);
+      },
+      timeoutMs,
+      url,
     });
-
-    CacheManager.setPromise(url, loadingPromise);
-    return loadingPromise;
   }
 
   /** Get a cached AudioBuffer by logical key. */

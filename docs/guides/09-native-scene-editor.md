@@ -10,17 +10,31 @@ components, screenshots, and human fine adjustment.
 
 ## Runtime Loading
 
-Keep scene files under `public/scenes/` and load one through the normal World level
-pipeline:
+Keep scene files under `public/scenes/` and select the root in
+`iwsdk.config.json`:
+
+```json
+{
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/main.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": { "mode": "vr" },
+    "features": { "grabbing": true, "locomotion": true }
+  }
+}
+```
+
+Application code consumes the same authority:
 
 ```ts
-import { SessionMode, World } from '@iwsdk/core';
+import { World } from '@iwsdk/core';
+import projectOptions from 'virtual:iwsdk-project';
 
-const world = await World.create(document.getElementById('scene')!, {
-  xr: { sessionMode: SessionMode.ImmersiveVR },
-  features: { enableGrabbing: true, enableLocomotion: true },
-  level: '/scenes/main.iwsdk.scene.json',
-});
+const world = await World.create(
+  document.getElementById('scene')!,
+  projectOptions,
+);
 ```
 
 Runtime code still owns systems, interaction, networking, and procedural behavior.
@@ -117,6 +131,7 @@ The complete public scene MCP surface is:
 ```text
 scene_open
 scene_render_file
+scene_flatten_file
 scene_get_state
 scene_get_capabilities
 scene_screenshot
@@ -130,6 +145,12 @@ scene_measure_image_regions
 without changing the active editor. Invalid input returns diagnostics and no PNG.
 Valid input returns dependency information, source/composed/runtime hashes, render
 statistics, camera metadata, and PNG bytes.
+
+Imports are an authoring-only scratch mechanism. The application runtime rejects
+them, and the editable editor requires an import-free document. After an imported
+composition renders correctly, call `scene_flatten_file` once. It writes the resolved
+document only after proving that its runtime hash matches the composed source; the
+flat output then becomes the sole source of truth.
 
 `scene_get_state` consolidates the active file, selection, hashes, validation,
 dirty/conflict status, runtime readiness, runtime errors, and render statistics.
@@ -145,6 +166,8 @@ Equivalent CLI examples:
 npx iwsdk scene render-file \
   --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
   --output-file artifacts/main.png
+npx iwsdk scene flatten \
+  --input-json '{"path":"public/scenes/main.composition.iwsdk.scene.json","outputPath":"public/scenes/main.iwsdk.scene.json"}' --raw
 npx iwsdk scene open \
   --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
 npx iwsdk scene state --raw

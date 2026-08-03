@@ -105,11 +105,16 @@ export class MCPWebSocketClient {
   private ws: WebSocket | null = null;
   private device: XRDevice | null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  // Vite may be unavailable for longer than five seconds while a project
+  // manifest edit restarts and re-optimizes the server. Keep reconnecting for
+  // the lifetime of the managed page instead of permanently stranding it.
+  private maxReconnectAttempts = Number.POSITIVE_INFINITY;
   private reconnectDelay = 1000;
+  private maxReconnectDelay = 5000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionalDisconnect = false;
   private verbose: boolean;
+  private readonly runtimeReadyListener = () => this.announceCommandReady();
 
   // Tab identity: stable across reloads/HMR within the same browser tab,
   // new ID when the tab is closed and reopened.
@@ -127,15 +132,19 @@ export class MCPWebSocketClient {
         ? window.__IWSDK_SCENE_SESSION_ID
         : undefined;
 
-    // sessionStorage is scoped per tab — survives reloads/HMR but not tab close
+    // sessionStorage is shared by same-origin frames. Key identity by role so
+    // the editor shell and its runtime iframe cannot impersonate successive
+    // generations of one page.
+    const tabIdStorageKey = `iwer-mcp-tab-id:${this.pageRole}`;
+    const tabGenerationStorageKey = `iwer-mcp-gen:${this.pageRole}`;
     let id =
       typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('iwer-mcp-tab-id')
+        ? sessionStorage.getItem(tabIdStorageKey)
         : null;
     if (!id) {
       id = `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('iwer-mcp-tab-id', id);
+        sessionStorage.setItem(tabIdStorageKey, id);
       }
     }
     this.tabId = id;
@@ -143,10 +152,11 @@ export class MCPWebSocketClient {
     // Generation increments on every page load / HMR within the same tab
     const gen =
       typeof sessionStorage !== 'undefined'
-        ? parseInt(sessionStorage.getItem('iwer-mcp-gen') || '0', 10) + 1
+        ? parseInt(sessionStorage.getItem(tabGenerationStorageKey) || '0', 10) +
+          1
         : 1;
     if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('iwer-mcp-gen', String(gen));
+      sessionStorage.setItem(tabGenerationStorageKey, String(gen));
     }
     this.tabGeneration = gen;
 
@@ -154,6 +164,12 @@ export class MCPWebSocketClient {
       window.__IWSDK_MCP_PAGE_ID = this.tabId;
       window.__IWSDK_MCP_PAGE_ROLE = this.pageRole;
       window.__IWSDK_MCP_TAB_GENERATION = this.tabGeneration;
+      if (typeof window.addEventListener === 'function') {
+        window.addEventListener(
+          'iwsdk:mcp-runtime-ready',
+          this.runtimeReadyListener,
+        );
+      }
     }
   }
 
@@ -294,6 +310,7 @@ export class MCPWebSocketClient {
       this.ws?.send(
         JSON.stringify({
           type: 'iwsdk_browser_hello',
+          commandReady: window.FRAMEWORK_MCP_RUNTIME != null,
           pageId: this.tabId,
           pageRole: this.pageRole,
           role: this.pageRole,
@@ -336,6 +353,21 @@ export class MCPWebSocketClient {
     this.ws.onmessage = async (event) => {
       await this.handleMessage(event.data);
     };
+  }
+
+  private announceCommandReady(): void {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.ws.send(
+      JSON.stringify({
+        type: 'iwsdk_browser_ready',
+        pageId: this.tabId,
+        pageRole: this.pageRole,
+        tabGeneration: this.tabGeneration,
+      }),
+    );
+    this.trace('client_command_ready_sent');
   }
 
   private async handleMessage(data: string): Promise<void> {
@@ -446,7 +478,10 @@ export class MCPWebSocketClient {
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * this.reconnectAttempts;
+    const delay = Math.min(
+      this.reconnectDelay * this.reconnectAttempts,
+      this.maxReconnectDelay,
+    );
 
     if (this.verbose) {
       console.debug(

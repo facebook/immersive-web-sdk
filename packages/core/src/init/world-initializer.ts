@@ -258,6 +258,7 @@ export async function initializeWorld(
     features: config.xr.features,
     restoreCameraOnExit: config.xr.restoreCameraOnExit,
   };
+  world.xrEnabled = config.xr.enabled;
 
   // Register core systems
   registerCoreSystems(world);
@@ -918,5 +919,8 @@ function setupMCPRuntime(world: World) {
   // without having a direct dependency on @iwsdk/core
   if (typeof window !== 'undefined') {
     (window as any).FRAMEWORK_MCP_RUNTIME = world.mcpRuntime;
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('iwsdk:mcp-runtime-ready'));
+    }
   }
 }

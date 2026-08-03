@@ -1,0 +1,121 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  CURRENT_SCENE_VERSION,
+  createSceneComponentCatalog,
+  validateSceneDocument,
+  type SceneDocument,
+} from '../src/index.js';
+
+function makeAssetScene(): SceneDocument {
+  return {
+    version: CURRENT_SCENE_VERSION,
+    units: 'meters',
+    resources: {
+      prefabs: [
+        {
+          id: 'asset-prefab',
+          root: {
+            id: 'prefab-root',
+            content: { type: 'asset', asset: 'prefab-asset' },
+          },
+        },
+      ],
+    },
+    nodes: [
+      {
+        id: 'ordinary-asset',
+        content: { type: 'asset', asset: 'ordinary-asset' },
+      },
+      {
+        id: 'group',
+        content: { type: 'group' },
+        children: [
+          {
+            id: 'nested-asset',
+            content: { type: 'asset', asset: 'nested-asset' },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('scene asset catalog validation', () => {
+  it('is disabled when no asset catalog is supplied', () => {
+    expect(validateSceneDocument(makeAssetScene())).toEqual({
+      valid: true,
+      issues: [],
+    });
+  });
+
+  it('accepts array and set catalogs containing every referenced asset', () => {
+    const assetIds = ['ordinary-asset', 'nested-asset', 'prefab-asset'];
+
+    expect(
+      validateSceneDocument(makeAssetScene(), { knownAssetIds: assetIds }),
+    ).toEqual({ valid: true, issues: [] });
+    expect(
+      validateSceneDocument(makeAssetScene(), {
+        knownAssetIds: new Set(assetIds),
+      }),
+    ).toEqual({ valid: true, issues: [] });
+  });
+
+  it('reports every asset against an empty catalog with precise fixes', () => {
+    expect(
+      validateSceneDocument(makeAssetScene(), { knownAssetIds: [] }).issues,
+    ).toEqual([
+      {
+        path: '$.resources.prefabs[0].root.content.asset',
+        message:
+          'asset "prefab-asset" is not declared in the project asset catalog; add "prefab-asset" to the asset manifest or replace this reference with a declared asset id',
+        code: 'reference',
+      },
+      {
+        path: '$.nodes[0].content.asset',
+        message:
+          'asset "ordinary-asset" is not declared in the project asset catalog; add "ordinary-asset" to the asset manifest or replace this reference with a declared asset id',
+        code: 'reference',
+      },
+      {
+        path: '$.nodes[1].children[0].content.asset',
+        message:
+          'asset "nested-asset" is not declared in the project asset catalog; add "nested-asset" to the asset manifest or replace this reference with a declared asset id',
+        code: 'reference',
+      },
+    ]);
+  });
+
+  it('preserves component-catalog validation when assets are known', () => {
+    const scene = makeAssetScene();
+    scene.nodes[0].components = { Marker: { enabled: 'yes' } };
+    const componentCatalog = createSceneComponentCatalog([
+      {
+        id: 'Marker',
+        source: 'app',
+        fields: { enabled: { type: 'Boolean' } },
+      },
+    ]);
+    const baseline = validateSceneDocument(scene, { componentCatalog });
+
+    expect(
+      validateSceneDocument(scene, {
+        componentCatalog,
+        knownAssetIds: ['ordinary-asset', 'nested-asset', 'prefab-asset'],
+      }),
+    ).toEqual(baseline);
+    expect(baseline.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'type',
+        path: '$.nodes[0].components.Marker.enabled',
+      }),
+    );
+  });
+});

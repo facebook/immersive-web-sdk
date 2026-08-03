@@ -97,4 +97,14 @@ describe('launchXR', () => {
     await flush();
     expect(world.session).toBeUndefined();
   });
+
+  it('rejects launch attempts when XR was disabled for the world', () => {
+    const world = createWorld();
+    world.xrEnabled = false;
+
+    expect(() => launchXR(world)).toThrow(
+      'XR is disabled for this world. Create it with an XR configuration instead of { xr: false } before calling launchXR().',
+    );
+    expect(world.renderer.xr.enabled).toBe(false);
+  });
 });

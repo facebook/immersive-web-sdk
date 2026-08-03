@@ -1,0 +1,139 @@
+{
+  "app": {
+    "assets": { "plant-sansevieria": [200, 200, 200, 200] },
+    "components": { "EnvironmentRaycastTarget": 1, "RayInteractable": 1 },
+    "hierarchyNameCount": 6,
+    "performance": {
+      "gotoMs": 2253,
+      "runtimeReadyMs": 72,
+      "canvasReadyMs": 16,
+      "screenshotCaptureMs": 51
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/app.png",
+      "sampledPixels": 633,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "https://127.0.0.1:63215/",
+  "editor": {
+    "performance": {
+      "gotoMs": 182,
+      "worldReadyMs": 1551,
+      "screenshotCaptureMs": 50
+    },
+    "sceneDocument": { "assetCount": 0, "nodeCount": 2 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/environment-raycast/editor.png",
+      "sampledPixels": 266,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [],
+      "meshCount": 10,
+      "nodeObjectCount": 2,
+      "objectHierarchy": [
+        {
+          "assetId": "plant-sansevieria",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 0, 0],
+          "nodeId": "plant-preview",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:d3105471ade4495d11e51f06e645059ec56e6e8412aa816961ee5e98a7775cc1",
+          "sourceNodeId": "plant-preview",
+          "worldPosition": [0, 0, 0]
+        },
+        {
+          "assetId": "environment-raycast-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1.29, -1.9],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:d3105471ade4495d11e51f06e645059ec56e6e8412aa816961ee5e98a7775cc1",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 1.29, -1.9]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/plantSansevieria.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+      },
+      {
+        "assetId": "plant-sansevieria",
+        "path": "plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 2253,
+      "runtimeReadyMs": 72,
+      "canvasReadyMs": 16,
+      "screenshotCaptureMs": 51
+    },
+    "editor": {
+      "gotoMs": 182,
+      "worldReadyMs": 1551,
+      "screenshotCaptureMs": 50
+    },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 6396
+  },
+  "scene": "public/scenes/environment-raycast.iwsdk.scene.json",
+  "target": "environment-raycast"
+}

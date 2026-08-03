@@ -9,6 +9,9 @@
     "*": {
       "lighting": [
         "dist/lighting/index.d.ts"
+      ],
+      "project": [
+        "dist/project/index.d.ts"
       ]
     }
   },
@@ -20,6 +23,10 @@
     "./lighting": {
       "types": "./dist/lighting/index.d.ts",
       "import": "./dist/lighting/index.js"
+    },
+    "./project": {
+      "types": "./dist/project/index.d.ts",
+      "import": "./dist/project/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -92,7 +99,7 @@
     "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
   },
   "devDependencies": {
-    "vitest": "^4.1.10",
-    "@vitest/coverage-v8": "^4.1.10"
+    "@vitest/coverage-v8": "^4.1.10",
+    "vitest": "^4.1.10"
   }
 }

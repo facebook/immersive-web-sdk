@@ -5,74 +5,85 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { type AssetManifest, AssetType } from '@iwsdk/core';
+import { AssetType, defineAssets } from '@iwsdk/core';
 
-const assets = {
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
+
+const assets = defineAssets({
   'environment-desk': {
     name: 'Environment Desk',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    url: stockAssetUrl('environment-desk', 'environmentDesk.gltf'),
   },
   earth: {
     name: 'Earth',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/earth.glb',
+    url: publicAssetUrl('gltf/original-grab/earth.glb'),
   },
   'chichen-itza': {
     name: 'Chichen Itza',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/chichen_itza.glb',
+    url: publicAssetUrl('gltf/original-grab/chichen_itza.glb'),
   },
   'eiffel-tower': {
     name: 'Eiffel Tower',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/eiffel_tower.glb',
+    url: publicAssetUrl('gltf/original-grab/eiffel_tower.glb'),
   },
   'opera-house': {
     name: 'Sydney Opera House',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/opera_house.glb',
+    url: publicAssetUrl('gltf/original-grab/opera_house.glb'),
   },
   pin: {
     name: 'Map Pin',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/pin.glb',
+    url: publicAssetUrl('gltf/original-grab/pin.glb'),
   },
   pyramid: {
     name: 'Pyramid',
     type: AssetType.GLTF,
-    url: '/gltf/original-grab/pyramid.glb',
+    url: publicAssetUrl('gltf/original-grab/pyramid.glb'),
   },
   'grab-welcome-panel': {
     name: 'Grab Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
   'distance-grab-panel': {
     name: 'Distance Grab Panel',
     type: AssetType.UIKitML,
-    url: '/ui/distance-grabbable.uikitml',
+    url: publicAssetUrl('ui/distance-grabbable.uikitml'),
   },
   'one-hand-grab-panel': {
     name: 'One-Hand Grab Panel',
     type: AssetType.UIKitML,
-    url: '/ui/one-hand-grabbable.uikitml',
+    url: publicAssetUrl('ui/one-hand-grabbable.uikitml'),
   },
   'two-hand-grab-panel': {
     name: 'Two-Hand Grab Panel',
     type: AssetType.UIKitML,
-    url: '/ui/two-hand-grabbable.uikitml',
+    url: publicAssetUrl('ui/two-hand-grabbable.uikitml'),
   },
   switchSound: {
     priority: 'background',
     type: AssetType.Audio,
-    url: './audio/switch.mp3',
+    url: publicAssetUrl('audio/switch.mp3'),
   },
   webxrLogo: {
     priority: 'critical',
     type: AssetType.Texture,
-    url: './textures/webxr.jpg',
+    url: publicAssetUrl('textures/webxr.jpg'),
   },
-} satisfies AssetManifest;
+});
 
 export default assets;

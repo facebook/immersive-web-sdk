@@ -1676,8 +1676,11 @@ describe('SceneEditorSession', () => {
     ).resolves.toMatchObject({
       issues: expect.arrayContaining([
         expect.objectContaining({
-          message: 'unknown manifest asset "missing"',
+          message:
+            'asset "missing" is not declared in the project asset catalog; add "missing" to the asset manifest or replace this reference with a declared asset id',
           nodeId: 'bad',
+          suggestedFix:
+            'Call scene_list_assets, then update the node to a registered manifest asset id.',
         }),
       ]),
       valid: false,

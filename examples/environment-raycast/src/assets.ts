@@ -5,19 +5,30 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { type AssetManifest, AssetType } from '@iwsdk/core';
+import { AssetType, defineAssets } from '@iwsdk/core';
 
-const assets = {
+const publicAssetUrl = (filePath: string) =>
+  `${import.meta.env.BASE_URL}${filePath.replace(/^\/+/u, '')}`;
+const DEFAULT_STOCK_ASSET_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const stockAssetBase = (
+  import.meta.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL?.trim() ||
+  DEFAULT_STOCK_ASSET_BASE
+).replace(/\/+$/u, '');
+const stockAssetUrl = (assetId: string, fileName: string) =>
+  `${stockAssetBase}/${assetId}/${fileName}`;
+
+const assets = defineAssets({
   'plant-sansevieria': {
     name: 'Plant Sansevieria',
     type: AssetType.GLTF,
-    url: '/iwsdk-assets/plant-sansevieria/plantSansevieria.gltf',
+    url: stockAssetUrl('plant-sansevieria', 'plantSansevieria.gltf'),
   },
   'environment-raycast-welcome-panel': {
     name: 'Environment Raycast Welcome Panel',
     type: AssetType.UIKitML,
-    url: '/ui/welcome.uikitml',
+    url: publicAssetUrl('ui/welcome.uikitml'),
   },
-} satisfies AssetManifest;
+});
 
 export default assets;

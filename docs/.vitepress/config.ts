@@ -109,6 +109,10 @@ gtag('config', 'G-V03QDNGKY3');`,
               link: '/guides/01-project-setup',
             },
             {
+              text: '01a · Project Manifest',
+              link: '/guides/01a-project-manifest',
+            },
+            {
               text: '02 · Testing Experience',
               link: '/guides/02-testing-experience',
             },

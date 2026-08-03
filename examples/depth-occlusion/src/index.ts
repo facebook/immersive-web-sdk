@@ -9,12 +9,10 @@ import {
   createSystem,
   DepthOccludable,
   DepthSensingSystem,
-  ReferenceSpaceType,
-  SessionMode,
   UIKitMLAsset,
   World,
 } from '@iwsdk/core';
-import assets from './assets.js';
+import projectOptions from 'virtual:iwsdk-project';
 import { configureWelcomePanel } from './panel.js';
 
 export class OcclusionDemoSystem extends createSystem({
@@ -31,33 +29,10 @@ export class OcclusionDemoSystem extends createSystem({
   }
 }
 
-World.create(document.getElementById('scene-container') as HTMLDivElement, {
-  assets,
-  level: './scenes/depth-occlusion.iwsdk.scene.json',
-  render: {
-    camera: {
-      position: [0, 1.6, 0],
-    },
-  },
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-    referenceSpace: ReferenceSpaceType.Unbounded,
-    features: {
-      depthSensing: {
-        required: true,
-        usage: 'gpu-optimized',
-        format: 'float32',
-      },
-      hitTest: { required: true },
-      anchors: { required: true },
-      unbounded: { required: true },
-    },
-  },
-  features: {
-    grabbing: true,
-    spatialUI: true,
-  },
-}).then((world) => {
+World.create(
+  document.getElementById('scene-container') as HTMLDivElement,
+  projectOptions,
+).then((world) => {
   world
     .registerSystem(DepthSensingSystem, {
       configData: {

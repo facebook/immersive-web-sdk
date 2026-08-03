@@ -690,6 +690,7 @@ function recordEditorEvent(method, result) {
 function handlesWorkspaceMethod(method) {
   return [
     'scene_get_state',
+    'scene_flatten_file',
     'scene_render_file',
     'scene_measure_image_regions',
     'scene_set_preview_visibility',
@@ -821,13 +822,13 @@ function workspaceState(session) {
   const pageId =
     window.__IWSDK_MCP_PAGE_ID ||
     (typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem('iwer-mcp-tab-id')
+      ? sessionStorage.getItem('iwer-mcp-tab-id:editor')
       : null) ||
     window.__IWSDK_WORKSPACE_PAGE_ID;
   const rawGeneration =
     window.__IWSDK_MCP_TAB_GENERATION ||
     (typeof sessionStorage !== 'undefined'
-      ? Number(sessionStorage.getItem('iwer-mcp-gen') || '0')
+      ? Number(sessionStorage.getItem('iwer-mcp-gen:editor') || '0')
       : null) ||
     window.__IWSDK_WORKSPACE_TAB_GENERATION;
   const tabGeneration = Number.isFinite(rawGeneration)
@@ -836,6 +837,18 @@ function workspaceState(session) {
   const sceneSessionId = window.__IWSDK_SCENE_SESSION_ID;
   const bridge = window.IWER_MCP;
   const runtimeFrame = document.getElementById('workspace-runtime-frame');
+  const runtimePresent = runtimeFrame instanceof HTMLIFrameElement;
+  const runtimeReady = window.__IWSDK_WORKSPACE_RUNTIME_READY === true;
+  const runtimeStale = window.__IWSDK_WORKSPACE_RUNTIME_STALE === true;
+  const runtimeReadinessReason = runtimeReady
+    ? null
+    : !runtimePresent
+      ? 'runtime_frame_missing'
+      : runtimeStale
+        ? 'reload_deferred_until_runtime_view'
+        : runtimeFrame.getAttribute('src')
+          ? 'runtime_frame_loading'
+          : 'runtime_frame_not_loaded';
   const iwerDevice = window.IWER_DEVICE;
   const emulationProfile = window.__IWSDK_EMULATION_PROFILE;
   const iwerAvailable = iwerDevice != null;
@@ -858,8 +871,10 @@ function workspaceState(session) {
       tabGeneration,
     },
     runtime: {
-      present: runtimeFrame instanceof HTMLIFrameElement,
-      ready: window.__IWSDK_WORKSPACE_RUNTIME_READY === true,
+      present: runtimePresent,
+      ready: runtimeReady,
+      readinessReason: runtimeReadinessReason,
+      stale: runtimeStale,
       pageId: pageId ? \`\${pageId}:runtime\` : null,
     },
     editor: {
@@ -984,21 +999,10 @@ async function reloadComposedSceneFromDisk(session, getCamera) {
   if (!session || !currentScenePath()) {
     return;
   }
-  if (session.isDirty) {
-    sceneFileReloadState = {
-      conflict: true,
-      diagnostics: [{
-        code: 'scene_file_editor_conflict',
-        message:
-          'The scene changed on disk while the editor has unsaved changes.',
-        path: '$',
-      }],
-      lastReloadedAt: sceneFileReloadState.lastReloadedAt,
-      status: 'conflict',
-    };
-    renderUi(session, getCamera());
-    return;
-  }
+  // The watcher also observes this editor's autosaves. Let any mutation that
+  // caused the event finish updating the saved revision/hash before deciding
+  // whether the disk write came from another author.
+  await editorMutationQueue;
   sceneFileReloadState = {
     ...sceneFileReloadState,
     conflict: false,
@@ -1018,6 +1022,21 @@ async function reloadComposedSceneFromDisk(session, getCamera) {
         lastReloadedAt: sceneFileReloadState.lastReloadedAt,
         status: 'ready',
       };
+      return;
+    }
+    if (session.isDirty) {
+      sceneFileReloadState = {
+        conflict: true,
+        diagnostics: [{
+          code: 'scene_file_editor_conflict',
+          message:
+            'The scene changed on disk while the editor has unsaved changes.',
+          path: '$',
+        }],
+        lastReloadedAt: sceneFileReloadState.lastReloadedAt,
+        status: 'conflict',
+      };
+      renderUi(session, getCamera());
       return;
     }
     await session.replaceFromDisk(loaded.document);
@@ -1409,6 +1428,44 @@ function requireScenePath(params) {
     throw new Error('A scene path under public/scenes is required');
   }
   return scenePath.trim();
+}
+
+function importBearingSceneError(scenePath, sourceDocument) {
+  const error = new Error(
+    'This scene is an authoring composition with imports. Flatten it before opening it in the editable editor or application runtime.',
+  );
+  Object.assign(error, {
+    code: 'scene_imports_require_flattening',
+    details: {
+      imports: (sourceDocument?.imports || []).map((entry) => ({
+        id: entry.id,
+        src: entry.src,
+      })),
+      path: scenePath,
+      suggestedCommand:
+        'npx iwsdk scene flatten --input-json ' +
+        JSON.stringify(JSON.stringify({ path: scenePath })),
+    },
+    recoverable: true,
+    retryAction: 'scene_flatten_file',
+  });
+  return error;
+}
+
+async function flattenSceneFile(params = {}) {
+  const scenePath = requireScenePath(params);
+  return fetchJsonOrThrow(sceneFilesUrl, {
+    body: JSON.stringify({
+      action: 'flatten',
+      path: scenePath,
+      ...(typeof params.outputPath === 'string'
+        ? { outputPath: params.outputPath }
+        : {}),
+      ...(params.overwrite === true ? { overwrite: true } : {}),
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
 }
 
 function subtreeNodeIds(documentValue, nodeId) {
@@ -2065,6 +2122,8 @@ async function dispatchWorkspaceCommand(session, method, params = {}) {
   switch (method) {
     case 'scene_get_state':
       return sceneState(session);
+    case 'scene_flatten_file':
+      return flattenSceneFile(params);
     case 'scene_render_file':
       return renderSceneFile(session, params);
     case 'workspace_get_state':
@@ -2253,6 +2312,9 @@ async function dispatchWorkspaceCommand(session, method, params = {}) {
     case 'scene_open': {
       const scenePath = requireScenePath(params);
       const opened = await fetchComposedSceneDocument(scenePath);
+      if ((opened.sourceDocument?.imports?.length || 0) > 0) {
+        throw importBearingSceneError(scenePath, opened.sourceDocument);
+      }
       scheduleSceneOpen(scenePath);
       return {
         composedDocumentHash: opened.documentHash,
@@ -2306,23 +2368,82 @@ async function renderScenePicker() {
         (file) =>
           '<button type="button" data-scene-picker-path="' +
           escapePickerAttribute(file.path) +
+          '" data-scene-picker-imports="' +
+          (file.hasImports ? 'true' : 'false') +
           '">' +
           escapePickerHtml(file.path) +
+          (file.hasImports ? ' · Flatten to edit' : '') +
           '</button>',
       )
       .join('');
     for (const button of list.querySelectorAll('[data-scene-picker-path]')) {
-      button.addEventListener('click', () => {
-        dispatchWorkspaceCommand(null, 'scene_open', {
-          path: button.dataset.scenePickerPath,
-        }).catch((error) => {
+      button.addEventListener('click', async () => {
+        try {
+          let scenePath = button.dataset.scenePickerPath;
+          if (button.dataset.scenePickerImports === 'true') {
+            button.disabled = true;
+            button.textContent = 'Flattening ' + scenePath + '…';
+            const flattened = await dispatchWorkspaceCommand(
+              null,
+              'scene_flatten_file',
+              { path: scenePath },
+            );
+            scenePath = flattened.outputPath;
+          }
+          await dispatchWorkspaceCommand(null, 'scene_open', {
+            path: scenePath,
+          });
+        } catch (error) {
           list.textContent = String(error?.message || error);
-        });
+        }
       });
     }
   };
 
   await renderFiles();
+}
+
+async function renderFlattenRequired(scenePath, sourceDocument) {
+  const status = document.getElementById('editor-status-strip');
+  if (status) {
+    status.textContent = 'Flatten composition to edit';
+  }
+  const host = document.querySelector('[data-workspace-editor-pane]');
+  if (!host) {
+    return;
+  }
+  const importCount = sourceDocument?.imports?.length || 0;
+  const dialog = document.createElement('section');
+  dialog.className = 'scene-picker-dialog';
+  dialog.setAttribute('aria-label', 'Flatten scene composition');
+  dialog.innerHTML =
+    '<div class="scene-picker-card">' +
+    '<div class="scene-picker-header">' +
+    '<h1>Flatten to Edit</h1>' +
+    '<p><code>' + escapePickerHtml(scenePath) + '</code> is an authoring composition with ' +
+    importCount + ' import' + (importCount === 1 ? '' : 's') +
+    '. Runtime and editable scenes must be import-free.</p>' +
+    '</div>' +
+    '<div class="scene-picker-list">' +
+    '<button type="button" data-flatten-active-scene>Flatten into a new editable scene</button>' +
+    '<p data-flatten-active-status>Scratch modules remain unchanged. The flat output becomes the source of truth.</p>' +
+    '</div>' +
+    '</div>';
+  host.appendChild(dialog);
+  const button = dialog.querySelector('[data-flatten-active-scene]');
+  const message = dialog.querySelector('[data-flatten-active-status]');
+  button?.addEventListener('click', async () => {
+    button.disabled = true;
+    if (message) message.textContent = 'Composing and verifying runtime hash…';
+    try {
+      const flattened = await flattenSceneFile({ path: scenePath });
+      if (message) message.textContent = 'Opening ' + flattened.outputPath + '…';
+      scheduleSceneOpen(flattened.outputPath);
+    } catch (error) {
+      button.disabled = false;
+      if (message) message.textContent = String(error?.message || error);
+    }
+  });
 }
 
 function escapePickerHtml(value) {
@@ -7714,9 +7835,6 @@ function readScale(inspector) {
     readFiniteInput(inspector, 'scale.1'),
     readFiniteInput(inspector, 'scale.2'),
   ];
-  if (scale.some((value) => value <= 0)) {
-    throw new Error('Scale values must be greater than 0');
-  }
   return scale.every((value) => value === scale[0]) ? scale[0] : scale;
 }
 
@@ -7762,9 +7880,6 @@ function transformWithFieldValue(transform, field, index, value) {
   const vector = [...transformVectorForField(transform, field)];
   vector[index] = value;
   if (field === 'scale') {
-    if (vector.some((entry) => entry <= 0)) {
-      throw new Error('Scale values must be greater than 0');
-    }
     return {
       ...(transform || {}),
       scale: compactScaleValue(vector),
@@ -7858,9 +7973,6 @@ function commitMultiTransformField(inspector, session, camera, nodes, fieldKey) 
       throw new Error('Transform field ' + fieldKey + ' must be a finite number');
     }
     const { field, index } = parseTransformFieldKey(fieldKey);
-    if (field === 'scale' && value <= 0) {
-      throw new Error('Scale values must be greater than 0');
-    }
     const signature = JSON.stringify({
       field,
       index,
@@ -9751,11 +9863,13 @@ function bindComponentEditor(
     row.addEventListener('change', (event) => {
       const eventTarget = event.target;
       markComponentFieldAuthored(eventTarget);
-      if (
-        eventTarget instanceof HTMLSelectElement ||
-        (eventTarget instanceof HTMLInputElement &&
-          (eventTarget.type === 'checkbox' || eventTarget.type === 'color'))
-      ) {
+      // Commit every completed field edit before an autosave/file-watcher
+      // refresh can replace the inspector row. Numeric and vector inputs used
+      // to remain DOM-only while focus moved between fields in the same row;
+      // a concurrent refresh could then restore their previous document
+      // value. commitComponentRow captures the whole row synchronously and
+      // deduplicates the matching focusout commit through its signatures.
+      if (isComponentEditTarget(eventTarget)) {
         commitComponentRow(
           inspector,
           row,
@@ -10530,6 +10644,7 @@ async function init() {
         session: null,
         unregisterContribution: unregisterEditorContribution,
       };
+      window.dispatchEvent(new Event('iwsdk:mcp-runtime-ready'));
       completeEditorStartup();
       await renderScenePicker();
       return;
@@ -10537,6 +10652,25 @@ async function init() {
   }
   updateEditorStartupProgress('Loading scene…', 48);
   const loadedScene = await fetchComposedSceneDocument(currentScenePath());
+  if ((loadedScene.sourceDocument?.imports?.length || 0) > 0) {
+    runtimeHandles = (method) => handlesWorkspaceMethod(method);
+    runtimeDispatch = (method, params = {}) =>
+      dispatchWorkspaceCommand(null, method, params);
+    window.IWSDK_SCENE_EDITOR = {
+      listContributions: () => [],
+      registerContribution: registerEditorContribution,
+      runtime: window.FRAMEWORK_MCP_RUNTIME,
+      session: null,
+      unregisterContribution: unregisterEditorContribution,
+    };
+    window.dispatchEvent(new Event('iwsdk:mcp-runtime-ready'));
+    completeEditorStartup();
+    await renderFlattenRequired(
+      currentScenePath(),
+      loadedScene.sourceDocument,
+    );
+    return;
+  }
   const documentValue = loadedScene.document;
   updateComposedSceneIdentity(loadedScene);
   sceneFileReloadState = {
@@ -10589,11 +10723,12 @@ async function init() {
     saveDocument: async (serializedDocument) => {
       if (sceneSourceHasImports) {
         const error = new Error(
-          'Composed scenes are authored through their source files. Open an imported module to edit its contents.',
+          'Import-bearing compositions are preview-only. Flatten this scene before editing it; the flat output becomes the source of truth.',
         );
         Object.assign(error, {
-          code: 'composed_scene_save_requires_source_edit',
+          code: 'scene_imports_require_flattening',
           recoverable: true,
+          retryAction: 'scene_flatten_file',
         });
         throw error;
       }
@@ -11057,6 +11192,7 @@ async function init() {
   );
 
   renderUi(session, activeCamera);
+  window.dispatchEvent(new Event('iwsdk:mcp-runtime-ready'));
   completeEditorStartup();
 }
 

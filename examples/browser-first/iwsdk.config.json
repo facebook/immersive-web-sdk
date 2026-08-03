@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/browser-first.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": false,
+    "input": { "canvasPointerEvents": true },
+    "render": {
+      "near": 0.001,
+      "far": 200,
+      "camera": {
+        "position": [0, 1.6, 0],
+        "lookAt": [0, 1.55, -1]
+      }
+    },
+    "features": {
+      "grabbing": true,
+      "locomotion": { "browserControls": true },
+      "physics": true,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3",
+      "activation": "always",
+      "injectOnBuild": true
+    }
+  }
+}

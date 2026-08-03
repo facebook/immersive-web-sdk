@@ -133,6 +133,9 @@ function inferRuntimeIssueCause(
   if (browser?.status === 'launch_failed') {
     return browser.lastError?.cause ?? 'browser_launch_failed';
   }
+  if (browser?.status === 'not_launched') {
+    return 'browser_not_launched';
+  }
   if (
     browser?.status === 'launching' ||
     browser?.status === 'waiting_for_connection'
@@ -676,6 +679,16 @@ export async function sendRuntimeCommand({
   timeoutMs = 30000,
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
+  if (runtimeSession?.browser?.status === 'not_launched') {
+    throw new RuntimeCommandExecutionError(
+      runtimeSession.browser.lastError?.message ??
+        'No managed browser was launched. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',
+      {
+        issueCause: 'browser_not_launched',
+        browser: runtimeSession.browser,
+      },
+    );
+  }
   const deadline = Date.now() + Math.max(timeoutMs, 1);
   const options = { method, params, port, runtimeSession, target };
   const previousSceneSessionId = await captureSceneOpenSessionBaseline(

@@ -117,20 +117,11 @@ function initDevRuntime(config: ProcessedDevOptions): void {
   };
 
   const isManagedTab = (window as any).__IWER_MCP_MANAGED === true;
-  const isManagedWorkspacePage =
-    (window as any).__IWSDK_MCP_PAGE_ROLE === 'editor' ||
-    location.pathname.startsWith('/__iwsdk/workspace') ||
-    location.pathname.startsWith('/__iwsdk/editor');
 
-  // The native editor command surface does not depend on WebXR emulation.
-  // Browser-first starters intentionally keep IWER disabled; connect their
-  // managed editor directly while leaving normal app tabs untouched.
-  if (
-    config.workspace &&
-    config.iwer === false &&
-    isManagedTab &&
-    isManagedWorkspacePage
-  ) {
+  // The native command surface does not depend on WebXR emulation.
+  // Browser-first starters intentionally keep IWER disabled; connect both the
+  // managed editor and its managed app frame while leaving normal tabs alone.
+  if (config.workspace && config.iwer === false && isManagedTab) {
     (window as any).IWER_MCP = initMCPBridge({ verbose: config.verbose });
   }
 

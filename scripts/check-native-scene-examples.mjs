@@ -6,15 +6,19 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
-
+const CORE_PROJECT_DIST = path.join(
+  REPO_ROOT,
+  'packages/core/dist/project/index.js',
+);
 const SCENE_COMPOSITION_DIST = path.join(
   REPO_ROOT,
   'packages/scene-composition/dist/index.js',
@@ -23,11 +27,18 @@ const EXAMPLE_ASSETS_DIST = path.join(
   REPO_ROOT,
   'packages/example-assets/dist/index.js',
 );
+const EXAMPLE_ASSET_CDN_BASE =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
 
-const MIGRATED_SCENES = [
+const EXAMPLES = [
   {
-    assetIds: ['environment-desk', 'robot'],
-    components: [
+    id: 'audio',
+    target: 'vr',
+    scene: 'audio.iwsdk.scene.json',
+    componentModule: true,
+    stockAssetIds: ['environment-desk', 'robot'],
+    requiredAssetIds: ['environment-desk', 'robot', 'spatial-audio-panel'],
+    requiredComponents: [
       'AudioSource',
       'DomeGradient',
       'IBLGradient',
@@ -36,16 +47,20 @@ const MIGRATED_SCENES = [
       'ScreenSpace',
       'Spinner',
     ],
-    id: 'audio',
-    componentManifest: './src/components.ts',
-    scene: 'examples/audio/public/scenes/audio.iwsdk.scene.json',
-    source: 'examples/audio/src/index.ts',
-    sourceLevelText: './scenes/audio.iwsdk.scene.json',
-    viteConfig: 'examples/audio/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk'],
-    components: [
+    id: 'browser-first',
+    target: 'browser',
+    scene: 'browser-first.iwsdk.scene.json',
+    stockAssetIds: ['environment-desk'],
+    requiredAssetIds: [
+      'browser-first-physics-ball',
+      'browser-first-player-avatar',
+      'browser-first-ray-target',
+      'browser-first-welcome-panel',
+      'environment-desk',
+    ],
+    requiredComponents: [
       'AudioSource',
       'DomeGradient',
       'IBLGradient',
@@ -55,16 +70,21 @@ const MIGRATED_SCENES = [
       'PhysicsShape',
       'RayInteractable',
     ],
-    id: 'browser-first',
-    scene:
-      'examples/browser-first/public/scenes/browser-first.iwsdk.scene.json',
-    source: 'examples/browser-first/src/index.ts',
-    sourceLevelText: './scenes/browser-first.iwsdk.scene.json',
-    viteConfig: 'examples/browser-first/vite.config.ts',
   },
   {
-    assetIds: ['plant-sansevieria', 'robot'],
-    components: [
+    id: 'depth-occlusion',
+    target: 'ar',
+    scene: 'depth-occlusion.iwsdk.scene.json',
+    stockAssetIds: ['plant-sansevieria', 'robot'],
+    requiredAssetIds: [
+      'depth-hard-cube',
+      'depth-occlusion-welcome-panel',
+      'depth-reference-cylinder',
+      'depth-soft-sphere',
+      'plant-sansevieria',
+      'robot',
+    ],
+    requiredComponents: [
       'DepthOccludable',
       'DistanceGrabbable',
       'IBLGradient',
@@ -73,31 +93,39 @@ const MIGRATED_SCENES = [
       'ScreenSpace',
       'XRAnchor',
     ],
-    id: 'depth-occlusion',
-    scene:
-      'examples/depth-occlusion/public/scenes/depth-occlusion.iwsdk.scene.json',
-    source: 'examples/depth-occlusion/src/index.ts',
-    sourceLevelText: './scenes/depth-occlusion.iwsdk.scene.json',
-    viteConfig: 'examples/depth-occlusion/vite.config.ts',
   },
   {
-    assetIds: ['plant-sansevieria'],
-    components: [
+    id: 'environment-raycast',
+    target: 'ar',
+    scene: 'environment-raycast.iwsdk.scene.json',
+    stockAssetIds: ['plant-sansevieria'],
+    requiredAssetIds: [
+      'environment-raycast-welcome-panel',
+      'plant-sansevieria',
+    ],
+    requiredComponents: [
       'EnvironmentRaycastTarget',
       'IBLGradient',
       'RayInteractable',
       'ScreenSpace',
     ],
-    id: 'environment-raycast',
-    scene:
-      'examples/environment-raycast/public/scenes/environment-raycast.iwsdk.scene.json',
-    source: 'examples/environment-raycast/src/index.ts',
-    sourceLevelText: './scenes/environment-raycast.iwsdk.scene.json',
-    viteConfig: 'examples/environment-raycast/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk'],
-    components: [
+    id: 'grab',
+    target: 'vr',
+    scene: 'grab.iwsdk.scene.json',
+    stockAssetIds: ['environment-desk'],
+    requiredAssetIds: [
+      'chichen-itza',
+      'earth',
+      'eiffel-tower',
+      'environment-desk',
+      'grab-welcome-panel',
+      'opera-house',
+      'pin',
+      'pyramid',
+    ],
+    requiredComponents: [
       'DistanceGrabbable',
       'DomeGradient',
       'IBLGradient',
@@ -106,24 +134,33 @@ const MIGRATED_SCENES = [
       'RayInteractable',
       'TwoHandsGrabbable',
     ],
-    id: 'grab',
-    scene: 'examples/grab/public/scenes/grab.iwsdk.scene.json',
-    source: 'examples/grab/src/index.ts',
-    sourceLevelText: './scenes/grab.iwsdk.scene.json',
-    viteConfig: 'examples/grab/vite.config.ts',
   },
   {
-    assetIds: [],
-    components: ['DomeGradient', 'IBLGradient'],
     id: 'layers',
-    scene: 'examples/layers/public/scenes/layers.iwsdk.scene.json',
-    source: 'examples/layers/src/index.ts',
-    sourceLevelText: './scenes/layers.iwsdk.scene.json',
-    viteConfig: 'examples/layers/vite.config.ts',
+    target: 'vr',
+    scene: 'layers.iwsdk.scene.json',
+    stockAssetIds: [],
+    requiredAssetIds: [
+      'layers-floor',
+      'layers-grid',
+      'layers-orb',
+      'layers-pillar',
+      'layers-welcome-panel',
+    ],
+    requiredComponents: ['DomeGradient', 'IBLGradient'],
   },
   {
-    assetIds: ['environment-desk'],
-    components: [
+    id: 'locomotion',
+    target: 'vr',
+    scene: 'locomotion.iwsdk.scene.json',
+    componentModule: true,
+    stockAssetIds: ['environment-desk'],
+    requiredAssetIds: [
+      'environment-desk',
+      'locomotion-settings-panel',
+      'locomotion-welcome-panel',
+    ],
+    requiredComponents: [
       'AudioSource',
       'DomeGradient',
       'Elevator',
@@ -134,16 +171,21 @@ const MIGRATED_SCENES = [
       'RayInteractable',
       'ScreenSpace',
     ],
-    id: 'locomotion',
-    componentManifest: './src/components.ts',
-    scene: 'examples/locomotion/public/scenes/locomotion.iwsdk.scene.json',
-    source: 'examples/locomotion/src/index.ts',
-    sourceLevelText: './scenes/locomotion.iwsdk.scene.json',
-    viteConfig: 'examples/locomotion/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
-    components: [
+    id: 'physics',
+    target: 'vr',
+    scene: 'physics.iwsdk.scene.json',
+    stockAssetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
+    requiredAssetIds: [
+      'environment-desk',
+      'physics-dynamic-cylinder',
+      'physics-dynamic-sphere',
+      'physics-welcome-panel',
+      'plant-sansevieria',
+      'robot',
+    ],
+    requiredComponents: [
       'DistanceGrabbable',
       'DomeGradient',
       'IBLGradient',
@@ -153,15 +195,20 @@ const MIGRATED_SCENES = [
       'PhysicsShape',
       'RayInteractable',
     ],
-    id: 'physics',
-    scene: 'examples/physics/public/scenes/physics.iwsdk.scene.json',
-    source: 'examples/physics/src/index.ts',
-    sourceLevelText: './scenes/physics.iwsdk.scene.json',
-    viteConfig: 'examples/physics/vite.config.ts',
   },
   {
-    assetIds: ['environment-desk', 'robot'],
-    components: [
+    id: 'poke',
+    target: 'vr',
+    scene: 'poke.iwsdk.scene.json',
+    componentModule: true,
+    stockAssetIds: ['environment-desk', 'robot'],
+    requiredAssetIds: [
+      'environment-desk',
+      'poke-webxr-banner',
+      'poke-welcome-panel',
+      'robot',
+    ],
+    requiredComponents: [
       'AudioSource',
       'DomeGradient',
       'IBLGradient',
@@ -171,16 +218,17 @@ const MIGRATED_SCENES = [
       'Robot',
       'ScreenSpace',
     ],
-    id: 'poke',
-    componentManifest: './src/components.ts',
-    scene: 'examples/poke/public/scenes/poke.iwsdk.scene.json',
-    source: 'examples/poke/src/index.ts',
-    sourceLevelText: './scenes/poke.iwsdk.scene.json',
-    viteConfig: 'examples/poke/vite.config.ts',
   },
   {
-    assetIds: [],
-    components: [
+    id: 'scene-understanding',
+    target: 'ar',
+    scene: 'scene-understanding.iwsdk.scene.json',
+    stockAssetIds: [],
+    requiredAssetIds: [
+      'scene-understanding-anchor',
+      'scene-understanding-welcome-panel',
+    ],
+    requiredComponents: [
       'DistanceGrabbable',
       'DomeTexture',
       'IBLTexture',
@@ -189,111 +237,21 @@ const MIGRATED_SCENES = [
       'ScreenSpace',
       'XRAnchor',
     ],
-    id: 'scene-understanding',
-    scene:
-      'examples/scene-understanding/public/scenes/scene-understanding.iwsdk.scene.json',
-    source: 'examples/scene-understanding/src/index.ts',
-    sourceLevelText: './scenes/scene-understanding.iwsdk.scene.json',
-    viteConfig: 'examples/scene-understanding/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
-    components: [
-      'AudioSource',
-      'DistanceGrabbable',
-      'DomeGradient',
-      'IBLGradient',
-      'LocomotionEnvironment',
-      'RayInteractable',
-      'Robot',
-      'ScreenSpace',
-    ],
-    id: 'starter-vr',
-    componentManifest: './src/components.ts',
-    manifestAssetIds: ['welcome-panel'],
-    scene:
-      'packages/starter-assets/starter-template/public/scenes/vr.iwsdk.scene.json',
-    source: 'packages/starter-assets/starter-template/src/index.template.ts',
-    sourceLevelText: './scenes/vr.iwsdk.scene.json',
-    viteConfig:
-      'packages/starter-assets/starter-template/vite.config.template.ts',
-  },
-  {
-    assetIds: ['plant-sansevieria', 'robot'],
-    components: [
-      'AudioSource',
-      'DistanceGrabbable',
-      'DomeGradient',
-      'IBLGradient',
-      'RayInteractable',
-      'Robot',
-      'ScreenSpace',
-    ],
-    id: 'starter-ar',
-    componentManifest: './src/components.ts',
-    manifestAssetIds: ['welcome-panel'],
-    scene:
-      'packages/starter-assets/starter-template/public/scenes/ar.iwsdk.scene.json',
-    source: 'packages/starter-assets/starter-template/src/index.template.ts',
-    sourceLevelText: './scenes/ar.iwsdk.scene.json',
-    viteConfig:
-      'packages/starter-assets/starter-template/vite.config.template.ts',
   },
 ];
 
-const SHARED_ASSET_VITE_CONFIGS = [
-  {
-    assetIds: ['environment-desk', 'robot'],
-    file: 'examples/audio/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk'],
-    file: 'examples/browser-first/vite.config.ts',
-  },
-  {
-    assetIds: ['plant-sansevieria', 'robot'],
-    file: 'examples/depth-occlusion/vite.config.ts',
-  },
-  {
-    assetIds: ['plant-sansevieria'],
-    file: 'examples/environment-raycast/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk'],
-    file: 'examples/grab/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk'],
-    file: 'examples/locomotion/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
-    file: 'examples/physics/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk', 'robot'],
-    file: 'examples/poke/vite.config.ts',
-  },
-  {
-    assetIds: ['environment-desk', 'plant-sansevieria', 'robot'],
-    file: 'packages/starter-assets/starter-template/vite.config.template.ts',
-  },
-];
-
-const LEGACY_DUPLICATE_ASSET_DIRS = [
-  'environmentDesk',
-  'plantSansevieria',
-  'robot',
-];
 const REMOVED_AUTHORED_DIR_NAME = ['meta', 'spatial'].join('');
 const REMOVED_AUTHORED_DIRS = [
   `examples/audio/${REMOVED_AUTHORED_DIR_NAME}`,
   `examples/grab/${REMOVED_AUTHORED_DIR_NAME}`,
   `examples/physics/${REMOVED_AUTHORED_DIR_NAME}`,
-  `packages/starter-assets/starter-template/${REMOVED_AUTHORED_DIR_NAME}-vr`,
-  `packages/starter-assets/starter-template/${REMOVED_AUTHORED_DIR_NAME}-ar`,
 ];
-const GENERATED_STARTER_ASSET_DIR = 'packages/starter-assets/dist/assets';
+const LEGACY_DUPLICATE_ASSET_DIRS = [
+  'environmentDesk',
+  'plantSansevieria',
+  'robot',
+];
+const REFERENCE_SHARP_OVERRIDE = '0.35.3';
 
 function readRelative(relativePath) {
   return readFileSync(path.join(REPO_ROOT, relativePath), 'utf8');
@@ -310,88 +268,406 @@ function flattenNodes(nodes) {
   ]);
 }
 
-function setDifference(expected, actual) {
-  return expected.filter((entry) => !actual.has(entry));
-}
-
 async function loadBuiltModule(modulePath, label) {
   if (!existsSync(modulePath)) {
     throw new Error(
       `${label} build output is missing at ${modulePath}. Run the package build before this check.`,
     );
   }
-
   return import(pathToFileURL(modulePath).href);
 }
 
-function assertViteConfigUsesAssets(failures, file, assetIds) {
-  const text = readRelative(file);
-  if (!text.includes('iwsdkExampleAssets')) {
-    failures.push(`${file} does not configure iwsdkExampleAssets`);
-  }
-
-  for (const assetId of assetIds) {
-    if (!text.includes(assetId)) {
-      failures.push(`${file} does not request shared asset "${assetId}"`);
-    }
+function addValidationFailures(failures, file, validation) {
+  for (const issue of validation.issues) {
+    failures.push(`${file}${issue.path}: ${issue.message}`);
   }
 }
 
-function assertManifestLocalAssetFiles(failures, sceneTarget) {
-  const sourceMarker = '/src/';
-  const markerIndex = sceneTarget.source.indexOf(sourceMarker);
-  if (markerIndex < 0) {
-    failures.push(
-      `${sceneTarget.source} is not under an app src directory; cannot resolve its asset manifest`,
-    );
-    return;
-  }
-
-  const appRoot = sceneTarget.source.slice(0, markerIndex);
-  const manifestPath = [
-    `${appRoot}/src/assets.ts`,
-    `${appRoot}/src/assets.template.ts`,
-  ].find(fileExists);
-  if (manifestPath == null) {
-    failures.push(`asset manifest is missing under ${appRoot}/src`);
-    return;
-  }
-
-  const manifestText = readRelative(manifestPath);
-  for (const assetId of sceneTarget.manifestAssetIds ?? []) {
+function extractDefinedAssets(sourceText, file, failures) {
+  const source = ts.createSourceFile(
+    file,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let declaration;
+  const visit = (node) => {
     if (
-      !manifestText.includes(`'${assetId}'`) &&
-      !manifestText.includes(`"${assetId}"`)
+      declaration == null &&
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'defineAssets' &&
+      node.arguments.length === 1 &&
+      ts.isObjectLiteralExpression(node.arguments[0])
+    ) {
+      declaration = node.arguments[0];
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (declaration == null) {
+    failures.push(
+      `${file} must export its complete catalog through defineAssets({...})`,
+    );
+    return { ids: new Set(), localUrls: [] };
+  }
+
+  const ids = new Set();
+  const localUrls = [];
+  for (const property of declaration.properties) {
+    if (
+      !ts.isPropertyAssignment(property) &&
+      !ts.isShorthandPropertyAssignment(property)
     ) {
       failures.push(
-        `${manifestPath} does not declare required manifest asset "${assetId}"`,
+        `${file} contains an unsupported computed/spread asset declaration`,
       );
+      continue;
+    }
+    const id = propertyName(property.name);
+    if (id == null) {
+      failures.push(
+        `${file} contains an asset id that is not statically readable`,
+      );
+      continue;
+    }
+    ids.add(id);
+    if (
+      !ts.isPropertyAssignment(property) ||
+      !ts.isObjectLiteralExpression(property.initializer)
+    ) {
+      continue;
+    }
+    const urlProperty = property.initializer.properties.find(
+      (candidate) =>
+        ts.isPropertyAssignment(candidate) &&
+        propertyName(candidate.name) === 'url',
+    );
+    if (
+      urlProperty != null &&
+      ts.isPropertyAssignment(urlProperty) &&
+      (ts.isStringLiteral(urlProperty.initializer) ||
+        ts.isNoSubstitutionTemplateLiteral(urlProperty.initializer))
+    ) {
+      localUrls.push(urlProperty.initializer.text);
+    } else if (
+      urlProperty != null &&
+      ts.isPropertyAssignment(urlProperty) &&
+      ts.isCallExpression(urlProperty.initializer) &&
+      ts.isIdentifier(urlProperty.initializer.expression) &&
+      urlProperty.initializer.expression.text === 'publicAssetUrl' &&
+      urlProperty.initializer.arguments.length === 1 &&
+      ts.isStringLiteral(urlProperty.initializer.arguments[0])
+    ) {
+      localUrls.push(`./${urlProperty.initializer.arguments[0].text}`);
     }
   }
-  const urlPattern = /\burl:\s*(['"])([^'"]+)\1/g;
-  for (const match of manifestText.matchAll(urlPattern)) {
-    const url = match[2];
+  return { ids, localUrls };
+}
+
+function propertyName(name) {
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNumericLiteral(name)
+  ) {
+    return name.text;
+  }
+  return undefined;
+}
+
+function assertLocalAssetUrls(failures, appRoot, assetsFile, urls) {
+  for (const url of urls) {
     if (
-      url.startsWith('/iwsdk-assets/') ||
+      /^(?:data:|https?:)/u.test(url) ||
       (!url.startsWith('/') && !url.startsWith('./'))
     ) {
       continue;
     }
-
     const publicPath = path.posix.join(
       appRoot,
       'public',
-      url.replace(/^\.\//, '').replace(/^\//, ''),
+      url.replace(/^\.\//u, '').replace(/^\//u, ''),
     );
     if (!fileExists(publicPath)) {
       failures.push(
-        `${manifestPath} references missing local asset "${url}" (${publicPath})`,
+        `${assetsFile} references missing local asset "${url}" (${publicPath})`,
       );
     }
   }
 }
 
-function assertNoRemovedSourceDirs(failures) {
+function assertExample({
+  catalogById,
+  example,
+  failures,
+  normalizeProjectWorldOptions,
+  validateIwsdkProjectManifest,
+  validateSceneDocument,
+}) {
+  const appRoot = `examples/${example.id}`;
+  const configFile = `${appRoot}/iwsdk.config.json`;
+  const sceneFile = `${appRoot}/public/scenes/${example.scene}`;
+  const assetsFile = `${appRoot}/src/assets.ts`;
+  const componentsFile = `${appRoot}/src/components.ts`;
+  const packageFile = `${appRoot}/package.json`;
+  const sourceFile = `${appRoot}/src/index.ts`;
+  const viteFile = `${appRoot}/vite.config.ts`;
+  for (const required of [
+    configFile,
+    sceneFile,
+    assetsFile,
+    packageFile,
+    sourceFile,
+    viteFile,
+  ]) {
+    if (!fileExists(required)) {
+      failures.push(
+        `required manifest-first example file is missing: ${required}`,
+      );
+      return;
+    }
+  }
+
+  const packageManifest = JSON.parse(readRelative(packageFile));
+  if (
+    packageManifest.devDependencies?.['@iwsdk/reference'] != null &&
+    packageManifest.overrides?.sharp !== REFERENCE_SHARP_OVERRIDE
+  ) {
+    failures.push(
+      `${packageFile} installs @iwsdk/reference without the required sharp ${REFERENCE_SHARP_OVERRIDE} security override`,
+    );
+  }
+  if (
+    packageManifest.dependencies?.['@iwsdk/example-assets'] != null ||
+    packageManifest.devDependencies?.['@iwsdk/example-assets'] != null
+  ) {
+    failures.push(
+      `${packageFile} installs @iwsdk/example-assets instead of using its immutable CDN files`,
+    );
+  }
+
+  const manifest = JSON.parse(readRelative(configFile));
+  const manifestValidation = validateIwsdkProjectManifest(manifest);
+  if (!manifestValidation.valid) {
+    addValidationFailures(failures, configFile, manifestValidation);
+  }
+  const expectedScene = `./public/scenes/${example.scene}`;
+  if (manifest.scene !== expectedScene) {
+    failures.push(
+      `${configFile} scene must be ${JSON.stringify(expectedScene)}`,
+    );
+  }
+  if (manifest.assets?.module !== './src/assets') {
+    failures.push(
+      `${configFile} must declare extensionless assets.module "./src/assets"`,
+    );
+  }
+  if (example.componentModule) {
+    if (!fileExists(componentsFile)) {
+      failures.push(`custom component module is missing: ${componentsFile}`);
+    }
+    if (manifest.components?.module !== './src/components') {
+      failures.push(
+        `${configFile} must declare extensionless components.module "./src/components"`,
+      );
+    }
+  } else if (manifest.components != null) {
+    failures.push(`${configFile} declares an unnecessary components module`);
+  }
+  const normalized = manifestValidation.valid
+    ? normalizeProjectWorldOptions(manifest)
+    : undefined;
+  if (normalized?.level !== `./scenes/${example.scene}`) {
+    failures.push(
+      `${configFile} does not normalize to the selected runtime scene`,
+    );
+  }
+  if (
+    example.target === 'browser'
+      ? manifest.world?.xr !== false
+      : manifest.world?.xr?.mode !== example.target
+  ) {
+    failures.push(
+      `${configFile} does not declare the ${example.target} target`,
+    );
+  }
+
+  const assetsText = readRelative(assetsFile);
+  const assetDeclaration = extractDefinedAssets(
+    assetsText,
+    assetsFile,
+    failures,
+  );
+  assertLocalAssetUrls(
+    failures,
+    appRoot,
+    assetsFile,
+    assetDeclaration.localUrls,
+  );
+  for (const assetId of example.requiredAssetIds) {
+    if (!assetDeclaration.ids.has(assetId)) {
+      failures.push(`${assetsFile} is missing required asset "${assetId}"`);
+    }
+  }
+  for (const assetId of example.stockAssetIds) {
+    if (!catalogById.has(assetId)) {
+      failures.push(
+        `${assetsFile} expects unknown shared catalog asset "${assetId}"`,
+      );
+    }
+  }
+  if (example.stockAssetIds.length > 0) {
+    if (!assetsText.includes('VITE_IWSDK_EXAMPLE_ASSET_BASE_URL')) {
+      failures.push(
+        `${assetsFile} does not use the centralized stock-asset base override`,
+      );
+    }
+    if (!assetsText.includes(EXAMPLE_ASSET_CDN_BASE)) {
+      failures.push(
+        `${assetsFile} does not use the verified exact-version stock-asset CDN`,
+      );
+    }
+    if (assetsText.includes("publicAssetUrl('iwsdk-assets')")) {
+      failures.push(
+        `${assetsFile} still falls back to the retired local stock-asset bridge`,
+      );
+    }
+  }
+
+  const document = JSON.parse(readRelative(sceneFile));
+  const sceneValidation = validateSceneDocument(document, {
+    knownAssetIds: [...assetDeclaration.ids],
+    validateAuthoringWorkflow: false,
+  });
+  if (!sceneValidation.valid) {
+    addValidationFailures(failures, sceneFile, sceneValidation);
+  }
+  if (document.resources?.assets != null) {
+    failures.push(
+      `${sceneFile} still embeds obsolete resources.assets metadata`,
+    );
+  }
+  const nodes = flattenNodes(document.nodes ?? []);
+  const referencedAssetIds = new Set(
+    nodes
+      .filter((node) => node.content?.type === 'asset')
+      .map((node) => node.content.asset),
+  );
+  for (const assetId of example.requiredAssetIds) {
+    if (!referencedAssetIds.has(assetId)) {
+      failures.push(
+        `${sceneFile} does not reference required asset "${assetId}"`,
+      );
+    }
+  }
+  const componentNames = new Set(
+    [
+      ...Object.keys(document.components ?? {}),
+      ...nodes.flatMap((node) => Object.keys(node.components ?? {})),
+    ].map((componentId) => componentId.split('.').at(-1)),
+  );
+  for (const component of example.requiredComponents) {
+    if (!componentNames.has(component)) {
+      failures.push(
+        `${sceneFile} is missing required component "${component}"`,
+      );
+    }
+  }
+
+  const sourceText = readRelative(sourceFile);
+  if (!/from\s+['"]virtual:iwsdk-project['"]/u.test(sourceText)) {
+    failures.push(`${sourceFile} does not import virtual:iwsdk-project`);
+  }
+  if (!/World\.create\([\s\S]*?projectOptions/u.test(sourceText)) {
+    failures.push(`${sourceFile} does not pass projectOptions to World.create`);
+  }
+  if (/from\s+['"]\.\/assets\.js['"]/u.test(sourceText)) {
+    failures.push(
+      `${sourceFile} still imports assets directly instead of projectOptions`,
+    );
+  }
+  if (/from\s+['"]\.\/components\.js['"]/u.test(sourceText)) {
+    failures.push(
+      `${sourceFile} still imports components directly instead of projectOptions`,
+    );
+  }
+
+  const viteText = readRelative(viteFile);
+  if (!/iwsdkDev\(\s*\)/u.test(viteText)) {
+    failures.push(`${viteFile} must use manifest-first iwsdkDev()`);
+  }
+  for (const retired of [
+    'assetManifest',
+    'componentManifest',
+    'workspace:',
+    'ai:',
+    'emulator:',
+  ]) {
+    if (viteText.includes(retired)) {
+      failures.push(
+        `${viteFile} still contains retired project/session option ${retired}`,
+      );
+    }
+  }
+  if (viteText.includes('iwsdkExampleAssets')) {
+    failures.push(`${viteFile} still uses the retired stock-asset copy plugin`);
+  }
+}
+
+function assertCreateSeeds(failures, validateSceneDocument) {
+  const assetsFile = 'packages/create/template/common/src/assets.ts';
+  const assets = extractDefinedAssets(
+    readRelative(assetsFile),
+    assetsFile,
+    failures,
+  );
+  const assetsText = readRelative(assetsFile);
+  if (!assetsText.includes(EXAMPLE_ASSET_CDN_BASE)) {
+    failures.push(
+      `${assetsFile} does not use the verified exact-version stock-asset CDN`,
+    );
+  }
+  for (const scene of ['ar.iwsdk.scene.json', 'immersive.iwsdk.scene.json']) {
+    const sceneFile = `packages/create/template/scenes/${scene}`;
+    const document = JSON.parse(readRelative(sceneFile));
+    const validation = validateSceneDocument(document, {
+      knownAssetIds: [...assets.ids],
+      validateAuthoringWorkflow: false,
+    });
+    if (!validation.valid) {
+      addValidationFailures(failures, sceneFile, validation);
+    }
+    if (document.player?.camera?.transform != null) {
+      failures.push(
+        `${sceneFile} incorrectly stores a nonimmersive preview pose on the tracked camera`,
+      );
+    }
+  }
+  const indexText = readRelative(
+    'packages/create/template/common/src/index.ts',
+  );
+  if (!indexText.includes("from 'virtual:iwsdk-project'")) {
+    failures.push(
+      'Create common source does not consume virtual:iwsdk-project',
+    );
+  }
+  const viteText = readRelative(
+    'packages/create/template/common/vite.config.ts',
+  );
+  if (!/iwsdkDev\(\s*\)/u.test(viteText)) {
+    failures.push('Create common Vite source does not use bare iwsdkDev()');
+  }
+  if (viteText.includes('iwsdkExampleAssets')) {
+    failures.push(
+      'Create common Vite source still uses the stock-asset copy plugin',
+    );
+  }
+}
+
+function assertRemovedDirectories(failures) {
   for (const relativePath of REMOVED_AUTHORED_DIRS) {
     if (fileExists(relativePath)) {
       failures.push(
@@ -399,22 +675,9 @@ function assertNoRemovedSourceDirs(failures) {
       );
     }
   }
-
-  const sourceRoots = [
-    'examples/audio',
-    'examples/browser-first',
-    'examples/depth-occlusion',
-    'examples/environment-raycast',
-    'examples/grab',
-    'examples/locomotion',
-    'examples/physics',
-    'examples/poke',
-    'packages/starter-assets/starter-template',
-  ];
-
-  for (const root of sourceRoots) {
+  for (const example of EXAMPLES) {
     for (const assetDir of LEGACY_DUPLICATE_ASSET_DIRS) {
-      const duplicatePath = `${root}/public/gltf/${assetDir}`;
+      const duplicatePath = `examples/${example.id}/public/gltf/${assetDir}`;
       if (fileExists(duplicatePath)) {
         failures.push(
           `duplicate public asset directory remains: ${duplicatePath}`,
@@ -424,210 +687,9 @@ function assertNoRemovedSourceDirs(failures) {
   }
 }
 
-function assertGeneratedStarterScenes({
-  catalogById,
-  failures,
-  validateSceneDocument,
-}) {
-  if (!fileExists(GENERATED_STARTER_ASSET_DIR)) {
-    failures.push(
-      `${GENERATED_STARTER_ASSET_DIR} is missing; run @iwsdk/starter-assets build before checking generated starters`,
-    );
-    return 0;
-  }
-
-  const generatedScenes = readdirSync(
-    path.join(REPO_ROOT, GENERATED_STARTER_ASSET_DIR),
-  )
-    .filter((file) => file.endsWith('.iwsdk.scene.json'))
-    .sort();
-  const expectedSuffixes = [
-    '-ar.iwsdk.scene.json',
-    '-browser.iwsdk.scene.json',
-    '-vr.iwsdk.scene.json',
-  ];
-
-  for (const suffix of expectedSuffixes) {
-    if (!generatedScenes.some((file) => file.endsWith(suffix))) {
-      failures.push(
-        `${GENERATED_STARTER_ASSET_DIR} is missing a generated ${suffix.slice(
-          1,
-        )} starter scene`,
-      );
-    }
-  }
-
-  for (const file of generatedScenes) {
-    const hasWelcomePanel =
-      file.endsWith('-ar.iwsdk.scene.json') ||
-      file.endsWith('-vr.iwsdk.scene.json');
-    const catalogAssetIds = file.endsWith('-ar.iwsdk.scene.json')
-      ? ['plant-sansevieria', 'robot']
-      : file.endsWith('-vr.iwsdk.scene.json')
-        ? ['environment-desk', 'plant-sansevieria', 'robot']
-        : [];
-    const document = assertSceneDocument({
-      catalogById,
-      catalogAssetIds,
-      expectedAssetIds: [
-        ...catalogAssetIds,
-        ...(hasWelcomePanel ? ['welcome-panel'] : []),
-      ],
-      failures,
-      relativePath: `${GENERATED_STARTER_ASSET_DIR}/${file}`,
-      validateSceneDocument,
-    });
-    if (document != null) {
-      const rootComponents = new Set(
-        Object.keys(document.components ?? {}).map((componentId) =>
-          componentId.split('.').at(-1),
-        ),
-      );
-      for (const component of ['DomeGradient', 'IBLGradient']) {
-        if (!rootComponents.has(component)) {
-          failures.push(
-            `${GENERATED_STARTER_ASSET_DIR}/${file} must explicitly author ${component} on the level root`,
-          );
-        }
-      }
-    }
-  }
-
-  return generatedScenes.length;
-}
-
-function assertSceneDocument({
-  catalogById,
-  catalogAssetIds = expectedAssetIds,
-  expectedAssetIds,
-  failures,
-  relativePath,
-  validateSceneDocument,
-}) {
-  if (!fileExists(relativePath)) {
-    failures.push(`scene file is missing: ${relativePath}`);
-    return undefined;
-  }
-
-  const document = JSON.parse(readRelative(relativePath));
-  const validation = validateSceneDocument(document);
-  if (!validation.valid) {
-    for (const issue of validation.issues) {
-      failures.push(`${relativePath}${issue.path}: ${issue.message}`);
-    }
-  }
-
-  if (document.resources?.assets != null) {
-    failures.push(
-      `${relativePath} still embeds obsolete resources.assets metadata`,
-    );
-  }
-
-  const referencedAssetIds = new Set(
-    flattenNodes(document.nodes ?? [])
-      .filter((node) => node.content?.type === 'asset')
-      .map((node) => node.content.asset),
-  );
-  const missingAssets = setDifference(expectedAssetIds, referencedAssetIds);
-  for (const assetId of missingAssets) {
-    failures.push(`${relativePath} does not reference asset "${assetId}"`);
-  }
-
-  for (const assetId of catalogAssetIds) {
-    const catalogAsset = catalogById.get(assetId);
-    if (catalogAsset == null) {
-      failures.push(
-        `${relativePath} expects unknown shared catalog asset "${assetId}"`,
-      );
-      continue;
-    }
-
-    if (catalogAsset.bounds == null) {
-      failures.push(`catalog asset "${assetId}" is missing bounds metadata`);
-    }
-  }
-
-  return document;
-}
-
-function assertMigratedScene({
-  catalogById,
-  failures,
-  sceneTarget,
-  validateSceneDocument,
-}) {
-  const document = assertSceneDocument({
-    catalogById,
-    catalogAssetIds: sceneTarget.assetIds,
-    expectedAssetIds: [
-      ...sceneTarget.assetIds,
-      ...(sceneTarget.manifestAssetIds ?? []),
-    ],
-    failures,
-    relativePath: sceneTarget.scene,
-    validateSceneDocument,
-  });
-  if (document == null) {
-    return;
-  }
-
-  assertManifestLocalAssetFiles(failures, sceneTarget);
-
-  const nodes = flattenNodes(document.nodes ?? []);
-  const componentNames = new Set(
-    [
-      ...Object.keys(document.components ?? {}),
-      ...nodes.flatMap((node) => Object.keys(node.components ?? {})),
-    ].map((componentId) => componentId.split('.').at(-1)),
-  );
-  for (const component of sceneTarget.components) {
-    if (!componentNames.has(component)) {
-      failures.push(
-        `${sceneTarget.scene} is missing required component "${component}"`,
-      );
-    }
-  }
-
-  const sourceText = readRelative(sceneTarget.source);
-  if (!sourceText.includes(sceneTarget.sourceLevelText)) {
-    failures.push(
-      `${sceneTarget.source} does not load ${sceneTarget.sourceLevelText}`,
-    );
-  }
-
-  if (!sourceText.includes("from './assets.js'")) {
-    failures.push(
-      `${sceneTarget.source} does not import the shared runtime/editor asset manifest`,
-    );
-  }
-
-  const viteConfigText = readRelative(sceneTarget.viteConfig);
-  if (!viteConfigText.includes("assetManifest: './src/assets.ts'")) {
-    failures.push(
-      `${sceneTarget.viteConfig} does not expose ./src/assets.ts to the editor`,
-    );
-  }
-  if (
-    sceneTarget.componentManifest != null &&
-    !viteConfigText.includes(
-      `componentManifest: '${sceneTarget.componentManifest}'`,
-    )
-  ) {
-    failures.push(
-      `${sceneTarget.viteConfig} does not expose ${sceneTarget.componentManifest} to the editor`,
-    );
-  }
-
-  if (sceneTarget.assetIds.length > 0) {
-    assertViteConfigUsesAssets(
-      failures,
-      sceneTarget.viteConfig,
-      sceneTarget.assetIds,
-    );
-  }
-}
-
 async function main() {
+  const { normalizeProjectWorldOptions, validateIwsdkProjectManifest } =
+    await loadBuiltModule(CORE_PROJECT_DIST, '@iwsdk/core/project');
   const { validateSceneDocument } = await loadBuiltModule(
     SCENE_COMPOSITION_DIST,
     '@iwsdk/scene-composition',
@@ -641,28 +703,26 @@ async function main() {
   );
   const failures = [];
 
-  for (const sceneTarget of MIGRATED_SCENES) {
-    assertMigratedScene({
+  for (const example of EXAMPLES) {
+    assertExample({
       catalogById,
+      example,
       failures,
-      sceneTarget,
+      normalizeProjectWorldOptions,
+      validateIwsdkProjectManifest,
       validateSceneDocument,
     });
   }
-
-  for (const config of SHARED_ASSET_VITE_CONFIGS) {
-    assertViteConfigUsesAssets(failures, config.file, config.assetIds);
+  const hasCreateSeeds = fileExists(
+    'packages/create/template/common/src/assets.ts',
+  );
+  if (hasCreateSeeds) {
+    assertCreateSeeds(failures, validateSceneDocument);
   }
-
-  const generatedStarterSceneCount = assertGeneratedStarterScenes({
-    catalogById,
-    failures,
-    validateSceneDocument,
-  });
-  assertNoRemovedSourceDirs(failures);
+  assertRemovedDirectories(failures);
 
   if (failures.length > 0) {
-    console.error('Native scene example migration check failed:');
+    console.error('Native scene/project-manifest migration check failed:');
     for (const failure of failures) {
       console.error(`- ${failure}`);
     }
@@ -671,11 +731,13 @@ async function main() {
   }
 
   console.log(
-    `Native scene example migration check passed: ${MIGRATED_SCENES.length} source scene files, ${generatedStarterSceneCount} generated starter scene files, and ${SHARED_ASSET_VITE_CONFIGS.length} shared asset configs are valid.`,
+    `Native scene/project-manifest migration check passed: ${EXAMPLES.length} examples${hasCreateSeeds ? ' and 2 Create scene seeds' : ''} are valid.`,
   );
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
   process.exitCode = 2;
 });

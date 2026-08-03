@@ -9,14 +9,16 @@ import type { Intersection } from '@pmndrs/pointer-events';
 import {
   CanvasTexture,
   CircleGeometry,
+  MathUtils,
   Matrix3,
   Mesh,
   MeshBasicMaterial,
   Quaternion,
   Vector3,
 } from 'three';
-import { lerp } from 'three/src/math/MathUtils.js';
 import type { XROrigin } from '../rig/xr-origin.js';
+
+const { lerp } = MathUtils;
 
 const cursorRes = 512;
 let cursorTexture: CanvasTexture | undefined;

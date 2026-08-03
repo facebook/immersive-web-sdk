@@ -779,7 +779,6 @@ function getPackageVersions() {
     ['@iwsdk/create', 'packages/create/package.json'],
     ['@iwsdk/example-assets', 'packages/example-assets/package.json'],
     ['@iwsdk/scene-composition', 'packages/scene-composition/package.json'],
-    ['@iwsdk/starter-assets', 'packages/starter-assets/package.json'],
     ['@iwsdk/vite-plugin-dev', 'packages/vite-plugin-dev/package.json'],
   ];
 

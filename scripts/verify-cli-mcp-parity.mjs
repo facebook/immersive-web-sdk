@@ -169,6 +169,8 @@ function normalizeValue(value, toolName) {
     const normalized = {};
     for (const [key, entry] of Object.entries(value)) {
       if (key === '_tab') continue;
+      if (key === 'sceneSessionId') continue;
+      if (key === 'frameTimeSamplesMs') continue;
       if (key.toLowerCase() === 'uuid') continue;
       if (key.toLowerCase().endsWith('uuid')) continue;
       if (toolName === 'browser_get_console_logs' && key === 'timestamp') {
@@ -715,7 +717,7 @@ async function warmBrowser(workspaceRoot, label) {
       const outcome = await callCliToolOutcome(
         workspaceRoot,
         'browser_screenshot',
-        { target: 'runtime' },
+        {},
         { trace: true },
       );
       if (outcome.ok && outcome.result?.status !== 'browser_relaunched') {

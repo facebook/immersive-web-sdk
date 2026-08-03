@@ -5,26 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { iwsdkExampleAssets } from '@iwsdk/example-assets/vite';
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [
-    iwsdkDev({
-      assetManifest: './src/assets.ts',
-      emulator: {
-        device: 'metaQuest3',
-        activation: 'always',
-        injectOnBuild: true,
-      },
-      ai: { mode: 'collaborate', screenshotSize: { width: 500, height: 500 } },
-      verbose: true,
-    }),
-    iwsdkExampleAssets({
-      assetIds: ['environment-desk'],
-    }),
-  ],
+  plugins: [iwsdkDev()],
   server: { host: '0.0.0.0' },
   build: {
     outDir: 'dist',

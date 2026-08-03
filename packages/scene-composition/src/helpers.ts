@@ -532,9 +532,15 @@ function decomposeLinearTransform(linear: Mat3): {
   ];
 
   if (scale.some((value) => Math.abs(value) < 1e-12)) {
-    throw new Error(
-      'Cannot convert world transform through a zero-scale parent',
-    );
+    throw new Error('Cannot preserve the world transform of a zero-scale node');
+  }
+
+  // A negative determinant represents a reflection. Preserve it on one scale
+  // axis so the remaining matrix is a proper rotation. This matches Three.js
+  // Matrix4.decompose and keeps mirrored nodes visually unchanged when they
+  // are reparented while preserving their world transform.
+  if (determinantMat3(linear) < 0) {
+    scale[0] = -scale[0];
   }
 
   const rotation: Mat3 = [
@@ -553,6 +559,14 @@ function decomposeLinearTransform(linear: Mat3): {
     rotationDeg: matrixToEulerDeg(rotation),
     scale: roundHelperVec3(scale),
   };
+}
+
+function determinantMat3(matrix: Mat3): number {
+  return (
+    matrix[0] * (matrix[4] * matrix[8] - matrix[5] * matrix[7]) -
+    matrix[1] * (matrix[3] * matrix[8] - matrix[5] * matrix[6]) +
+    matrix[2] * (matrix[3] * matrix[7] - matrix[4] * matrix[6])
+  );
 }
 
 function matrixToEulerDeg(matrix: Mat3): Vec3 {

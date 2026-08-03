@@ -169,6 +169,8 @@ function makeWorld() {
     assets: {
       bounds: (assetId: string) =>
         assetBounds[assetId as keyof typeof assetBounds],
+      catalog: () =>
+        Object.keys(assetBounds).map((id) => ({ id, kind: 'gltf', name: id })),
       instantiate,
     },
     createTransformEntity: vi.fn((object: Object3D, parent: FakeEntity) => {
@@ -326,67 +328,8 @@ describe('SceneJSONImporter', () => {
     ).resolves.toMatchObject({ document: expect.any(Object) });
   });
 
-  it('resolves imported scene modules before lowering the runtime document', async () => {
+  it('rejects authoring imports at the runtime boundary', async () => {
     const { root, world } = makeWorld();
-    const moduleDocument: SceneDocument = {
-      version: CURRENT_SCENE_VERSION,
-      units: 'meters',
-      resources: {},
-      nodes: [
-        {
-          id: 'chair',
-          content: { type: 'asset', asset: 'chair' },
-        },
-      ],
-    };
-    const fetchModule = vi.fn(
-      async () =>
-        new Response(JSON.stringify(moduleDocument), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 200,
-        }),
-    );
-    vi.stubGlobal('fetch', fetchModule);
-
-    const result = await SceneJSONImporter.loadDocument(
-      world,
-      {
-        version: CURRENT_SCENE_VERSION,
-        units: 'meters',
-        imports: [
-          {
-            id: 'alcove',
-            src: './modules/alcove.iwsdk.scene.json',
-            transform: { position: [2, 0, 0] },
-          },
-        ],
-        resources: {},
-        nodes: [],
-      },
-      root,
-      'https://example.test/scenes/root.iwsdk.scene.json',
-    );
-
-    expect(fetchModule).toHaveBeenCalledWith(
-      'https://example.test/scenes/modules/alcove.iwsdk.scene.json',
-    );
-    expect(result.dependencies).toEqual([
-      expect.objectContaining({
-        namespace: 'alcove',
-        source: 'https://example.test/scenes/modules/alcove.iwsdk.scene.json',
-      }),
-    ]);
-    expect([...result.nodes.keys()]).toEqual(['alcove', 'alcove/chair']);
-    expect(result.document.imports).toBeUndefined();
-    expect(result.document.nodes[0]).toMatchObject({
-      id: 'alcove',
-      transform: { position: [2, 0, 0] },
-    });
-  });
-
-  it('requires a document URL when a scene document imports modules', async () => {
-    const { root, world } = makeWorld();
-
     await expect(
       SceneJSONImporter.loadDocument(
         world,
@@ -398,8 +341,9 @@ describe('SceneJSONImporter', () => {
           nodes: [],
         },
         root,
+        'https://example.test/scenes/root.iwsdk.scene.json',
       ),
-    ).rejects.toThrow(/require a document URL/);
+    ).rejects.toThrow(/imports are supported only by IWSDK authoring tools/i);
   });
 
   it('loads native scene JSON into Object3D hierarchy, ECS entities, and components', async () => {
@@ -661,7 +605,9 @@ describe('SceneJSONImporter', () => {
 
     await expect(
       SceneJSONImporter.loadDocument(world, scene, root),
-    ).rejects.toThrow('Unknown renderable asset "missing"');
+    ).rejects.toThrow(
+      'asset "missing" is not declared in the project asset catalog',
+    );
 
     expect(entities).toHaveLength(0);
     expect(rootObject.children).toEqual([]);

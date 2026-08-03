@@ -1,0 +1,163 @@
+{
+  "app": {
+    "assets": { "environment-desk": [200, 200, 200, 200] },
+    "components": {
+      "Elevator": 1,
+      "LocomotionEnvironment": 2,
+      "LocomotionSettingsPanel": 1
+    },
+    "hierarchyNameCount": 11,
+    "performance": {
+      "gotoMs": 1706,
+      "runtimeReadyMs": 76,
+      "canvasReadyMs": 15,
+      "screenshotCaptureMs": 133
+    },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/app.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/app.png",
+      "sampledPixels": 79,
+      "uniqueColors": 32
+    }
+  },
+  "baseUrl": "https://127.0.0.1:63355/",
+  "editor": {
+    "performance": {
+      "gotoMs": 176,
+      "worldReadyMs": 873,
+      "screenshotCaptureMs": 79
+    },
+    "sceneDocument": { "assetCount": 0, "nodeCount": 4 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/editor.png",
+    "screenshotStats": {
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/locomotion/editor.png",
+      "sampledPixels": 250,
+      "uniqueColors": 32
+    },
+    "viewport": {
+      "assetLoads": [],
+      "meshCount": 20,
+      "nodeObjectCount": 4,
+      "objectHierarchy": [
+        {
+          "assetId": "environment-desk",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, -0.107, 0],
+          "nodeId": "environment",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:621b833801a8d9bc0756c6b225e543762c885357db84994f37769d7246170661",
+          "sourceNodeId": "environment",
+          "worldPosition": [0, -0.107, 0]
+        },
+        {
+          "assetId": "environment-desk",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [13, 0, -7.5],
+          "nodeId": "elevator",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:621b833801a8d9bc0756c6b225e543762c885357db84994f37769d7246170661",
+          "sourceNodeId": "elevator",
+          "worldPosition": [13, 0, -7.5]
+        },
+        {
+          "assetId": "locomotion-welcome-panel",
+          "contentType": "asset",
+          "fallback": null,
+          "helperType": null,
+          "localPosition": [0, 1.6, -2],
+          "nodeId": "welcome-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:621b833801a8d9bc0756c6b225e543762c885357db84994f37769d7246170661",
+          "sourceNodeId": "welcome-panel",
+          "worldPosition": [0, 1.6, -2]
+        },
+        {
+          "assetId": "locomotion-settings-panel",
+          "contentType": "asset",
+          "fallback": "audio-source-helper",
+          "helperType": "audio-source",
+          "localPosition": [0.6728, 0.9766, 1.8222],
+          "nodeId": "settings-panel",
+          "parentNodeId": null,
+          "runtimeHash": "sha256:621b833801a8d9bc0756c6b225e543762c885357db84994f37769d7246170661",
+          "sourceNodeId": "settings-panel",
+          "worldPosition": [0.6728, 0.9766, 1.8222]
+        }
+      ],
+      "renderer": "iwsdk-webgl",
+      "webgl": true,
+      "worldReady": true
+    }
+  },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
+  "performance": {
+    "app": {
+      "gotoMs": 1706,
+      "runtimeReadyMs": 76,
+      "canvasReadyMs": 15,
+      "screenshotCaptureMs": 133
+    },
+    "editor": { "gotoMs": 176, "worldReadyMs": 873, "screenshotCaptureMs": 79 },
+    "thresholds": {
+      "appCanvasReadyMs": 30000,
+      "appRuntimeReadyMs": 60000,
+      "appScreenshotCaptureMs": 10000,
+      "editorScreenshotCaptureMs": 10000,
+      "editorWorldReadyMs": 60000,
+      "targetTotalMs": 120000
+    },
+    "totalMs": 5576
+  },
+  "scene": "public/scenes/locomotion.iwsdk.scene.json",
+  "target": "locomotion"
+}

@@ -63,21 +63,26 @@ are:
 
 ### Assets Directory Structure
 
-- **`/iwsdk-assets/environment-desk/`** - shared environment GLTF served by the catalog plugin
+- **Shared stock base** - immutable `@iwsdk/example-assets@0.4.2` CDN delivery,
+  overridable with `VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` for a local mirror
 - **`public/textures/`** - Images, textures, and visual assets (.png, .jpg, etc.)
 - **`public/audio/`** - Sound effects and music files
 
 ### Asset Usage
 
-```javascript
-// Reference public assets and shared catalog assets using root-relative paths.
-const assets = {
+```typescript
+const stockAssetBase =
+  'https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets';
+const assets = defineAssets({
   model: {
-    url: '/iwsdk-assets/environment-desk/environmentDesk.gltf',
+    url: `${stockAssetBase}/environment-desk/environmentDesk.gltf`,
     type: AssetType.GLTF,
   },
-  texture: { url: '/textures/my-texture.png', type: AssetType.Texture },
-};
+  texture: {
+    url: publicAssetUrl('textures/my-texture.png'),
+    type: AssetType.Texture,
+  },
+});
 ```
 
 ## 🌐 WebXR Development
@@ -118,9 +123,12 @@ The `vite.config.js` file includes:
 
 ### Adding New Assets
 
-1. Add reusable GLTF assets to `@iwsdk/example-assets` when they are shared across examples, or place one-off assets in the appropriate `public/` subdirectory.
-2. Reference them in your code using root-relative paths such as `/iwsdk-assets/<asset-id>/<file>` or `/textures/model.png`.
-3. Assets are automatically served by Vite during development and copied to build output
+1. Add reusable GLTF assets to `@iwsdk/example-assets` through its independently
+   verified release process, or place one-off assets in the appropriate
+   `public/` subdirectory.
+2. Pin shared stock assets to an exact CDN version; build local URLs from
+   `import.meta.env.BASE_URL` so subpath production builds resolve them.
+3. Vite serves and copies only the example's local `public/` assets.
 
 ## 📋 Scripts
 

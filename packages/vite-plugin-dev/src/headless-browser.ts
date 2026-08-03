@@ -1473,18 +1473,9 @@ export async function launchManagedBrowser(
     queryLogs: (options?: LogQuery) => consoleCapture.query(options),
     getTabMetadata: async () =>
       page.evaluate(() => {
-        const id =
-          typeof sessionStorage !== 'undefined'
-            ? sessionStorage.getItem('iwer-mcp-tab-id')
-            : null;
-        const rawGeneration =
-          typeof sessionStorage !== 'undefined'
-            ? sessionStorage.getItem('iwer-mcp-gen')
-            : null;
-        const generation =
-          rawGeneration != null && rawGeneration !== ''
-            ? Number(rawGeneration)
-            : null;
+        const id = window.__IWSDK_MCP_PAGE_ID ?? null;
+        const rawGeneration = window.__IWSDK_MCP_TAB_GENERATION ?? null;
+        const generation = rawGeneration != null ? Number(rawGeneration) : null;
         return {
           id,
           generation: Number.isFinite(generation) ? generation : null,

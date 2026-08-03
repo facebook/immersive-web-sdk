@@ -7,130 +7,98 @@
     "components": {
       "AudioSource": 3,
       "LocomotionEnvironment": 1,
-      "PanelUI": 1,
       "RayInteractable": 4
     },
-    "hierarchyNameCount": 36,
+    "hierarchyNameCount": 34,
     "performance": {
-      "gotoMs": 4829,
-      "runtimeReadyMs": 462,
-      "canvasReadyMs": 4,
-      "screenshotCaptureMs": 163
+      "gotoMs": 1359,
+      "runtimeReadyMs": 261,
+      "canvasReadyMs": 13,
+      "screenshotCaptureMs": 140
     },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
-      "sampledPixels": 95,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/app.png",
+      "sampledPixels": 79,
       "uniqueColors": 32
     }
   },
-  "baseUrl": "http://127.0.0.1:51631/",
+  "baseUrl": "https://127.0.0.1:63059/",
   "editor": {
     "performance": {
-      "gotoMs": 404,
-      "worldReadyMs": 1224,
-      "screenshotCaptureMs": 136
+      "gotoMs": 175,
+      "worldReadyMs": 2061,
+      "screenshotCaptureMs": 77
     },
-    "sceneDocument": { "assetCount": 2, "nodeCount": 6 },
-    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
+    "sceneDocument": { "assetCount": 0, "nodeCount": 5 },
+    "screenshot": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
     "screenshotStats": {
-      "path": "/Users/fe1ix/Projects/webxr-dev-platform/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
-      "sampledPixels": 193,
+      "path": "/Users/fe1ix/Projects/webxr-dev-platform-iwsdk-restack-audit/immersive-web-sdk/docs/test-evidence/native-scene-examples/current/audio/editor.png",
+      "sampledPixels": 250,
       "uniqueColors": 32
     },
     "viewport": {
-      "assetLoads": [
-        {
-          "assetId": "environment-desk",
-          "loadedAt": 1784972550816,
-          "status": "loaded",
-          "url": "/iwsdk-assets/environment-desk/environmentDesk.gltf"
-        },
-        {
-          "assetId": "robot",
-          "loadedAt": 1784972550867,
-          "status": "loaded",
-          "url": "/iwsdk-assets/robot/robot.gltf"
-        }
-      ],
-      "meshCount": 66,
-      "nodeObjectCount": 6,
+      "assetLoads": [],
+      "meshCount": 73,
+      "nodeObjectCount": 5,
       "objectHierarchy": [
         {
-          "assetId": null,
-          "contentType": "group",
-          "fallback": "environment-light-helper",
-          "helperType": "environment-light",
-          "localPosition": [0, 0, 0],
-          "nodeId": "level",
-          "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
-          "sourceNodeId": "level",
-          "worldPosition": [0, 0, 0]
-        },
-        {
           "assetId": "environment-desk",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, -0.1069, 0],
           "nodeId": "environment",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "runtimeHash": "sha256:399b817a9be8dedb353d5a4a39107b8fca6c27e04b5f165d0599350b334485a5",
           "sourceNodeId": "environment",
           "worldPosition": [0, -0.1069, 0]
         },
         {
           "assetId": "robot",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": "audio-source-helper",
           "helperType": "audio-source",
           "localPosition": [0, 0.95, -1.8],
           "nodeId": "robot-center",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "runtimeHash": "sha256:399b817a9be8dedb353d5a4a39107b8fca6c27e04b5f165d0599350b334485a5",
           "sourceNodeId": "robot-center",
           "worldPosition": [0, 0.95, -1.8]
         },
         {
           "assetId": "robot",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": "audio-source-helper",
           "helperType": "audio-source",
           "localPosition": [-0.5, 0.95, -1.8],
           "nodeId": "robot-left",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "runtimeHash": "sha256:399b817a9be8dedb353d5a4a39107b8fca6c27e04b5f165d0599350b334485a5",
           "sourceNodeId": "robot-left",
           "worldPosition": [-0.5, 0.95, -1.8]
         },
         {
           "assetId": "robot",
-          "contentType": "model",
+          "contentType": "asset",
           "fallback": "audio-source-helper",
           "helperType": "audio-source",
           "localPosition": [0.5, 0.95, -1.8],
           "nodeId": "robot-right",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "runtimeHash": "sha256:399b817a9be8dedb353d5a4a39107b8fca6c27e04b5f165d0599350b334485a5",
           "sourceNodeId": "robot-right",
           "worldPosition": [0.5, 0.95, -1.8]
         },
         {
-          "assetId": null,
-          "contentType": null,
+          "assetId": "spatial-audio-panel",
+          "contentType": "asset",
           "fallback": null,
           "helperType": null,
           "localPosition": [0, 1.6, -2.2],
           "nodeId": "welcome-panel",
           "parentNodeId": null,
-          "primitiveType": null,
-          "runtimeHash": "sha256:aa646e5106eda1db9eac6dd1e0eef611f8bc9cade3b4cf49e9b68f148995aa0a",
+          "runtimeHash": "sha256:399b817a9be8dedb353d5a4a39107b8fca6c27e04b5f165d0599350b334485a5",
           "sourceNodeId": "welcome-panel",
           "worldPosition": [0, 1.6, -2.2]
         }
@@ -140,17 +108,124 @@
       "worldReady": true
     }
   },
+  "packedAssets": {
+    "appRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "editorRequests": [
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/environmentDesk.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/robot.gltf",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/c6378ca88952228817e344695bd6ec8c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/86677bb00f5b899e5b8123e68b1e4d7b.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/82f7622c553a011ccb45883b167253b8.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+      },
+      {
+        "assetId": "robot",
+        "path": "robot/288d754a3fb5199c07278aa1e889259c.png",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+      },
+      {
+        "assetId": "environment-desk",
+        "path": "environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+        "url": "https://iwsdk-example-assets.invalid/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+      }
+    ],
+    "packageVersion": "0.4.2"
+  },
   "performance": {
     "app": {
-      "gotoMs": 4829,
-      "runtimeReadyMs": 462,
-      "canvasReadyMs": 4,
-      "screenshotCaptureMs": 163
+      "gotoMs": 1359,
+      "runtimeReadyMs": 261,
+      "canvasReadyMs": 13,
+      "screenshotCaptureMs": 140
     },
     "editor": {
-      "gotoMs": 404,
-      "worldReadyMs": 1224,
-      "screenshotCaptureMs": 136
+      "gotoMs": 175,
+      "worldReadyMs": 2061,
+      "screenshotCaptureMs": 77
     },
     "thresholds": {
       "appCanvasReadyMs": 30000,
@@ -160,7 +235,7 @@
       "editorWorldReadyMs": 60000,
       "targetTotalMs": 120000
     },
-    "totalMs": 10717
+    "totalMs": 6724
   },
   "scene": "public/scenes/audio.iwsdk.scene.json",
   "target": "audio"

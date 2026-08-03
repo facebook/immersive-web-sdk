@@ -29,8 +29,9 @@ physics/
 └── package.json
 ```
 
-Shared catalog assets are served at `/iwsdk-assets/...` by the example asset
-Vite plugin.
+Shared catalog assets load from the immutable
+`@iwsdk/example-assets@0.4.2` CDN catalog. Set
+`VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` to use a local mirror.
 
 ## Run
 

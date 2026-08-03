@@ -23,7 +23,7 @@ describe('runtime contract scene tools', () => {
     expect(new Set(sceneTools)).toEqual(
       new Set([...SCENE_MCP_TOOL_NAMES, ...APP_RUNTIME_SCENE_MCP_TOOL_NAMES]),
     );
-    expect(sceneTools).toHaveLength(12);
+    expect(sceneTools).toHaveLength(13);
     expect(
       RUNTIME_MCP_TOOLS.some((tool) => tool.name.startsWith('workspace_')),
     ).toBe(false);
@@ -76,6 +76,17 @@ describe('runtime contract scene tools', () => {
     expect(render?.description).toContain('PNG');
   });
 
+  test('exposes one-way hash-verified scene flattening', () => {
+    const flatten = getRuntimeOperationByToolName('scene_flatten_file');
+    expect(flatten).toMatchObject({
+      cliPath: ['scene', 'flatten'],
+      target: { role: 'editor' },
+      wsMethod: 'scene_flatten_file',
+    });
+    expect(flatten?.inputSchema.required).toEqual(['path']);
+    expect(flatten?.description).toContain('runtime-loadable');
+  });
+
   test('describes the consolidated live scene state', () => {
     const state = getRuntimeOperationByToolName('scene_get_state');
 
@@ -110,7 +121,9 @@ describe('runtime contract scene tools', () => {
     });
     expect(operation?.inputSchema).toMatchObject({
       additionalProperties: false,
-      properties: {},
+      properties: {
+        expectedTab: expect.objectContaining({ type: 'object' }),
+      },
     });
     expect(resolveRuntimeOperationRequest(operation!, {})).toEqual({
       params: {},
@@ -121,6 +134,23 @@ describe('runtime contract scene tools', () => {
     ).toThrow(
       'browser_screenshot does not accept parameters; it always captures the application runtime',
     );
+  });
+
+  test('turns result._tab into a strict routing precondition', () => {
+    const operation = getRuntimeOperationByToolName('scene_get_state')!;
+    expect(
+      resolveRuntimeOperationRequest(operation, {
+        expectedTab: { id: 'tab-1', generation: 7 },
+      }),
+    ).toEqual({
+      params: {},
+      target: { role: 'editor', pageId: 'tab-1', tabGeneration: 7 },
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(operation, {
+        expectedTab: { id: 'tab-1', generation: 0 },
+      }),
+    ).toThrow(/expectedTab requires/);
   });
 
   test('rejects runtime requests that omit required parameters', () => {
