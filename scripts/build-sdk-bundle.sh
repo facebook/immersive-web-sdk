@@ -6,15 +6,14 @@
 
 # Build a distributable SDK bundle containing:
 #   - packages/  → all workspace packages as .tgz tarballs, grouped by package name
-#   - starter/   → JavaScript starter template generated from /starter-template (TS)
 #   - docs/      → prebuilt static docs with a tiny local server script
 #
 # This is intended for sharing an early build of the SDK without publishing to npm.
 # Reference corpus artifacts still need separate hosting:
 #   - `packages/reference-assets/dist/`
 # Consumers can:
-#   - cd starter && npm install && npm run dev
-#   - cd ../docs && npm run serve (serves the static docs)
+#   - run the bundled @iwsdk/create tarball to scaffold an app
+#   - cd docs && npm run serve (serves the static docs)
 
 set -euo pipefail
 
@@ -24,7 +23,6 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGES_DIR="$BASE_DIR/packages"
 BUNDLE_ROOT="$BASE_DIR/sdk-bundle"
 BUNDLE_PKGS="$BUNDLE_ROOT/packages"
-BUNDLE_STARTER="$BUNDLE_ROOT/starter"
 BUNDLE_DOCS="$BUNDLE_ROOT/docs"
 
 # Start fresh: delete previous bundle if it exists

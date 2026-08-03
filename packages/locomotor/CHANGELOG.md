@@ -1,5 +1,25 @@
 # @iwsdk/locomotor
 
+## 0.5.0
+
+### Patch Changes
+
+- c259681: Add a target-first Create flow and dedicated Desktop 3D starter recipes alongside
+  the VR and mixed reality starters. Harden managed-workspace readiness and retain
+  configured initial player positions when locomotion runs in a worker. Support
+  agent-first in-place scaffolding with `.` and explicit `--force` confirmation
+  for non-empty repositories. Keep the common starter source target-agnostic and
+  leave browser camera interaction to the application instead of scaffolding an
+  assumed mouse-look control scheme. Standardize generated coding-agent guidance
+  on `AGENTS.md`, add native OpenCode support and narrow per-harness MCP approval
+  settings, and provide `iwsdk adapter prompt` as a catch-all setup path.
+  Seed the starter panel with explicit Horizon-kit components, bundled Lucide icons,
+  and remotely loaded DM Sans font weights.
+  Replace the legacy `@meta-quest/hzdb` compatibility shim with
+  `@meta-quest/metavr` 1.3.2, migrate its MCP server name, and launch MetaVR
+  telemetry and MCP through Node rather than platform shell shims so Windows uses
+  the same safe process path as macOS and Linux.
+
 ## 0.4.2
 
 ### Patch Changes

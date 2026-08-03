@@ -25,6 +25,14 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ "$SKIP_REFERENCE_ASSETS" -eq 1 ]; then
+    # `pnpm install` runs workspace prepare hooks while root packages are
+    # temporarily rewired to packed dependencies. Carry the skip decision into
+    # that lifecycle so reference-assets does not rebuild its 50+ MB corpus as
+    # an install side effect.
+    export IWSDK_REFERENCE_ASSETS_SKIP_BUILD=1
+fi
+
 echo "🚀 Building standalone tgz packages..."
 
 if command -v pnpm >/dev/null 2>&1; then

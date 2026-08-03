@@ -19,12 +19,9 @@
 #       core/iwsdk-core.tgz
 #       locomotor/iwsdk-locomotor.tgz
 #       ...
-#     recipes/
-#       index.json
-#       vr-manual-ts.recipe.json
-#       ...
-#     assets/
-#       (content-addressed binary assets)
+#
+# Starter source is embedded in @iwsdk/create and is intentionally absent from
+# this dependency bundle.
 
 set -euo pipefail
 
@@ -74,35 +71,7 @@ for TGZ in "$PACKAGES_DIR"/*/*.tgz; do
 done
 
 ##############################################
-# 3) Rebuild starter-assets outputs
-##############################################
-echo "🔨 Building starter-assets..."
-pnpm --filter @iwsdk/starter-assets run build
-
-##############################################
-# 4) Copy starter-assets (recipes + assets)
-##############################################
-echo "📥 Copying starter-assets..."
-
-STARTER_ASSETS_DIST="$PACKAGES_DIR/starter-assets/dist"
-if [ -d "$STARTER_ASSETS_DIST/recipes" ]; then
-  cp -r "$STARTER_ASSETS_DIST/recipes" "$OUTPUT_DIR/recipes"
-  echo "   ➕ recipes/"
-else
-  echo "   ⚠️  No recipes folder found at $STARTER_ASSETS_DIST/recipes"
-  echo "   Run 'pnpm --filter @iwsdk/starter-assets run build' first."
-  exit 1
-fi
-
-if [ -d "$STARTER_ASSETS_DIST/assets" ]; then
-  cp -r "$STARTER_ASSETS_DIST/assets" "$OUTPUT_DIR/assets"
-  echo "   ➕ assets/"
-else
-  echo "   ⚠️  No assets folder found (non-fatal, recipes may not use binary assets)"
-fi
-
-##############################################
-# 5) Generate bundle.json manifest
+# 3) Generate bundle.json manifest
 ##############################################
 echo "📝 Generating bundle.json manifest..."
 

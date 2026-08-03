@@ -1,0 +1,137 @@
+{
+  "baseUrl": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/",
+  "browser": [
+    {
+      "assetId": "environment-desk",
+      "meshCount": 4,
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+    },
+    {
+      "assetId": "robot",
+      "meshCount": 18,
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+    },
+    {
+      "assetId": "plant-sansevieria",
+      "meshCount": 1,
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+    }
+  ],
+  "checkedAt": "2026-07-31T14:35:05.698Z",
+  "files": [
+    {
+      "assetId": "environment-desk",
+      "bytes": 2634281,
+      "mimeType": "image/jpeg",
+      "path": "d022feed3df22c33fedf823eab2fb76a.jpg",
+      "sha256": "289d5c71fe722f3367f4898fa5fa3edf16f3e5d1f74e8eb6c1ee5c0bd61f57ca",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/d022feed3df22c33fedf823eab2fb76a.jpg"
+    },
+    {
+      "assetId": "environment-desk",
+      "bytes": 2035621,
+      "mimeType": "image/jpeg",
+      "path": "de62cd3b4ecfca5e0179c8f217ba59fe.jpg",
+      "sha256": "45693b5afb4d0ec8394da4cfb8b7fd9f84b4148064f51a245400e4287f0d3f90",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/de62cd3b4ecfca5e0179c8f217ba59fe.jpg"
+    },
+    {
+      "assetId": "environment-desk",
+      "bytes": 1036308,
+      "mimeType": "model/gltf+json",
+      "path": "environmentDesk.gltf",
+      "sha256": "b55e4ee6f19d0bca42f7085730d8750fdb1a3db7d9b75e5972dd91cc803cccc2",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/environmentDesk.gltf"
+    },
+    {
+      "assetId": "environment-desk",
+      "bytes": 415378,
+      "mimeType": "image/jpeg",
+      "path": "fdcc7a0dae2c9b19ef712deb4a2d287c.jpg",
+      "sha256": "35fbf8c79b663adee07314c7cbb384f8f14b9a2c6668d9699e553e994da3216f",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/environment-desk/fdcc7a0dae2c9b19ef712deb4a2d287c.jpg"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 46973,
+      "mimeType": "image/png",
+      "path": "288d754a3fb5199c07278aa1e889259c.png",
+      "sha256": "5860fd89b1a12469866cf3e8f7ddd6dd8511897485fbae5fdbaf0b406fc30eef",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/288d754a3fb5199c07278aa1e889259c.png"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 32869,
+      "mimeType": "image/png",
+      "path": "82f7622c553a011ccb45883b167253b8.png",
+      "sha256": "1d704a9cbe74b32b551ae50af3c72ffe266be57e5abfed9db18c6778440a3ae1",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/82f7622c553a011ccb45883b167253b8.png"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 639670,
+      "mimeType": "image/png",
+      "path": "86677bb00f5b899e5b8123e68b1e4d7b.png",
+      "sha256": "f37d2c32282b13022b035df057911536495f653a026e39d3beb4fcdec347922d",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/86677bb00f5b899e5b8123e68b1e4d7b.png"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 107798,
+      "mimeType": "image/png",
+      "path": "c6378ca88952228817e344695bd6ec8c.png",
+      "sha256": "3a7e0e15c8712945be8557527740dcbdcad29e43bc2af68b8126ec0f1b228cea",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/c6378ca88952228817e344695bd6ec8c.png"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 14142,
+      "mimeType": "image/png",
+      "path": "cf3bcdd483ef6bf07dc1fba58d988ef6.png",
+      "sha256": "15d30c4fdd36221621b2be36e6acc42464a7d46138bea60c816cd1b18f1ce931",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/cf3bcdd483ef6bf07dc1fba58d988ef6.png"
+    },
+    {
+      "assetId": "robot",
+      "bytes": 405128,
+      "mimeType": "model/gltf+json",
+      "path": "robot.gltf",
+      "sha256": "e735d2191e01eb1b745ac32992f588f3a9682da8bbd04949240db1bcf9fa1f4a",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/robot/robot.gltf"
+    },
+    {
+      "assetId": "plant-sansevieria",
+      "bytes": 1121015,
+      "mimeType": "image/png",
+      "path": "74dfc45d02dc82b12e5f78f746595698.png",
+      "sha256": "c080422a4ac9d99d50cf0d72ad34b33a552f32fa7f221c09fe26c4301dbe6cc4",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/74dfc45d02dc82b12e5f78f746595698.png"
+    },
+    {
+      "assetId": "plant-sansevieria",
+      "bytes": 904353,
+      "mimeType": "image/png",
+      "path": "d4978425948a18d0f8e31f98232b81c1.png",
+      "sha256": "276721495d199450ba4b34dec7ec26e6815a7fd392597cfd08bc2244080fd8cd",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/d4978425948a18d0f8e31f98232b81c1.png"
+    },
+    {
+      "assetId": "plant-sansevieria",
+      "bytes": 648915,
+      "mimeType": "image/png",
+      "path": "f1569237527b16131ce98cd7bc94c74e.png",
+      "sha256": "d68e00cbe4ece25bc9a13966b4cad596a0ac6df94ece5cc4bbefb0f3ebad5c75",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/f1569237527b16131ce98cd7bc94c74e.png"
+    },
+    {
+      "assetId": "plant-sansevieria",
+      "bytes": 74534,
+      "mimeType": "model/gltf+json",
+      "path": "plantSansevieria.gltf",
+      "sha256": "683ebf4fca9b3c61de9f8c3762f86a8ef762691b88d385494c2ff6ae2e0fcdd2",
+      "url": "https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/plant-sansevieria/plantSansevieria.gltf"
+    }
+  ],
+  "package": "@iwsdk/example-assets",
+  "version": "0.4.2"
+}

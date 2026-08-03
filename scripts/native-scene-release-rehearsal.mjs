@@ -42,14 +42,6 @@ const STEPS = [
     args: ['build:tgz:skip-reference-assets'],
   },
   {
-    name: 'Build starter assets',
-    args: ['--filter', '@iwsdk/starter-assets', 'build'],
-  },
-  {
-    name: 'Verify starter recipes',
-    args: ['--filter', '@iwsdk/starter-assets', 'chef:verify'],
-  },
-  {
     name: 'Build create CLI',
     args: ['--filter', '@iwsdk/create', 'build'],
   },

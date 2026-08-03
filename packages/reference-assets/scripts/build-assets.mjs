@@ -17,6 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(__dirname, '..');
 const distDir = path.join(packageRoot, 'dist');
 const ALLOW_MISSING = process.argv.includes('--if-ready');
+const SKIP_BUILD = process.env.IWSDK_REFERENCE_ASSETS_SKIP_BUILD === '1';
 
 async function sha256File(filePath) {
   return new Promise((resolve, reject) => {
@@ -63,6 +64,13 @@ async function buildArchive(kind) {
 }
 
 async function main() {
+  if (SKIP_BUILD) {
+    process.stdout.write(
+      'Skipping @iwsdk/reference-assets dist build because IWSDK_REFERENCE_ASSETS_SKIP_BUILD=1.\n',
+    );
+    return;
+  }
+
   const assetsPackage = JSON.parse(
     await fsp.readFile(path.join(packageRoot, 'package.json'), 'utf8'),
   );
