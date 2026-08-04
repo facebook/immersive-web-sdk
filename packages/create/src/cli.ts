@@ -65,6 +65,7 @@ type CliOptions = {
   physics?: boolean;
   sceneUnderstanding?: boolean;
   environmentRaycast?: boolean;
+  skipReferenceWarmup?: boolean;
 };
 
 function hasFlag(args: string[], flag: string): boolean {
@@ -255,6 +256,10 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--no-scene-understanding', 'Disable scene understanding')
     .option('--environment-raycast', 'Enable environment raycast (AR mode)')
     .option('--no-environment-raycast', 'Disable environment raycast')
+    .option(
+      '--skip-reference-warmup',
+      'Skip the optional one-time reference model download',
+    )
     .action((n: string | undefined, opts: CliOptions) => {
       nameArg = n;
       cliOpts = opts;
@@ -501,13 +506,16 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       }
 
       // Install dependencies
+      let referenceReady = false;
       if (res.installNow) {
         if (source.isBundleMode) {
           await installDependenciesFromBundle(outDir, source);
         } else {
           await installDependencies(outDir);
         }
-        await warmupReference(outDir);
+        if (!cliOpts.skipReferenceWarmup) {
+          referenceReady = await warmupReference(outDir);
+        }
       }
 
       // Write MCP adapter configs for every supported coding harness.
@@ -540,7 +548,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         res.installNow,
         res.actionItems || [],
         projectTarget.inPlace,
-        res.installNow,
+        referenceReady,
       );
     } finally {
       await source.cleanup();

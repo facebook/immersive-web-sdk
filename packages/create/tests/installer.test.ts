@@ -29,6 +29,7 @@ vi.mock('cross-spawn', () => {
     }),
     spawn: vi.fn(() => {
       const child = new EventEmitter();
+      child.kill = vi.fn();
       process.nextTick(() => child.emit('exit', nextExitCode));
       return child;
     }),
@@ -209,7 +210,9 @@ describe('installDependenciesFromBundle', () => {
 
 describe('warmupReference', () => {
   it('runs the installed IWSDK reference warmup as part of creation', async () => {
-    await warmupReference('/tmp/generated-iwsdk-app');
+    await expect(warmupReference('/tmp/generated-iwsdk-app')).resolves.toBe(
+      true,
+    );
     expect(mockedSpawn).toHaveBeenCalledWith(
       process.execPath,
       [
@@ -222,5 +225,28 @@ describe('warmupReference', () => {
         stdio: 'inherit',
       },
     );
+  });
+
+  it('does not fail project creation when reference warmup fails', async () => {
+    const mock = await import('cross-spawn');
+    (mock as any).__setExitCode(1);
+
+    await expect(warmupReference('/tmp/generated-iwsdk-app')).resolves.toBe(
+      false,
+    );
+  });
+
+  it('terminates a reference warmup that exceeds its time limit', async () => {
+    const { EventEmitter } = await import('events');
+    const child = new EventEmitter() as EventEmitter & {
+      kill: ReturnType<typeof vi.fn>;
+    };
+    child.kill = vi.fn();
+    vi.mocked(mockedSpawn).mockReturnValueOnce(child as any);
+
+    await expect(warmupReference('/tmp/generated-iwsdk-app', 1)).resolves.toBe(
+      false,
+    );
+    expect(child.kill).toHaveBeenCalledOnce();
   });
 });

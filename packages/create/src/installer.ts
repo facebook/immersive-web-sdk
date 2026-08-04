@@ -133,8 +133,16 @@ export async function installDependenciesFromBundle(
   }
 }
 
-/** Initialize the shared reference corpus/model cache after dependencies exist. */
-export async function warmupReference(outDir: string) {
+const DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS = 120_000;
+
+/**
+ * Initialize the optional reference cache without making project creation
+ * depend on network/model availability.
+ */
+export async function warmupReference(
+  outDir: string,
+  timeoutMs = DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS,
+): Promise<boolean> {
   const spinner: Ora = ora({
     text: 'Initializing IWSDK reference tools (one-time shared download) ...',
     stream: process.stderr,
@@ -160,23 +168,43 @@ export async function warmupReference(outDir: string) {
       },
     );
     await new Promise<void>((resolve, reject) => {
-      child.on('error', reject);
+      const timeout = setTimeout(() => {
+        child.kill();
+        reject(
+          new Error(
+            `Reference initialization timed out after ${Math.ceil(timeoutMs / 1000)} seconds`,
+          ),
+        );
+      }, timeoutMs);
+      const finish = (callback: () => void) => {
+        clearTimeout(timeout);
+        callback();
+      };
+      child.on('error', (error) => finish(() => reject(error)));
       child.on('exit', (code) =>
         code === 0
-          ? resolve()
-          : reject(new Error(`Reference initialization failed (${code})`)),
+          ? finish(resolve)
+          : finish(() =>
+              reject(new Error(`Reference initialization failed (${code})`)),
+            ),
       );
     });
     spinner.stopAndPersist({
       symbol: stderrColor.green('✔'),
       text: 'IWSDK reference tools ready',
     });
+    return true;
   } catch (error) {
     spinner.stopAndPersist({
       symbol: stderrColor.red('✖'),
       text: 'IWSDK reference initialization failed',
     });
-    throw error;
+    console.warn(
+      stderrColor.yellow(
+        `Project creation will continue without the optional reference cache: ${error instanceof Error ? error.message : String(error)}. Run "npx iwsdk reference warmup" from the project directory to retry.`,
+      ),
+    );
+    return false;
   }
 }
 
