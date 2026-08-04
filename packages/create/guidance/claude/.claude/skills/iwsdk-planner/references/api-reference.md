@@ -41,6 +41,11 @@ Use `input.canvasPointerEvents` for browser mouse/touch canvas events. Browser c
 
 ## Critical Best Practices
 
+`createSystem()` accepts query descriptors as its first argument and optional
+configuration schema as its second. Lifecycle methods never go inside either
+object: define `init()`, `update()`, and `destroy()` in the subclass body. A
+function inside the query map is a lifecycle-placement mistake, not a query.
+
 ### 1. Keep Systems Stateless
 
 Systems should NOT store arrays of entities or maintain entity references. Use queries instead.

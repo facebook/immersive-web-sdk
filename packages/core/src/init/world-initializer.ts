@@ -226,7 +226,7 @@ type CameraPoseOptions = NonNullable<
  * This function powers {@link World.create}. Prefer using that static helper.
  */
 export async function initializeWorld(
-  container: HTMLDivElement,
+  container: HTMLElement,
   options: WorldOptions = {},
 ): Promise<World> {
   // Create and configure world instance
@@ -384,7 +384,7 @@ function extractConfiguration(options: WorldOptions) {
 /**
  * Setup camera, renderer, and scene
  */
-function setupRendering(sceneContainer: HTMLDivElement, config: any) {
+function setupRendering(sceneContainer: HTMLElement, config: any) {
   // Camera Setup
   const camera = new PerspectiveCamera(
     config.cameraFov,

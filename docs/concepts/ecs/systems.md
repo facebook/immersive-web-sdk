@@ -6,6 +6,10 @@ title: System
 
 Systems implement behavior. They declare queries (entity sets) and optional config schema (reactive signals).
 
+`createSystem(queries, schema)` receives only query descriptors and optional
+configuration fields. Define lifecycle methods such as `init()`, `update()`,
+and `destroy()` in the subclass body, not inside the `queries` object.
+
 ## Mental Model: Behavior that reacts to data
 
 Systems are **functions over sets of entities**. Think of them as database stored procedures that run every frame:

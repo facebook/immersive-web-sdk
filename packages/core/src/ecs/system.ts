@@ -101,6 +101,21 @@ export function createSystem<S extends SystemSchema, Q extends SystemQueries>(
   queries: Q = {} as Q,
   schema: S = {} as S,
 ): SystemConstructor<S, Q, World, System<S, Q>> {
+  if (typeof queries === 'function') {
+    throw new TypeError(
+      'createSystem() received a lifecycle function as its query map. ' +
+        'Pass only named query descriptors in createSystem({...}); define init(), update(), and destroy() in the subclass body.',
+    );
+  }
+  for (const [name, query] of Object.entries(queries)) {
+    if (typeof query === 'function') {
+      throw new TypeError(
+        `createSystem() received lifecycle method "${name}" inside its query map. ` +
+          `Move ${name}() into the subclass body; each createSystem() entry must be a query descriptor such as { required: [Component] }.`,
+      );
+    }
+  }
+
   return class implements System<S, Q> {
     static schema = schema;
     static isSystem = true;

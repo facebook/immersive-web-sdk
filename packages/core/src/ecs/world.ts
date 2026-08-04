@@ -90,7 +90,7 @@ export type OnXRFrameCallback = (
  * ```ts
  * import { World, SessionMode } from '@iwsdk/core';
  *
- * const container = document.getElementById('scene-container') as HTMLDivElement;
+ * const container = document.getElementById('scene-container') as HTMLElement;
  * const world = await World.create(container, {
  *   xr: { sessionMode: SessionMode.ImmersiveVR },
  *   features: { enableLocomotion: true, enableGrabbing: true },
@@ -627,7 +627,7 @@ export class World extends ElicsWorld {
    * @see /getting-started/01-hello-xr
    */
   static async create(
-    container: HTMLDivElement,
+    container: HTMLElement,
     options?: WorldOptions,
   ): Promise<World> {
     const { initializeWorld } = await import('../init/world-initializer.js');
