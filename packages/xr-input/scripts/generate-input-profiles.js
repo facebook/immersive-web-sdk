@@ -43,6 +43,7 @@ function readFlagValue(flag) {
 const forceRefresh =
   process.argv.includes('--force') || process.argv.includes('--refresh');
 const offline = process.argv.includes('--offline');
+const assetsDirectory = readFlagValue('--assets-dir');
 const proxyUrl =
   readFlagValue('--proxy') ??
   process.env.HTTPS_PROXY ??
@@ -64,7 +65,9 @@ function redactUrlForLogs(value) {
 }
 
 function explainNetworkMode() {
-  if (offline) {
+  if (assetsDirectory) {
+    console.log(`🌐 Network mode: local assets from ${assetsDirectory}.`);
+  } else if (offline) {
     console.log(
       '🌐 Network mode: offline; using existing generated profiles only.',
     );
@@ -86,7 +89,7 @@ if (!forceRefresh && fs.existsSync(OUTPUT_FILE)) {
   process.exit(0);
 }
 
-if (offline) {
+if (offline && !assetsDirectory) {
   console.error(
     `❌ Offline profile generation requested, but ${OUTPUT_FILE} does not exist.`,
   );
@@ -165,6 +168,16 @@ async function fetchJsonWithCurl(url) {
 }
 
 async function fetchJson(url) {
+  if (assetsDirectory) {
+    const relativePath = url.slice(`${CDN_BASE_URL}/`.length);
+    const basePath = path.resolve(assetsDirectory);
+    const filePath = path.resolve(basePath, relativePath);
+    if (!filePath.startsWith(`${basePath}${path.sep}`)) {
+      throw new Error(`Invalid profile path: ${relativePath}`);
+    }
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  }
+
   try {
     return proxyUrl ? await fetchJsonWithCurl(url) : await fetchJsonDirect(url);
   } catch (error) {
