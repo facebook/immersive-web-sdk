@@ -2087,11 +2087,14 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         this.addWatchFile(loadedProject.configPath);
       }
       if (config.command === 'build') {
-        const files = await validateUIKitMLDirectory(
+        const validation = await validateUIKitMLDirectory(
           config.publicDir || path.resolve(config.root, 'public'),
         );
-        for (const file of files) {
+        for (const file of validation.files) {
           this.addWatchFile(file);
+        }
+        for (const warning of validation.warnings) {
+          this.warn(warning);
         }
       }
       // Development always builds the managed-workspace bridge, even when

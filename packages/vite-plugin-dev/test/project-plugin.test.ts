@@ -94,7 +94,7 @@ describe('manifest-first Vite integration', () => {
     });
 
     await expect(
-      callHook(plugin.buildStart, { addWatchFile: vi.fn() }),
+      callHook(plugin.buildStart, { addWatchFile: vi.fn(), warn: vi.fn() }),
     ).rejects.toThrow(/panel\.uikitml.*Invalid value for property "padding"/s);
   });
 

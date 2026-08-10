@@ -117,6 +117,16 @@ that file's location:
 For `public/ui/main-menu.uikitml`, this example loads
 `public/ui/fonts/BrandSans-Regular.ttf`.
 
+IWSDK's bundled font atlases cover their packaged character set, not every
+Unicode script or emoji. Production builds warn once per UIKitML file when
+literal text contains uncovered glyphs, including each glyph's code point and
+first source element. UIKitML does not fall back to an operating-system font:
+include a licensed TTF with the required glyphs, declare it with `@font-face`,
+and apply that family to the affected element. For mixed scripts, use separate
+elements and assign an appropriate custom family to each script. A declared
+TTF's internal glyph coverage is checked by the font loader at runtime, so
+confirm the warning's listed code points are present in that file.
+
 ### Component Kits
 
 Component sets provide pre-built UI components like buttons, panels, inputs, and icons. IWSDK's default `horizon` kit includes Horizon components and Lucide icons; applications do not import those packages individually.

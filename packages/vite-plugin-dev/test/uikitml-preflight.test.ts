@@ -50,9 +50,10 @@ describe('UIKitML production preflight', () => {
     tempDirectories.push(root);
     await mkdir(path.join(root, 'ui'), { recursive: true });
     await writeFile(path.join(root, 'ui', 'valid.uikitml'), '<div>OK</div>');
-    await expect(validateUIKitMLDirectory(root)).resolves.toEqual([
-      path.join(root, 'ui', 'valid.uikitml'),
-    ]);
+    await expect(validateUIKitMLDirectory(root)).resolves.toEqual({
+      files: [path.join(root, 'ui', 'valid.uikitml')],
+      warnings: [],
+    });
 
     await writeFile(
       path.join(root, 'ui', 'invalid.uikitml'),
@@ -61,5 +62,23 @@ describe('UIKitML production preflight', () => {
     await expect(validateUIKitMLDirectory(root)).rejects.toThrow(
       /invalid\.uikitml.*Invalid value for property "padding"/s,
     );
+  });
+
+  it('deduplicates unsupported glyphs and identifies their source element', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-uikitml-'));
+    tempDirectories.push(root);
+    await mkdir(path.join(root, 'ui'), { recursive: true });
+    const file = path.join(root, 'ui', 'localized.uikitml');
+    await writeFile(file, '<div id="greeting">Café Café 日本語 😀😀</div>');
+
+    const result = await validateUIKitMLDirectory(root);
+
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain(file);
+    expect(result.warnings[0]).toContain('"é" (U+00E9)');
+    expect(result.warnings[0].match(/U\+00E9/g)).toHaveLength(1);
+    expect(result.warnings[0].match(/U\+1F600/g)).toHaveLength(1);
+    expect(result.warnings[0]).toContain('<div#greeting> 1:20');
+    expect(result.warnings[0]).toContain('custom @font-face');
   });
 });
