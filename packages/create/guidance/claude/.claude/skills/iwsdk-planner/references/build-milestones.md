@@ -28,9 +28,11 @@ current release documented on iwsdk.dev.
 
 Notes:
 
-- `--no-xr` scaffolds `xr: false` but does **not** wire browser locomotion,
-  mouselook, or browser grabbing — add `features.locomotion.browserControls`
-  and app-owned camera controls in code.
+- `--no-xr` (the legacy alias for `--target browser`) scaffolds `xr: false`,
+  browser locomotion, canvas pointer input, and browser interaction support.
+  Camera look remains intentionally app-owned because first-person, orbit,
+  editor, and follow cameras need different behavior. For a first-person app,
+  adapt the pointer-lock pattern in `examples/browser-first/src/mouselook.ts`.
 - Dual-runtime (VR + browser testable): scaffold `--mode vr`, then set
   `xr: { offer: 'once' }`, `input: { canvasPointerEvents: true }`,
   `locomotion: { browserControls: true }`.

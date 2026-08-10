@@ -66,7 +66,7 @@ overwrite permission.
 |--------|------|-------------|
 | **VR** | `--target vr` | Fully immersive virtual environment. |
 | **Mixed reality** | `--target ar` | Passthrough experience with virtual content in the physical environment. |
-| **Desktop 3D** | `--target browser` | Desktop browser 3D app without an immersive session. This dedicated starter has `xr: false`, browser locomotion, right-button mouselook, canvas pointer input, grabbing, and IWER disabled. |
+| **Desktop 3D** | `--target browser` | Desktop browser 3D app without an immersive session. This dedicated starter has `xr: false`, browser locomotion, canvas pointer input, browser interaction support, and IWER disabled. Camera look is app-owned. |
 
 The flag value remains `ar` because it maps to WebXR's `immersive-ar` session
 mode; the user-facing starting point is mixed reality / passthrough.
@@ -112,7 +112,7 @@ npx @iwsdk/create@latest space-pong --yes --target vr --physics --no-locomotion 
 # Mixed reality object placer
 npx @iwsdk/create@latest mr-placer --yes --target ar --physics --scene-understanding --environment-raycast
 
-# Desktop 3D game (no headset; browser controls are already scaffolded)
+# Desktop 3D game (no headset; locomotion and pointer input are scaffolded)
 npx @iwsdk/create@latest desktop-game --yes --target browser --physics
 
 # Existing cloud-harness repository (explicitly confirm generated-file overwrite)

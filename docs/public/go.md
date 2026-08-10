@@ -30,9 +30,11 @@ npx @iwsdk/create@latest . --yes --force --target vr
 ```
 
 Choose flags based on the requested experience. The Desktop 3D starter includes
-browser locomotion and camera controls. `.` scaffolds in place; a non-empty
-target requires `--force`, which overwrites conflicting generated files while
-preserving unrelated files. `--yes` alone never permits overwrites.
+browser locomotion and canvas pointer input; camera look is app-owned so each app
+can choose first-person, orbit, editor, or follow behavior. `.` scaffolds in
+place; a non-empty target requires `--force`, which overwrites conflicting
+generated files while preserving unrelated files. `--yes` alone never permits
+overwrites.
 
 ## Run
 
