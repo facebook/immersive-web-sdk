@@ -25,6 +25,7 @@ IWSDK applications should be built from the official scaffold and verified throu
 - [Custom systems](https://iwsdk.dev/guides/07-custom-systems.html): Build ECS systems and components.
 - [Build and deploy](https://iwsdk.dev/guides/08-build-deploy.html): Production builds, optimized assets, and static deployment.
 - [Browser-first systems](https://iwsdk.dev/guides/16-browser-first-systems.html): Browser-first 3D app patterns without requiring a headset.
+- [Platform services and backends](https://iwsdk.dev/guides/18-platform-services.html): Scope boundaries and supported web, backend, and native-host integration routes.
 
 ## Core Concepts
 
