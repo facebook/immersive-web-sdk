@@ -142,10 +142,17 @@ importers:
         version: 2.0.0-alpha.16(@types/node@20.19.25)(postcss@8.5.18)(terser@5.44.1)(typescript@5.9.3)(yaml@2.8.3)
 
   packages/cli:
+    dependencies:
+      semver:
+        specifier: ^7.6.3
+        version: 7.7.3
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@types/semver':
+        specifier: ^7.5.8
+        version: 7.7.1
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
