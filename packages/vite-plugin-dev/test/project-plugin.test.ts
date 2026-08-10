@@ -64,6 +64,13 @@ afterEach(async () => {
 });
 
 describe('manifest-first Vite integration', () => {
+  it('validates the configurable managed-browser bridge timeout', () => {
+    expect(() => iwsdkDev({ bridgeReadyTimeoutMs: 0 })).toThrow(
+      'iwsdkDev().bridgeReadyTimeoutMs must be a positive integer',
+    );
+    expect(() => iwsdkDev({ bridgeReadyTimeoutMs: 15000 })).not.toThrow();
+  });
+
   it('rejects retired metadata options even when no project manifest exists', async () => {
     await rm(path.join(projectRoot, 'iwsdk.config.json'));
     const plugin = iwsdkDev({

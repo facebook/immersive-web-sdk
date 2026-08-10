@@ -62,6 +62,36 @@ function formatSchemaPropertyLines(
   return lines;
 }
 
+function schemaExample(schema: JsonSchema): unknown {
+  if (schema.enum?.length) {
+    return schema.enum[0];
+  }
+  if (schema.oneOf?.length) {
+    return schemaExample(schema.oneOf[0]);
+  }
+  if (schema.type === 'array') {
+    return [schemaExample(schema.items ?? { type: 'string' })];
+  }
+  if (schema.type === 'object' || schema.properties) {
+    return Object.fromEntries(
+      (schema.required ?? []).map((name) => [
+        name,
+        schemaExample(schema.properties?.[name] ?? { type: 'string' }),
+      ]),
+    );
+  }
+  if (schema.type === 'number' || schema.type === 'integer') {
+    return schema.minimum ?? 1;
+  }
+  if (schema.type === 'boolean') {
+    return true;
+  }
+  if (schema.type === 'null') {
+    return null;
+  }
+  return '<string>';
+}
+
 export function buildRuntimeCommandHelp(
   domain: string,
   action: string,
@@ -104,6 +134,11 @@ export function buildRuntimeCommandHelp(
 
   lines.push(
     '',
+    'Example:',
+    `  iwsdk ${domain} ${action} --input-json '${JSON.stringify(
+      schemaExample(operation.inputSchema),
+    )}'`,
+    '',
     'Options:',
     '  --input-json <json>',
     '  --timeout <ms>',
@@ -112,6 +147,21 @@ export function buildRuntimeCommandHelp(
   if (writesScreenshot) {
     lines.push(
       '  --output-file <path>   Write the PNG to this path and return screenshotPath; takes precedence over --raw',
+    );
+  }
+  if (operation.mcpName === 'ecs_step') {
+    lines.push(
+      '  --frames <count>      Alias for input count',
+      '  --count <count>       Alias for input count',
+      '  --delta <seconds>     Alias for input delta',
+    );
+  }
+  if (operation.mcpName === 'browser_get_console_logs') {
+    lines.push(
+      '  --level <levels>      Comma-separated log-level alias',
+      '  --count <count>       Maximum log-count alias',
+      '  --pattern <regex>     Message-pattern alias',
+      '  --since <timestamp>   Timestamp alias',
     );
   }
 

@@ -12,6 +12,16 @@ It owns:
 - runtime-resolved MCP stdio access
 - direct runtime control commands
 
+## Running without a local install
+
+Starter apps install this package and should run `npx iwsdk ...` from the app
+directory. Elsewhere, use the scoped package explicitly so npm does not resolve
+the unrelated `iwsdk` placeholder package:
+
+```bash
+npm exec --package @iwsdk/cli -- iwsdk --help
+```
+
 ## Coding-agent adapters
 
 `iwsdk adapter sync` preserves unrelated settings while configuring the native

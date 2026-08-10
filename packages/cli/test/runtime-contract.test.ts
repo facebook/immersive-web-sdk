@@ -179,6 +179,23 @@ describe('runtime contract scene tools', () => {
     });
   });
 
+  test('rejects unknown keys and invalid schema values before transport', () => {
+    const step = getRuntimeOperationByToolName('ecs_step')!;
+    const input = getRuntimeOperationByToolName('xr_set_input_mode')!;
+
+    expect(() => resolveRuntimeOperationRequest(step, { frames: 3 })).toThrow(
+      'ecs_step has unknown parameter "frames"',
+    );
+    expect(() => resolveRuntimeOperationRequest(step, { count: '3' })).toThrow(
+      'ecs_step.count must be number',
+    );
+    expect(() =>
+      resolveRuntimeOperationRequest(input, {
+        mode: 'not-a-mode',
+      }),
+    ).toThrow(/must be one of/);
+  });
+
   test('exposes isolated UIKitML rendering as an editor-targeted image tool', () => {
     const assets = getRuntimeOperationByToolName('ui_list_assets');
     const operation = getRuntimeOperationByToolName('ui_render_preview');

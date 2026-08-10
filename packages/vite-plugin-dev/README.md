@@ -75,6 +75,9 @@ iwsdkDev({
   // Set `false` for HTTP, or pass generation options such as `domains`.
   https: true,
 
+  // Wait for the managed browser command bridge after launch or recovery.
+  bridgeReadyTimeoutMs: 5000, // default
+
   // Enable verbose logging
   verbose: false, // default
 });

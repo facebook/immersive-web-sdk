@@ -186,6 +186,13 @@ export interface DevPluginOptions {
   workspace?: WorkspaceOptions;
 
   /**
+   * Time to wait for the managed browser command bridge after launch or
+   * recovery before returning a not-ready status.
+   * @default 5000
+   */
+  bridgeReadyTimeoutMs?: number;
+
+  /**
    * Configure the cached, self-signed HTTPS certificate used by the Vite dev
    * server. IWSDK enables it by default so WebXR is available on physical
    * headsets without installing a local certificate authority. The managed
@@ -233,6 +240,7 @@ export interface ProcessedDevOptions {
     viewport: { width: number; height: number } | null;
     screenshotSize: { width: number; height: number };
   };
+  bridgeReadyTimeoutMs: number;
   injectOnBuild: boolean;
   activation: 'localhost' | 'always' | RegExp;
   verbose: boolean;

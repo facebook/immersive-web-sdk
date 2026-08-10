@@ -171,6 +171,9 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       case 'scene':
       case 'ui':
       case 'ecs':
+        if (!subcommand) {
+          throw new Error(buildRuntimeDomainHelp(command).join('\n'));
+        }
         result = await handleRuntimeOperation(
           command,
           subcommand,

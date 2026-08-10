@@ -283,6 +283,7 @@ async function startRuntimeFixture(
   options: {
     aiTools?: AiTool[];
     relaunchFirstScreenshot?: boolean;
+    runtimeErrorMethod?: string;
   } = {},
 ) {
   const aiTools = options.aiTools ?? ['claude', 'cursor'];
@@ -298,6 +299,15 @@ async function startRuntimeFixture(
   server.on('connection', (socket) => {
     socket.on('message', (chunk) => {
       const request = JSON.parse(chunk.toString());
+      if (request.method === options.runtimeErrorMethod) {
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { message: 'No XR session is currently offered' },
+          }),
+        );
+        return;
+      }
       if (request.method === 'screenshot') {
         screenshotRequestCount += 1;
       }
@@ -764,12 +774,17 @@ describe('runtime introspection and raw output', () => {
     expect(xrHelp.stdout).toContain('Usage: iwsdk xr look-at');
     expect(xrHelp.stdout).toContain('device (required) [enum]');
     expect(xrHelp.stdout).toContain('controller-right');
+    expect(xrHelp.stdout).toContain('Example:');
+    expect(xrHelp.stdout).toContain('--input-json');
 
     const ecsHelp = await runCli(['ecs', 'toggle-system', '--help'], appA);
     expect(ecsHelp.exitCode).toBe(0);
     expect(ecsHelp.stdout).toContain('Usage: iwsdk ecs toggle-system');
     expect(ecsHelp.stdout).toContain('name (required)');
     expect(ecsHelp.stdout).not.toContain('systemName');
+
+    const ecsStepHelp = await runCli(['ecs', 'step', '--help'], appA);
+    expect(ecsStepHelp.stdout).toContain('--frames <count>');
 
     const renderFileHelp = await runCli(
       ['scene', 'render-file', '--help'],
@@ -798,6 +813,62 @@ describe('runtime introspection and raw output', () => {
     const uiAssetsHelp = await runCli(['ui', 'assets', '--help'], appA);
     expect(uiAssetsHelp.exitCode).toBe(0);
     expect(uiAssetsHelp.stdout).toContain('Usage: iwsdk ui assets');
+  });
+
+  test('rejects unknown runtime flags and wrong JSON keys', async () => {
+    const unknownFlag = await runCli(['ecs', 'step', '--framse', '3'], appA);
+    expect(unknownFlag.exitCode).toBe(1);
+    expect(JSON.parse(unknownFlag.stderr).error.message).toContain(
+      'Unknown option --framse',
+    );
+
+    const wrongKey = await runCli(
+      ['ecs', 'step', '--input-json', '{"frames":3}'],
+      appA,
+    );
+    expect(wrongKey.exitCode).toBe(1);
+    expect(JSON.parse(wrongKey.stderr).error.message).toContain(
+      'unknown parameter "frames"',
+    );
+  });
+
+  test('accepts safe direct aliases and prints domain help without undefined', async () => {
+    const runtime = await startRuntimeFixture(appA);
+    try {
+      const step = await runCli(
+        ['ecs', 'step', '--frames', '2', '--delta', '0.01'],
+        appA,
+      );
+      expect(step.exitCode).toBe(0);
+      expect(JSON.parse(step.stdout).data.result.params).toEqual({
+        count: 2,
+        delta: 0.01,
+      });
+    } finally {
+      await runtime.close();
+    }
+
+    const missingAction = await runCli(['xr'], appA);
+    expect(missingAction.exitCode).toBe(1);
+    expect(JSON.parse(missingAction.stderr).error.message).toContain(
+      'Usage: iwsdk xr <action>',
+    );
+    expect(missingAction.stderr).not.toContain('undefined');
+  });
+
+  test('explains how to make an XR session enterable', async () => {
+    const runtime = await startRuntimeFixture(appA, {
+      runtimeErrorMethod: 'accept_session',
+    });
+    try {
+      const enter = await runCli(['xr', 'enter'], appA);
+      expect(enter.exitCode).toBe(1);
+      expect(JSON.parse(enter.stderr).error.message).toContain(
+        'world.xr.offer as "once" or "always"',
+      );
+    } finally {
+      await runtime.close();
+    }
   });
 
   test('returns underlying runtime payloads with --raw', async () => {

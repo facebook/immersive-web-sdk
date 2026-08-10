@@ -26,6 +26,143 @@ export type JsonSchema = {
   additionalProperties?: boolean | JsonSchema;
 };
 
+function describeValue(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  return typeof value;
+}
+
+function assertSchemaValue(
+  value: unknown,
+  schema: JsonSchema,
+  path: string,
+): void {
+  if (schema.oneOf?.length) {
+    const matches = schema.oneOf.filter((candidate) => {
+      try {
+        assertSchemaValue(value, candidate, path);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (matches.length !== 1) {
+      throw new Error(`${path} must match exactly one supported shape`);
+    }
+  }
+  if (schema.anyOf?.length) {
+    const matches = schema.anyOf.some((candidate) => {
+      try {
+        assertSchemaValue(value, candidate, path);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (!matches) {
+      throw new Error(`${path} must match a supported shape`);
+    }
+  }
+  if (schema.not) {
+    let matchesDisallowedSchema = true;
+    try {
+      assertSchemaValue(value, schema.not, path);
+    } catch {
+      matchesDisallowedSchema = false;
+    }
+    if (matchesDisallowedSchema) {
+      throw new Error(`${path} uses a disallowed value`);
+    }
+  }
+
+  const typeMatches =
+    schema.type == null ||
+    (schema.type === 'null' && value === null) ||
+    (schema.type === 'array' && Array.isArray(value)) ||
+    (schema.type === 'object' && isRecord(value)) ||
+    (schema.type === 'integer' && Number.isInteger(value)) ||
+    (schema.type === 'number' &&
+      typeof value === 'number' &&
+      Number.isFinite(value)) ||
+    (schema.type === 'string' && typeof value === 'string') ||
+    (schema.type === 'boolean' && typeof value === 'boolean');
+  if (!typeMatches) {
+    throw new Error(
+      `${path} must be ${schema.type}; received ${describeValue(value)}`,
+    );
+  }
+
+  if (schema.enum && !schema.enum.includes(value as string)) {
+    throw new Error(`${path} must be one of: ${schema.enum.join(', ')}`);
+  }
+  if (typeof value === 'number') {
+    if (schema.minimum != null && value < schema.minimum) {
+      throw new Error(`${path} must be at least ${schema.minimum}`);
+    }
+    if (schema.exclusiveMinimum != null && value <= schema.exclusiveMinimum) {
+      throw new Error(
+        `${path} must be greater than ${schema.exclusiveMinimum}`,
+      );
+    }
+    if (schema.maximum != null && value > schema.maximum) {
+      throw new Error(`${path} must be at most ${schema.maximum}`);
+    }
+  }
+  if (
+    typeof value === 'string' &&
+    schema.pattern &&
+    !new RegExp(schema.pattern).test(value)
+  ) {
+    throw new Error(`${path} must match ${schema.pattern}`);
+  }
+  if (Array.isArray(value)) {
+    if (schema.minItems != null && value.length < schema.minItems) {
+      throw new Error(`${path} requires at least ${schema.minItems} items`);
+    }
+    if (schema.maxItems != null && value.length > schema.maxItems) {
+      throw new Error(`${path} allows at most ${schema.maxItems} items`);
+    }
+    if (schema.items) {
+      value.forEach((entry, index) =>
+        assertSchemaValue(entry, schema.items!, `${path}[${index}]`),
+      );
+    }
+  }
+  if (isRecord(value)) {
+    const properties = schema.properties;
+    for (const required of schema.required ?? []) {
+      if (!Object.prototype.hasOwnProperty.call(value, required)) {
+        throw new Error(`${path}.${required} is required`);
+      }
+    }
+    for (const [name, entry] of Object.entries(value)) {
+      const propertySchema = properties?.[name];
+      if (propertySchema) {
+        assertSchemaValue(entry, propertySchema, `${path}.${name}`);
+      } else if (!properties || schema.additionalProperties === true) {
+        continue;
+      } else if (typeof schema.additionalProperties === 'object') {
+        assertSchemaValue(
+          entry,
+          schema.additionalProperties,
+          `${path}.${name}`,
+        );
+      } else {
+        const allowed = Object.keys(properties);
+        throw new Error(
+          `${path} has unknown parameter "${name}"${
+            allowed.length ? `; allowed: ${allowed.join(', ')}` : ''
+          }`,
+        );
+      }
+    }
+  }
+}
+
 export interface McpConfigTarget {
   file: string;
   jsonKey: string | null;
@@ -2873,6 +3010,7 @@ export function resolveRuntimeOperationRequest(
       'browser_screenshot does not accept parameters; it always captures the application runtime',
     );
   }
+  assertSchemaValue(params, operation.inputSchema, operation.mcpName);
   const commandParams =
     paramsRecord == null
       ? params

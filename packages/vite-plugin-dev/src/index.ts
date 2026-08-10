@@ -190,6 +190,15 @@ type ResolvedDevPluginOptions = DevPluginOptions & {
 function processOptions(
   options: ResolvedDevPluginOptions = {},
 ): ProcessedDevOptions {
+  const bridgeReadyTimeoutMs = options.bridgeReadyTimeoutMs ?? 5000;
+  if (
+    !Number.isSafeInteger(bridgeReadyTimeoutMs) ||
+    bridgeReadyTimeoutMs <= 0
+  ) {
+    throw new Error(
+      'iwsdkDev().bridgeReadyTimeoutMs must be a positive integer',
+    );
+  }
   const emulator = options.emulator ?? {};
   const processed: ProcessedDevOptions = {
     ...(options.assetManifest == null
@@ -205,6 +214,7 @@ function processOptions(
     userAgentException:
       emulator.userAgentException || new RegExp('OculusBrowser'),
     iwer: emulator.iwer ?? true,
+    bridgeReadyTimeoutMs,
   };
 
   // Process SEM options from emulator.environment
@@ -402,6 +412,9 @@ function projectManifestPluginOptions(
     ...(workspace == null ? {} : { workspace }),
     ...(options.https == null ? {} : { https: options.https }),
     ...(options.verbose == null ? {} : { verbose: options.verbose }),
+    ...(options.bridgeReadyTimeoutMs == null
+      ? {}
+      : { bridgeReadyTimeoutMs: options.bridgeReadyTimeoutMs }),
   };
 }
 
@@ -873,7 +886,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       let consecutiveFailures = 0;
       let currentBrowserState: RuntimeBrowserState | null = null;
       const MAX_LAUNCH_FAILURES = 3;
-      const BRIDGE_READY_TIMEOUT_MS = 5000;
+      const BRIDGE_READY_TIMEOUT_MS = pluginOptions.bridgeReadyTimeoutMs;
       const traceEnabled = process.env.IWSDK_RUNTIME_TRACE === '1';
       const wsConnectionIds = new WeakMap<WebSocket, string>();
       const wsConnectionKinds = new WeakMap<WebSocket, 'command' | 'bridge'>();
