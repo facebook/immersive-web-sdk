@@ -99,6 +99,24 @@ describe('runtime UIKitML loading', () => {
     );
   });
 
+  it('rejects an HTML fallback response with the requested UIKitML URL', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<!doctype html><html><body>App</body></html>', {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+          status: 200,
+        }),
+      ),
+    );
+
+    await expect(
+      loadUIKitMLComponent('/ui/missing-panel.uikitml'),
+    ).rejects.toThrow(
+      '/ui/missing-panel.uikitml returned HTML (content-type: text/html; charset=utf-8)',
+    );
+  });
+
   it('loads a manifest UIKitML key and reuses its cached source', async () => {
     const fetchMock = vi
       .fn()

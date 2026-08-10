@@ -35,7 +35,19 @@ export class UIKitMLAssetLoader {
                 `Failed to load UIKitML: ${url} (${response.status} ${response.statusText})`,
               );
             }
-            resolve(await response.text());
+            const contentType = response.headers.get('content-type') ?? '';
+            const source = await response.text();
+            if (
+              /^(text\/html|application\/xhtml\+xml)(?:;|$)/i.test(
+                contentType.trim(),
+              ) ||
+              /^\s*(?:<!doctype\s+html\b|<html(?:\s|>))/i.test(source)
+            ) {
+              throw new Error(
+                `Failed to load UIKitML: ${url} returned HTML (content-type: ${contentType || 'unknown'}). Check that the asset path exists and is served as UIKitML rather than the app fallback page.`,
+              );
+            }
+            resolve(source);
           })
           .catch(reject);
       },

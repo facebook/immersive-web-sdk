@@ -71,6 +71,33 @@ describe('manifest-first Vite integration', () => {
     expect(() => iwsdkDev({ bridgeReadyTimeoutMs: 15000 })).not.toThrow();
   });
 
+  it('fails a production build before bundling invalid public UIKitML', async () => {
+    const publicDirectory = path.join(projectRoot, 'public');
+    await mkdir(path.join(publicDirectory, 'ui'), { recursive: true });
+    const panelPath = path.join(publicDirectory, 'ui', 'panel.uikitml');
+    await writeFile(
+      panelPath,
+      '<div style="padding: 12px 24px">Invalid shorthand</div>',
+    );
+    const plugin = iwsdkDev({ https: false });
+    await callHook(
+      plugin.config,
+      plugin,
+      { root: projectRoot },
+      { command: 'build', mode: 'production' },
+    );
+    callHook(plugin.configResolved, plugin, {
+      command: 'build',
+      root: projectRoot,
+      publicDir: publicDirectory,
+      server: {},
+    });
+
+    await expect(
+      callHook(plugin.buildStart, { addWatchFile: vi.fn() }),
+    ).rejects.toThrow(/panel\.uikitml.*Invalid value for property "padding"/s);
+  });
+
   it('rejects retired metadata options even when no project manifest exists', async () => {
     await rm(path.join(projectRoot, 'iwsdk.config.json'));
     const plugin = iwsdkDev({

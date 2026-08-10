@@ -334,7 +334,10 @@ Define reusable styles with full pseudo-selector support using the `<style>` tag
   .button {
     background-color: #3b82f6;
     color: white;
-    padding: 12px 24px;
+    padding-top: 12px;
+    padding-right: 24px;
+    padding-bottom: 12px;
+    padding-left: 24px;
     border-radius: 6px;
     cursor: pointer;
   }
@@ -351,12 +354,18 @@ Define reusable styles with full pseudo-selector support using the `<style>` tag
 
   /* Responsive styles */
   .button:sm {
-    padding: 8px 16px;
+    padding-top: 8px;
+    padding-right: 16px;
+    padding-bottom: 8px;
+    padding-left: 16px;
     font-size: 14px;
   }
 
   .button:lg {
-    padding: 16px 32px;
+    padding-top: 16px;
+    padding-right: 32px;
+    padding-bottom: 16px;
+    padding-left: 32px;
     font-size: 18px;
   }
 </style>

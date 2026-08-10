@@ -46,6 +46,7 @@ const pluginConfig = {
     '@iwer/devui',
     '@iwer/sem',
     '@vitejs/plugin-basic-ssl',
+    '@drawcall/uikitml',
     'ws',
     'playwright',
     'sharp',

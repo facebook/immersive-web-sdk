@@ -53,6 +53,7 @@
   "author": "Felix Zhang <fe1ix@meta.com>",
   "license": "MIT",
   "dependencies": {
+    "@drawcall/uikitml": "0.1.8",
     "@iwer/devui": "^2.3.0",
     "@iwer/sem": "^2.3.0",
     "@iwsdk/core": "workspace:*",

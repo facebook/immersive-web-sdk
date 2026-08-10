@@ -103,6 +103,7 @@ import type {
   AiMode,
   WorkspaceOptions,
 } from './types.js';
+import { validateUIKitMLDirectory } from './uikitml-preflight.js';
 
 // Export types for users
 export type {
@@ -2084,6 +2085,14 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     async buildStart() {
       if (loadedProject != null) {
         this.addWatchFile(loadedProject.configPath);
+      }
+      if (config.command === 'build') {
+        const files = await validateUIKitMLDirectory(
+          config.publicDir || path.resolve(config.root, 'public'),
+        );
+        for (const file of files) {
+          this.addWatchFile(file);
+        }
       }
       // Development always builds the managed-workspace bridge, even when
       // IWER is disabled. Production builds include only explicitly enabled
