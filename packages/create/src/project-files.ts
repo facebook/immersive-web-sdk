@@ -106,6 +106,11 @@ function createProjectPackageJson(
     },
     dependencies: {
       '@iwsdk/core': packageSpec('@iwsdk/core'),
+      // Declared so Vite resolve.dedupe / optimizeDeps.include can resolve from
+      // the app root under pnpm (transitive-only installs break `vite build`).
+      '@pmndrs/uikit': '^1.0.74',
+      '@pmndrs/uikit-horizon': '^1.0.74',
+      '@pmndrs/uikit-lucide': '^1.0.74',
       three: 'npm:super-three@0.181.0',
     },
     devDependencies: {
@@ -118,7 +123,15 @@ function createProjectPackageJson(
         : {}),
       vite: '^7.1.4',
     },
-    overrides: { sharp: '0.35.3' },
+    overrides: {
+      sharp: '0.35.3',
+      three: 'npm:super-three@0.181.0',
+    },
+    pnpm: {
+      overrides: {
+        three: 'npm:super-three@0.181.0',
+      },
+    },
     engines: {
       node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0',
     },

@@ -74,6 +74,11 @@ describe('common starter project files', () => {
         .spatialUI,
     ).toEqual({ kit: 'horizon' });
     expect(textFile(outputs[0], 'vite.config.ts')).toContain('iwsdkDev()');
+    expect(textFile(outputs[0], 'vite.config.ts')).toContain('dedupe:');
+    expect(textFile(outputs[0], 'vite.config.ts')).toContain('@pmndrs/uikit');
+    expect(textFile(outputs[0], 'vite.config.ts')).toContain(
+      '@drawcall/uikitml',
+    );
     expect(textFile(outputs[0], 'src/assets.ts')).toContain(
       'VITE_IWSDK_EXAMPLE_ASSET_BASE_URL',
     );
@@ -135,13 +140,25 @@ describe('common starter project files', () => {
     expect(files.some((file) => file.path === '.gitignore')).toBe(true);
     expect(files.some((file) => file.path === '.nvmrc')).toBe(true);
     expect(packageJson.dependencies['@iwsdk/core']).toMatch(/^\d+\.\d+\.\d+/u);
+    expect(packageJson.dependencies['@pmndrs/uikit']).toBe('^1.0.74');
+    expect(packageJson.dependencies['@pmndrs/uikit-horizon']).toBe('^1.0.74');
+    expect(packageJson.dependencies['@pmndrs/uikit-lucide']).toBe('^1.0.74');
+    expect(packageJson.dependencies.three).toBe('npm:super-three@0.181.0');
     expect(
       packageJson.devDependencies['@iwsdk/example-assets'],
     ).toBeUndefined();
     expect(packageJson.devDependencies['@meta-quest/metavr']).toBe('^1.3.2');
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
     expect(packageJson.devDependencies['@types/three']).toBe('^0.181.0');
-    expect(packageJson.overrides).toEqual({ sharp: '0.35.3' });
+    expect(packageJson.overrides).toEqual({
+      sharp: '0.35.3',
+      three: 'npm:super-three@0.181.0',
+    });
+    expect(packageJson.pnpm).toEqual({
+      overrides: {
+        three: 'npm:super-three@0.181.0',
+      },
+    });
     expect(packageJson.scripts.typecheck).toBe('tsc --noEmit');
     expect(JSON.stringify(packageJson)).not.toContain('@latest');
     expect(JSON.stringify(packageJson)).not.toContain('@pmndrs/chef');
