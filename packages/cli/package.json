@@ -5,7 +5,7 @@
   "private": false,
   "type": "module",
   "bin": {
-    "iwsdk": "dist/cli.js"
+    "iwsdk": "bin/iwsdk.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,6 +27,7 @@
     }
   },
   "files": [
+    "bin/iwsdk.js",
     "dist",
     "guidance",
     "README.md"

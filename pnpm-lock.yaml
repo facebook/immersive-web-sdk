@@ -421,6 +421,9 @@ importers:
         specifier: npm:super-three@0.181.0
         version: super-three@0.181.0
     devDependencies:
+      '@webxr-input-profiles/assets':
+        specifier: 1.0.20
+        version: 1.0.20
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@20.19.25)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))
@@ -1691,6 +1694,9 @@ packages:
 
   '@webgpu/types@0.1.66':
     resolution: {integrity: sha512-YA2hLrwLpDsRueNDXIMqN9NTzD6bCDkuXbOSe0heS+f8YE8usA6Gbv1prj81pzVHrbaAma7zObnIC+I6/sXJgA==}
+
+  '@webxr-input-profiles/assets@1.0.20':
+    resolution: {integrity: sha512-V/8NB4Ywgm//TBVMgo0TgJ9DtxsBoo0iiaF8AdfiP0F0cgbwkuQycEZAIOsplyd/iZ8L3mrFYNJBC6rzQb4tJA==}
 
   '@zappar/msdf-generator@1.2.4':
     resolution: {integrity: sha512-6S/MCk0Ky0ipewZJw4xFEzH/2aYfWmPXEkTdBtNyDDfkbicrNwgJgtxZ4SnTDyNe9XHMqDA4sL9srRsgDLRMqA==}
@@ -5380,6 +5386,8 @@ snapshots:
       vue: 3.5.29(typescript@5.9.3)
 
   '@webgpu/types@0.1.66': {}
+
+  '@webxr-input-profiles/assets@1.0.20': {}
 
   '@zappar/msdf-generator@1.2.4':
     dependencies:

@@ -7,6 +7,7 @@
  */
 
 import { execFile } from 'child_process';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import https from 'https';
@@ -17,9 +18,11 @@ const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 const CDN_BASE_URL =
   'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles';
+const PINNED_ASSETS_SOURCE = 'npm:@webxr-input-profiles/assets@1.0.20';
 const OUTPUT_FILE = path.join(
   __dirname,
   '../src/gamepad/generated-profiles.ts',
@@ -80,16 +83,37 @@ function explainNetworkMode() {
   }
 }
 
+function findInstalledProfilesDirectory() {
+  try {
+    const packageJson = require.resolve(
+      '@webxr-input-profiles/assets/package.json',
+    );
+    return path.join(path.dirname(packageJson), 'dist', 'profiles');
+  } catch {
+    return undefined;
+  }
+}
+
+function readInstalledProfile(profilesDirectory, relativePath) {
+  return JSON.parse(
+    fs.readFileSync(path.join(profilesDirectory, relativePath), 'utf8'),
+  );
+}
+
+const installedProfilesDirectory = findInstalledProfilesDirectory();
+
 // Check if we should skip fetching (file exists and --force/--refresh not passed)
 if (!forceRefresh && fs.existsSync(OUTPUT_FILE)) {
   console.log(
-    `✅ Input profiles already exist at ${OUTPUT_FILE}, skipping CDN fetch.`,
+    `✅ Input profiles already exist at ${OUTPUT_FILE}, skipping generation.`,
   );
-  console.log('   Use --force or --refresh to refresh from CDN.');
+  console.log(
+    '   Use --force or --refresh to regenerate from the pinned assets.',
+  );
   process.exit(0);
 }
 
-if (offline && !assetsDirectory) {
+if (offline && !assetsDirectory && !installedProfilesDirectory) {
   console.error(
     `❌ Offline profile generation requested, but ${OUTPUT_FILE} does not exist.`,
   );
@@ -190,21 +214,35 @@ async function fetchJson(url) {
 
 async function generateInputProfiles() {
   try {
-    explainNetworkMode();
-    console.log('Fetching profiles list...');
-    const profilesList = await fetchJson(`${CDN_BASE_URL}/profilesList.json`);
+    let profilesList;
+    if (installedProfilesDirectory) {
+      console.log(
+        `📦 Loading pinned input profiles from ${installedProfilesDirectory}`,
+      );
+      profilesList = readInstalledProfile(
+        installedProfilesDirectory,
+        'profilesList.json',
+      );
+    } else {
+      explainNetworkMode();
+      console.log('Fetching profiles list...');
+      profilesList = await fetchJson(`${CDN_BASE_URL}/profilesList.json`);
+    }
 
     const profilePaths = Object.values(profilesList).map(
       (profile) => profile.path,
     );
     const uniquePaths = [...new Set(profilePaths)]; // Remove duplicates
 
-    console.log(`Found ${uniquePaths.length} unique profiles to fetch...`);
+    console.log(
+      `Found ${uniquePaths.length} unique profiles to ${installedProfilesDirectory ? 'load' : 'fetch'}...`,
+    );
 
     // Fetch all profile data in parallel
     const profilePromises = uniquePaths.map(async (profilePath) => {
-      const profileUrl = `${CDN_BASE_URL}/${profilePath}`;
-      const profileData = await fetchJson(profileUrl);
+      const profileData = installedProfilesDirectory
+        ? readInstalledProfile(installedProfilesDirectory, profilePath)
+        : await fetchJson(`${CDN_BASE_URL}/${profilePath}`);
       return { path: profilePath, data: profileData };
     });
 
@@ -212,8 +250,7 @@ async function generateInputProfiles() {
 
     // Generate TypeScript content
     let tsContent = `// This file is auto-generated. Do not edit manually.
-// Generated from: ${CDN_BASE_URL}/profilesList.json
-// Generated at: ${new Date().toISOString()}
+// Generated from: ${installedProfilesDirectory ? PINNED_ASSETS_SOURCE : `${CDN_BASE_URL}/profilesList.json`}
 
 `;
 

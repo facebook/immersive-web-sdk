@@ -44,8 +44,9 @@ For guides, concepts, and API reference, visit: **[https://iwsdk.dev](https://iw
 ## Development
 
 ```bash
-# Install dependencies
-pnpm install
+# Use the pinned Node major, install dependencies, and build workspace packages
+nvm use
+corepack pnpm@10.18.3 run bootstrap
 
 # Build all packages as tgz files (for examples to consume)
 npm run build:tgz
@@ -54,12 +55,25 @@ npm run build:tgz
 cd examples/locomotion && npm run fresh:dev
 
 # Lint and format
-pnpm run lint
-pnpm run format
+corepack pnpm@10.18.3 run lint
+corepack pnpm@10.18.3 run format
 
 # Build a specific package
-pnpm --filter @iwsdk/core build
+corepack pnpm@10.18.3 --filter @iwsdk/core build
 ```
+
+`bootstrap` is also the repair command for a partial or stale source build. It
+uses the lockfile, builds packages in dependency order, and generates WebXR
+input profiles from the pinned npm asset package instead of making a separate
+CDN request. Run `corepack pnpm@10.18.3 run doctor` for environment, proxy, and
+generated-output checks.
+
+For a network-restricted checkout whose pnpm store is already warm, use
+`corepack pnpm@10.18.3 run bootstrap:offline`. Initial dependency installation
+still needs registry access (and honors standard npm/pnpm proxy configuration),
+but subsequent profile generation and builds are offline-safe. A directory-linked
+`@iwsdk/cli` now keeps a stable launcher; if its `dist` is missing, it prints the
+exact package build command instead of leaving a broken executable link.
 
 ### Development Workflow
 

@@ -3,7 +3,10 @@
   "description": "Javascript WebXR Runtime for Emulation - Monorepo",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.18.3",
   "scripts": {
+    "bootstrap": "corepack pnpm@10.18.3 install --frozen-lockfile && corepack pnpm@10.18.3 -r --filter '!@iwsdk/reference-assets' run build",
+    "bootstrap:offline": "corepack pnpm@10.18.3 install --offline --frozen-lockfile && corepack pnpm@10.18.3 -r --filter '!@iwsdk/reference-assets' run build",
     "build": "corepack pnpm@10.18.3 --filter '@iwsdk/core' run build",
     "build:all": "corepack pnpm@10.18.3 -r run build",
     "build:tgz": "bash ./scripts/build-tgz.sh",
@@ -27,6 +30,7 @@
     "setup-hooks": "node scripts/setup-git-hooks.cjs",
     "engines:audit": "node scripts/check-engines.mjs",
     "doctor:linux-dev-server": "bash ./scripts/dev/doctor-linux-dev-server.sh",
+    "doctor": "bash ./scripts/dev/doctor-linux-dev-server.sh",
     "headers:check": "node scripts/check-headers.mjs --dry-run",
     "headers:fix": "node scripts/check-headers.mjs --fix",
     "three:check": "node scripts/check-three-version.mjs",

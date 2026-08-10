@@ -47,11 +47,14 @@ const ok = (maj === 20 && min >= 19) || (maj === 22 && min >= 12) || maj >= 24;
 process.exit(ok ? 0 : 1);
 NODE
 
-pnpm_version="$(pnpm -v 2>/dev/null || true)"
-[ -n "$pnpm_version" ] || fail "pnpm is not on PATH"
-pass "pnpm $pnpm_version"
+pnpm_version="$(corepack pnpm@10.18.3 -v 2>/dev/null || true)"
+[ -n "$pnpm_version" ] || fail "Corepack could not launch the pinned pnpm 10.18.3"
+pass "pnpm $pnpm_version (via Corepack)"
 
-if command -v curl >/dev/null 2>&1; then
+if (cd packages/xr-input && node -e "require.resolve('@webxr-input-profiles/assets/package.json')") >/dev/null 2>&1; then
+  pass "pinned WebXR input profiles package is installed (generation is offline-safe)"
+elif command -v curl >/dev/null 2>&1; then
+  warn "Pinned WebXR input profiles package is missing; checking the legacy CDN fallback"
   pass "curl is available"
   if [ -n "$PROXY_URL" ]; then
     echo "🌐 Proxy detected: $(redact_url "$PROXY_URL")"
