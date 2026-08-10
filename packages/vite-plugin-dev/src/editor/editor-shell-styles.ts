@@ -472,6 +472,25 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         padding-left: 0;
       }
 
+      .viewport-distance-control {
+        align-items: center;
+        display: flex;
+        gap: 4px;
+        white-space: nowrap;
+      }
+
+      .viewport-distance-control > span {
+        color: #8d8d94;
+        font-size: 10px;
+      }
+
+      .viewport-distance-control input {
+        height: 24px;
+        min-height: 24px;
+        text-align: right;
+        width: 68px;
+      }
+
       .editor-slot:empty {
         display: none !important;
       }

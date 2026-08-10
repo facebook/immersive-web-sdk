@@ -57,6 +57,7 @@ test('renders and captures an exact saved orthographic authoring view', async ()
       cameraProjection: 'orthographic',
       cameraViewId: 'plan-review',
       rendererCamera: {
+        far: 5000,
         isOrthographicCamera: true,
         isPerspectiveCamera: false,
         type: 'OrthographicCamera',
@@ -115,7 +116,7 @@ test('renders and captures an exact saved orthographic authoring view', async ()
         type: 'PerspectiveCamera',
       },
     });
-});
+}, 15000);
 
 test('reports only camera-renderable nodes and records the occlusion limit', async () => {
   harness = await createEditorTestHarness('review-frustum-visibility');

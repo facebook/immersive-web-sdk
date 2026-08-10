@@ -24,6 +24,70 @@ afterEach(async () => {
 });
 
 describe('editor camera and orientation gizmo', () => {
+  test('uses a configurable Blender-style infinite grid and extended clip distance', async () => {
+    harness = await createEditorTestHarness('editor-infinite-grid');
+    const editor = await harness.openEditor();
+    await expectRealWebGLViewport(editor);
+
+    await expect
+      .poll(() => getEditorProof(editor.page))
+      .toMatchObject({
+        editorGrid: {
+          cameraAnchored: true,
+          drawDistance: 5000,
+          fadeEnd: 5000,
+          fadeStart: 2500,
+          followsCamera: true,
+          geometry: 'PlaneGeometry',
+          material: 'ShaderMaterial',
+          minimumSpacing: 0.5,
+          planeSize: 10000,
+          seamlessLod: true,
+          shaderFade: true,
+        },
+        rendererCamera: {
+          far: 5000,
+          isPerspectiveCamera: true,
+        },
+      });
+
+    const viewDistance = editor.page.getByLabel('View distance');
+    await expect(viewDistance.inputValue()).resolves.toBe('5000');
+    await viewDistance.fill('2500');
+    await viewDistance.blur();
+    await expect
+      .poll(() => getEditorProof(editor.page))
+      .toMatchObject({
+        editorGrid: {
+          drawDistance: 2500,
+          fadeEnd: 2500,
+          fadeStart: 1250,
+          planeSize: 5000,
+        },
+        rendererCamera: { far: 2500 },
+      });
+    await expect(
+      editor.page.evaluate(() =>
+        localStorage.getItem('iwsdk-editor-view-distance'),
+      ),
+    ).resolves.toBe('2500');
+
+    await dispatchSceneTool(editor.page, 'scene_set_camera', {
+      lookAt: [0, 0, 0],
+      position: [120, 80, -90],
+      projection: 'perspective',
+    });
+    await expect
+      .poll(() => getEditorProof(editor.page))
+      .toMatchObject({
+        editorGrid: {
+          cameraAnchored: true,
+          position: [120, 0, -90],
+        },
+        rendererCamera: { far: 2500 },
+      });
+  }, 15000);
+
   test('exposes a real orientation gizmo and deterministic named-view screenshots', async () => {
     harness = await createEditorTestHarness('editor-camera-gizmo');
     const editor = await harness.openEditor();

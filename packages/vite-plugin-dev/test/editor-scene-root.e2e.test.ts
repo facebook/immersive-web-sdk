@@ -105,7 +105,7 @@ describe('editor scene root', () => {
         }),
       )
       .toEqual({
-        cameraFar: 200,
+        cameraFar: 5000,
         cameraPosition: [140, 80, 120],
         domeClipDepth: true,
         domePosition: [0, 0, 0],

@@ -441,7 +441,6 @@ let DirectionalLight;
 let Float32BufferAttribute;
 let Frustum;
 let finalizeSceneReviewDraft;
-let GridHelper;
 let Group;
 let hashSceneDocument;
 let hashRuntimeSceneDocument;
@@ -483,6 +482,11 @@ let editorPanelPreviewRendererState = null;
 let editorPanelPreviewRendererCreatedCount = 0;
 let editorPanelPreviewRenderQueue = Promise.resolve();
 const editorPanelFrameSchedulers = new WeakMap();
+const DEFAULT_EDITOR_DRAW_DISTANCE = 5000;
+const MIN_EDITOR_DRAW_DISTANCE = 50;
+const MAX_EDITOR_DRAW_DISTANCE = 100000;
+const MIN_EDITOR_GRID_SPACING = 0.5;
+const EDITOR_DRAW_DISTANCE_STORAGE_KEY = 'iwsdk-editor-view-distance';
 
 async function loadEditorRuntimeDependencies() {
   const [
@@ -537,7 +541,6 @@ async function loadEditorRuntimeDependencies() {
     DirectionalLight,
     Float32BufferAttribute,
     Frustum,
-    GridHelper,
     Group,
     LevelComponentApplier,
     LineBasicMaterial,
@@ -2854,6 +2857,9 @@ function editorWorkspaceController() {
     },
     setTransformMode,
     setTransformSpace,
+    setViewportDrawDistance(distance) {
+      setEditorDrawDistance(distance);
+    },
     setView(view) {
       void setWorkspaceView(view);
     },
@@ -5849,6 +5855,7 @@ function renderEditorWorld() {
   hideCurrentEditorHelpersForRenderOnlyCapture();
   syncEditorLightBindings();
   syncEditorLightHelperTransforms();
+  syncInfiniteEditorGrid();
   const startedAt = performance.now();
   editorWorldState.world.renderer.render(
     editorWorldState.world.scene,
@@ -7045,6 +7052,154 @@ function syncEditorWorld(session, camera, size = {}) {
   updateProjectedHitTargets(session);
 }
 
+function normalizeEditorDrawDistance(value) {
+  if (value == null || value === '') {
+    return DEFAULT_EDITOR_DRAW_DISTANCE;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_EDITOR_DRAW_DISTANCE;
+  }
+  return Math.round(
+    MathUtils.clamp(
+      numeric,
+      MIN_EDITOR_DRAW_DISTANCE,
+      MAX_EDITOR_DRAW_DISTANCE,
+    ),
+  );
+}
+
+function loadEditorDrawDistance() {
+  if (typeof localStorage === 'undefined') {
+    return DEFAULT_EDITOR_DRAW_DISTANCE;
+  }
+  try {
+    return normalizeEditorDrawDistance(
+      localStorage.getItem(EDITOR_DRAW_DISTANCE_STORAGE_KEY),
+    );
+  } catch {
+    return DEFAULT_EDITOR_DRAW_DISTANCE;
+  }
+}
+
+function createInfiniteEditorGrid(drawDistance) {
+  const material = new ShaderMaterial({
+    depthTest: true,
+    depthWrite: false,
+    extensions: { derivatives: true },
+    fragmentShader:
+      'varying vec3 gridWorldPosition; ' +
+      'uniform float drawDistance; ' +
+      'uniform float minimumGridSpacing; ' +
+      'uniform bool perspectiveView; ' +
+      'float gridLine(vec2 position, float scale) { ' +
+      '  vec2 coordinate = position / scale; ' +
+      '  vec2 width = max(fwidth(coordinate), vec2(0.0001)); ' +
+      '  vec2 lineDistance = abs(fract(coordinate - 0.5) - 0.5) / width; ' +
+      '  return 1.0 - min(min(lineDistance.x, lineDistance.y), 1.0); ' +
+      '} ' +
+      'void main() { ' +
+      '  vec2 gridPosition = gridWorldPosition.xz; ' +
+      '  float pixelWorldSize = max(length(fwidth(gridPosition)), 0.0001); ' +
+      '  float level = log(max((pixelWorldSize * 10.0) / minimumGridSpacing, 1.0)) / log(10.0); ' +
+      '  float gridScale = minimumGridSpacing * pow(10.0, floor(level)); ' +
+      '  float levelBlend = fract(level); ' +
+      '  float fineLine = gridLine(gridPosition, gridScale); ' +
+      '  float middleLine = gridLine(gridPosition, gridScale * 10.0); ' +
+      '  float coarseLine = gridLine(gridPosition, gridScale * 100.0); ' +
+      '  float fineAlpha = fineLine * (1.0 - levelBlend) * 0.22; ' +
+      '  float middleAlpha = middleLine * mix(0.48, 0.22, levelBlend); ' +
+      '  float coarseAlpha = coarseLine * levelBlend * 0.48; ' +
+      '  float gridAlpha = max(fineAlpha, max(middleAlpha, coarseAlpha)); ' +
+      '  float xAxis = 1.0 - smoothstep(0.0, max(fwidth(gridWorldPosition.z) * 1.5, 0.0001), abs(gridWorldPosition.z)); ' +
+      '  float zAxis = 1.0 - smoothstep(0.0, max(fwidth(gridWorldPosition.x) * 1.5, 0.0001), abs(gridWorldPosition.x)); ' +
+      '  vec3 color = vec3(0.24, 0.29, 0.32); ' +
+      '  color = mix(color, vec3(0.63, 0.20, 0.19), xAxis); ' +
+      '  color = mix(color, vec3(0.28, 0.53, 0.16), zAxis); ' +
+      '  float alpha = max(gridAlpha, max(xAxis, zAxis) * 0.78); ' +
+      '  float cameraDistance = length(cameraPosition - gridWorldPosition); ' +
+      '  float distanceFade = 1.0 - smoothstep(drawDistance * 0.5, drawDistance, cameraDistance); ' +
+      '  if (perspectiveView) { ' +
+      '    vec3 viewDirection = normalize(cameraPosition - gridWorldPosition); ' +
+      '    float angleFade = 1.0 - pow(1.0 - abs(viewDirection.y), 3.0); ' +
+      '    distanceFade *= angleFade; ' +
+      '  } ' +
+      '  alpha *= distanceFade; ' +
+      '  if (alpha < 0.003) discard; ' +
+      '  gl_FragColor = vec4(color, alpha); ' +
+      '}',
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+    transparent: true,
+    uniforms: {
+      drawDistance: { value: drawDistance },
+      minimumGridSpacing: { value: MIN_EDITOR_GRID_SPACING },
+      perspectiveView: { value: true },
+    },
+    vertexShader:
+      'varying vec3 gridWorldPosition; ' +
+      'void main() { ' +
+      '  vec4 worldPosition = modelMatrix * vec4(position, 1.0); ' +
+      '  gridWorldPosition = worldPosition.xyz; ' +
+      '  gl_Position = projectionMatrix * viewMatrix * worldPosition; ' +
+      '}',
+  });
+  const grid = new Mesh(new PlaneGeometry(2, 2), material);
+  grid.name = 'IWSDKSceneEditorGrid';
+  grid.rotation.x = -Math.PI / 2;
+  grid.scale.set(drawDistance, drawDistance, 1);
+  grid.frustumCulled = false;
+  grid.renderOrder = -1;
+  grid.userData.iwsdkEditorHelper = true;
+  grid.userData.iwsdkEditorInfiniteGrid = true;
+  return grid;
+}
+
+function syncInfiniteEditorGrid() {
+  if (!editorWorldState?.editorGrid) {
+    return;
+  }
+  const camera = editorWorldState.world.camera;
+  const grid = editorWorldState.editorGrid;
+  const drawDistance = editorWorldState.drawDistance;
+  grid.position.set(camera.position.x, 0, camera.position.z);
+  grid.scale.set(drawDistance, drawDistance, 1);
+  grid.material.uniforms.drawDistance.value = drawDistance;
+  grid.material.uniforms.perspectiveView.value =
+    camera.isPerspectiveCamera === true;
+  grid.updateMatrixWorld(true);
+}
+
+function setEditorDrawDistance(value, persist = true) {
+  const drawDistance = normalizeEditorDrawDistance(value);
+  if (!editorWorldState) {
+    return drawDistance;
+  }
+  editorWorldState.drawDistance = drawDistance;
+  for (const camera of [
+    editorWorldState.perspectiveCamera,
+    editorWorldState.orthographicCamera,
+  ]) {
+    camera.far = drawDistance;
+    camera.updateProjectionMatrix();
+  }
+  if (persist && typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(
+        EDITOR_DRAW_DISTANCE_STORAGE_KEY,
+        String(drawDistance),
+      );
+    } catch {
+      // The viewport setting still applies when browser storage is unavailable.
+    }
+  }
+  syncInfiniteEditorGrid();
+  workspaceUi?.update({ viewportDrawDistance: drawDistance });
+  renderEditorWorld();
+  return drawDistance;
+}
+
 async function createEditorWorld(session, camera) {
   const host = getViewportHost();
   const editorRuntime = window.FRAMEWORK_MCP_RUNTIME;
@@ -7082,7 +7237,10 @@ async function createEditorWorld(session, camera) {
   canvas.setAttribute('aria-label', 'IWSDK 3D scene viewport');
   world.renderer.setClearColor(0x101418, 1);
 
+  const drawDistance = loadEditorDrawDistance();
   const perspectiveCamera = world.camera;
+  perspectiveCamera.far = drawDistance;
+  perspectiveCamera.updateProjectionMatrix();
   const orthographicCamera = new OrthographicCamera(
     -1,
     1,
@@ -7122,9 +7280,7 @@ async function createEditorWorld(session, camera) {
   const { builtInObjectMap, levelRootProxy } =
     createEditorBuiltinRig(proxyRoot);
 
-  const grid = new GridHelper(12, 24, 0x40515f, 0x26343d);
-  grid.name = 'IWSDKSceneEditorGrid';
-  grid.userData.iwsdkEditorHelper = true;
+  const grid = createInfiniteEditorGrid(drawDistance);
   world.scene.add(grid);
   const ambient = new AmbientLight(0xffffff, 0.65);
   ambient.name = 'IWSDKSceneEditorAmbientLight';
@@ -7143,6 +7299,7 @@ async function createEditorWorld(session, camera) {
     currentCamera: camera,
     currentDocumentValue: null,
     currentSession: session,
+    drawDistance,
     editorAmbient: ambient,
     editorDirectional: directional,
     editorGrid: grid,
@@ -7489,6 +7646,34 @@ function createViewportProof() {
     layout: createLayoutProof(),
     materialCount,
     meshCount,
+    editorGrid: {
+      cameraAnchored:
+        editorWorldState.editorGrid.position.x ===
+          editorWorldState.world.camera.position.x &&
+        editorWorldState.editorGrid.position.z ===
+          editorWorldState.world.camera.position.z,
+      drawDistance: editorWorldState.drawDistance,
+      fadeEnd: editorWorldState.drawDistance,
+      fadeStart: editorWorldState.drawDistance * 0.5,
+      followsCamera: true,
+      geometry: editorWorldState.editorGrid.geometry.type,
+      material: editorWorldState.editorGrid.material.type,
+      minimumSpacing:
+        editorWorldState.editorGrid.material.uniforms.minimumGridSpacing.value,
+      planeSize: editorWorldState.drawDistance * 2,
+      position: roundCameraVec3(editorWorldState.editorGrid.position),
+      seamlessLod:
+        editorWorldState.editorGrid.material.fragmentShader.includes(
+          'middleLine * mix(0.48, 0.22, levelBlend)',
+        ) &&
+        editorWorldState.editorGrid.material.fragmentShader.includes(
+          'coarseLine * levelBlend * 0.48',
+        ),
+      shaderFade:
+        editorWorldState.editorGrid.material.fragmentShader.includes(
+          'smoothstep(drawDistance * 0.5, drawDistance, cameraDistance)',
+        ),
+    },
     nodeObjectCount: editorWorldState.objectMap.size,
     objectHierarchy: objectHierarchyProof(),
     orbitControls: Boolean(editorWorldState.orbitControls),
@@ -7509,10 +7694,12 @@ function createViewportProof() {
       : null,
     renderer: canvas.dataset.renderer || 'unknown',
     rendererCamera: {
+      far: editorWorldState.world.camera.far,
       isOrthographicCamera:
         editorWorldState.world.camera.isOrthographicCamera === true,
       isPerspectiveCamera:
         editorWorldState.world.camera.isPerspectiveCamera === true,
+      near: editorWorldState.world.camera.near,
       type: editorWorldState.world.camera.type,
     },
     renderStats: currentEditorRenderStats(),
@@ -11000,6 +11187,8 @@ function renderUi(session, camera) {
     transformSnapEnabled:
       editorWorldState?.transformSnapEnabled === true,
     transformSpace: editorWorldState?.transformSpace || 'local',
+    viewportDrawDistance:
+      editorWorldState?.drawDistance ?? DEFAULT_EDITOR_DRAW_DISTANCE,
     view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
   });
 

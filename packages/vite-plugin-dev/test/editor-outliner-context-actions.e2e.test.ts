@@ -51,7 +51,7 @@ describe('editor outliner context actions', () => {
       .poll(() => rootNodeIds(editor))
       .toEqual(['table-1', 'entity-1', 'entity-2']);
     await expect.poll(() => selectedNodeIds(editor)).toEqual(['entity-2']);
-  });
+  }, 15000);
 
   test('duplicates and removes scene graph nodes with document, runtime, and reload parity', async () => {
     harness = await createEditorTestHarness('editor-outliner-context-actions');

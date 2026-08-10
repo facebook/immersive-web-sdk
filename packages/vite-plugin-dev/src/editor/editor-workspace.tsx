@@ -63,6 +63,7 @@ export interface EditorWorkspaceSnapshot {
   transformMode: 'translate' | 'rotate' | 'scale';
   transformSnapEnabled: boolean;
   transformSpace: 'local' | 'world';
+  viewportDrawDistance: number;
   view: WorkspaceView;
 }
 
@@ -85,6 +86,7 @@ export interface EditorWorkspaceController {
   selectRoot?(): void;
   setTransformMode?(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
+  setViewportDrawDistance?(distance: number): void;
   setView?(view: WorkspaceView): void;
   toggleNodeExpanded?(nodeId: string): void;
   toggleNodeVisibility?(nodeId: string): void;
@@ -120,6 +122,7 @@ const DEFAULT_SNAPSHOT: EditorWorkspaceSnapshot = {
   transformMode: 'translate',
   transformSnapEnabled: false,
   transformSpace: 'local',
+  viewportDrawDistance: 5000,
   view: 'runtime',
 };
 
@@ -409,6 +412,30 @@ function EditorToolbar({
           id="redo"
           onClick={() => controller.redo?.()}
         />
+      </div>
+      <div class="toolbar-group" aria-label="Viewport settings">
+        <label
+          class="viewport-distance-control"
+          title="Editor viewport far clipping distance"
+        >
+          <span>View</span>
+          <input
+            aria-label="View distance"
+            data-viewport-draw-distance
+            min="50"
+            max="100000"
+            step="100"
+            type="number"
+            value={snapshot.viewportDrawDistance}
+            onBlur={(event) => {
+              const distance = event.currentTarget.valueAsNumber;
+              if (Number.isFinite(distance)) {
+                controller.setViewportDrawDistance?.(distance);
+              }
+            }}
+          />
+          <span>m</span>
+        </label>
       </div>
       <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.right" />
     </div>
