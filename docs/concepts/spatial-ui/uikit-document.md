@@ -84,6 +84,13 @@ else start?.classList.remove('disabled');
 
 - Manifest asset instances are disposed when their owning entity is destroyed.
   Direct `loadUIKitMLAsset()` users can call `dispose()` explicitly.
+- The legacy `PanelUI` adapter requires a transform-backed host. Create its
+  entity with `world.createTransformEntity()` before adding `PanelUI`; a plain
+  `world.createEntity()` is rejected before a document is loaded.
+- Outside XR, `ScreenSpaceUISystem` temporarily reparents the document (not the
+  host entity) under `world.camera`. The host transform and visibility do not
+  control the document while it is screen-space. Entering XR restores the
+  document to the host object.
 - After disposal, references to components are invalid; re‑query after re‑creating the document.
 
 ## Debugging Tips

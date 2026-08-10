@@ -102,6 +102,13 @@ export class PanelUISystem extends createSystem(
    * attach it to the entity, and tag the entity with {@link PanelDocument}.
    */
   private async loadPanel(entity: Entity): Promise<void> {
+    if (!entity.object3D) {
+      throw new Error(
+        `Entity ${entity.index} cannot host PanelUI because it has no object3D. ` +
+          'Create it with world.createTransformEntity() before adding PanelUI.',
+      );
+    }
+
     const config = PanelUI.data.config[entity.index];
     const rootElement = await loadUIKitMLComponent(config, {
       kit: this.config.kit.value as UIKitMLKit,
@@ -111,14 +118,7 @@ export class PanelUISystem extends createSystem(
     });
     const document = new UIKitDocument(rootElement);
 
-    if (entity.object3D) {
-      entity.object3D.add(document);
-    } else {
-      console.warn(
-        `[PanelUISystem] Entity ${entity.index} has no object3D! Cannot add UI to scene.`,
-      );
-    }
-
+    entity.object3D.add(document);
     entity.addComponent(PanelDocument, { document });
   }
 
