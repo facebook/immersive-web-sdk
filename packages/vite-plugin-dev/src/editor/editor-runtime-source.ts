@@ -487,6 +487,17 @@ const MIN_EDITOR_DRAW_DISTANCE = 50;
 const MAX_EDITOR_DRAW_DISTANCE = 100000;
 const MIN_EDITOR_GRID_SPACING = 0.5;
 const EDITOR_DRAW_DISTANCE_STORAGE_KEY = 'iwsdk-editor-view-distance';
+const DEFAULT_EDITOR_TRANSFORM_SNAP = Object.freeze({
+  rotationDeg: 15,
+  scale: 0.1,
+  translation: 0.25,
+});
+const EDITOR_TRANSFORM_SNAP_LIMITS = Object.freeze({
+  rotationDeg: { max: 180, min: 0.1 },
+  scale: { max: 10, min: 0.001 },
+  translation: { max: 10000, min: 0.001 },
+});
+const EDITOR_TRANSFORM_SNAP_STORAGE_KEY = 'iwsdk-editor-transform-snap';
 
 async function loadEditorRuntimeDependencies() {
   const [
@@ -2856,6 +2867,10 @@ function editorWorkspaceController() {
         .then(refreshActiveEditor);
     },
     setTransformMode,
+    setTransformSnap(mode, value) {
+      setTransformSnapValue(mode, value);
+      refreshActiveEditor();
+    },
     setTransformSpace,
     setViewportDrawDistance(distance) {
       setEditorDrawDistance(distance);
@@ -3815,6 +3830,13 @@ function snapVector(values, increment) {
   return values.map((value) => snapNumber(value, increment));
 }
 
+function snapScaleVector(values, increment) {
+  return values.map((value) => {
+    const snapped = snapNumber(value, increment);
+    return snapped === 0 ? (Math.sign(value) || 1) * increment : snapped;
+  });
+}
+
 function scaleVectorFromTransform(transform = {}) {
   return typeof transform.scale === 'number'
     ? [transform.scale, transform.scale, transform.scale]
@@ -3854,7 +3876,9 @@ function snapTransformForCurrentMode(transform) {
   if (mode === 'scale') {
     return {
       ...transform,
-      scale: compactScaleValue(snapVector(scaleVectorFromTransform(transform), snap.scale)),
+      scale: compactScaleValue(
+        snapScaleVector(scaleVectorFromTransform(transform), snap.scale),
+      ),
     };
   }
   return transform;
@@ -6783,6 +6807,7 @@ function setTransformMode(mode) {
   if (editorWorldState) {
     editorWorldState.transformMode = mode;
     applyTransformControlSettings();
+    workspaceUi?.update({ transformMode: mode });
     renderEditorWorld();
   }
   renderTransformToolbar();
@@ -6798,6 +6823,46 @@ function setTransformSpace(space) {
     renderEditorWorld();
   }
   renderTransformToolbar();
+}
+
+function transformSnapPropertyForMode(mode) {
+  if (mode === 'rotate') {
+    return 'rotationDeg';
+  }
+  if (mode === 'scale') {
+    return 'scale';
+  }
+  return 'translation';
+}
+
+function setTransformSnapValue(mode, value, persist = true) {
+  if (!editorWorldState) {
+    return null;
+  }
+  const property = transformSnapPropertyForMode(mode);
+  const nextValue = normalizeEditorTransformSnapValue(property, value);
+  editorWorldState.transformSnap = {
+    ...editorWorldState.transformSnap,
+    [property]: nextValue,
+  };
+  applyTransformControlSettings();
+  if (persist && typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(
+        EDITOR_TRANSFORM_SNAP_STORAGE_KEY,
+        JSON.stringify(editorWorldState.transformSnap),
+      );
+    } catch {
+      // The snap settings still apply when browser storage is unavailable.
+    }
+  }
+  workspaceUi?.update({
+    transformSnapRotationDeg: editorWorldState.transformSnap.rotationDeg,
+    transformSnapScale: editorWorldState.transformSnap.scale,
+    transformSnapTranslation: editorWorldState.transformSnap.translation,
+  });
+  renderEditorWorld();
+  return nextValue;
 }
 
 function setTransformSnapEnabled(enabled) {
@@ -7082,6 +7147,45 @@ function loadEditorDrawDistance() {
   }
 }
 
+function normalizeEditorTransformSnapValue(property, value) {
+  const fallback = DEFAULT_EDITOR_TRANSFORM_SNAP[property];
+  const limits = EDITOR_TRANSFORM_SNAP_LIMITS[property];
+  const numeric = Number(value);
+  if (!limits || !Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Number(
+    MathUtils.clamp(numeric, limits.min, limits.max).toFixed(6),
+  );
+}
+
+function normalizeEditorTransformSnap(value) {
+  const candidate = value && typeof value === 'object' ? value : {};
+  return {
+    rotationDeg: normalizeEditorTransformSnapValue(
+      'rotationDeg',
+      candidate.rotationDeg,
+    ),
+    scale: normalizeEditorTransformSnapValue('scale', candidate.scale),
+    translation: normalizeEditorTransformSnapValue(
+      'translation',
+      candidate.translation,
+    ),
+  };
+}
+
+function loadEditorTransformSnap() {
+  if (typeof localStorage === 'undefined') {
+    return { ...DEFAULT_EDITOR_TRANSFORM_SNAP };
+  }
+  try {
+    const stored = localStorage.getItem(EDITOR_TRANSFORM_SNAP_STORAGE_KEY);
+    return normalizeEditorTransformSnap(stored ? JSON.parse(stored) : null);
+  } catch {
+    return { ...DEFAULT_EDITOR_TRANSFORM_SNAP };
+  }
+}
+
 function createInfiniteEditorGrid(drawDistance) {
   const material = new ShaderMaterial({
     depthTest: true,
@@ -7238,6 +7342,7 @@ async function createEditorWorld(session, camera) {
   world.renderer.setClearColor(0x101418, 1);
 
   const drawDistance = loadEditorDrawDistance();
+  const transformSnap = loadEditorTransformSnap();
   const perspectiveCamera = world.camera;
   perspectiveCamera.far = drawDistance;
   perspectiveCamera.updateProjectionMatrix();
@@ -7349,11 +7454,7 @@ async function createEditorWorld(session, camera) {
     transformDragState: null,
     transformHelper,
     transformMode: 'translate',
-    transformSnap: {
-      rotationDeg: 15,
-      scale: 0.1,
-      translation: 0.25,
-    },
+    transformSnap,
     transformSnapApplied: {
       rotationSnapDeg: null,
       scaleSnap: null,
@@ -11184,6 +11285,15 @@ function renderUi(session, camera) {
     soloNodeId: soloOutlinerNodeId,
     statusStrip: editorStatusStripText(session, nodes.length),
     transformMode: editorWorldState?.transformMode || 'translate',
+    transformSnapRotationDeg:
+      editorWorldState?.transformSnap?.rotationDeg ??
+      DEFAULT_EDITOR_TRANSFORM_SNAP.rotationDeg,
+    transformSnapScale:
+      editorWorldState?.transformSnap?.scale ??
+      DEFAULT_EDITOR_TRANSFORM_SNAP.scale,
+    transformSnapTranslation:
+      editorWorldState?.transformSnap?.translation ??
+      DEFAULT_EDITOR_TRANSFORM_SNAP.translation,
     transformSnapEnabled:
       editorWorldState?.transformSnapEnabled === true,
     transformSpace: editorWorldState?.transformSpace || 'local',
@@ -11961,6 +12071,7 @@ async function init() {
       return activeCamera;
     },
     setTransformMode: (mode) => setTransformMode(mode),
+    setTransformSnap: (mode, value) => setTransformSnapValue(mode, value),
     setSurfacePlacementEnabled: (enabled) =>
       setSurfacePlacementEnabled(enabled),
     setTransformSnapEnabled: (enabled) => setTransformSnapEnabled(enabled),

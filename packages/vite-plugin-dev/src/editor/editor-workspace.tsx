@@ -62,6 +62,9 @@ export interface EditorWorkspaceSnapshot {
   statusStrip: string;
   transformMode: 'translate' | 'rotate' | 'scale';
   transformSnapEnabled: boolean;
+  transformSnapRotationDeg: number;
+  transformSnapScale: number;
+  transformSnapTranslation: number;
   transformSpace: 'local' | 'world';
   viewportDrawDistance: number;
   view: WorkspaceView;
@@ -85,6 +88,10 @@ export interface EditorWorkspaceController {
   selectBuiltin?(target: string): void;
   selectRoot?(): void;
   setTransformMode?(mode: 'translate' | 'rotate' | 'scale'): void;
+  setTransformSnap?(
+    mode: 'translate' | 'rotate' | 'scale',
+    value: number,
+  ): void;
   setTransformSpace?(space: 'local' | 'world'): void;
   setViewportDrawDistance?(distance: number): void;
   setView?(view: WorkspaceView): void;
@@ -121,6 +128,9 @@ const DEFAULT_SNAPSHOT: EditorWorkspaceSnapshot = {
   statusStrip: 'Scene loading...',
   transformMode: 'translate',
   transformSnapEnabled: false,
+  transformSnapRotationDeg: 15,
+  transformSnapScale: 0.1,
+  transformSnapTranslation: 0.25,
   transformSpace: 'local',
   viewportDrawDistance: 5000,
   view: 'runtime',
@@ -345,6 +355,37 @@ function EditorToolbar({
   controller: EditorWorkspaceController;
   snapshot: EditorWorkspaceSnapshot;
 }) {
+  const snapControl =
+    snapshot.transformMode === 'rotate'
+      ? {
+          label: 'Rotation snap interval',
+          max: 180,
+          min: 0.1,
+          step: 0.1,
+          suffix: '°',
+          title: 'Rotation snapping interval in degrees',
+          value: snapshot.transformSnapRotationDeg,
+        }
+      : snapshot.transformMode === 'scale'
+        ? {
+            label: 'Scale snap interval',
+            max: 10,
+            min: 0.001,
+            step: 0.01,
+            suffix: '×',
+            title:
+              'Scale factor snapping interval (0.1× equals 10 percentage-point steps)',
+            value: snapshot.transformSnapScale,
+          }
+        : {
+            label: 'Move snap interval',
+            max: 10000,
+            min: 0.001,
+            step: 0.001,
+            suffix: 'm',
+            title: 'Movement snapping interval in meters',
+            value: snapshot.transformSnapTranslation,
+          };
   return (
     <div class="editor-toolbar" aria-label="Scene editor tools">
       <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.left" />
@@ -375,8 +416,34 @@ function EditorToolbar({
           onClick={() => controller.setTransformMode?.('scale')}
         />
       </div>
-      <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.center" />
-      <div class="toolbar-group" aria-label="Transform settings">
+      <div class="toolbar-group" aria-label="Transform snapping">
+        <IconButton
+          active={snapshot.transformSnapEnabled}
+          icon="Magnet"
+          label="Snap"
+          data={{ 'data-transform-snap': '' }}
+          onClick={() => controller.toggleTransformSnap?.()}
+        />
+        <label class="transform-snap-control" title={snapControl.title}>
+          <input
+            aria-label={snapControl.label}
+            data-transform-snap-interval={snapshot.transformMode}
+            max={snapControl.max}
+            min={snapControl.min}
+            step={snapControl.step}
+            type="number"
+            value={snapControl.value}
+            onBlur={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isFinite(value)) {
+                controller.setTransformSnap?.(snapshot.transformMode, value);
+              }
+            }}
+          />
+          <span>{snapControl.suffix}</span>
+        </label>
+      </div>
+      <div class="toolbar-group" aria-label="Transform space">
         <IconButton
           active={snapshot.transformSpace === 'local'}
           icon="Box"
@@ -391,14 +458,8 @@ function EditorToolbar({
           data={{ 'data-transform-space': 'world' }}
           onClick={() => controller.setTransformSpace?.('world')}
         />
-        <IconButton
-          active={snapshot.transformSnapEnabled}
-          icon="Magnet"
-          label="Snap"
-          data={{ 'data-transform-snap': '' }}
-          onClick={() => controller.toggleTransformSnap?.()}
-        />
       </div>
+      <div class="editor-slot toolbar-slot" data-editor-slot="toolbar.center" />
       <div class="toolbar-group" aria-label="Document history">
         <IconButton
           icon="Undo2"

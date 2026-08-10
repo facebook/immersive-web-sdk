@@ -472,6 +472,7 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         padding-left: 0;
       }
 
+      .transform-snap-control,
       .viewport-distance-control {
         align-items: center;
         display: flex;
@@ -479,15 +480,24 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         white-space: nowrap;
       }
 
+      .transform-snap-control > span,
       .viewport-distance-control > span {
         color: #8d8d94;
         font-size: 10px;
       }
 
+      .transform-snap-control input,
       .viewport-distance-control input {
         height: 24px;
         min-height: 24px;
         text-align: right;
+      }
+
+      .transform-snap-control input {
+        width: 54px;
+      }
+
+      .viewport-distance-control input {
         width: 68px;
       }
 

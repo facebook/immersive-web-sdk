@@ -209,17 +209,35 @@ describe('editor transform gizmo', () => {
     await expectRealWebGLViewport(editor);
     await selectNode(editor.page, 'table-1');
 
-    await editor.page.evaluate(() => {
-      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformSnapEnabled(
-        true,
-      );
+    const moveSnap = editor.page.getByLabel('Move snap interval');
+    await expect(moveSnap.inputValue()).resolves.toBe('0.25');
+    await moveSnap.fill('0.5');
+    await moveSnap.blur();
+
+    await editor.page.locator('[data-transform-mode="rotate"]').click();
+    const rotationSnap = editor.page.getByLabel('Rotation snap interval');
+    await expect(rotationSnap.inputValue()).resolves.toBe('15');
+    await rotationSnap.fill('30');
+    await rotationSnap.blur();
+
+    await editor.page.locator('[data-transform-mode="scale"]').click();
+    const scaleSnap = editor.page.getByLabel('Scale snap interval');
+    await expect(scaleSnap.inputValue()).resolves.toBe('0.1');
+    await scaleSnap.fill('0.25');
+    await scaleSnap.blur();
+
+    await editor.page.locator('[data-transform-snap]').click();
+    await expect(
+      editor.page.evaluate(() =>
+        JSON.parse(localStorage.getItem('iwsdk-editor-transform-snap') || '{}'),
+      ),
+    ).resolves.toEqual({
+      rotationDeg: 30,
+      scale: 0.25,
+      translation: 0.5,
     });
 
-    await editor.page.evaluate(() => {
-      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode(
-        'translate',
-      );
-    });
+    await editor.page.locator('[data-transform-mode="translate"]').click();
     const translated = await editor.page.evaluate(() =>
       (
         window as any
@@ -238,9 +256,7 @@ describe('editor transform gizmo', () => {
       .poll(() => runtimeTransform(editor))
       .toMatchObject({ position: [0.5, 0, 0] });
 
-    await editor.page.evaluate(() => {
-      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode('rotate');
-    });
+    await editor.page.locator('[data-transform-mode="rotate"]').click();
     const rotated = await editor.page.evaluate(() =>
       (
         window as any
@@ -259,26 +275,41 @@ describe('editor transform gizmo', () => {
       .poll(() => runtimeTransform(editor))
       .toMatchObject({ rotationDeg: [0, 30, 0] });
 
-    await editor.page.evaluate(() => {
-      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode('scale');
-    });
+    await editor.page.locator('[data-transform-mode="scale"]').click();
     const scaled = await editor.page.evaluate(() =>
       (
         window as any
       ).IWSDK_SCENE_EDITOR_TEST_HOOKS.simulateTransformControlCommit({
         position: [0.5, 0, 0],
         rotationDeg: [0, 30, 0],
-        scale: [1.04, 1.16, 0.96],
+        scale: [1.04, 1.16, -0.04],
       }),
     );
     expect(scaled.documentTransform).toMatchObject({
       position: [0.5, 0, 0],
       rotationDeg: [0, 30, 0],
-      scale: [1, 1.2, 1],
+      scale: [1, 1.25, -0.25],
     });
     await expect
       .poll(() => runtimeTransform(editor))
-      .toMatchObject({ scale: [1, 1.2, 1] });
+      .toMatchObject({ scale: [1, 1.25, -0.25] });
+
+    expect((await getEditorProof(editor.page)).transformControls).toMatchObject(
+      {
+        mode: 'scale',
+        snapping: {
+          applied: {
+            rotationSnapDeg: 30,
+            scaleSnap: 0.25,
+            translationSnap: 0.5,
+          },
+          enabled: true,
+          rotationDeg: 30,
+          scale: 0.25,
+          translation: 0.5,
+        },
+      },
+    );
   }, 45000);
 
   test('exposes X/Y/Z translate handles and preserves untouched axes on commits', async () => {
