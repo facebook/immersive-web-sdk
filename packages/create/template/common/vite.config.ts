@@ -18,8 +18,25 @@ export default defineConfig({
     rollupOptions: { input: './index.html' },
   },
   esbuild: { target: 'esnext' },
+  // @drawcall/uikitml otherwise pulls a second three/@pmndrs/uikit graph
+  // (three@0.185 vs app super-three@0.181). Duplicate Component classes break
+  // instanceof checks → "Only pmndrs/uikit components can be added as children".
+  resolve: {
+    dedupe: [
+      'three',
+      '@pmndrs/uikit',
+      '@pmndrs/uikit-horizon',
+      '@pmndrs/uikit-lucide',
+    ],
+  },
   optimizeDeps: {
     exclude: ['@babylonjs/havok'],
+    include: [
+      '@pmndrs/uikit',
+      '@pmndrs/uikit-horizon',
+      '@pmndrs/uikit-lucide',
+      '@drawcall/uikitml',
+    ],
     esbuildOptions: { target: 'esnext' },
   },
   publicDir: 'public',
