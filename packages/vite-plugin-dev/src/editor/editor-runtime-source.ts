@@ -428,6 +428,7 @@ let applyScenePatch;
 let Box3;
 let Box3Helper;
 let BoxGeometry;
+let BufferGeometry;
 let CanvasTexture;
 let Color;
 let ComponentRegistry;
@@ -437,6 +438,7 @@ let disposeLoweredSceneNodes;
 let ConeGeometry;
 let CylinderGeometry;
 let DirectionalLight;
+let Float32BufferAttribute;
 let Frustum;
 let finalizeSceneReviewDraft;
 let GridHelper;
@@ -444,6 +446,8 @@ let Group;
 let hashSceneDocument;
 let hashRuntimeSceneDocument;
 let LevelComponentApplier;
+let LineBasicMaterial;
+let LineSegments;
 let LightBinding;
 let lightSpecFromComponentValue;
 let lowerSceneDocumentObjects;
@@ -455,9 +459,11 @@ let MeshStandardMaterial;
 let OrthographicCamera;
 let PerspectiveCamera;
 let PlaneGeometry;
+let Quaternion;
 let Raycaster;
 let restoreSceneEnvironment;
 let Scene;
+let ShaderMaterial;
 let SphereGeometry;
 let SRGBColorSpace;
 let Types;
@@ -519,6 +525,7 @@ async function loadEditorRuntimeDependencies() {
     Box3,
     Box3Helper,
     BoxGeometry,
+    BufferGeometry,
     CanvasTexture,
     Color,
     ComponentRegistry,
@@ -528,10 +535,13 @@ async function loadEditorRuntimeDependencies() {
     ConeGeometry,
     CylinderGeometry,
     DirectionalLight,
+    Float32BufferAttribute,
     Frustum,
     GridHelper,
     Group,
     LevelComponentApplier,
+    LineBasicMaterial,
+    LineSegments,
     LightBinding,
     lightSpecFromComponentValue,
     lowerSceneDocumentObjects,
@@ -543,9 +553,11 @@ async function loadEditorRuntimeDependencies() {
     OrthographicCamera,
     PerspectiveCamera,
     PlaneGeometry,
+    Quaternion,
     Raycaster,
     restoreSceneEnvironment,
     Scene,
+    ShaderMaterial,
     SphereGeometry,
     SRGBColorSpace,
     Types,
@@ -4149,23 +4161,302 @@ function markOwnedEditorHelper(mesh, nodeId, helperType) {
   return mesh;
 }
 
+function markLightEditorHelper(mesh, nodeId, helperType, role) {
+  markOwnedEditorHelper(mesh, nodeId, helperType);
+  mesh.userData.iwsdkEditorLightRole = role;
+  mesh.userData.iwsdkEditorPickable = role === 'handle';
+  return mesh;
+}
+
+function createLightPickHandle(nodeId, helperType, color) {
+  return markLightEditorHelper(
+    new Mesh(
+      new SphereGeometry(0.09, 16, 10),
+      new MeshBasicMaterial({
+        color,
+        colorWrite: false,
+        depthWrite: false,
+      }),
+    ),
+    nodeId,
+    helperType,
+    'handle',
+  );
+}
+
+function createLightCenterDot(nodeId, helperType, color) {
+  return markLightEditorHelper(
+    new Mesh(
+      new SphereGeometry(0.025, 12, 8),
+      new MeshBasicMaterial({ color, depthTest: false, depthWrite: false }),
+    ),
+    nodeId,
+    helperType,
+    'visual',
+  );
+}
+
+function appendLightOutlineSegment(points, start, end) {
+  points.push(new Vector3(...start), new Vector3(...end));
+}
+
+function appendLightOutlineCircle(
+  points,
+  radius,
+  plane = 'xy',
+  center = [0, 0, 0],
+  segments = 24,
+) {
+  const pointAt = (angle) => {
+    const cosine = Math.cos(angle) * radius;
+    const sine = Math.sin(angle) * radius;
+    if (plane === 'yz') {
+      return [center[0], center[1] + cosine, center[2] + sine];
+    }
+    if (plane === 'xz') {
+      return [center[0] + cosine, center[1], center[2] + sine];
+    }
+    return [center[0] + cosine, center[1] + sine, center[2]];
+  };
+  for (let index = 0; index < segments; index += 1) {
+    appendLightOutlineSegment(
+      points,
+      pointAt((index / segments) * Math.PI * 2),
+      pointAt(((index + 1) / segments) * Math.PI * 2),
+    );
+  }
+}
+
+function appendDashedLightOutlineCircle(points, radius, segments) {
+  const ring = Array.from({ length: segments }, (_, index) => {
+    const angle = (index / segments) * Math.PI * 2;
+    return [Math.cos(angle) * radius, Math.sin(angle) * radius, 0];
+  });
+  for (let index = 0; index < segments; index += 2) {
+    appendLightOutlineSegment(points, ring[index], ring[index + 1]);
+  }
+}
+
+function appendLightOutlineDiamond(points, radius) {
+  const diamond = [
+    [radius, 0, 0],
+    [0, radius, 0],
+    [-radius, 0, 0],
+    [0, -radius, 0],
+  ];
+  for (let index = 0; index < diamond.length; index += 1) {
+    appendLightOutlineSegment(
+      points,
+      diamond[index],
+      diamond[(index + 1) % diamond.length],
+    );
+  }
+}
+
+function createLightOutline(
+  nodeId,
+  helperType,
+  color,
+  points,
+  alignment = 'object',
+) {
+  let material;
+  if (alignment === 'object') {
+    material = new LineBasicMaterial({
+      color,
+      depthTest: false,
+      depthWrite: false,
+      opacity: 0.9,
+      transparent: true,
+    });
+  } else {
+    const screenSpace = alignment === 'screen-space';
+    material = new ShaderMaterial({
+      depthTest: false,
+      depthWrite: false,
+      fragmentShader: \`uniform vec3 outlineColor;
+void main() { gl_FragColor = vec4(outlineColor, 0.9); }\`,
+      transparent: true,
+      uniforms: {
+        outlineColor: { value: color },
+        viewportSize: { value: new Vector2(1, 1) },
+      },
+      vertexShader: screenSpace
+        ? \`uniform vec2 viewportSize;
+void main() {
+  vec4 center = projectionMatrix * viewMatrix * modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  center.xy += position.xy * 200.0 / viewportSize * center.w;
+  gl_Position = center;
+}\`
+        : \`void main() {
+  vec3 center = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+  vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+  vec3 worldPosition = center + right * position.x + up * position.y;
+  gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
+}\`,
+    });
+  }
+  const outline = new LineSegments(
+    new BufferGeometry().setFromPoints(points),
+    material,
+  );
+  if (alignment === 'screen-space') {
+    const viewportSize = material.uniforms.viewportSize.value;
+    outline.onBeforeRender = (renderer) => {
+      renderer.getDrawingBufferSize(viewportSize);
+    };
+  }
+  return markLightEditorHelper(
+    outline,
+    nodeId,
+    helperType,
+    'visual',
+  );
+}
+
+function createBlenderLightIcon(nodeId, helperType, color, sunRays = false) {
+  const points = [];
+  appendLightOutlineDiamond(points, 0.027);
+  appendDashedLightOutlineCircle(points, 0.09, 16);
+  appendDashedLightOutlineCircle(points, 0.1197, 20);
+  if (sunRays) {
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * Math.PI * 2;
+      const direction = [Math.cos(angle), Math.sin(angle)];
+      for (const [startScale, endScale] of [
+        [0.144, 0.171],
+        [0.198, 0.225],
+      ]) {
+        appendLightOutlineSegment(
+          points,
+          [direction[0] * startScale, direction[1] * startScale, 0],
+          [direction[0] * endScale, direction[1] * endScale, 0],
+        );
+      }
+    }
+  }
+  return createLightOutline(
+    nodeId,
+    helperType,
+    color,
+    points,
+    'screen-space',
+  );
+}
+
+function createSpotSilhouette(
+  nodeId,
+  helperType,
+  color,
+  radius,
+  length,
+  segments = 32,
+) {
+  const positions = [];
+  const adjacentNormalsA = [];
+  const adjacentNormalsB = [];
+  const edgeCenters = [];
+  const angularStep = (Math.PI * 2) / segments;
+  const appendVectorTwice = (target, value) => {
+    target.push(...value, ...value);
+  };
+  const faceNormal = (angle) =>
+    new Vector3(
+      length * Math.cos(angle),
+      length * Math.sin(angle),
+      radius,
+    )
+      .normalize()
+      .toArray();
+  for (let index = 0; index < segments; index += 1) {
+    const angle = index * angularStep;
+    const base = [
+      radius * Math.cos(angle),
+      radius * Math.sin(angle),
+      -length,
+    ];
+    positions.push(0, 0, 0, ...base);
+    appendVectorTwice(
+      adjacentNormalsA,
+      faceNormal(angle - angularStep / 2),
+    );
+    appendVectorTwice(
+      adjacentNormalsB,
+      faceNormal(angle + angularStep / 2),
+    );
+    appendVectorTwice(edgeCenters, [base[0] / 2, base[1] / 2, -length / 2]);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new Float32BufferAttribute(positions, 3),
+  );
+  geometry.setAttribute(
+    'adjacentNormalA',
+    new Float32BufferAttribute(adjacentNormalsA, 3),
+  );
+  geometry.setAttribute(
+    'adjacentNormalB',
+    new Float32BufferAttribute(adjacentNormalsB, 3),
+  );
+  geometry.setAttribute(
+    'edgeCenter',
+    new Float32BufferAttribute(edgeCenters, 3),
+  );
+  return markLightEditorHelper(
+    new LineSegments(
+      geometry,
+      new ShaderMaterial({
+        depthTest: false,
+        depthWrite: false,
+        fragmentShader: \`uniform vec3 outlineColor;
+void main() {
+  gl_FragColor = vec4(outlineColor, 0.9);
+}\`,
+        transparent: true,
+        uniforms: { outlineColor: { value: color } },
+        vertexShader: \`attribute vec3 adjacentNormalA;
+attribute vec3 adjacentNormalB;
+attribute vec3 edgeCenter;
+void main() {
+  vec3 centerInView = (modelViewMatrix * vec4(edgeCenter, 1.0)).xyz;
+  bool perspective = projectionMatrix[2][3] == -1.0;
+  vec3 viewDirection = perspective ? normalize(-centerInView) : vec3(0.0, 0.0, 1.0);
+  float facingA = dot(normalize(normalMatrix * adjacentNormalA), viewDirection);
+  float facingB = dot(normalize(normalMatrix * adjacentNormalB), viewDirection);
+  vec3 visiblePosition = facingA * facingB <= 0.0 ? position : vec3(0.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(visiblePosition, 1.0);
+}\`,
+      }),
+    ),
+    nodeId,
+    helperType,
+    'visual',
+  );
+}
+
 function createComponentHelperDecoration(node, helperType) {
   const group = new Group();
   group.name = node.id + '-' + helperType + '-helper';
   group.userData.iwsdkEditorHelper = true;
   group.userData.iwsdkEditorHelperType = helperType;
   group.userData.iwsdkSceneNodeId = node.id;
+  if (isLightEditorHelperType(helperType)) {
+    group.matrixAutoUpdate = false;
+    group.matrixWorldAutoUpdate = false;
+    group.userData.iwsdkEditorScaleInvariant = true;
+    group.userData.iwsdkEditorWorldPosition = new Vector3();
+    group.userData.iwsdkEditorWorldQuaternion = new Quaternion();
+    group.userData.iwsdkEditorWorldScale = new Vector3(1, 1, 1);
+  }
 
   const lightSpec = Object.entries(node.components || {})
     .map(([componentName, value]) =>
       lightSpecFromComponentValue(componentName, value),
     )
     .find(Boolean);
-  const lightColor = new Color(0xffd86b);
-  const authoredColor = lightSpec?.color || lightSpec?.skyColor;
-  if (authoredColor) {
-    lightColor.setRGB(authoredColor[0], authoredColor[1], authoredColor[2]);
-  }
+  const lightColor = new Color(0xffa62b);
 
   if (helperType === 'audio-source') {
     const body = markOwnedEditorHelper(
@@ -4193,138 +4484,236 @@ function createComponentHelperDecoration(node, helperType) {
     wave.position.x = 0.18;
     group.add(body, wave);
   } else if (helperType === 'camera-source') {
-    const body = markOwnedEditorHelper(
-      new Mesh(
-        new BoxGeometry(0.22, 0.14, 0.12),
-        new MeshBasicMaterial({ color: 0xffd166, opacity: 0.9, transparent: true }),
-      ),
+    const cameraColor = new Color(0xffa62b);
+    const handle = createLightPickHandle(node.id, helperType, cameraColor);
+    const center = createLightCenterDot(node.id, helperType, cameraColor);
+    const points = [];
+    const planeZ = -0.44;
+    const corners = [
+      [-0.22, -0.14, planeZ],
+      [0.22, -0.14, planeZ],
+      [0.22, 0.14, planeZ],
+      [-0.22, 0.14, planeZ],
+    ];
+    for (const corner of corners) {
+      appendLightOutlineSegment(points, [0, 0, 0], corner);
+    }
+    for (let index = 0; index < corners.length; index += 1) {
+      appendLightOutlineSegment(
+        points,
+        corners[index],
+        corners[(index + 1) % corners.length],
+      );
+    }
+    const frustum = createLightOutline(
       node.id,
       helperType,
+      cameraColor,
+      points,
     );
-    const frustum = markOwnedEditorHelper(
+    const upMarker = markLightEditorHelper(
       new Mesh(
-        new ConeGeometry(0.2, 0.34, 4, 1, true),
+        new BufferGeometry().setFromPoints([
+          new Vector3(-0.08, 0.16, planeZ),
+          new Vector3(0.08, 0.16, planeZ),
+          new Vector3(0, 0.29, planeZ),
+          new Vector3(0, 0.29, planeZ),
+          new Vector3(0.08, 0.16, planeZ),
+          new Vector3(-0.08, 0.16, planeZ),
+        ]),
         new MeshBasicMaterial({
-          color: 0xfff0a8,
-          opacity: 0.5,
-          transparent: true,
-          wireframe: true,
+          color: cameraColor,
+          depthTest: false,
+          depthWrite: false,
         }),
       ),
       node.id,
       helperType,
+      'visual',
     );
-    frustum.rotation.x = Math.PI / 2;
-    frustum.position.z = -0.24;
-    group.add(body, frustum);
+    group.add(handle, center, frustum, upMarker);
   } else if (helperType === 'point-light') {
-    const distance = lightSpec?.kind === 'point' ? lightSpec.distance : 0;
-    const radius = distance > 0 ? distance : 0.18;
-    const range = markOwnedEditorHelper(
-      new Mesh(
-        new SphereGeometry(radius, 20, 14),
-        new MeshBasicMaterial({
-          color: lightColor,
-          opacity: distance > 0 ? 0.22 : 0.68,
-          transparent: true,
-          wireframe: true,
-        }),
-      ),
+    const handle = createLightPickHandle(node.id, helperType, lightColor);
+    const center = createLightCenterDot(node.id, helperType, lightColor);
+    const icon = createBlenderLightIcon(node.id, helperType, lightColor);
+    const points = [];
+    appendLightOutlineCircle(points, 0.13, 'xy', [0, 0, 0], 32);
+    const symbol = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      points,
+      'screen-aligned',
     );
-    group.add(range);
+    group.add(handle, center, icon, symbol);
   } else if (helperType === 'spot-light') {
-    const distance =
-      lightSpec?.kind === 'spot' && lightSpec.distance > 0
-        ? lightSpec.distance
-        : 0.5;
+    const handle = createLightPickHandle(node.id, helperType, lightColor);
+    const center = createLightCenterDot(node.id, helperType, lightColor);
+    const icon = createBlenderLightIcon(node.id, helperType, lightColor);
+    const emitterPoints = [];
+    appendLightOutlineCircle(emitterPoints, 0.07, 'xy', [0, 0, 0], 32);
+    const emitter = createLightOutline(
+      node.id,
+      helperType,
+      lightColor,
+      emitterPoints,
+      'screen-aligned',
+    );
+    const length = 0.5;
     const angleDeg = lightSpec?.kind === 'spot' ? lightSpec.angleDeg : 60;
-    const radius = Math.max(
-      0.02,
-      Math.tan(MathUtils.degToRad(angleDeg)) * distance,
+    const radius = MathUtils.clamp(
+      Math.tan(MathUtils.degToRad(MathUtils.clamp(angleDeg, 5, 70))) * length,
+      0.08,
+      0.26,
     );
-    const cone = markOwnedEditorHelper(
-      new Mesh(
-        new ConeGeometry(radius, distance, 24, 1, true),
-        new MeshBasicMaterial({
-          color: lightColor,
-          opacity: 0.62,
-          transparent: true,
-          wireframe: true,
-        }),
-      ),
+    const points = [];
+    appendLightOutlineCircle(points, radius, 'xy', [0, 0, -length], 24);
+    appendLightOutlineCircle(
+      points,
+      radius * 0.86,
+      'xy',
+      [0, 0, -length],
+      24,
+    );
+    appendLightOutlineSegment(points, [0, 0, 0], [0, 0, -length]);
+    const coneOutline = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      points,
     );
-    cone.rotation.x = Math.PI / 2;
-    cone.position.z = -distance / 2;
-    group.add(cone);
+    const coneSilhouette = createSpotSilhouette(
+      node.id,
+      helperType,
+      lightColor,
+      radius,
+      length,
+    );
+    group.add(handle, center, icon, emitter, coneOutline, coneSilhouette);
   } else if (helperType === 'directional-light') {
-    const shaft = markOwnedEditorHelper(
-      new Mesh(
-        new CylinderGeometry(0.035, 0.035, 0.36, 12),
-        new MeshBasicMaterial({ color: lightColor }),
-      ),
+    const handle = createLightPickHandle(node.id, helperType, lightColor);
+    const center = createLightCenterDot(node.id, helperType, lightColor);
+    const icon = createBlenderLightIcon(node.id, helperType, lightColor, true);
+    const points = [];
+    appendLightOutlineSegment(points, [0, 0, 0], [0, 0, -0.46]);
+    const direction = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      points,
     );
-    shaft.rotation.x = -Math.PI / 2;
-    shaft.position.z = -0.18;
-    const head = markOwnedEditorHelper(
-      new Mesh(
-        new ConeGeometry(0.1, 0.2, 16),
-        new MeshBasicMaterial({ color: lightColor }),
-      ),
+    const endpointPoints = [];
+    appendLightOutlineDiamond(endpointPoints, 0.022);
+    const endpoint = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      endpointPoints,
+      'screen-space',
     );
-    head.rotation.x = -Math.PI / 2;
-    head.position.z = -0.44;
-    group.add(shaft, head);
+    endpoint.position.z = -0.46;
+    group.add(handle, center, icon, direction, endpoint);
   } else if (helperType === 'rect-area-light') {
-    const width = lightSpec?.kind === 'rect-area' ? lightSpec.width : 0.48;
-    const height = lightSpec?.kind === 'rect-area' ? lightSpec.height : 0.32;
-    const panel = markOwnedEditorHelper(
-      new Mesh(
-        new BoxGeometry(width, height, 0.025),
-        new MeshBasicMaterial({
-          color: lightColor,
-          opacity: 0.55,
-          transparent: true,
-          wireframe: true,
-        }),
-      ),
+    const authoredWidth = lightSpec?.kind === 'rect-area' ? lightSpec.width : 0.48;
+    const authoredHeight = lightSpec?.kind === 'rect-area' ? lightSpec.height : 0.32;
+    const fitScale = Math.min(
+      1,
+      0.42 / Math.max(Math.abs(authoredWidth), Math.abs(authoredHeight), 0.01),
+    );
+    const width = Math.max(0.12, Math.abs(authoredWidth) * fitScale);
+    const height = Math.max(0.08, Math.abs(authoredHeight) * fitScale);
+    const handle = createLightPickHandle(node.id, helperType, lightColor);
+    const center = createLightCenterDot(node.id, helperType, lightColor);
+    const icon = createBlenderLightIcon(node.id, helperType, lightColor);
+    const points = [];
+    const corners = [
+      [-width / 2, -height / 2, 0],
+      [width / 2, -height / 2, 0],
+      [width / 2, height / 2, 0],
+      [-width / 2, height / 2, 0],
+    ];
+    for (let index = 0; index < corners.length; index += 1) {
+      appendLightOutlineSegment(
+        points,
+        corners[index],
+        corners[(index + 1) % corners.length],
+      );
+    }
+    appendLightOutlineSegment(points, [0, 0, 0], [0, 0, -0.44]);
+    const panel = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      points,
     );
-    group.add(panel);
+    const endpointPoints = [];
+    appendLightOutlineDiamond(endpointPoints, 0.022);
+    const endpoint = createLightOutline(
+      node.id,
+      helperType,
+      lightColor,
+      endpointPoints,
+      'screen-space',
+    );
+    endpoint.position.z = -0.44;
+    group.add(handle, center, icon, panel, endpoint);
   } else {
-    const core = markOwnedEditorHelper(
-      new Mesh(
-        new CylinderGeometry(0.14, 0.14, 0.06, 24),
-        new MeshBasicMaterial({ color: 0xa8ff78, opacity: 0.85, transparent: true }),
-      ),
+    const handle = createLightPickHandle(node.id, helperType, lightColor);
+    const center = createLightCenterDot(node.id, helperType, lightColor);
+    const points = [];
+    appendLightOutlineCircle(points, 0.17, 'xy', [0, 0, 0], 24);
+    appendLightOutlineCircle(points, 0.17, 'xz', [0, 0, 0], 24);
+    const halo = createLightOutline(
       node.id,
       helperType,
+      lightColor,
+      points,
     );
-    const halo = markOwnedEditorHelper(
-      new Mesh(
-        new ConeGeometry(0.28, 0.12, 24, 1, true),
-        new MeshBasicMaterial({
-          color: 0xf7ff9e,
-          opacity: 0.45,
-          transparent: true,
-          wireframe: true,
-        }),
-      ),
-      node.id,
-      helperType,
-    );
-    halo.position.y = 0.04;
-    group.add(core, halo);
+    group.add(handle, center, halo);
   }
   return group;
+}
+
+function componentHelperProof(nodeId) {
+  syncEditorLightHelperTransforms();
+  const object = editorWorldState?.objectMap.get(nodeId);
+  const helper = object?.children.find(
+    (child) =>
+      child.userData?.iwsdkEditorHelper === true &&
+      typeof child.userData?.iwsdkEditorHelperType === 'string',
+  );
+  if (!helper) {
+    return null;
+  }
+  helper.updateMatrixWorld(true);
+  const bounds = new Box3().setFromObject(helper);
+  const size = new Vector3();
+  if (!bounds.isEmpty()) {
+    bounds.getSize(size);
+  }
+  const meshes = [];
+  helper.traverse((entry) => {
+    if (!entry.isMesh && !entry.isLine) {
+      return;
+    }
+    meshes.push({
+      color:
+        entry.material?.color?.getHexString?.() ||
+        entry.material?.uniforms?.outlineColor?.value?.getHexString?.() ||
+        null,
+      geometry: entry.geometry?.type || null,
+      kind: entry.isLine ? 'line' : 'mesh',
+      material: entry.material?.type || null,
+      pickable: entry.userData?.iwsdkEditorPickable !== false,
+      role: entry.userData?.iwsdkEditorLightRole || null,
+      vertexCount: entry.geometry?.attributes?.position?.count || 0,
+    });
+  });
+  return {
+    helperType: helper.userData.iwsdkEditorHelperType,
+    meshes,
+    size: roundVec3(size.toArray()),
+  };
 }
 
 async function waitForAssetLoads() {
@@ -4633,6 +5022,25 @@ function syncEditorLightBindings() {
   if (!editorWorldState?.lightBindings) return;
   for (const bindings of editorWorldState.lightBindings.values()) {
     for (const binding of bindings) binding.syncTransform();
+  }
+}
+
+function syncEditorLightHelperTransforms() {
+  if (!editorWorldState?.objectMap) return;
+  for (const object of editorWorldState.objectMap.values()) {
+    const helper = object.children.find(
+      (child) => child.userData?.iwsdkEditorScaleInvariant === true,
+    );
+    if (!helper) continue;
+    object.updateWorldMatrix(true, false);
+    const position = helper.userData.iwsdkEditorWorldPosition;
+    const quaternion = helper.userData.iwsdkEditorWorldQuaternion;
+    const scale = helper.userData.iwsdkEditorWorldScale;
+    object.getWorldPosition(position);
+    object.getWorldQuaternion(quaternion);
+    helper.matrixWorld.compose(position, quaternion, scale);
+    helper.matrixWorldNeedsUpdate = false;
+    helper.updateWorldMatrix(false, true);
   }
 }
 
@@ -5177,7 +5585,20 @@ function boundsForObjectWithoutEditorHelpers(object) {
   return fallbackBounds.isEmpty() ? null : fallbackBounds;
 }
 
+function isLightEditorHelperType(helperType) {
+  return (
+    helperType === 'directional-light' ||
+    helperType === 'environment-light' ||
+    helperType === 'point-light' ||
+    helperType === 'rect-area-light' ||
+    helperType === 'spot-light'
+  );
+}
+
 function createEditorBoundsHelper(object, color) {
+  if (isLightEditorHelperType(object.userData?.iwsdkEditorHelperType)) {
+    return null;
+  }
   const bounds = boundsForObjectWithoutEditorHelpers(object);
   if (!bounds) {
     return null;
@@ -5427,6 +5848,7 @@ function renderEditorWorld() {
   }
   hideCurrentEditorHelpersForRenderOnlyCapture();
   syncEditorLightBindings();
+  syncEditorLightHelperTransforms();
   const startedAt = performance.now();
   editorWorldState.world.renderer.render(
     editorWorldState.world.scene,
@@ -6105,6 +6527,42 @@ function selectedBuiltinTarget() {
   return target === 'player' ? target : null;
 }
 
+function lightScaleTarget(node) {
+  if (!node || node.content != null) {
+    return null;
+  }
+  for (const [component, value] of Object.entries(node.components || {})) {
+    const spec = lightSpecFromComponentValue(component, value);
+    if (spec) {
+      return { component, spec, value };
+    }
+  }
+  return null;
+}
+
+function lightScaleAxisPolicy(node) {
+  const target = lightScaleTarget(node);
+  if (!target) return null;
+  switch (target.spec.kind) {
+    case 'point':
+      return {
+        x: target.spec.distance > 0,
+        y: target.spec.distance > 0,
+        z: target.spec.distance > 0,
+      };
+    case 'spot':
+      return {
+        x: true,
+        y: true,
+        z: target.spec.distance > 0,
+      };
+    case 'rect-area':
+      return { x: true, y: true, z: false };
+    default:
+      return { x: false, y: false, z: false };
+  }
+}
+
 function selectionForNodeClick(nodeId, event) {
   const currentSelection = Array.isArray(window.__IWSDK_EDITOR_SELECTION)
     ? window.__IWSDK_EDITOR_SELECTION
@@ -6127,6 +6585,14 @@ function applyTransformControlSettings() {
   const transformControls = editorWorldState.transformControls;
   transformControls.setMode(mode);
   transformControls.setSpace(space);
+  const nodeId = selectedNodeId();
+  const node = nodeId
+    ? findNodeById(editorWorldState.currentSession?.document, nodeId)
+    : null;
+  const lightPolicy = mode === 'scale' ? lightScaleAxisPolicy(node) : null;
+  transformControls.showX = lightPolicy?.x ?? true;
+  transformControls.showY = lightPolicy?.y ?? true;
+  transformControls.showZ = lightPolicy?.z ?? true;
   const snap = editorWorldState.transformSnapEnabled
     ? editorWorldState.transformSnap
     : null;
@@ -6167,6 +6633,119 @@ function setTransformControlSnap(transformControls, method, property, value) {
   } else {
     transformControls[property] = value;
   }
+}
+
+function scaleRatio(startTransform, nextTransform) {
+  const start = scaleVectorFromTransform(startTransform);
+  const next = scaleVectorFromTransform(nextTransform);
+  return start.map((value, index) =>
+    Math.max(
+      0.001,
+      Math.abs(value) > 1e-6 ? Math.abs(next[index] / value) : 1,
+    ),
+  );
+}
+
+function inferredScaleAxis(ratio) {
+  const changed = ['X', 'Y', 'Z'].filter(
+    (_axis, index) => Math.abs(ratio[index] - 1) > 1e-4,
+  );
+  if (
+    changed.length === 3 &&
+    Math.abs(ratio[0] - ratio[1]) < 1e-4 &&
+    Math.abs(ratio[1] - ratio[2]) < 1e-4
+  ) {
+    return 'XYZ';
+  }
+  return changed.join('');
+}
+
+function combinedScaleFactor(ratio, axis) {
+  const indices = ['X', 'Y', 'Z']
+    .map((name, index) => (axis.includes(name) ? index : -1))
+    .filter((index) => index >= 0);
+  if (indices.length === 0) return 1;
+  return Math.pow(
+    indices.reduce((product, index) => product * ratio[index], 1),
+    1 / indices.length,
+  );
+}
+
+function roundedLightProperty(value) {
+  return Number(value.toFixed(4));
+}
+
+function lightPropertyScaleEdit(node, startTransform, nextTransform, scaleAxis) {
+  const target = lightScaleTarget(node);
+  if (!target) return null;
+  const ratio = scaleRatio(startTransform, nextTransform);
+  const axis = scaleAxis || inferredScaleAxis(ratio);
+  const value = { ...target.value };
+  let changed = false;
+  switch (target.spec.kind) {
+    case 'point': {
+      if (target.spec.distance <= 0) break;
+      const factor = combinedScaleFactor(ratio, axis || 'XYZ');
+      value.distance = roundedLightProperty(
+        Math.max(0.001, target.spec.distance * factor),
+      );
+      changed = value.distance !== target.spec.distance;
+      break;
+    }
+    case 'spot': {
+      if (axis !== 'XYZ' && (axis.includes('X') || axis.includes('Y'))) {
+        const radialAxis = ['X', 'Y'].filter((name) => axis.includes(name)).join('');
+        const radialFactor = combinedScaleFactor(ratio, radialAxis);
+        value.angleDeg = roundedLightProperty(
+          MathUtils.clamp(
+            MathUtils.radToDeg(
+              Math.atan(
+                Math.tan(MathUtils.degToRad(target.spec.angleDeg)) *
+                  radialFactor,
+              ),
+            ),
+            0.1,
+            90,
+          ),
+        );
+        changed = value.angleDeg !== target.spec.angleDeg;
+      }
+      if (axis.includes('Z') && target.spec.distance > 0) {
+        value.distance = roundedLightProperty(
+          Math.max(0.001, target.spec.distance * ratio[2]),
+        );
+        changed = changed || value.distance !== target.spec.distance;
+      }
+      break;
+    }
+    case 'rect-area': {
+      if (axis.includes('X')) {
+        value.width = roundedLightProperty(
+          Math.max(0.001, target.spec.width * ratio[0]),
+        );
+        changed = value.width !== target.spec.width;
+      }
+      if (axis.includes('Y')) {
+        value.height = roundedLightProperty(
+          Math.max(0.001, target.spec.height * ratio[1]),
+        );
+        changed = changed || value.height !== target.spec.height;
+      }
+      break;
+    }
+  }
+  return {
+    changed,
+    patch: changed
+      ? {
+          component: target.component,
+          nodeId: node.id,
+          op: 'updateComponent',
+          value,
+        }
+      : null,
+    policy: target.spec.kind,
+  };
 }
 
 function renderTransformToolbar() {
@@ -6301,6 +6880,28 @@ async function commitTransformControlDrag(session, rerender) {
   const nextTransform = snapTransformForCurrentMode(
     transformFromObject(object, node.transform || {}),
   );
+  const lightScaleEdit =
+    dragState.mode === 'scale'
+      ? lightPropertyScaleEdit(
+          node,
+          dragState.startTransform,
+          nextTransform,
+          dragState.scaleAxis,
+        )
+      : null;
+  if (lightScaleEdit) {
+    applyNodeTransform(object, dragState.startTransform);
+    updateSelectionHelpers();
+    renderEditorWorld();
+    if (lightScaleEdit.patch) {
+      await session.dispatch('scene_apply_patch', {
+        patch: lightScaleEdit.patch,
+      });
+      clearValidationResult();
+    }
+    rerender();
+    return;
+  }
   applyNodeTransform(object, nextTransform);
   updateSelectionHelpers();
   renderEditorWorld();
@@ -6621,6 +7222,8 @@ async function createEditorWorld(session, camera) {
       : nodeId && node
         ? {
             nodeId,
+            mode: editorWorldState.transformMode,
+            scaleAxis: transformControls.axis,
             startTransform: cloneTransform(node.transform || {}),
           }
         : null;
@@ -10260,6 +10863,9 @@ function pickCanvasNode(session, camera, canvas, event) {
     true,
   );
   for (const intersection of intersections) {
+    if (intersection.object.userData?.iwsdkEditorPickable === false) {
+      continue;
+    }
     let current = intersection.object;
     while (current) {
       const nodeId = current.userData?.iwsdkSceneNodeId;
@@ -10287,6 +10893,36 @@ function pickCanvasNode(session, camera, canvas, event) {
     }
   }
   return null;
+}
+
+function pickNodeAtObjectCenter(session, nodeId) {
+  if (!editorWorldState) {
+    return null;
+  }
+  const object = editorWorldState.objectMap.get(nodeId);
+  if (!object) {
+    return { builtinTarget: null, nodeId: null };
+  }
+  const bounds = boundsForObjectWithoutEditorHelpers(object);
+  if (!bounds) {
+    return { builtinTarget: null, nodeId: null };
+  }
+  const projected = new Vector3();
+  bounds.getCenter(projected);
+  projected.project(editorWorldState.world.camera);
+  if (!Number.isFinite(projected.z) || projected.z < -1 || projected.z > 1) {
+    return { builtinTarget: null, nodeId: null };
+  }
+  const canvas = getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const hit = pickCanvasNode(session, editorWorldState.currentCamera, canvas, {
+    clientX: rect.left + ((projected.x + 1) / 2) * rect.width,
+    clientY: rect.top + ((1 - projected.y) / 2) * rect.height,
+  });
+  return {
+    builtinTarget: hit?.builtinTarget || null,
+    nodeId: hit?.node?.id || null,
+  };
 }
 
 function renderCanvas(session, camera, size = {}) {
@@ -10933,10 +11569,13 @@ async function init() {
       };
     },
     getCamera: () => activeCamera,
+    getComponentHelperState: (nodeId) => componentHelperProof(nodeId),
     getObjectSummary: () => ({
       ids: editorWorldState ? [...editorWorldState.objectMap.keys()] : [],
       objectCount: editorWorldState?.objectMap.size ?? 0,
     }),
+    pickNodeAtObjectCenter: (nodeId) =>
+      pickNodeAtObjectCenter(session, nodeId),
     getPanelPreviewState: (nodeId) => {
       const object = editorWorldState?.objectMap.get(nodeId);
       const preview = object?.children.find(
@@ -11080,6 +11719,11 @@ async function init() {
     getRendererGlobals: () => rendererGlobalsProof(),
     getTransformControlObjectTransform: () =>
       objectTransformProof(editorWorldState?.transformControls?.object),
+    getTransformControlAxisVisibility: () => ({
+      x: editorWorldState?.transformControls?.showX ?? null,
+      y: editorWorldState?.transformControls?.showY ?? null,
+      z: editorWorldState?.transformControls?.showZ ?? null,
+    }),
     findTransformControlPointerTarget: (axis = 'X') =>
       findTransformControlPointerTarget(axis),
     beginTransformControlDrag: (transform) => {
@@ -11142,7 +11786,7 @@ async function init() {
       };
     },
     hasSharedAsset: (key) => editorWorldState?.world.assets.has(String(key)) === true,
-    simulateTransformControlCommit: async (transform) => {
+    simulateTransformControlCommit: async (transform, scaleAxis = null) => {
       const nodeId = selectedNodeId();
       if (!nodeId || !editorWorldState?.transformControls?.object) {
         throw new Error('A selected node with attached transform controls is required');
@@ -11153,6 +11797,8 @@ async function init() {
       }
       editorWorldState.transformDragState = {
         nodeId,
+        mode: editorWorldState.transformMode,
+        scaleAxis,
         startTransform: cloneTransform(node.transform || {}),
       };
       applyNodeTransform(editorWorldState.transformControls.object, transform);

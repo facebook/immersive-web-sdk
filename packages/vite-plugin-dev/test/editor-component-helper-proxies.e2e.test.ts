@@ -104,6 +104,7 @@ describe('editor component helper proxies', () => {
     await assertSelectableRuntimeHelper(editor, 'camera-source-1', {
       component: 'CameraSource',
       helperType: 'camera-source',
+      meshCount: 3,
     });
     await assertSelectableRuntimeHelper(editor, 'environment-light-1', {
       component: 'DomeGradient',
@@ -112,8 +113,14 @@ describe('editor component helper proxies', () => {
     await assertSelectableRuntimeHelper(editor, 'spot-light-1', {
       component: 'SpotLight',
       helperType: 'spot-light',
-      meshCount: 1,
     });
+    await expect(
+      editor.page.evaluate(
+        () =>
+          (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.getProof()
+            .selectionBounds,
+      ),
+    ).resolves.toEqual({ helper: null, nodeId: 'spot-light-1' });
     await expect
       .poll(() =>
         editor.page.evaluate(
@@ -229,6 +236,266 @@ describe('editor component helper proxies', () => {
       position: [0.25, 1.55, 0.35],
     });
   }, 60000);
+
+  test('keeps light gizmos compact and their range visuals out of scene picking', async () => {
+    harness = await createEditorTestHarness('editor-light-gizmo-picking');
+    const editor = await harness.openEditor();
+    await expectRealWebGLViewport(editor);
+
+    for (const node of [
+      {
+        components: {
+          'com.iwsdk.components.PointLight': {
+            color: [1, 0.75, 0.3, 1],
+            distance: 1.5,
+            intensity: 20,
+          },
+        },
+        id: 'point-light-large-range',
+        transform: { position: [2.7, 1.375, 2.5], scale: [3, 2, 1] },
+      },
+      {
+        components: {
+          'com.iwsdk.components.SpotLight': {
+            angleDeg: 70,
+            distance: 100,
+            intensity: 20,
+          },
+        },
+        id: 'spot-light-large-range',
+        transform: { position: [-1.2, 1.6, 0.5], scale: [3, 2, 1] },
+      },
+      {
+        components: {
+          'com.iwsdk.components.DirectionalLight': { intensity: 2 },
+        },
+        id: 'directional-light-helper',
+        transform: { position: [1.2, 1.6, 0.5], scale: [3, 2, 1] },
+      },
+      {
+        components: {
+          'com.iwsdk.components.RectAreaLight': {
+            height: 20,
+            intensity: 20,
+            width: 30,
+          },
+        },
+        id: 'rect-area-light-large-emitter',
+        transform: { position: [0, 2.2, -1], scale: [3, 2, 1] },
+      },
+    ]) {
+      await dispatchSceneTool(editor.page, 'scene_add_node', { node });
+    }
+
+    await expect
+      .poll(async () => {
+        const states = await Promise.all(
+          [
+            'point-light-large-range',
+            'spot-light-large-range',
+            'directional-light-helper',
+            'rect-area-light-large-emitter',
+          ].map((nodeId) => componentHelperState(editor, nodeId)),
+        );
+        return states.every(Boolean) ? states : null;
+      })
+      .not.toBeNull();
+
+    const states = await Promise.all(
+      [
+        'point-light-large-range',
+        'spot-light-large-range',
+        'directional-light-helper',
+        'rect-area-light-large-emitter',
+      ].map((nodeId) => componentHelperState(editor, nodeId)),
+    );
+    for (const state of states) {
+      expect(Math.max(...state.size)).toBeLessThanOrEqual(0.65);
+      expect([...new Set(state.meshes.map((mesh: any) => mesh.color))]).toEqual(
+        ['ffa62b'],
+      );
+      expect(state.meshes.filter((mesh: any) => mesh.pickable)).toEqual([
+        expect.objectContaining({ role: 'handle' }),
+      ]);
+      expect(
+        state.meshes
+          .filter((mesh: any) => mesh.role === 'visual')
+          .every((mesh: any) => !mesh.pickable),
+      ).toBe(true);
+    }
+    expect(
+      states.map((state) => state.meshes.map((mesh: any) => mesh.geometry)),
+    ).toEqual([
+      ['SphereGeometry', 'SphereGeometry', 'BufferGeometry', 'BufferGeometry'],
+      [
+        'SphereGeometry',
+        'SphereGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+      ],
+      [
+        'SphereGeometry',
+        'SphereGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+      ],
+      [
+        'SphereGeometry',
+        'SphereGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+        'BufferGeometry',
+      ],
+    ]);
+    expect(
+      states.map((state) =>
+        state.meshes.map((mesh: any) => [mesh.kind, mesh.vertexCount]),
+      ),
+    ).toEqual([
+      [
+        ['mesh', expect.any(Number)],
+        ['mesh', expect.any(Number)],
+        ['line', 44],
+        ['line', 64],
+      ],
+      [
+        ['mesh', expect.any(Number)],
+        ['mesh', expect.any(Number)],
+        ['line', 44],
+        ['line', 64],
+        ['line', 98],
+        ['line', 64],
+      ],
+      [
+        ['mesh', expect.any(Number)],
+        ['mesh', expect.any(Number)],
+        ['line', 76],
+        ['line', 2],
+        ['line', 8],
+      ],
+      [
+        ['mesh', expect.any(Number)],
+        ['mesh', expect.any(Number)],
+        ['line', 44],
+        ['line', 10],
+        ['line', 8],
+      ],
+    ]);
+    expect(states[1].meshes.at(-1)).toMatchObject({
+      kind: 'line',
+      material: 'ShaderMaterial',
+      pickable: false,
+      role: 'visual',
+    });
+    expect(states[0].meshes.slice(2).map((mesh: any) => mesh.material)).toEqual(
+      ['ShaderMaterial', 'ShaderMaterial'],
+    );
+    expect(states[1].meshes.slice(2).map((mesh: any) => mesh.material)).toEqual(
+      [
+        'ShaderMaterial',
+        'ShaderMaterial',
+        'LineBasicMaterial',
+        'ShaderMaterial',
+      ],
+    );
+
+    await selectNode(editor.page, 'point-light-large-range');
+    await editor.page.evaluate(() =>
+      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.setTransformMode('scale'),
+    );
+    await expect(transformControlAxisVisibility(editor)).resolves.toEqual({
+      x: true,
+      y: true,
+      z: true,
+    });
+    await simulateLightPropertyScale(
+      editor,
+      { position: [2.7, 1.375, 2.5], scale: [6, 2, 1] },
+      'X',
+    );
+    await expect
+      .poll(() =>
+        componentValue(editor, 'point-light-large-range', 'PointLight'),
+      )
+      .toMatchObject({ distance: 3 });
+
+    await selectNode(editor.page, 'spot-light-large-range');
+    await expect(transformControlAxisVisibility(editor)).resolves.toEqual({
+      x: true,
+      y: true,
+      z: true,
+    });
+    await simulateLightPropertyScale(
+      editor,
+      { position: [-1.2, 1.6, 0.5], scale: [1.5, 2, 1] },
+      'X',
+    );
+    await expect
+      .poll(() => componentValue(editor, 'spot-light-large-range', 'SpotLight'))
+      .toMatchObject({ angleDeg: 53.9476, distance: 100 });
+    await simulateLightPropertyScale(
+      editor,
+      { position: [-1.2, 1.6, 0.5], scale: [3, 2, 1.5] },
+      'Z',
+    );
+    await expect
+      .poll(() => componentValue(editor, 'spot-light-large-range', 'SpotLight'))
+      .toMatchObject({ angleDeg: 53.9476, distance: 150 });
+
+    await selectNode(editor.page, 'rect-area-light-large-emitter');
+    await expect(transformControlAxisVisibility(editor)).resolves.toEqual({
+      x: true,
+      y: true,
+      z: false,
+    });
+    await simulateLightPropertyScale(
+      editor,
+      { position: [0, 2.2, -1], scale: [6, 1, 3] },
+      'XY',
+    );
+    await expect
+      .poll(() =>
+        componentValue(
+          editor,
+          'rect-area-light-large-emitter',
+          'RectAreaLight',
+        ),
+      )
+      .toMatchObject({ height: 10, width: 60 });
+
+    await selectNode(editor.page, 'directional-light-helper');
+    await expect(transformControlAxisVisibility(editor)).resolves.toEqual({
+      x: false,
+      y: false,
+      z: false,
+    });
+    await simulateLightPropertyScale(
+      editor,
+      { position: [1.2, 1.6, 0.5], scale: [6, 4, 2] },
+      'XYZ',
+    );
+    await expect(
+      componentValue(editor, 'directional-light-helper', 'DirectionalLight'),
+    ).resolves.toMatchObject({ intensity: 2 });
+
+    await expect(
+      editor.page.evaluate(() =>
+        (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.pickNodeAtObjectCenter(
+          'table-1',
+        ),
+      ),
+    ).resolves.toEqual({ builtinTarget: null, nodeId: 'table-1' });
+    await expect(
+      editor.page.evaluate(() =>
+        (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.pickNodeAtObjectCenter(
+          'deleted-node',
+        ),
+      ),
+    ).resolves.toEqual({ builtinTarget: null, nodeId: null });
+  }, 60000);
 });
 
 async function helperTypes(
@@ -238,6 +505,45 @@ async function helperTypes(
   return Object.fromEntries(
     proof.objectHierarchy.map((entry: any) => [entry.nodeId, entry.helperType]),
   );
+}
+
+async function componentHelperState(
+  editor: EditorPageContext,
+  nodeId: string,
+): Promise<any> {
+  return editor.page.evaluate(
+    (id) =>
+      (window as any).IWSDK_SCENE_EDITOR_TEST_HOOKS.getComponentHelperState(id),
+    nodeId,
+  );
+}
+
+async function transformControlAxisVisibility(
+  editor: EditorPageContext,
+): Promise<any> {
+  return editor.page.evaluate(() =>
+    (
+      window as any
+    ).IWSDK_SCENE_EDITOR_TEST_HOOKS.getTransformControlAxisVisibility(),
+  );
+}
+
+async function simulateLightPropertyScale(
+  editor: EditorPageContext,
+  transform: Record<string, unknown>,
+  axis: string,
+): Promise<void> {
+  const result = await editor.page.evaluate(
+    ({ nextTransform, scaleAxis }) =>
+      (
+        window as any
+      ).IWSDK_SCENE_EDITOR_TEST_HOOKS.simulateTransformControlCommit(
+        nextTransform,
+        scaleAxis,
+      ),
+    { nextTransform: transform, scaleAxis: axis },
+  );
+  expect(result.documentTransform).toMatchObject({ scale: [3, 2, 1] });
 }
 
 function componentRow(editor: EditorPageContext, type: string) {
