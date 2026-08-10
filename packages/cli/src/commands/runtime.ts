@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { parseIntegerOption, safeJsonParse } from '../argv.js';
@@ -42,6 +42,10 @@ function isScreenshotResult(
   return isRecord(value) && typeof value.imageData === 'string';
 }
 
+function isBrowserRelaunchedResult(value: unknown): boolean {
+  return isRecord(value) && value.status === 'browser_relaunched';
+}
+
 function withBrowserStatus(
   result: unknown,
   session: RuntimeSession,
@@ -75,6 +79,7 @@ async function saveScreenshot(
     typeof requestedPath === 'string'
       ? requestedPath
       : path.join(os.tmpdir(), `iwsdk-screenshot-${Date.now()}.png`);
+  await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, Buffer.from(result.imageData, 'base64'));
   return outputPath;
 }
@@ -114,7 +119,7 @@ export async function handleRuntimeOperation(
       : {};
   const command = resolveRuntimeOperationRequest(operation, parsedParams);
 
-  const rawResult = await sendRuntimeCommand({
+  const sendOptions = {
     port: session.port,
     method: operation.wsMethod,
     params: command.params,
@@ -125,7 +130,14 @@ export async function handleRuntimeOperation(
       DEFAULT_TIMEOUT_MS,
     ),
     runtimeSession: session,
-  });
+  };
+  let rawResult = await sendRuntimeCommand(sendOptions);
+  if (
+    operation.mcpName === 'browser_screenshot' &&
+    isBrowserRelaunchedResult(rawResult.result ?? rawResult)
+  ) {
+    rawResult = await sendRuntimeCommand(sendOptions);
+  }
 
   const result =
     operation.mcpName === 'xr_get_session_status'

@@ -282,9 +282,11 @@ async function startRuntimeFixture(
   workspaceRoot: string,
   options: {
     aiTools?: AiTool[];
+    relaunchFirstScreenshot?: boolean;
   } = {},
 ) {
   const aiTools = options.aiTools ?? ['claude', 'cursor'];
+  let screenshotRequestCount = 0;
   const server = new WebSocketServer({ port: 0 });
   await new Promise<void>((resolve) => {
     server.once('listening', () => resolve());
@@ -296,23 +298,33 @@ async function startRuntimeFixture(
   server.on('connection', (socket) => {
     socket.on('message', (chunk) => {
       const request = JSON.parse(chunk.toString());
+      if (request.method === 'screenshot') {
+        screenshotRequestCount += 1;
+      }
       const response = {
         id: request.id,
         result:
           request.method === 'get_session_status'
             ? { sessionMode: 'immersive-vr', running: true }
-            : request.method === 'screenshot' ||
-                request.method === 'scene_screenshot' ||
-                request.method === 'ui_render_preview'
+            : request.method === 'screenshot' &&
+                options.relaunchFirstScreenshot &&
+                screenshotRequestCount === 1
               ? {
-                  imageData: ONE_BY_ONE_PNG_BASE64,
-                  mimeType: 'image/png',
+                  status: 'browser_relaunched',
+                  message: 'Browser was relaunched; retry the request.',
                 }
-              : {
-                  ok: true,
-                  method: request.method,
-                  params: request.params ?? {},
-                },
+              : request.method === 'screenshot' ||
+                  request.method === 'scene_screenshot' ||
+                  request.method === 'ui_render_preview'
+                ? {
+                    imageData: ONE_BY_ONE_PNG_BASE64,
+                    mimeType: 'image/png',
+                  }
+                : {
+                    ok: true,
+                    method: request.method,
+                    params: request.params ?? {},
+                  },
         _tabId: 'tab-1',
         _tabGeneration: 1,
       };
@@ -340,6 +352,9 @@ async function startRuntimeFixture(
   });
 
   return {
+    getScreenshotRequestCount() {
+      return screenshotRequestCount;
+    },
     async close() {
       await unregisterRuntimeSession(workspaceRoot);
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -622,6 +637,34 @@ describe('runtime commands and project resolution', () => {
       expect(JSON.parse(uiAssets.stdout)).toMatchObject({
         method: 'ui_list_assets',
       });
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test('retries a screenshot after browser relaunch and creates output parents', async () => {
+    const runtime = await startRuntimeFixture(appA, {
+      relaunchFirstScreenshot: true,
+    });
+    const requestedScreenshot = path.join(
+      appA,
+      'captures',
+      'nested',
+      'browser.png',
+    );
+
+    try {
+      const screenshot = await runCli(
+        ['browser', 'screenshot', '--output-file', requestedScreenshot],
+        appA,
+      );
+
+      expect(screenshot.exitCode).toBe(0);
+      expect(JSON.parse(screenshot.stdout).data.screenshotPath).toBe(
+        requestedScreenshot,
+      );
+      expect(existsSync(requestedScreenshot)).toBe(true);
+      expect(runtime.getScreenshotRequestCount()).toBe(2);
     } finally {
       await runtime.close();
     }
