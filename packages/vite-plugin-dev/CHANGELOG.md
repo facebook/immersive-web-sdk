@@ -1,5 +1,17 @@
 # @iwsdk/vite-plugin-dev
 
+## 0.5.2
+
+### Patch Changes
+
+- 0b3ddc3: Improve managed editor and local launch reliability. Add an editor action to open
+  the runtime in the default browser, serve generated-app test assets from the app
+  origin, persist local HTTPS certificates, bootstrap fresh tarball builds, improve
+  controller UI clicks, clarify XR player framing, and tolerate slower isolated
+  render previews.
+  - @iwsdk/core@0.5.2
+  - @iwsdk/scene-composition@0.5.2
+
 ## 0.5.0
 
 ### Minor Changes

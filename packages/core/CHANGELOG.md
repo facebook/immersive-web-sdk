@@ -1,5 +1,14 @@
 # @iwsdk/core
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [0b3ddc3]
+  - @iwsdk/xr-input@0.5.2
+  - @iwsdk/locomotor@0.5.2
+  - @iwsdk/scene-composition@0.5.2
+
 ## 0.5.0
 
 ### Minor Changes

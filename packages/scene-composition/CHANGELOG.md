@@ -1,5 +1,7 @@
 # @iwsdk/scene-composition
 
+## 0.5.2
+
 ## 0.5.0
 
 ### Minor Changes

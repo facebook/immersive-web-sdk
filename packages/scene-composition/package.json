@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/scene-composition",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "IWSDK native scene document schema, validation, patching, and authoring helpers",
   "type": "module",
   "main": "dist/index.js",

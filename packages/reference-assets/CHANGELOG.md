@@ -1,5 +1,7 @@
 # @iwsdk/reference-assets
 
+## 0.5.2
+
 ## 0.5.0
 
 ### Patch Changes
