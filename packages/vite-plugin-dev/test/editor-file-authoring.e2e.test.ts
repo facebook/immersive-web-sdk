@@ -153,6 +153,18 @@ describe('file-first scene authoring', () => {
     await page.waitForFunction(
       () => (window as any).__IWSDK_SCENE_EDITOR_READY === true,
     );
+    expect(
+      await page
+        .locator(
+          '[data-workspace-reload-button] + [data-workspace-open-browser-button]',
+        )
+        .count(),
+    ).toBe(1);
+    expect(
+      await page
+        .locator('[data-workspace-open-browser-button]')
+        .getAttribute('aria-label'),
+    ).toBe('Open runtime in default browser');
     expect(new URL(page.url()).hash).toBe('');
     await expect
       .poll(() =>

@@ -2833,6 +2833,25 @@ function editorWorkspaceController() {
     reloadPage() {
       window.location.reload();
     },
+    openRuntimeInBrowser() {
+      void fetch('/__iwsdk/workspace/open-runtime', {
+        method: 'POST',
+      })
+        .then((response) => {
+          if (!response.ok) {
+            console.error(
+              '[IWSDK] Failed to open runtime in default browser:',
+              response.status,
+            );
+          }
+        })
+        .catch((error) => {
+          console.error(
+            '[IWSDK] Failed to open runtime in default browser:',
+            error,
+          );
+        });
+    },
     selectNode(nodeId, modifiers) {
       const session = activeEditorSession();
       if (!session) {

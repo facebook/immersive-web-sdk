@@ -19,6 +19,12 @@ import {
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
 
+const mocks = vi.hoisted(() => ({
+  open: vi.fn(),
+}));
+
+vi.mock('open', () => ({ default: mocks.open }));
+
 type Middleware = (
   request: Readable & {
     headers: Record<string, string>;
@@ -121,6 +127,8 @@ function reviewWorkflowScene(): SceneDocument {
 }
 
 beforeEach(async () => {
+  mocks.open.mockReset();
+  mocks.open.mockResolvedValue({});
   previousManagedWorkspaceToken =
     process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN;
   process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN = TEST_MANAGED_WORKSPACE_TOKEN;
@@ -142,6 +150,54 @@ afterEach(async () => {
 });
 
 describe('native editor route middleware', () => {
+  test('opens the resolved runtime origin in the default browser for managed requests', async () => {
+    const plugin = createConfiguredPlugin(tempRoot);
+    const middlewares: Middleware[] = [];
+    plugin.configureServer?.({
+      httpServer: { on: vi.fn() },
+      middlewares: {
+        use: (middleware: Middleware) => {
+          middlewares.push(middleware);
+        },
+      },
+      resolvedUrls: {
+        local: ['https://localhost:4317/nested/path'],
+        network: [],
+      },
+    } as never);
+    expect(middlewares).toHaveLength(1);
+
+    const unmanaged = await runMiddleware(
+      middlewares[0],
+      'POST',
+      '/__iwsdk/workspace/open-runtime',
+    );
+    expect(unmanaged.statusCode).toBe(403);
+    expect(mocks.open).not.toHaveBeenCalled();
+
+    const wrongMethod = await runMiddleware(
+      middlewares[0],
+      'GET',
+      '/__iwsdk/workspace/open-runtime',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(wrongMethod.statusCode).toBe(405);
+    expect(wrongMethod.headers.Allow).toBe('POST');
+
+    const opened = await runMiddleware(
+      middlewares[0],
+      'POST',
+      '/__iwsdk/workspace/open-runtime',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(opened.statusCode).toBe(204);
+    expect(mocks.open).toHaveBeenCalledWith('https://localhost:4317/', {
+      wait: false,
+    });
+  });
+
   test('restores the scene after workflow commit failure and permits the same-token retry', async () => {
     const sceneRelativePath = 'public/scenes/retry.iwsdk.scene.json';
     const sceneFile = path.join(tempRoot, sceneRelativePath);

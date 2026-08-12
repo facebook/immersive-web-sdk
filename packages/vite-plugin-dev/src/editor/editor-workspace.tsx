@@ -15,6 +15,7 @@ import {
   Crosshair,
   Eye,
   EyeOff,
+  ExternalLink,
   Focus,
   Gamepad2,
   Globe2,
@@ -79,6 +80,7 @@ export interface EditorWorkspaceController {
     parent?: { type: 'player-space'; target: string },
   ): void;
   openNodeContextMenu?(nodeId: string, point: { x: number; y: number }): void;
+  openRuntimeInBrowser?(): void;
   redo?(): void;
   reloadPage?(): void;
   selectNode?(
@@ -145,6 +147,7 @@ const ICONS = {
   Crosshair,
   Eye,
   EyeOff,
+  ExternalLink,
   Focus,
   Gamepad2,
   Globe2,
@@ -290,13 +293,23 @@ function WorkspaceViewSwitcher({
       ))}
       <button
         type="button"
-        class="workspace-reload-button"
+        class="workspace-icon-button workspace-reload-button"
         data-workspace-reload-button
         title="Reload page"
         aria-label="Reload page"
         onClick={() => controller.reloadPage?.()}
       >
         <Icon name="RefreshCw" />
+      </button>
+      <button
+        type="button"
+        class="workspace-icon-button"
+        data-workspace-open-browser-button
+        title="Open runtime in default browser"
+        aria-label="Open runtime in default browser"
+        onClick={() => controller.openRuntimeInBrowser?.()}
+      >
+        <Icon name="ExternalLink" />
       </button>
     </div>
   );

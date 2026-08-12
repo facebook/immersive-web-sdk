@@ -50,6 +50,7 @@ import {
   type SceneReview,
 } from '@iwsdk/scene-composition';
 import { getCertificate } from '@vitejs/plugin-basic-ssl';
+import open from 'open';
 import type { ModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
@@ -149,6 +150,7 @@ const WORKSPACE_REVIEWS_ROUTE = `${WORKSPACE_ROUTE}/reviews`;
 const WORKSPACE_REVIEW_CAPTURES_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/captures`;
 const WORKSPACE_REVIEW_TRANSITIONS_ROUTE = `${WORKSPACE_REVIEWS_ROUTE}/transitions`;
 const WORKSPACE_PUBLISH_ROUTE = `${WORKSPACE_ROUTE}/publish`;
+const WORKSPACE_OPEN_RUNTIME_ROUTE = `${WORKSPACE_ROUTE}/open-runtime`;
 const WORKSPACE_RUNTIME_PREFLIGHT_ROUTE = `${WORKSPACE_ROUTE}/runtime-preflight`;
 const OPTIMIZER_EXCLUSIONS = [
   '@zappar/msdf-generator',
@@ -820,6 +822,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             config.root,
             managedBrowser,
           );
+          return;
+        }
+
+        if (pathname === WORKSPACE_OPEN_RUNTIME_ROUTE) {
+          if (!isManagedWorkspaceRequest) {
+            sendJsonError(
+              response,
+              403,
+              'Opening the runtime in the default browser is only available from the managed workspace browser.',
+            );
+            return;
+          }
+          handleOpenRuntimeRequest(request, response, server);
           return;
         }
 
@@ -2363,6 +2378,34 @@ function sendJsonError(
   response.statusCode = statusCode;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify({ error: message, ...extra }));
+}
+
+async function handleOpenRuntimeRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  server: ViteDevServer,
+): Promise<void> {
+  if (request.method !== 'POST') {
+    response.statusCode = 405;
+    response.setHeader('Allow', 'POST');
+    response.end('Method not allowed');
+    return;
+  }
+
+  const localUrl = server.resolvedUrls?.local?.[0];
+  if (localUrl == null) {
+    sendJsonError(response, 503, 'The local runtime URL is not available yet.');
+    return;
+  }
+
+  try {
+    await open(new URL('/', localUrl).toString(), { wait: false });
+    response.statusCode = 204;
+    response.end();
+  } catch (error) {
+    console.error('[IWSDK] Failed to open the default browser:', error);
+    sendJsonError(response, 500, 'Failed to open the default browser.');
+  }
 }
 
 function normalizePageRole(

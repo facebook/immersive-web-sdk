@@ -64,7 +64,7 @@ describe('editor runtime source', () => {
     expect(source).toContain('completeEditorStartup();');
   });
 
-  test('exposes runtime and editor workspace views with a page reload control', () => {
+  test('exposes runtime and editor workspace views with browser controls', () => {
     const source = createRuntimeSource();
     const viewState = section(
       source,
@@ -98,6 +98,11 @@ describe('editor runtime source', () => {
     expect(workspaceSource).toContain('data-workspace-reload-button');
     expect(workspaceSource).toContain('controller.reloadPage?.()');
     expect(controller).toContain('window.location.reload()');
+    expect(workspaceSource).toContain('data-workspace-open-browser-button');
+    expect(workspaceSource).toContain('Open runtime in default browser');
+    expect(workspaceSource).toContain('controller.openRuntimeInBrowser?.()');
+    expect(controller).toContain("fetch('/__iwsdk/workspace/open-runtime', {");
+    expect(controller).toContain("method: 'POST'");
     expect(workspaceSource).not.toContain("'split'");
   });
 

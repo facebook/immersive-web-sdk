@@ -178,16 +178,19 @@ export const EDITOR_SHELL_CSS = String.raw`      html,
         color: #ffffff;
       }
 
-      .workspace-view-switcher .workspace-reload-button {
+      .workspace-view-switcher .workspace-icon-button {
         align-items: center;
         display: flex;
         justify-content: center;
-        margin-left: 2px;
         padding: 0;
         width: 24px;
       }
 
-      .workspace-view-switcher .workspace-reload-button .lucide-icon {
+      .workspace-view-switcher .workspace-reload-button {
+        margin-left: 2px;
+      }
+
+      .workspace-view-switcher .workspace-icon-button .lucide-icon {
         height: 13px;
         stroke-width: 1.8;
         width: 13px;
