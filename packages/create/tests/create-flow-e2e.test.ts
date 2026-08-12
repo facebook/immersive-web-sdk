@@ -7,6 +7,7 @@
 
 import { spawn } from 'child_process';
 import {
+  cp,
   mkdir,
   mkdtemp,
   readdir,
@@ -79,6 +80,7 @@ const LEGACY_EDITOR_CLI_ENV = ['META', 'SPATIAL', 'EDITOR', 'CLI', 'PATH'].join(
   '_',
 );
 const TEST_MANAGED_WORKSPACE_TOKEN = 'create-flow-managed-workspace-token';
+const PACKED_ASSET_PUBLIC_PATH = '__iwsdk-example-assets/assets';
 const MANAGED_WORKSPACE_HEADERS = {
   'x-iwsdk-managed-workspace': TEST_MANAGED_WORKSPACE_TOKEN,
 };
@@ -749,6 +751,17 @@ describe('create-iwsdk scene flow E2E', () => {
             expect(build.exitCode, build.stderr + build.stdout).toBe(0);
             await stat(path.join(appRoot, 'dist', 'index.html'));
 
+            // The plugin-owned managed browser cannot inherit routes from the
+            // test's Playwright pages. Serve the verified packed fixture from
+            // the generated app so every browser consumes the same bytes.
+            const packedAssetPublicRoot = path.join(
+              appRoot,
+              'public',
+              PACKED_ASSET_PUBLIC_PATH,
+            );
+            await cp(packedAssetFixture.assetRoot, packedAssetPublicRoot, {
+              recursive: true,
+            });
             const port = await getFreePort();
             const devServer = startLongRunningCommand(
               'npm',
@@ -772,7 +785,7 @@ describe('create-iwsdk scene flow E2E', () => {
                   IWSDK_DEV_OPEN: 'true',
                   IWSDK_DEV_SCREENSHOT_HEIGHT: '',
                   IWSDK_DEV_SCREENSHOT_WIDTH: '',
-                  VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: packedAssetFixture.baseUrl,
+                  VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: `/${PACKED_ASSET_PUBLIC_PATH}`,
                 },
               },
             );
@@ -845,10 +858,10 @@ describe('create-iwsdk scene flow E2E', () => {
                 language,
                 target,
                 scenePath,
-                packedAssetFixture,
               });
             } finally {
               await devServer.close();
+              await rm(packedAssetPublicRoot, { force: true, recursive: true });
             }
           }
         }
@@ -867,16 +880,12 @@ async function smokeGeneratedAppEditorFlow({
   language,
   target,
   scenePath,
-  packedAssetFixture,
 }: {
   appRoot: string;
   baseUrl: string;
   language: 'js' | 'ts';
   target: ExperienceTarget;
   scenePath: string;
-  packedAssetFixture: Awaited<
-    ReturnType<typeof createPackedExampleAssetFixture>
-  >;
 }) {
   const scenePublicUrl = scenePath.replace(/^public\//, '');
   browser ??= await launchChromium();
@@ -906,13 +915,6 @@ async function smokeGeneratedAppEditorFlow({
     ignoreHTTPSErrors: true,
     viewport: { height: 720, width: 960 },
   });
-  const appAssetRoute = await packedAssetFixture.installRoute(appPage, {
-    assetIds: sharedAssetIds,
-  });
-  // Runtime fetches only assets referenced by the active scene. The editor
-  // owns the complete authoring catalog and may load every lazy stock model to
-  // render asset-drawer previews, including assets not yet placed.
-  const editorAssetRoute = await packedAssetFixture.installRoute(editorPage);
   await installManagedWorkspaceRoute(editorPage, baseUrl);
   const appDiagnostics = collectPageDiagnostics(appPage, sharedAssetIds);
   const editorDiagnostics = collectPageDiagnostics(editorPage, sharedAssetIds);
@@ -1171,19 +1173,6 @@ async function smokeGeneratedAppEditorFlow({
     );
     assertAssetResponses(appSnapshot.assetResponses, sharedAssetIds);
     assertAssetResponses(editorSnapshot.assetResponses, sharedAssetIds);
-    for (const assetId of sharedAssetIds) {
-      expect(
-        appAssetRoute.requests.some((request) => request.assetId === assetId),
-        `packed app CDN route request for ${assetId}`,
-      ).toBe(true);
-      expect(
-        editorAssetRoute.requests.some(
-          (request) => request.assetId === assetId,
-        ),
-        `packed editor CDN route request for ${assetId}`,
-      ).toBe(true);
-    }
-
     if (evidenceDir != null) {
       await writeFile(
         path.join(evidenceDir, 'proof.json'),
@@ -1595,8 +1584,8 @@ async function waitForManagedBrowserLaunch(
         );
       }
       if (
-        session.browser?.status === 'waiting_for_connection' ||
-        session.browser?.status === 'connected'
+        session.browser?.status === 'connected' &&
+        session.browser?.commandReady === true
       ) {
         return session;
       }
