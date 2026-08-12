@@ -10,9 +10,15 @@ import {
   APP_RUNTIME_SCENE_MCP_TOOL_NAMES,
   RUNTIME_MCP_TOOLS,
   SCENE_MCP_TOOL_NAMES,
+  getDefaultRuntimeCommandTimeoutMs,
   getRuntimeOperationByToolName,
   resolveRuntimeOperationRequest,
 } from '../src/runtime-contract.js';
+
+test('allows isolated UI rendering extra time for editor resource settling', () => {
+  expect(getDefaultRuntimeCommandTimeoutMs('ui_render_preview')).toBe(60_000);
+  expect(getDefaultRuntimeCommandTimeoutMs('ecs_find_entities')).toBe(30_000);
+});
 
 describe('runtime contract scene tools', () => {
   test('exposes the file-first and app-runtime inspection surfaces', () => {

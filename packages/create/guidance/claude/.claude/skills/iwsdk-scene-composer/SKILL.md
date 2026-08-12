@@ -87,9 +87,11 @@ gate as blocked.
 
 Camera parameters are intentionally distinct: `view` accepts only the built-in
 presets (`current`, `top`, `front`, `back`, `left`, `right`, `quarter`, `orbit`),
-while `viewId` selects an exact camera declared in `authoring.views`. Once a level
-loads, its saved hero view owns runtime framing and supersedes the initial
-`World.create({ render: { camera } })` pose.
+while `viewId` selects an exact camera declared in `authoring.views`. Outside
+immersive XR, a loaded level's saved hero view owns runtime framing and
+supersedes the initial `World.create({ render: { camera } })` pose. In XR, the
+tracked player rig owns the camera, so the player-spawn view is a separate
+required framing check.
 
 ## Workflow
 

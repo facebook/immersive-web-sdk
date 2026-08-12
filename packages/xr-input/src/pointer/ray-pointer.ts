@@ -66,6 +66,10 @@ export class RayPointer {
       { current: xrOrigin.raySpaces[handedness] },
       {},
       {
+        // XR trigger presses are commonly longer than a mouse click, especially
+        // through controller emulation. Match the poke pointer's forgiving
+        // activation window so a normal select gesture reaches child UI clicks.
+        clickThresholdMs: 800,
         // Disable contextmenu on button 2 (squeeze) to avoid spurious events
         contextMenuButton: -1,
       },

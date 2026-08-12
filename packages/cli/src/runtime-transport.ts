@@ -7,6 +7,7 @@
 
 import WebSocket from 'ws';
 import {
+  getDefaultRuntimeCommandTimeoutMs,
   isRuntimeBrowserCommandReady,
   type RuntimePageTarget,
   type RuntimeBrowserState,
@@ -676,7 +677,7 @@ export async function sendRuntimeCommand({
   method,
   params,
   target,
-  timeoutMs = 30000,
+  timeoutMs = getDefaultRuntimeCommandTimeoutMs(method),
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
   if (runtimeSession?.browser?.status === 'not_launched') {

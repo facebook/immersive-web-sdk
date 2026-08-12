@@ -17,6 +17,7 @@ import type {
   ResolvedCliIo,
 } from '../cli-types.js';
 import {
+  getDefaultRuntimeCommandTimeoutMs,
   isRuntimeBrowserCommandReady,
   RUNTIME_OPERATIONS,
   getRuntimeOperationByCliPath,
@@ -33,7 +34,6 @@ import {
   sendRuntimeCommand,
 } from '../runtime-transport.js';
 
-const DEFAULT_TIMEOUT_MS = 30000;
 const COMMON_RUNTIME_OPTIONS = new Set([
   'help',
   'inputJson',
@@ -216,7 +216,7 @@ export async function handleRuntimeOperation(
     timeoutMs: parseIntegerOption(
       options.timeout,
       '--timeout',
-      DEFAULT_TIMEOUT_MS,
+      getDefaultRuntimeCommandTimeoutMs(operation.wsMethod),
     ),
     runtimeSession: session,
   };

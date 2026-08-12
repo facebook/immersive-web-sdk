@@ -87,6 +87,9 @@ describe('launchManagedBrowser', () => {
     expect(mocks.launch.mock.calls[0]?.[0]).not.toHaveProperty(
       'executablePath',
     );
+    expect(mocks.launch.mock.calls[0]?.[0]?.args).toContain(
+      '--ignore-certificate-errors',
+    );
     expect(mocks.launch.mock.calls[0]?.[0]?.args).not.toContain('--no-sandbox');
   });
 
@@ -152,7 +155,10 @@ describe('launchManagedBrowser', () => {
     expect(mocks.launchPersistentContext).toHaveBeenCalledWith(
       '',
       expect.objectContaining({
-        args: expect.arrayContaining(['--app=http://127.0.0.1:5173/']),
+        args: expect.arrayContaining([
+          '--app=http://127.0.0.1:5173/',
+          '--ignore-certificate-errors',
+        ]),
         headless: false,
         ignoreDefaultArgs: ['about:blank'],
         ignoreHTTPSErrors: true,

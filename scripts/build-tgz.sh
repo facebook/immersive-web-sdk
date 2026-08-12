@@ -26,20 +26,19 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SKIP_REFERENCE_ASSETS" -eq 1 ]; then
-    # `pnpm install` runs workspace prepare hooks while root packages are
-    # temporarily rewired to packed dependencies. Carry the skip decision into
-    # that lifecycle so reference-assets does not rebuild its 50+ MB corpus as
-    # an install side effect.
+    # A bootstrap `pnpm install` runs workspace prepare hooks. Carry the skip
+    # decision into that lifecycle so reference-assets does not rebuild its
+    # 50+ MB corpus as an install side effect.
     export IWSDK_REFERENCE_ASSETS_SKIP_BUILD=1
 fi
 
 echo "🚀 Building standalone tgz packages..."
 
-if command -v pnpm >/dev/null 2>&1; then
-    PNPM_CMD=(pnpm --config.confirmModulesPurge=false)
-elif command -v corepack >/dev/null 2>&1; then
+if command -v corepack >/dev/null 2>&1; then
     COREPACK_PNPM_VERSION="${COREPACK_PNPM_VERSION:-pnpm@10.18.3}"
     PNPM_CMD=(corepack "$COREPACK_PNPM_VERSION" --config.confirmModulesPurge=false)
+elif command -v pnpm >/dev/null 2>&1; then
+    PNPM_CMD=(pnpm --config.confirmModulesPurge=false)
 else
     echo "❌ pnpm is required. Install pnpm or enable corepack." >&2
     exit 1
@@ -69,6 +68,20 @@ PACKAGES_DIR="$BASE_DIR/packages"
 EXAMPLES_DIR="$BASE_DIR/examples"
 LOCKFILE_BACKUP="$BASE_DIR/pnpm-lock.yaml.build-tgz.backup"
 WORKSPACE_BACKUP="$BASE_DIR/pnpm-workspace.yaml.build-tgz.backup"
+
+# A source checkout may not have workspace dependencies installed yet. The
+# package build scripts run before the temporary packed-dependency installs
+# below, so make the initial source build self-bootstrapping instead of failing
+# with an indirect `rollup: command not found` error.
+if [ ! -x "$BASE_DIR/node_modules/.bin/rollup" ]; then
+    echo "📥 Workspace dependencies are missing; installing from the lockfile..."
+    cd "$BASE_DIR"
+    if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+        "${PNPM_CMD[@]}" install --no-frozen-lockfile
+    else
+        "${PNPM_CMD[@]}" install --frozen-lockfile
+    fi
+fi
 
 # Package build order (dependencies first)
 LEAF_PACKAGES=("scene-composition" "xr-input" "locomotor" "example-assets" "cli" "create" "reference-assets" "reference")
@@ -334,17 +347,15 @@ build_root_packages() {
         # Replace workspace dependencies with file dependencies
         replace_workspace_deps "$package_dir"
 
-        # Install the file dependencies
-        echo "   📥 Installing file dependencies..."
-        "${PNPM_CMD[@]}" install $PNPM_INSTALL_FLAGS
-
+        # Keep the installed workspace links for the build. The rewritten
+        # manifest is consumed by `pnpm pack`; generated-app tests validate the
+        # resulting tarballs with their file: dependencies installed.
         build_and_pack_package "$package_dir" "build" "$package"
 
-        # Restore original package.json and reinstall workspace dependencies
+        # Restore the original workspace manifest and lockfile.
         echo "   🔄 Restoring workspace dependencies..."
         restore_package_json "$package_dir"
         restore_workspace_state
-        "${PNPM_CMD[@]}" install --silent $PNPM_INSTALL_FLAGS
     done
 }
 
@@ -356,8 +367,6 @@ cleanup() {
         if [ -f "$package_dir/package.json.backup" ]; then
             restore_package_json "$package_dir"
             restore_workspace_state
-            cd "$package_dir"
-            "${PNPM_CMD[@]}" install --silent $PNPM_INSTALL_FLAGS
         fi
     done
     find "$PACKAGES_DIR" -name "package.json.backup" -delete

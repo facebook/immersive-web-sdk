@@ -287,7 +287,11 @@ VITE_IWSDK_EXAMPLE_ASSET_BASE_URL=/vendor/iwsdk-assets
 The localized directory must preserve `assets/<asset-id>/<file>` layout. Run a
 production build and test it with the network disabled; loading only the entry
 `.gltf` file is insufficient because its relative resources are fetched
-separately. Production applications should own or mirror every critical asset
+separately. Keep the mirror under the app's public directory so it is served
+from the same origin. Do not point this setting at Vite's `/@fs/` escape hatch:
+paths outside the workspace are rejected by its filesystem allow-list, and a
+separate HTTP server also needs explicit CORS headers (and HTTPS when the app is
+HTTPS). Production applications should own or mirror every critical asset
 rather than depending on a sample CDN's availability.
 
 IWSDK repository tests override the base URL with a server backed by the exact

@@ -404,10 +404,12 @@ Their arbitrary external geometry cannot be proven from a JSON world-AABB assump
 Authoring views contain exact projection parameters. Perspective views use position,
 target, and FOV. Orthographic views use position, target, and height. Pass a saved
 `viewId` to camera or screenshot tools rather than approximating it with a preset.
-The separate `view` field accepts only built-in preset names. The runtime applies the
-scene's hero view after level initialization, so adjust that authored view when editor
-and runtime framing need to stay in parity; an initial `World.create` camera is not an
-override for a scene-owned camera.
+The separate `view` field accepts only built-in preset names. Outside immersive XR,
+the runtime applies the scene's hero view after level initialization, so adjust that
+authored view when editor and browser framing need to stay in parity; an initial
+`World.create` camera is not an override for a scene-owned camera. In XR the tracked
+player rig owns the camera, so separately inspect framing from the authored player
+spawn.
 
 ```json
 {

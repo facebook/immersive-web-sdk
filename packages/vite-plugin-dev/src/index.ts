@@ -569,8 +569,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         const httpsOptions =
           typeof options.https === 'object' ? options.https : {};
         const configuredCacheDir =
-          httpsOptions.certDir ??
-          path.join(userConfig.cacheDir ?? 'node_modules/.vite', 'iwsdk-https');
+          httpsOptions.certDir ?? path.join('.iwsdk', 'https');
         const certDir = path.isAbsolute(configuredCacheDir)
           ? configuredCacheDir
           : path.resolve(projectRoot, configuredCacheDir);
@@ -580,6 +579,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           httpsOptions.domains,
           httpsOptions.ttlDays ?? 365,
         );
+        // @vitejs/plugin-basic-ssl writes its cache asynchronously after
+        // returning. Complete the write before Vite starts so a rapid restart
+        // cannot generate a second certificate for the same project.
+        mkdirSync(certDir, { recursive: true });
+        writeFileSync(path.join(certDir, '_cert.pem'), certificate, {
+          mode: 0o600,
+        });
         userConfig.server ??= {};
         userConfig.server.https = {
           cert: certificate,

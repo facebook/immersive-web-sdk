@@ -147,7 +147,7 @@ export interface DevelopmentHttpsOptions {
   /**
    * Directory used to cache the generated certificate. Relative paths are
    * resolved from the Vite project root.
-   * @default '<vite cacheDir>/iwsdk-https'
+   * @default '.iwsdk/https'
    */
   certDir?: string;
 

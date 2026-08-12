@@ -1278,6 +1278,9 @@ export async function launchManagedBrowser(
 
   const browserArgs = [
     '--enable-webgl',
+    // This dedicated browser only visits the local managed workspace. Keep
+    // HTTPS enabled while accepting IWSDK's intentionally untrusted dev cert.
+    '--ignore-certificate-errors',
     `--use-gl=${backend.useGl}`,
     `--use-angle=${backend.useAngle}`,
     '--disable-background-timer-throttling',

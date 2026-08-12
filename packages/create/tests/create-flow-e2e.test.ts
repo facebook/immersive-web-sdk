@@ -1966,7 +1966,11 @@ function stripComponentPrefix(componentName: string): string {
 
 async function launchChromium() {
   return chromium.launch({
-    args: ['--enable-webgl', '--use-angle=metal'],
+    args: [
+      '--enable-webgl',
+      '--ignore-certificate-errors',
+      '--use-angle=metal',
+    ],
     channel: 'chromium',
     headless: true,
   });

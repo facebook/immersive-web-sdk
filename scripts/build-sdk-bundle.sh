@@ -164,7 +164,7 @@ Structure:
 - docs/     – prebuilt static documentation site with a local server
 
 Use the Create CLI (from bundle root):
-- npx -y ./packages/create/iwsdk-create.tgz
+- npx --yes --package=./packages/create/iwsdk-create.tgz create-iwsdk
 
 Serve the Docs (independent of CLI):
 - cd docs && npm run serve → open http://localhost:8082

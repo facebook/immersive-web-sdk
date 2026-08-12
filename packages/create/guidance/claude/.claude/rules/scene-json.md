@@ -48,11 +48,14 @@ node already uses instead of normalising.
 
 `LevelRoot`, `LevelTag` and `Transform` are runtime-owned; never author them.
 
-## The scene owns the runtime camera
+## Browser hero views and XR spawn framing are distinct
 
-The hero authoring view supersedes `world.render.camera` from
-`iwsdk.config.json` once the level initialises. Changing the config camera to fix
-runtime framing will appear to do nothing — change the hero view instead.
+Outside immersive XR, the hero authoring view supersedes `world.render.camera`
+from `iwsdk.config.json` once the level initialises. While XR is presenting,
+the tracked player rig owns the camera and the hero view is intentionally not
+applied. Use the hero view for editor/browser framing, and validate important
+content from the authored `player.transform` spawn (or the default standing
+view near `[0, 1.6, 0]`) before accepting XR framing.
 
 ## Validation
 

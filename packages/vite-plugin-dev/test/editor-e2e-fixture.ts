@@ -869,7 +869,11 @@ export async function hasNonBlankCanvas(
 
 async function launchChromium(): Promise<Browser> {
   return chromium.launch({
-    args: ['--enable-webgl', '--use-angle=metal'],
+    args: [
+      '--enable-webgl',
+      '--ignore-certificate-errors',
+      '--use-angle=metal',
+    ],
     channel: 'chromium',
     headless: true,
   });

@@ -7,6 +7,15 @@
 
 export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex' | 'opencode';
 
+export const DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS = 30_000;
+export const UI_RENDER_PREVIEW_TIMEOUT_MS = 60_000;
+
+export function getDefaultRuntimeCommandTimeoutMs(method: string): number {
+  return method === 'ui_render_preview'
+    ? UI_RENDER_PREVIEW_TIMEOUT_MS
+    : DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
+}
+
 export type JsonSchema = {
   type?: string;
   description?: string;

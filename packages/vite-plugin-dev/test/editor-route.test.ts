@@ -707,11 +707,20 @@ describe('native editor route middleware', () => {
 
     expect(userConfig.server?.https?.cert).toContain('BEGIN CERTIFICATE');
     expect(userConfig.server?.https?.key).toContain('BEGIN RSA PRIVATE KEY');
-    await vi.waitFor(async () => {
-      await expect(
-        readFile(path.join(cacheDir, 'iwsdk-https', '_cert.pem'), 'utf8'),
-      ).resolves.toContain('BEGIN CERTIFICATE');
+    const certPath = path.join(tempRoot, '.iwsdk', 'https', '_cert.pem');
+    await expect(readFile(certPath, 'utf8')).resolves.toBe(
+      userConfig.server?.https?.cert,
+    );
+
+    await rm(cacheDir, { force: true, recursive: true });
+    const restartedConfig: typeof userConfig = { cacheDir, root: tempRoot };
+    await iwsdkDev().config?.(restartedConfig as never, {
+      command: 'serve',
+      mode: 'development',
     });
+    expect(restartedConfig.server?.https?.cert).toBe(
+      userConfig.server?.https?.cert,
+    );
   });
 
   test('preserves explicit HTTP and custom HTTPS configuration', async () => {
