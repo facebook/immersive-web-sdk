@@ -1,5 +1,13 @@
 # @iwsdk/core
 
+## 0.5.3
+
+### Patch Changes
+
+- @iwsdk/locomotor@0.5.3
+- @iwsdk/scene-composition@0.5.3
+- @iwsdk/xr-input@0.5.3
+
 ## 0.5.2
 
 ### Patch Changes

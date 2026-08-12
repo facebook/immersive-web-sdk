@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/locomotor",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Locomotion engine for WebXR applications - physics-based movement, teleportation, and collision detection for Three.js",
   "type": "module",
   "main": "dist/index.js",

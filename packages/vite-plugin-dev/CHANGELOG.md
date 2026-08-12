@@ -1,5 +1,15 @@
 # @iwsdk/vite-plugin-dev
 
+## 0.5.3
+
+### Patch Changes
+
+- c9bf4ae: Light scaffolded AR scenes by default, restore the workspace button that opens
+  the runtime in the default browser, and return an actionable error when an
+  editor command requires a scene to be open.
+  - @iwsdk/core@0.5.3
+  - @iwsdk/scene-composition@0.5.3
+
 ## 0.5.2
 
 ### Patch Changes

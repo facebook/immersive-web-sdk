@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/cli",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Runtime-first CLI for IWSDK dev servers, adapters, and MCP access",
   "private": false,
   "type": "module",
