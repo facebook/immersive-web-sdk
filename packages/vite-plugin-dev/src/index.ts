@@ -1080,6 +1080,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   WORKSPACE_REVIEW_CAPTURES_ROUTE,
                   WORKSPACE_REVIEW_TRANSITIONS_ROUTE,
                   WORKSPACE_PUBLISH_ROUTE,
+                  WORKSPACE_OPEN_RUNTIME_ROUTE,
                   WORKSPACE_RUNTIME_PREFLIGHT_ROUTE,
                   `${EDITOR_ROUTE}/document`,
                 ],

@@ -184,6 +184,24 @@ describe('common starter project files', () => {
     },
   );
 
+  it('lights AR scene content without covering passthrough', async () => {
+    const files = await buildStarterProjectFiles({
+      appName: 'lit-ar-app',
+      configuration: getRecommendedConfiguration('ar'),
+      language: 'ts',
+      packageSource: npmSource,
+      templateRoot: TEMPLATE_ROOT,
+    });
+    const scene = JSON.parse(
+      textFile(files, 'public/scenes/main.iwsdk.scene.json'),
+    );
+
+    expect(scene.components).toHaveProperty('com.iwsdk.components.IBLGradient');
+    expect(scene.components).not.toHaveProperty(
+      'com.iwsdk.components.DomeGradient',
+    );
+  });
+
   it('keeps static starter composition out of the application entry point', async () => {
     const files = await buildStarterProjectFiles({
       appName: 'scene-owned-composition',

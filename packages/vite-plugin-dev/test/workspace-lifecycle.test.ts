@@ -248,7 +248,10 @@ describe('managed workspace lifecycle', () => {
       null,
       { height: 800, width: 800 },
       false,
-      expect.objectContaining({ topLevelPathnames: ['/'] }),
+      expect.objectContaining({
+        pathnames: expect.arrayContaining(['/__iwsdk/workspace/open-runtime']),
+        topLevelPathnames: ['/'],
+      }),
       'workspace',
     );
 

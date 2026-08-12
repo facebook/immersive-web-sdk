@@ -106,6 +106,27 @@ describe('editor runtime source', () => {
     expect(workspaceSource).not.toContain("'split'");
   });
 
+  test('fails fast when editor commands require an open scene', () => {
+    const source = createRuntimeSource();
+    const routing = section(
+      source,
+      'function handlesEditorMethodWithoutSession',
+      'function readStoredWorkspaceScenePath',
+    );
+
+    expect(source).toContain("String(method).startsWith('ui_')");
+    expect(routing).toContain("value.startsWith('scene_')");
+    expect(routing).toContain("value.startsWith('ui_')");
+    expect(routing).toContain('No scene is open in the IWSDK editor.');
+    expect(routing).toContain('npx iwsdk scene open --input-json');
+    expect(source).toContain(
+      'runtimeHandles = (method) => handlesEditorMethodWithoutSession(method)',
+    );
+    expect(source).toContain(
+      'dispatchEditorMethodWithoutSession(method, params)',
+    );
+  });
+
   test('keeps editor view and scene selection in the visible URL', () => {
     const source = createRuntimeSource();
     const sceneImport = section(

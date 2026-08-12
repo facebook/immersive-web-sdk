@@ -647,6 +647,7 @@ let runtimeDispatch = async () => {
 };
 let runtimeHandles = (method) =>
   String(method).startsWith('scene_') ||
+  String(method).startsWith('ui_') ||
   String(method).startsWith('workspace_');
 const collapsedOutlinerNodeIds = new Set();
 const hiddenOutlinerNodeIds = new Set();
@@ -722,6 +723,29 @@ function handlesWorkspaceMethod(method) {
     'scene_set_preview_visibility',
     'scene_open',
   ].includes(method);
+}
+
+function handlesEditorMethodWithoutSession(method) {
+  const value = String(method);
+  return (
+    handlesWorkspaceMethod(value) ||
+    value.startsWith('scene_') ||
+    value.startsWith('ui_')
+  );
+}
+
+function dispatchEditorMethodWithoutSession(
+  method,
+  params = {},
+  unavailableMessage =
+    'No scene is open in the IWSDK editor. Open the Editor view and select a scene, or run npx iwsdk scene open --input-json with the scene path.',
+) {
+  if (handlesWorkspaceMethod(method)) {
+    return dispatchWorkspaceCommand(null, method, params);
+  }
+  throw new Error(
+    unavailableMessage + \` Then retry "\${String(method)}".\`,
+  );
 }
 
 function readStoredWorkspaceScenePath() {
@@ -11588,9 +11612,9 @@ async function init() {
         syncWorkspaceLocation('editor', currentScenePath(), { replace: true });
       }
     } else {
-      runtimeHandles = (method) => handlesWorkspaceMethod(method);
+      runtimeHandles = (method) => handlesEditorMethodWithoutSession(method);
       runtimeDispatch = (method, params = {}) =>
-        dispatchWorkspaceCommand(null, method, params);
+        dispatchEditorMethodWithoutSession(method, params);
       window.IWSDK_SCENE_EDITOR = {
         listContributions: () => [],
         registerContribution: registerEditorContribution,
@@ -11607,9 +11631,13 @@ async function init() {
   updateEditorStartupProgress('Loading scene…', 48);
   const loadedScene = await fetchComposedSceneDocument(currentScenePath());
   if ((loadedScene.sourceDocument?.imports?.length || 0) > 0) {
-    runtimeHandles = (method) => handlesWorkspaceMethod(method);
+    runtimeHandles = (method) => handlesEditorMethodWithoutSession(method);
     runtimeDispatch = (method, params = {}) =>
-      dispatchWorkspaceCommand(null, method, params);
+      dispatchEditorMethodWithoutSession(
+        method,
+        params,
+        'The selected scene uses imports and cannot be edited directly. Flatten it first, then open the flattened scene.',
+      );
     window.IWSDK_SCENE_EDITOR = {
       listContributions: () => [],
       registerContribution: registerEditorContribution,

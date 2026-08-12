@@ -24,6 +24,51 @@ afterEach(async () => {
 });
 
 describe('file-first scene authoring', () => {
+  test('rejects editor commands immediately when no scene is open', async () => {
+    harness = await createEditorTestHarness('editor-no-open-scene');
+    await writeFile(
+      path.join(harness.tempRoot, 'public/scenes/second.iwsdk.scene.json'),
+      JSON.stringify({
+        version: 'iwsdk.scene.v1',
+        units: 'meters',
+        resources: {},
+        nodes: [],
+      }),
+    );
+    const context = await harness.browser.newContext({
+      extraHTTPHeaders: MANAGED_WORKSPACE_HEADERS,
+      ignoreHTTPSErrors: true,
+    });
+    const page = await context.newPage();
+
+    await page.goto(`${harness.baseUrl}__iwsdk/workspace`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForFunction(
+      () =>
+        (window as any).__IWSDK_SCENE_EDITOR_READY === true &&
+        (window as any).IWSDK_SCENE_EDITOR?.session === null,
+    );
+
+    const result = await page.evaluate(async () => {
+      const runtime = (window as any).IWSDK_SCENE_EDITOR.runtime;
+      try {
+        await runtime.dispatch('ui_list_assets', {});
+        return { handled: runtime.handles('ui_list_assets'), message: null };
+      } catch (error) {
+        return {
+          handled: runtime.handles('ui_list_assets'),
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.message).toContain('No scene is open in the IWSDK editor.');
+    expect(result.message).toContain('npx iwsdk scene open --input-json');
+    await context.close();
+  }, 60000);
+
   test('atomically reloads roots and modules and renders detached files', async () => {
     harness = await createEditorTestHarness('editor-file-authoring');
     const editor = await harness.openEditor();
