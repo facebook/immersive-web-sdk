@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -72,10 +75,10 @@ import { MCPRuntime } from '../mcp/index.js';
 // when `features.physics` is enabled so non-physics projects don't pay the
 // bundle-size tax.
 import {
-  Clock,
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
+  Timer,
   WebGLRenderer,
 } from '../runtime/index.js';
 import {
@@ -824,11 +827,15 @@ async function registerFeatureSystems(
  * Setup the main render loop
  */
 function setupRenderLoop(world: World, renderer: WebGLRenderer) {
-  const clock = new Clock();
+  const timer = new Timer();
+  if (typeof document !== 'undefined') {
+    timer.connect(document);
+  }
 
-  const render = () => {
-    const delta = clock.getDelta();
-    const elapsedTime = clock.elapsedTime;
+  const render = (timestamp?: number) => {
+    timer.update(timestamp);
+    const delta = timer.getDelta();
+    const elapsedTime = timer.getElapsed();
     world.visibilityState.value = (world.session?.visibilityState ??
       VisibilityState.NonImmersive) as VisibilityState;
     // Run ECS systems in priority order (InputSystem => LocomotionSystem => GrabSystem)
@@ -846,7 +853,10 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
   renderer.setAnimationLoop(render);
   // Allow World.destroy() to stop the loop (otherwise it keeps the world,
   // renderer, scene and camera alive forever via the render closure).
-  world.addCleanup(() => renderer.setAnimationLoop(null));
+  world.addCleanup(() => {
+    renderer.setAnimationLoop(null);
+    timer.dispose();
+  });
 
   // No explicit sessionend handling required on r177; WebXRManager handles
   // render target and canvas sizing restoration internally.

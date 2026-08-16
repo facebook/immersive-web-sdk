@@ -25,12 +25,12 @@
   "scripts": {
     "build": "rollup -c",
     "format": "prettier --write ./src/**/* ./tests/**/*",
-    "prepublishOnly": "corepack pnpm@10.18.3 verify:publishable",
+    "prepublishOnly": "corepack pnpm@11.22.0 verify:publishable",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:cdn": "node ../../scripts/check-example-assets-cdn.mjs",
     "verify:cdn-tooling": "node ../../scripts/check-example-assets-cdn.mjs --local-package",
-    "verify:publishable": "corepack pnpm@10.18.3 build && node --input-type=module -e \"import('./dist/index.js').then(({ assertExampleAssetCatalogPublishable }) => assertExampleAssetCatalogPublishable())\""
+    "verify:publishable": "corepack pnpm@11.22.0 build && node --input-type=module -e \"import('./dist/index.js').then(({ assertExampleAssetCatalogPublishable }) => assertExampleAssetCatalogPublishable())\""
   },
   "repository": {
     "type": "git",

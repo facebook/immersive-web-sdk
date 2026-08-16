@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -67,12 +70,12 @@ export interface System<S extends SystemSchema, Q extends SystemQueries>
 
   init(): void;
   /**
-   * Per-frame tick. Both arguments are in seconds (Three.js `Clock` convention),
+   * Per-frame tick. Both arguments are in seconds (Three.js `Timer` convention),
    * not milliseconds.
    *
    * @param delta Seconds since the previous frame.
-   * @param time  Accumulated `Clock.elapsedTime` (seconds since the render loop
-   *              started ticking the clock); monotonic across frames within a
+   * @param time  Accumulated elapsed time in seconds since the render loop
+   *              started ticking the timer; monotonic across frames within a
    *              session.
    */
   update(delta: number, time: number): void;

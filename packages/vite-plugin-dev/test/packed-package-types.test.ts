@@ -183,7 +183,7 @@ async function packPackage(
   await execFileAsync(
     'corepack',
     [
-      'pnpm@10.18.3',
+      'pnpm@11.22.0',
       '--dir',
       packageRoot,
       'pack',

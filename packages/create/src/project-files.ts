@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -106,7 +109,7 @@ function createProjectPackageJson(
     },
     dependencies: {
       '@iwsdk/core': packageSpec('@iwsdk/core'),
-      three: 'npm:super-three@0.181.0',
+      three: 'npm:super-three@0.185.0',
     },
     devDependencies: {
       '@iwsdk/reference': packageSpec('@iwsdk/reference'),
@@ -114,7 +117,7 @@ function createProjectPackageJson(
       '@iwsdk/vite-plugin-dev': packageSpec('@iwsdk/vite-plugin-dev'),
       '@meta-quest/metavr': '^1.3.2',
       ...(language === 'ts'
-        ? { '@types/three': '^0.181.0', typescript: '^5.5.0' }
+        ? { '@types/three': '^0.185.0', typescript: '^5.5.0' }
         : {}),
       vite: '^7.1.4',
     },

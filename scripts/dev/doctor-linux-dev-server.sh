@@ -47,8 +47,8 @@ const ok = (maj === 20 && min >= 19) || (maj === 22 && min >= 12) || maj >= 24;
 process.exit(ok ? 0 : 1);
 NODE
 
-pnpm_version="$(corepack pnpm@10.18.3 -v 2>/dev/null || true)"
-[ -n "$pnpm_version" ] || fail "Corepack could not launch the pinned pnpm 10.18.3"
+pnpm_version="$(corepack pnpm@11.22.0 -v 2>/dev/null || true)"
+[ -n "$pnpm_version" ] || fail "Corepack could not launch the pinned pnpm 11.22.0"
 pass "pnpm $pnpm_version (via Corepack)"
 
 if (cd packages/xr-input && node -e "require.resolve('@webxr-input-profiles/assets/package.json')") >/dev/null 2>&1; then

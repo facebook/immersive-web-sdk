@@ -35,7 +35,7 @@ fi
 echo "🚀 Building standalone tgz packages..."
 
 if command -v corepack >/dev/null 2>&1; then
-    COREPACK_PNPM_VERSION="${COREPACK_PNPM_VERSION:-pnpm@10.18.3}"
+    COREPACK_PNPM_VERSION="${COREPACK_PNPM_VERSION:-pnpm@11.22.0}"
     PNPM_CMD=(corepack "$COREPACK_PNPM_VERSION" --config.confirmModulesPurge=false)
 elif command -v pnpm >/dev/null 2>&1; then
     PNPM_CMD=(pnpm --config.confirmModulesPurge=false)

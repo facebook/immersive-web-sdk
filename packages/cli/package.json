@@ -36,7 +36,7 @@
     "prebuild": "node scripts/gen-version.cjs",
     "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
     "clean": "rm -rf dist",
-    "test": "corepack pnpm@10.18.3 build && vitest run",
+    "test": "corepack pnpm@11.22.0 build && vitest run",
     "test:watch": "vitest"
   },
   "keywords": [
