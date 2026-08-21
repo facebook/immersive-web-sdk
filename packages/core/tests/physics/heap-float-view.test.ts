@@ -5,89 +5,48 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import { PhysicsSystem } from '../../src/physics/physics-system.js';
-import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/three.js';
+import { describe, expect, it } from 'vitest';
+import {
+  PHYSICS_HEADER_BYTES,
+  PHYSICS_INPUT_RECORD_FLOATS,
+  PHYSICS_OUTPUT_RECORD_FLOATS,
+  physicsExchangeByteLength,
+} from '../../src/physics/physics-worker-protocol.js';
+import { reusableFloat32View } from '../../src/physics/physics-worker-utils.js';
 
-// physics-system.ts -> runtime barrel -> xr-input cursor-visual.ts touches
-// `document` at module load; provide a minimal canvas stub before importing.
-vi.hoisted(() => {
-  (globalThis as any).document = {
-    createElement: () => ({
-      getContext: () => ({
-        arc: () => {},
-        beginPath: () => {},
-        clearRect: () => {},
-        fill: () => {},
-        fillStyle: '',
-        lineWidth: 0,
-        stroke: () => {},
-        strokeStyle: '',
-      }),
-      height: 0,
-      width: 0,
-    }),
-  };
+describe('physics transferable exchange buffers', () => {
+  it('sizes the payload for the larger of commands and results', () => {
+    expect(physicsExchangeByteLength(10, 1)).toBe(
+      PHYSICS_HEADER_BYTES + 10 * PHYSICS_INPUT_RECORD_FLOATS * 4,
+    );
+    expect(physicsExchangeByteLength(1, 10)).toBe(
+      PHYSICS_HEADER_BYTES + 10 * PHYSICS_OUTPUT_RECORD_FLOATS * 4,
+    );
+  });
+
+  it('transfers ownership without copying or SharedArrayBuffer', () => {
+    const original = new ArrayBuffer(128);
+    new Uint32Array(original)[0] = 0xdecafbad;
+
+    const transferred = structuredClone(original, { transfer: [original] });
+
+    expect(original.byteLength).toBe(0);
+    expect(transferred).toBeInstanceOf(ArrayBuffer);
+    expect(transferred).not.toBeInstanceOf(SharedArrayBuffer);
+    expect(new Uint32Array(transferred)[0]).toBe(0xdecafbad);
+  });
 });
 
-function createPhysicsSystem() {
-  const world = {
-    camera: new PerspectiveCamera(),
-    globals: {},
-    input: {},
-    player: new Object3D(),
-    playerEntity: {},
-    playerHeadEntity: {},
-    renderer: {},
-    scene: new Scene(),
-    session: undefined,
-    visibilityState: { value: 'visible' },
-  };
-  return new PhysicsSystem(world as any, {} as any, 0);
-}
+describe('physics worker heap views', () => {
+  it('reuses a view until the WASM heap buffer changes', () => {
+    const firstBuffer = new ArrayBuffer(64);
+    const firstView = reusableFloat32View(undefined, firstBuffer);
 
-describe('PhysicsSystem.getHeapFloatView', () => {
-  it('caches the heap view across calls (no per-call allocation)', () => {
-    const system = createPhysicsSystem();
-    const buffer = new ArrayBuffer(64);
-    (system as any).havok = { HEAPU8: { buffer } };
+    expect(reusableFloat32View(firstView, firstBuffer)).toBe(firstView);
 
-    const view1 = (system as any).getHeapFloatView();
-    const view2 = (system as any).getHeapFloatView();
-
-    expect(view1).toBeInstanceOf(Float32Array);
-    expect(view1).toBe(view2);
-    expect(view1.buffer).toBe(buffer);
-  });
-
-  it('recreates the view when the underlying heap buffer changes (WASM growth)', () => {
-    const system = createPhysicsSystem();
-    const bufferA = new ArrayBuffer(64);
-    (system as any).havok = { HEAPU8: { buffer: bufferA } };
-    const viewA = (system as any).getHeapFloatView();
-
-    // Simulate the Havok heap growing: HEAPU8.buffer becomes a new ArrayBuffer.
-    const bufferB = new ArrayBuffer(128);
-    (system as any).havok.HEAPU8.buffer = bufferB;
-    const viewB = (system as any).getHeapFloatView();
-
-    expect(viewB).not.toBe(viewA);
-    expect(viewB.buffer).toBe(bufferB);
-  });
-
-  it('reads the same floats a fresh view would (parity with the old per-frame view)', () => {
-    const system = createPhysicsSystem();
-    const buffer = new ArrayBuffer(16 * 4);
-    const seed = new Float32Array(buffer);
-    for (let i = 0; i < 16; i++) {
-      seed[i] = i * 1.5;
-    }
-    (system as any).havok = { HEAPU8: { buffer } };
-
-    const cached = (system as any).getHeapFloatView();
-    const fresh = new Float32Array(buffer, 0, 16); // the pre-fix per-frame view
-    for (let i = 0; i < 16; i++) {
-      expect(cached[i]).toBe(fresh[i]);
-    }
+    const grownBuffer = new ArrayBuffer(128);
+    const grownView = reusableFloat32View(firstView, grownBuffer);
+    expect(grownView).not.toBe(firstView);
+    expect(grownView.buffer).toBe(grownBuffer);
   });
 });

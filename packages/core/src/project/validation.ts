@@ -423,7 +423,10 @@ function validateFeatures(
       issues,
     );
   }
-  for (const key of ['physics', 'environmentRaycast', 'camera'] as const) {
+  if ('physics' in features) {
+    validatePhysics(features.physics, `${path}.physics`, issues);
+  }
+  for (const key of ['environmentRaycast', 'camera'] as const) {
     if (key in features) {
       booleanValue(features[key], `${path}.${key}`, issues);
     }
@@ -438,6 +441,45 @@ function validateFeatures(
   }
   if ('spatialUI' in features) {
     validateSpatialUI(features.spatialUI, `${path}.spatialUI`, issues);
+  }
+}
+
+function validatePhysics(
+  value: unknown,
+  path: string,
+  issues: ProjectManifestValidationIssue[],
+): void {
+  if (typeof value === 'boolean') {
+    return;
+  }
+  const physics = objectValue(
+    value,
+    path,
+    ['useWorker', 'updateFrequency', 'interpolation'],
+    [],
+    issues,
+  );
+  if (physics == null) {
+    return;
+  }
+  if ('useWorker' in physics) {
+    booleanValue(physics.useWorker, `${path}.useWorker`, issues);
+  }
+  if (
+    'updateFrequency' in physics &&
+    numberValue(physics.updateFrequency, `${path}.updateFrequency`, issues) &&
+    ((physics.updateFrequency as number) <= 0 ||
+      (physics.updateFrequency as number) > 240)
+  ) {
+    addIssue(
+      issues,
+      `${path}.updateFrequency`,
+      'type',
+      'expected a number greater than 0 and at most 240',
+    );
+  }
+  if ('interpolation' in physics) {
+    booleanValue(physics.interpolation, `${path}.interpolation`, issues);
   }
 }
 

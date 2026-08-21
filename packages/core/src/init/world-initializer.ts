@@ -180,8 +180,17 @@ export type WorldOptions = {
         };
     /** Grabbing (one/two‑hand, distance). @defaultValue false */
     grabbing?: boolean | { useHandPinchForGrab?: boolean };
-    /** Physics simulation (Havok). @defaultValue false */
-    physics?: boolean;
+    /** Physics simulation (Havok). Boolean or config. @defaultValue false */
+    physics?:
+      | boolean
+      | {
+          /** Run the physics engine in a Web Worker. @defaultValue true */
+          useWorker?: boolean;
+          /** Fixed simulation rate in updates per second (maximum 240). @defaultValue 60 */
+          updateFrequency?: number;
+          /** Smooth render transforms between physics snapshots. @defaultValue true */
+          interpolation?: boolean;
+        };
     /** Scene Understanding (planes/meshes/anchors). Boolean or config. @defaultValue false */
     sceneUnderstanding?: boolean | { showWireFrame?: boolean };
     /** Environment Raycast (hit-test against real-world surfaces). @defaultValue false */
@@ -666,7 +675,14 @@ async function registerFeatureSystems(
     | boolean
     | { useHandPinchForGrab?: boolean };
   const grabbingEnabled = !!grabbing;
-  const physicsEnabled = !!config.features.physics;
+  const physics = config.features.physics as
+    | boolean
+    | {
+        useWorker?: boolean;
+        updateFrequency?: number;
+        interpolation?: boolean;
+      };
+  const physicsEnabled = !!physics;
   const sceneUnderstanding = config.features.sceneUnderstanding as
     | boolean
     | { showWireFrame?: boolean };
@@ -733,11 +749,24 @@ async function registerFeatureSystems(
   if (physicsEnabled) {
     const { PhysicsBody, PhysicsManipulation, PhysicsShape, PhysicsSystem } =
       await import('../physics/index.js');
+    const physicsOpts =
+      typeof physics === 'object' && physics
+        ? Object.fromEntries(
+            Object.entries({
+              useWorker: physics.useWorker,
+              updateFrequency: physics.updateFrequency,
+              interpolation: physics.interpolation,
+            }).filter(([, value]) => value !== undefined),
+          )
+        : undefined;
     world
       .registerComponent(PhysicsBody)
       .registerComponent(PhysicsShape)
       .registerComponent(PhysicsManipulation)
-      .registerSystem(PhysicsSystem, { priority: -2 });
+      .registerSystem(PhysicsSystem, {
+        priority: -2,
+        configData: physicsOpts,
+      });
   }
 
   // Scene Understanding updates plane/mesh/anchor debug after input/physics

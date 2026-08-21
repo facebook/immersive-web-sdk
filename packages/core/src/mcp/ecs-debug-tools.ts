@@ -16,10 +16,75 @@ import type { World } from '../ecs/world.js';
 const debugState = {
   paused: false,
   stepResolve: null as (() => void) | null,
+  stepReject: null as ((error: Error) => void) | null,
+  stepInFlight: false,
   stepDelta: 1 / 72,
   frameCount: 0,
   pausedAtFrame: 0,
 };
+
+interface DebugFrameSynchronizer {
+  prepareDebugFrame?(delta: number): void;
+  flushDebugFrame(): Promise<void>;
+}
+
+const DEBUG_SYNC_TIMEOUT_MS = 5000;
+
+function isDebugFrameSynchronizer(
+  system: unknown,
+): system is DebugFrameSynchronizer {
+  return (
+    typeof system === 'object' &&
+    system !== null &&
+    'flushDebugFrame' in system &&
+    typeof system.flushDebugFrame === 'function'
+  );
+}
+
+async function flushDebugSystems(world: World): Promise<void> {
+  await Promise.all(
+    world
+      .getSystems()
+      .map((system) =>
+        isDebugFrameSynchronizer(system)
+          ? system.flushDebugFrame()
+          : Promise.resolve(),
+      ),
+  );
+}
+
+function prepareDebugSystems(world: World, delta: number): void {
+  for (const system of world.getSystems()) {
+    if (isDebugFrameSynchronizer(system)) {
+      system.prepareDebugFrame?.(delta);
+    }
+  }
+}
+
+async function flushDebugSystemsWithTimeout(
+  world: World,
+  operation: string,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      flushDebugSystems(world),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              `${operation} timed out after ${DEBUG_SYNC_TIMEOUT_MS}ms while waiting for asynchronous systems to settle`,
+            ),
+          );
+        }, DEBUG_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Install debug hook — monkey-patches world.update()
@@ -45,11 +110,33 @@ export function installDebugHook(world: World): void {
     }
 
     if (debugState.paused && debugState.stepResolve) {
+      if (debugState.stepInFlight) {
+        return;
+      }
       // Stepping — use fixed timestep
-      originalUpdate!(debugState.stepDelta, time);
       const resolve = debugState.stepResolve;
+      const reject = debugState.stepReject;
       debugState.stepResolve = null;
-      resolve();
+      debugState.stepReject = null;
+      debugState.stepInFlight = true;
+      try {
+        prepareDebugSystems(world, debugState.stepDelta);
+        originalUpdate!(debugState.stepDelta, time);
+      } catch (error) {
+        debugState.stepInFlight = false;
+        reject?.(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      void flushDebugSystems(world).then(
+        () => {
+          debugState.stepInFlight = false;
+          resolve();
+        },
+        (error) => {
+          debugState.stepInFlight = false;
+          reject?.(error instanceof Error ? error : new Error(String(error)));
+        },
+      );
       return;
     }
 
@@ -67,9 +154,10 @@ export interface EcsPauseResult {
   systemCount: number;
 }
 
-export function ecsPause(world: World): EcsPauseResult {
+export async function ecsPause(world: World): Promise<EcsPauseResult> {
   debugState.paused = true;
   debugState.pausedAtFrame = debugState.frameCount;
+  await flushDebugSystemsWithTimeout(world, 'Pause');
   return {
     paused: true,
     frame: debugState.frameCount,
@@ -92,6 +180,10 @@ export function ecsResume(world: World): EcsResumeResult {
   const framesWhilePaused = debugState.frameCount - debugState.pausedAtFrame;
   debugState.paused = false;
   debugState.stepResolve = null;
+  debugState.stepReject = null;
+  // Keep stepInFlight set until its asynchronous system flush actually
+  // settles. Normal updates can resume, but a later debugger step must not
+  // overlap the abandoned exchange.
 
   // Cap first real delta after resume to avoid physics explosions
   if (!resumeClampInstalled && originalUpdate) {
@@ -155,23 +247,29 @@ export async function ecsStep(
   // no active XR session, page hidden), the resolve callback from
   // world.update() never fires. A 5s timeout per step prevents the MCP
   // call from hanging indefinitely.
-  const STEP_TIMEOUT_MS = 5000;
-
   for (let i = 0; i < frameCount; i++) {
     await new Promise<void>((resolve, reject) => {
       debugState.stepResolve = () => {
         clearTimeout(timer);
         resolve();
       };
+      debugState.stepReject = (error) => {
+        clearTimeout(timer);
+        reject(error);
+      };
       const timer = setTimeout(() => {
         debugState.stepResolve = null;
+        debugState.stepReject = null;
+        // If world.update already started this step, its asynchronous flush is
+        // still physically in flight. Leave the guard set so a retry cannot
+        // submit another exact step until that work really settles.
         reject(
           new Error(
-            `Step timeout after ${STEP_TIMEOUT_MS}ms — the render loop may not be running. ` +
+            `Step timeout after ${DEBUG_SYNC_TIMEOUT_MS}ms — the render loop may not be running. ` +
               `Ensure an XR session is active and the browser tab is visible.`,
           ),
         );
-      }, STEP_TIMEOUT_MS);
+      }, DEBUG_SYNC_TIMEOUT_MS);
     });
   }
 

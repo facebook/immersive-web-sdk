@@ -12,7 +12,12 @@ import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
 
 export default {
-  input: ['src/index.ts', 'src/lighting/index.ts', 'src/project/index.ts'],
+  input: [
+    'src/index.ts',
+    'src/lighting/index.ts',
+    'src/project/index.ts',
+    'src/physics/physics-worker.ts',
+  ],
   external: (id) => {
     // Mark three.js and all its subpaths as external
     if (id === 'three' || id.startsWith('three/')) {

@@ -229,7 +229,10 @@ function normalizeFeatures(
         : { ...source.grabbing };
   }
   if (source.physics != null) {
-    features.physics = source.physics;
+    features.physics =
+      typeof source.physics === 'boolean'
+        ? source.physics
+        : { ...source.physics };
   }
   if (source.sceneUnderstanding != null) {
     features.sceneUnderstanding =

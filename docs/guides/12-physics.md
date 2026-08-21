@@ -82,10 +82,23 @@ world
 
 ### Step 2: Physics World Configuration
 
+When physics is enabled through `iwsdk.config.json`, worker execution is the
+default. You can also select the simulation frequency and render smoothing:
+
+```jsonc
+"physics": {
+  "useWorker": true,
+  "updateFrequency": 60,
+  "interpolation": true
+}
+```
+
 The physics system automatically creates a Havok physics world with:
 
 - **Gravity**: Default value `[0, -9.81, 0]` (configurable in physics system) (Earth-like gravity)
-- **Step Rate**: Synchronized with your application's frame rate
+- **Execution**: A dedicated Web Worker by default; set `useWorker` to `false` to run the same runtime on the main thread
+- **Step Rate**: Fixed at 60 Hz by default and configurable up to 240 Hz
+- **Render Smoothing**: Interpolates object transforms between physics snapshots by default
 - **Automatic Cleanup**: Physics resources are cleaned up when entities are removed
 
 ## Understanding the Components

@@ -205,6 +205,24 @@
         }
       ]
     },
+    "physics": {
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "useWorker": { "type": "boolean" },
+            "updateFrequency": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 240
+            },
+            "interpolation": { "type": "boolean" }
+          }
+        }
+      ]
+    },
     "sceneUnderstanding": {
       "oneOf": [
         { "type": "boolean" },
@@ -237,7 +255,7 @@
       "properties": {
         "locomotion": { "$ref": "#/$defs/locomotion" },
         "grabbing": { "$ref": "#/$defs/grabbing" },
-        "physics": { "type": "boolean" },
+        "physics": { "$ref": "#/$defs/physics" },
         "sceneUnderstanding": { "$ref": "#/$defs/sceneUnderstanding" },
         "environmentRaycast": { "type": "boolean" },
         "camera": { "type": "boolean" },

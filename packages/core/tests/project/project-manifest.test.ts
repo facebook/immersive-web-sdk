@@ -72,7 +72,7 @@ const vrManifest = {
         },
       },
       grabbing: { useHandPinchForGrab: true },
-      physics: true,
+      physics: { useWorker: false, updateFrequency: 60, interpolation: true },
       sceneUnderstanding: { showWireFrame: false },
       environmentRaycast: false,
       camera: false,
@@ -153,7 +153,7 @@ describe('iwsdk.project.v1 validation and normalization', () => {
           },
         },
         grabbing: { useHandPinchForGrab: true },
-        physics: true,
+        physics: { useWorker: false, updateFrequency: 60, interpolation: true },
         sceneUnderstanding: { showWireFrame: false },
         environmentRaycast: false,
         camera: false,
@@ -164,6 +164,17 @@ describe('iwsdk.project.v1 validation and normalization', () => {
         },
       },
     });
+  });
+
+  it('preserves boolean physics enablement for existing manifests', () => {
+    const manifest = structuredClone(vrManifest) as any;
+    manifest.world.features.physics = true;
+
+    expect(validateIwsdkProjectManifest(manifest)).toEqual({
+      valid: true,
+      issues: [],
+    });
+    expect(normalizeProjectWorldOptions(manifest).features?.physics).toBe(true);
   });
 
   it('preserves structured AR depth-sensing and required feature flags', () => {
@@ -272,6 +283,7 @@ describe('iwsdk.project.v1 validation and normalization', () => {
     invalid.world.xr.features.unrecognized = true;
     invalid.world.features.spatialUI.componentSets = [];
     invalid.world.features.locomotion.browserControls.pointerLock = false;
+    invalid.world.features.physics.extra = true;
     invalid.dev.emulator.verbose = true;
 
     const issues = validateIwsdkProjectManifest(invalid).issues;
@@ -288,6 +300,10 @@ describe('iwsdk.project.v1 validation and normalization', () => {
         }),
         expect.objectContaining({
           path: '$.world.features.locomotion.browserControls.pointerLock',
+          code: 'unknown-key',
+        }),
+        expect.objectContaining({
+          path: '$.world.features.physics.extra',
           code: 'unknown-key',
         }),
         expect.objectContaining({
@@ -316,7 +332,11 @@ describe('iwsdk.project.v1 validation and normalization', () => {
         render: { camera: { position: [0, Number.NaN] } },
         features: {
           locomotion: { turningMethod: 'continuous' },
-          physics: 'yes',
+          physics: {
+            useWorker: 'yes',
+            updateFrequency: 0,
+            interpolation: 'yes',
+          },
         },
       },
       dev: {
@@ -339,7 +359,9 @@ describe('iwsdk.project.v1 validation and normalization', () => {
       '$.world.xr.features.depthSensing.format',
       '$.world.render.camera.position',
       '$.world.features.locomotion.turningMethod',
-      '$.world.features.physics',
+      '$.world.features.physics.useWorker',
+      '$.world.features.physics.updateFrequency',
+      '$.world.features.physics.interpolation',
       '$.dev.emulator.activation',
       '$.dev.emulator.userAgentException.source',
       '$.dev.workspace',
@@ -348,6 +370,23 @@ describe('iwsdk.project.v1 validation and normalization', () => {
         expect.arrayContaining([expect.objectContaining({ path })]),
       );
     }
+  });
+
+  it('rejects non-boolean, non-object physics configuration', () => {
+    const invalid = structuredClone(vrManifest) as unknown as Record<
+      string,
+      any
+    >;
+    invalid.world.features.physics = 'yes';
+
+    expect(validateIwsdkProjectManifest(invalid).issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.world.features.physics',
+          code: 'type',
+        }),
+      ]),
+    );
   });
 
   it('throws a path-rich aggregate error before normalization', () => {

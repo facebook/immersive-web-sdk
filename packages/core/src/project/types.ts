@@ -112,6 +112,14 @@ export type ProjectGrabbingOptions =
   | boolean
   | { useHandPinchForGrab?: boolean };
 
+export type ProjectPhysicsOptions =
+  | boolean
+  | {
+      useWorker?: boolean;
+      updateFrequency?: number;
+      interpolation?: boolean;
+    };
+
 export type ProjectSceneUnderstandingOptions =
   | boolean
   | { showWireFrame?: boolean };
@@ -127,7 +135,7 @@ export type ProjectSpatialUIOptions =
 export interface ProjectFeatureOptions {
   locomotion?: ProjectLocomotionOptions;
   grabbing?: ProjectGrabbingOptions;
-  physics?: boolean;
+  physics?: ProjectPhysicsOptions;
   sceneUnderstanding?: ProjectSceneUnderstandingOptions;
   environmentRaycast?: boolean;
   camera?: boolean;

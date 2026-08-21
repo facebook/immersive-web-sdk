@@ -27,6 +27,16 @@ Enable physics in `iwsdk.config.json` with the `physics` feature flag:
 
 Setting `physics: true` automatically registers `PhysicsBody`, `PhysicsShape`, `PhysicsManipulation` components and the `PhysicsSystem` at priority `-2`.
 
+Use an options object when you need to select the execution mode or simulation rate. Worker execution is the default; `useWorker: false` runs the same physics runtime and protocol on the main thread for compatibility and diagnostics.
+
+```jsonc
+"physics": {
+  "useWorker": true,
+  "updateFrequency": 60,
+  "interpolation": true
+}
+```
+
 **Only enable physics when needed.** If no objects require dynamic simulation, omit it to avoid overhead.
 
 

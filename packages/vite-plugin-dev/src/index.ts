@@ -153,6 +153,7 @@ const WORKSPACE_PUBLISH_ROUTE = `${WORKSPACE_ROUTE}/publish`;
 const WORKSPACE_OPEN_RUNTIME_ROUTE = `${WORKSPACE_ROUTE}/open-runtime`;
 const WORKSPACE_RUNTIME_PREFLIGHT_ROUTE = `${WORKSPACE_ROUTE}/runtime-preflight`;
 const OPTIMIZER_EXCLUSIONS = [
+  '@iwsdk/core',
   '@zappar/msdf-generator',
   'lucide',
   'preact',

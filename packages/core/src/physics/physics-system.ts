@@ -5,43 +5,46 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// All symbols from `@babylonjs/havok` are type-only here. The runtime engine
-// (which ships ~2 MB of WASM) is loaded lazily via `await import(...)` later
-// in `init()`, and runtime access to enums like `MotionType` is done via the
-// loaded instance (e.g. `this.havok.MotionType.STATIC`). Keeping these as
-// `import type` ensures `@babylonjs/havok` stays out of the static module
-// graph when consumers don't enable `features.physics`, so the WASM and JS
-// engine chunks aren't bundled into non-physics projects.
-import type {
-  HavokPhysicsWithBindings,
-  HP_ShapeId,
-  HP_WorldId,
-  MassProperties,
-  MotionType,
-} from '@babylonjs/havok';
-import { createSystem, Entity, ne, Types, Grabbed } from '.././index.js';
+import { effect } from '@preact/signals-core';
+import { createSystem, Entity, Grabbed, ne, Types } from '.././index.js';
+import { Mesh, Object3D, Quaternion, Vector3 } from '../runtime/three.js';
 import {
-  Vector3,
-  Mesh,
-  TypedArray,
-  Quaternion,
-  Matrix4,
-  Object3D,
-} from '../runtime/three.js';
+  createPhysicsTransport,
+  type PhysicsTransport,
+} from './physics-transport.js';
+import {
+  getCapsuleAxisEndpoints,
+  PHYSICS_HEADER_WORDS,
+  PHYSICS_INPUT_RECORD_FLOATS,
+  PHYSICS_OUTPUT_RECORD_FLOATS,
+  PHYSICS_PROTOCOL_VERSION,
+  PhysicsCommandFlag,
+  PhysicsExchangeStatus,
+  PhysicsHeaderIndex,
+  PhysicsInputOffset,
+  PhysicsOutputOffset,
+  physicsExchangeByteLength,
+  type PhysicsWorkerAddBodyMessage,
+  type PhysicsWorkerBodyState,
+  type PhysicsWorkerOutputMessage,
+  type PhysicsWorkerShapeDescriptor,
+} from './physics-worker-protocol.js';
 import {
   DEFAULT_ANGULAR_DAMPING,
   DEFAULT_GRAVITY_FACTOR,
   DEFAULT_LINEAR_DAMPING,
   PhysicsBody,
   PhysicsState,
-} from './physicsBody';
-import { PhysicsManipulation } from './physicsManipulation';
-import { PhysicsShape, PhysicsShapeType } from './physicsShape';
+} from './physicsBody.js';
+import { PhysicsManipulation } from './physicsManipulation.js';
+import { PhysicsShape, PhysicsShapeType } from './physicsShape.js';
 import {
   detectShapeFromGeometry,
   generateMergedGeometry,
   sequentialIndices,
-} from './utils';
+} from './utils.js';
+
+export { getCapsuleAxisEndpoints } from './physics-worker-protocol.js';
 
 type Vector3Input = Vector3 | readonly [number, number, number];
 type QuaternionInput = Quaternion | readonly [number, number, number, number];
@@ -62,32 +65,45 @@ export interface PhysicsBodyTransformOptions {
   resetVelocity?: boolean;
 }
 
-const ZERO_VECTOR = [0, 0, 0] as const;
-
-export function getCapsuleAxisEndpoints(
-  radius: number,
-  totalHeight: number,
-): [[number, number, number], [number, number, number]] | null {
-  if (
-    !Number.isFinite(radius) ||
-    !Number.isFinite(totalHeight) ||
-    radius <= 0 ||
-    totalHeight < radius * 2
-  ) {
-    return null;
-  }
-  const halfSegment = totalHeight / 2 - radius;
-  if (halfSegment === 0) {
-    return [
-      [0, 0, 0],
-      [0, 0, 0],
-    ];
-  }
-  return [
-    [0, -halfSegment, 0],
-    [0, halfSegment, 0],
-  ];
+interface PendingBodyCommand {
+  handle: number;
+  flags: number;
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  impulsePoint: [number, number, number];
+  impulse: [number, number, number];
+  linearVelocity: [number, number, number];
+  angularVelocity: [number, number, number];
+  gravityFactor: number;
+  linearDamping: number;
+  angularDamping: number;
 }
+
+interface SerializedShape {
+  descriptor: PhysicsWorkerShapeDescriptor;
+  transfer: ArrayBuffer[];
+}
+
+interface BodyPoseSnapshot {
+  previousPosition: Vector3;
+  currentPosition: Vector3;
+  previousQuaternion: Quaternion;
+  currentQuaternion: Quaternion;
+}
+
+interface CompletedExchange {
+  buffer: ArrayBuffer;
+  ints: Int32Array;
+  floats: Float32Array;
+  sequence: number;
+}
+
+const ZERO_VECTOR = [0, 0, 0] as const;
+const EXCHANGE_BUFFER_COUNT = 2;
+const INITIAL_RESULT_CAPACITY = 64;
+const DEFAULT_UPDATE_FREQUENCY = 60;
+const MAX_UPDATE_FREQUENCY = 240;
+const MAX_ACCUMULATED_STEPS = 4;
 
 function vector3ToArray(value: Vector3Input): [number, number, number] {
   return 'x' in value
@@ -103,35 +119,43 @@ function quaternionToArray(
     : [value[0], value[1], value[2], value[3]];
 }
 
+function createPendingCommand(handle: number): PendingBodyCommand {
+  return {
+    handle,
+    flags: 0,
+    position: [0, 0, 0],
+    quaternion: [0, 0, 0, 1],
+    impulsePoint: [0, 0, 0],
+    impulse: [0, 0, 0],
+    linearVelocity: [0, 0, 0],
+    angularVelocity: [0, 0, 0],
+    gravityFactor: DEFAULT_GRAVITY_FACTOR,
+    linearDamping: DEFAULT_LINEAR_DAMPING,
+    angularDamping: DEFAULT_ANGULAR_DAMPING,
+  };
+}
+
+function isZeroVector(value: ArrayLike<number>): boolean {
+  return value[0] === 0 && value[1] === 0 && value[2] === 0;
+}
+
 /**
- * Manages physics simulation using the Havok physics engine.
+ * Manages a Havok simulation on either a dedicated worker or the main thread.
+ *
+ * Per-frame commands and poses travel through a pair of transferable
+ * ArrayBuffers.
+ * Both execution modes use the same binary protocol and shared Havok runtime.
+ * Worker mode alternates ownership of transferable ArrayBuffers, avoiding both
+ * structured-clone copies and SharedArrayBuffer's cross-origin-isolation
+ * requirement. Shape creation/removal uses infrequent control messages.
  *
  * @remarks
- * - Initializes Havok physics engine and creates a physics world with gravity.
- * - Supports automatic physics shapes creation based on entity geometry when {@link PhysicsShapeType.Auto} is used.
- * - Supports multiple collision shapes: Sphere, Box, Cylinder, ConvexHull, and TriMesh.
- * - Synchronizes physics body transforms with Three.js Object3D positions and rotations using {@link PhysicsBody}.
- * - Handles physics manipulations like applying forces and setting velocities in {@link PhysicsManipulation}.
- * - Automatically cleans up physics resources when entities are removed.
- *
- * @example Basic physics setup
- * ```ts
- * // Add to your world to enable physics
- * world.addSystem(PhysicsSystem)
- *
- * // Create a dynamic box that falls due to gravity
- * const box = world.createTransformEntity(boxMesh)
- * box.addComponent(PhysicsShape, {
- *   shape: PhysicsShapeType.Box,
- *   dimensions: [1, 1, 1]
- * })
- * box.addComponent(PhysicsBody, { state: PhysicsState.Dynamic })
- * ```
+ * - Supports Sphere, Box, Cylinder, Capsule, ConvexHull, TriMesh, and Auto shapes.
+ * - Synchronizes dynamic body poses and velocities back to ECS entities.
+ * - Sends grab targets, impulses, velocity edits, damping, and gravity changes through one transport contract.
+ * - Automatically releases bodies and shapes when entities are removed.
  *
  * @category Physics
- * @see {@link PhysicsBody}
- * @see {@link PhysicsShape}
- * @see {@link PhysicsManipulation}
  */
 export class PhysicsSystem extends createSystem(
   {
@@ -142,11 +166,6 @@ export class PhysicsSystem extends createSystem(
       required: [PhysicsBody, PhysicsManipulation],
       where: [ne(PhysicsBody, '_engineBody', 0)],
     },
-    // Bodies whose gravityFactor / linearDamping / angularDamping differ from
-    // the defaults. The value predicate keeps each set limited to overridden
-    // bodies, so the common case (default values) is never visited by the
-    // per-frame reactive sync below, and the queries re-fire whenever the field
-    // is `setValue`-d.
     gravityOverrides: {
       required: [PhysicsBody, PhysicsShape],
       where: [ne(PhysicsBody, 'gravityFactor', DEFAULT_GRAVITY_FACTOR)],
@@ -162,95 +181,130 @@ export class PhysicsSystem extends createSystem(
   },
   {
     gravity: { type: Types.Vec3, default: [0, -9.81, 0] },
+    useWorker: { type: Types.Boolean, default: true },
+    updateFrequency: { type: Types.Float32, default: DEFAULT_UPDATE_FREQUENCY },
+    interpolation: { type: Types.Boolean, default: true },
   },
 ) {
-  private havok?: HavokPhysicsWithBindings;
-  private havokWorld?: HP_WorldId;
-  private bodyBuffer?: number;
+  private transport?: PhysicsTransport;
+  private transportReady = false;
+  private nextBodyHandle = 1;
+  private nextSequence = 1;
+  private bodyEntities = new Map<number, Entity>();
+  private bodySnapshots = new Map<number, BodyPoseSnapshot>();
+  private bodyResultSequenceFloors = new Map<number, number>();
+  private failedBodyEntities = new WeakSet<Entity>();
+  private pendingCommands = new Map<number, PendingBodyCommand>();
+  private commandPool: PendingBodyCommand[] = [];
+  private freeExchangeBuffers: ArrayBuffer[] = [];
+  private completedExchanges: CompletedExchange[] = [];
 
-  private scaleBuffer = new Vector3();
-  private matrixBuffer = new Matrix4();
-  /**
-   * Cached Float32Array view over the entire Havok heap, reused across frames
-   * and bodies. Recreated only when the underlying ArrayBuffer changes (the
-   * WASM heap can grow and detach the old buffer), so per-body transform reads
-   * don't allocate a fresh typed-array view every frame.
-   */
-  private heapFloatView?: Float32Array;
+  private inFlightExchangeCount = 0;
+  private stepAccumulator = 0;
+  private pendingDebugStepDelta?: number;
+  private debugFlushWaiters = new Set<() => void>();
 
-  /** Float32 view over the current Havok heap buffer (see {@link heapFloatView}). */
-  private getHeapFloatView(): Float32Array {
-    const buffer = this.havok!.HEAPU8.buffer;
-    if (!this.heapFloatView || this.heapFloatView.buffer !== buffer) {
-      this.heapFloatView = new Float32Array(buffer);
+  init(): void {
+    const initialByteLength = physicsExchangeByteLength(
+      0,
+      INITIAL_RESULT_CAPACITY,
+    );
+    for (let index = 0; index < EXCHANGE_BUFFER_COUNT; index++) {
+      this.freeExchangeBuffers.push(new ArrayBuffer(initialByteLength));
     }
-    return this.heapFloatView;
-  }
 
-  async init(): Promise<void> {
-    const { default: HavokPhysics } = await import('@babylonjs/havok');
-    this.havok = await HavokPhysics();
-    this.havokWorld = this.havok.HP_World_Create()[1];
-    this.havok.HP_World_SetGravity(this.havokWorld, this.config.gravity.value);
+    try {
+      const transport = createPhysicsTransport(
+        this.config.useWorker.value as boolean,
+      );
+      transport.onmessage = (event: MessageEvent<PhysicsWorkerOutputMessage>) =>
+        this.handleTransportMessage(event.data);
+      transport.onerror = (event) => {
+        this.handleTransportFailure(
+          `Physics transport error: ${event.message}`,
+        );
+      };
+      transport.onmessageerror = () => {
+        this.handleTransportFailure(
+          'Physics transport message could not be decoded',
+        );
+      };
+      this.transport = transport;
+      transport.postMessage({
+        type: 'init',
+        gravity: [...this.config.gravity.value],
+      });
+      this.cleanupFuncs.push(
+        effect(() => {
+          const gravity = this.config.gravity.value;
+          this.transport?.postMessage({
+            type: 'set-gravity',
+            gravity: [gravity[0], gravity[1], gravity[2]],
+          });
+        }),
+      );
+    } catch (error) {
+      this.transport?.terminate();
+      this.transport = undefined;
+      console.error(
+        this.config.useWorker.value
+          ? 'Failed to start physics worker. Set features.physics.useWorker to false to run physics on the main thread:'
+          : 'Failed to start main-thread physics:',
+        error,
+      );
+    }
 
-    // Unified cleanup
-    this.queries.physicsEntities.subscribe('disqualify', (entity) => {
-      if (!this.havok || !this.havokWorld) {
-        return;
-      }
-
-      const engineShape = entity.getValue(PhysicsShape, '_engineShape');
-      if (engineShape) {
-        this.havok.HP_Shape_Release([BigInt(engineShape)]);
-      }
-
-      const engineBody = entity.getValue(PhysicsBody, '_engineBody');
-      if (engineBody) {
-        this.havok.HP_World_RemoveBody(this.havokWorld, [BigInt(engineBody)]);
-      }
-    });
-
+    this.cleanupFuncs.push(
+      this.queries.physicsEntities.subscribe('disqualify', (entity) => {
+        this.removeBody(entity);
+      }),
+    );
     this.subscribeReactiveOverrides();
+
+    this.cleanupFuncs.push(() => {
+      this.transport?.terminate();
+      this.transport = undefined;
+      this.transportReady = false;
+      this.bodyEntities.clear();
+      this.bodySnapshots.clear();
+      this.bodyResultSequenceFloors.clear();
+      this.failedBodyEntities = new WeakSet<Entity>();
+      this.pendingCommands.clear();
+      this.freeExchangeBuffers.length = 0;
+      this.completedExchanges.length = 0;
+      this.stepAccumulator = 0;
+      this.pendingDebugStepDelta = undefined;
+      this.resolveDebugFlushWaiters(true);
+    });
   }
 
   /**
-   * Teleport an existing Havok body to `pose`.
-   *
-   * @remarks
-   * No-ops until the entity has a live {@link PhysicsBody}. The pose is pushed
-   * directly to Havok and mirrored onto `entity.object3D` immediately so callers
-   * do not need to wait for the next physics tick before reading the reset
-   * transform. Linear and angular velocity are cleared by default, which is the
-   * expected behavior for reset/home-position flows.
-   *
-   * @example Reset a fallen prop to its home pose
-   * ```ts
-   * const physics = world.getSystem(PhysicsSystem);
-   * physics.setBodyTransform(prop, {
-   *   position: homePosition,
-   *   quaternion: homeQuaternion,
-   * });
-   * ```
+   * Teleport an existing physics body and mirror the pose immediately on its
+   * Object3D. The runtime consumes the command on the next available exchange.
    */
   setBodyTransform(
     entity: Entity,
     pose: PhysicsBodyTransformPose,
     options: PhysicsBodyTransformOptions = {},
   ): void {
-    if (!this.havok || !entity.hasComponent(PhysicsBody)) {
+    if (!entity.hasComponent(PhysicsBody)) {
       return;
     }
 
-    const engineBody = entity.getValue(PhysicsBody, '_engineBody');
-    if (!engineBody) {
+    const handle = entity.getValue(PhysicsBody, '_engineBody');
+    if (!handle) {
       return;
     }
 
-    const body = [BigInt(engineBody)] as [bigint];
     const position = vector3ToArray(pose.position);
     const quaternion = quaternionToArray(pose.quaternion);
-
-    this.havok.HP_Body_SetQTransform(body, [position, quaternion]);
+    const command = this.getPendingCommand(handle);
+    command.flags |= PhysicsCommandFlag.SetTransform;
+    command.position = position;
+    command.quaternion = quaternion;
+    if (this.bodySnapshots.has(handle)) {
+      this.bodyResultSequenceFloors.set(handle, this.nextSequence);
+    }
 
     if (entity.object3D) {
       entity.object3D.position.set(position[0], position[1], position[2]);
@@ -261,294 +315,683 @@ export class PhysicsSystem extends createSystem(
         quaternion[3],
       );
       entity.object3D.updateMatrixWorld(true);
+      this.syncSnapshotToObject(handle, entity.object3D);
     }
 
     if (options.resetVelocity === false) {
       return;
     }
 
-    this.havok.HP_Body_SetLinearVelocity(body, [...ZERO_VECTOR]);
-    this.havok.HP_Body_SetAngularVelocity(body, [...ZERO_VECTOR]);
+    command.flags |=
+      PhysicsCommandFlag.ResetLinearVelocity |
+      PhysicsCommandFlag.ResetAngularVelocity;
     entity.getVectorView(PhysicsBody, '_linearVelocity').set(ZERO_VECTOR);
     entity.getVectorView(PhysicsBody, '_angularVelocity').set(ZERO_VECTOR);
   }
 
-  /**
-   * Reset a body's gravityFactor / linearDamping / angularDamping to the engine
-   * default when its field returns to the default value. The entity then drops
-   * out of the override set, so {@link syncReactiveOverrides} no longer visits
-   * it — this is the one place that restores the default. The `hasComponent`
-   * guard distinguishes the value-returned-to-default case from the other
-   * disqualify cause (PhysicsBody/PhysicsShape removal), where the body is being
-   * released and must not be written to.
-   */
-  private subscribeReactiveOverrides(): void {
-    this.queries.gravityOverrides.subscribe('disqualify', (entity) => {
-      if (
-        entity.hasComponent(PhysicsBody) &&
-        entity.hasComponent(PhysicsShape)
-      ) {
-        this.syncGravityFactor(entity);
-      }
-    });
-    this.queries.linearDampingOverrides.subscribe('disqualify', (entity) => {
-      if (
-        entity.hasComponent(PhysicsBody) &&
-        entity.hasComponent(PhysicsShape)
-      ) {
-        this.syncLinearDamping(entity);
-      }
-    });
-    this.queries.angularDampingOverrides.subscribe('disqualify', (entity) => {
-      if (
-        entity.hasComponent(PhysicsBody) &&
-        entity.hasComponent(PhysicsShape)
-      ) {
-        this.syncAngularDamping(entity);
-      }
-    });
-  }
-
   update(delta: number): void {
-    if (this.havok && this.havokWorld) {
-      this.havok.HP_World_SetIdealStepTime(this.havokWorld, delta);
-      this.havok.HP_World_Step(this.havokWorld, delta);
-      this.bodyBuffer = this.havok.HP_World_GetBodyBuffer(this.havokWorld)[1];
+    this.applyCompletedExchange();
+
+    if (!this.transport) {
+      return;
     }
 
     this.queries.physicsEntities.entities.forEach((entity) => {
-      if (!entity.object3D || !this.havok || !this.havokWorld) {
-        return;
-      }
-
-      const engineShape = entity.getValue(PhysicsShape, '_engineShape');
-      const engineBody = entity.getValue(PhysicsBody, '_engineBody');
-
-      if (!engineShape) {
-        const dimensionsView = entity.getVectorView(
-          PhysicsShape,
-          'dimensions',
-        ) as Float32Array;
-        this.createHavokShapes(entity, dimensionsView);
-        return;
-      } else {
-        if (!engineBody && engineShape) {
-          const linearDamping =
-            entity.getValue(PhysicsBody, 'linearDamping') ??
-            DEFAULT_LINEAR_DAMPING;
-          const angularDamping =
-            entity.getValue(PhysicsBody, 'angularDamping') ??
-            DEFAULT_ANGULAR_DAMPING;
-          const gravityFactor =
-            entity.getValue(PhysicsBody, 'gravityFactor') ??
-            DEFAULT_GRAVITY_FACTOR;
-          const bodyRepsonse = this.createBody(
-            [BigInt(engineShape)],
-            entity.object3D.position,
-            entity.object3D.quaternion,
-            entity.getValue(PhysicsBody, 'state'),
-            linearDamping,
-            angularDamping,
-            gravityFactor,
-            entity.getVectorView(PhysicsBody, 'centerOfMass') as Float32Array,
-          );
-          if (bodyRepsonse) {
-            entity.setValue(
-              PhysicsBody,
-              '_engineBody',
-              Number(bodyRepsonse.createdBody),
-            );
-            entity.setValue(PhysicsBody, '_engineOffset', bodyRepsonse.offset);
-            // Seed the reactive shadows with what createBody just pushed, so the
-            // first per-frame sync sees no drift and skips a redundant write.
-            PhysicsBody.data._engineGravityFactor[entity.index] = gravityFactor;
-            PhysicsBody.data._engineLinearDamping[entity.index] = linearDamping;
-            PhysicsBody.data._engineAngularDamping[entity.index] =
-              angularDamping;
-          }
-        } else if (engineBody && this.bodyBuffer) {
-          const linearVelocity = this.havok.HP_Body_GetLinearVelocity([
-            BigInt(engineBody),
-          ]);
-          const angularVelocity = this.havok.HP_Body_GetAngularVelocity([
-            BigInt(engineBody),
-          ]);
-
-          const linearVelocityView = entity.getVectorView(
-            PhysicsBody,
-            '_linearVelocity',
-          );
-          const angularVelocityView = entity.getVectorView(
-            PhysicsBody,
-            '_angularVelocity',
-          );
-          linearVelocityView.set(linearVelocity[1]);
-          angularVelocityView.set(angularVelocity[1]);
-          // Processing physics body motion here
-          const position = entity.object3D.position;
-          const quaternion = entity.object3D.quaternion;
-
-          if (Grabbed.bitmask && entity.hasComponent(Grabbed)) {
-            this.havok.HP_Body_SetTargetQTransform(
-              [BigInt(engineBody)],
-              [
-                [position.x, position.y, position.z],
-                [quaternion.x, quaternion.y, quaternion.z, quaternion.w],
-              ],
-            );
-            return;
-          }
-
-          const bodyOffset = entity.getValue(PhysicsBody, '_engineOffset') ?? 0;
-          // Read the 16-float transform straight out of the cached heap view.
-          // `bodyBuffer + bodyOffset` is 4-byte aligned (it was a valid
-          // Float32Array byteOffset previously), so `>> 2` is exact.
-          const heap = this.getHeapFloatView();
-          const base = (this.bodyBuffer + bodyOffset) >> 2;
-
-          for (let mi = 0; mi < 15; mi++) {
-            if ((mi & 3) != 3) {
-              this.matrixBuffer.elements[mi] = heap[base + mi];
-            }
-          }
-          this.matrixBuffer.elements[15] = 1.0;
-          this.matrixBuffer.decompose(position, quaternion, this.scaleBuffer);
-        }
+      this.ensureBody(entity);
+      const handle = entity.getValue(PhysicsBody, '_engineBody');
+      if (
+        handle &&
+        entity.object3D &&
+        Grabbed.bitmask &&
+        entity.hasComponent(Grabbed)
+      ) {
+        const command = this.getPendingCommand(handle);
+        command.flags |= PhysicsCommandFlag.SetTargetTransform;
+        command.position[0] = entity.object3D.position.x;
+        command.position[1] = entity.object3D.position.y;
+        command.position[2] = entity.object3D.position.z;
+        command.quaternion[0] = entity.object3D.quaternion.x;
+        command.quaternion[1] = entity.object3D.quaternion.y;
+        command.quaternion[2] = entity.object3D.quaternion.z;
+        command.quaternion[3] = entity.object3D.quaternion.w;
+        this.syncSnapshotToObject(handle, entity.object3D);
       }
     });
 
     this.syncReactiveOverrides();
+    this.queueManipulations(delta);
 
-    this.queries.manipluatedEntities.entities.forEach((entity) => {
-      const engineBody = entity.getValue(PhysicsBody, '_engineBody');
-
-      if (!entity.object3D || !this.havok || !this.havokWorld || !engineBody) {
-        return;
-      }
-
-      // Applying one time force to the body
-      if (
-        !entity
-          .getVectorView(PhysicsManipulation, 'force')
-          .every((element) => element === 0)
-      ) {
-        const force = entity.getVectorView(PhysicsManipulation, 'force');
-        this.havok.HP_Body_ApplyImpulse(
-          [BigInt(engineBody)],
-          [
-            entity.object3D.position.x,
-            entity.object3D.position.y,
-            entity.object3D.position.z,
-          ],
-          [force[0] * delta, force[1] * delta, force[2] * delta],
-        );
-      }
-
-      // Applying one time linear velocity to the body
-      if (
-        !entity
-          .getVectorView(PhysicsManipulation, 'linearVelocity')
-          .every((element) => element === 0)
-      ) {
-        const linearVelocity = entity.getVectorView(
-          PhysicsManipulation,
-          'linearVelocity',
-        );
-        this.havok.HP_Body_SetLinearVelocity(
-          [BigInt(engineBody)],
-          [linearVelocity[0], linearVelocity[1], linearVelocity[2]],
-        );
-      }
-
-      // Applying one time angular velocity to the body
-      if (
-        !entity
-          .getVectorView(PhysicsManipulation, 'angularVelocity')
-          .every((element) => element === 0)
-      ) {
-        const angularVelocity = entity.getVectorView(
-          PhysicsManipulation,
-          'angularVelocity',
-        );
-        this.havok.HP_Body_SetAngularVelocity(
-          [BigInt(engineBody)],
-          [angularVelocity[0], angularVelocity[1], angularVelocity[2]],
-        );
-      }
-
-      entity.removeComponent(PhysicsManipulation);
-    });
-  }
-
-  private createBody(
-    shape: HP_ShapeId,
-    position: Vector3,
-    quaternion: Quaternion,
-    state: any,
-    linearDamping: number,
-    angularDamping: number,
-    gravityFactor: number,
-    centerOfMass: Float32Array,
-  ) {
-    if (!this.havok || !this.havokWorld) {
+    if (this.pendingDebugStepDelta !== undefined) {
+      this.stepAccumulator = 0;
+      this.trySendPendingDebugStep();
+      this.renderInterpolatedTransforms(1);
       return;
     }
 
-    const body = this.havok.HP_Body_Create()[1];
-    this.havok.HP_Body_SetShape(body, shape);
-    this.havok.HP_Body_SetQTransform(body, [
-      [position.x, position.y, position.z],
-      [quaternion.x, quaternion.y, quaternion.z, quaternion.w],
-    ]);
-    this.havok.HP_Body_SetLinearDamping(body, linearDamping);
-    this.havok.HP_Body_SetAngularDamping(body, angularDamping);
-    this.havok.HP_Body_SetGravityFactor(body, gravityFactor);
+    const stepInterval = this.getStepInterval();
+    this.stepAccumulator = Math.min(
+      this.stepAccumulator + Math.max(0, delta),
+      stepInterval * MAX_ACCUMULATED_STEPS,
+    );
 
-    const shapeMass = this.havok.HP_Shape_BuildMassProperties(shape);
-    const massProps =
-      shapeMass[0] == this.havok.Result.RESULT_OK
-        ? shapeMass[1]
-        : ([[0, 0, 0], 1, [1, 1, 1], [0, 0, 0, 1]] as MassProperties);
-    if (!centerOfMass.every((e) => e == Infinity)) {
-      massProps[0] = [centerOfMass[0], centerOfMass[1], centerOfMass[2]];
-    } else {
-      // Update the centerOfMass with the computed value from mass properties
-      centerOfMass[0] = massProps[0][0];
-      centerOfMass[1] = massProps[0][1];
-      centerOfMass[2] = massProps[0][2];
+    if (this.transportReady) {
+      const stepCount = Math.min(
+        Math.floor(this.stepAccumulator / stepInterval + 1e-9),
+        MAX_ACCUMULATED_STEPS,
+      );
+      if (stepCount > 0 && this.sendExchange(stepInterval, stepCount)) {
+        this.stepAccumulator = Math.max(
+          0,
+          this.stepAccumulator - stepInterval * stepCount,
+        );
+      }
     }
 
-    this.havok.HP_Body_SetMassProperties(body, massProps);
+    const interpolationAlpha = this.config.interpolation.value
+      ? Math.min(this.stepAccumulator / stepInterval, 1)
+      : 1;
+    this.renderInterpolatedTransforms(interpolationAlpha);
+  }
 
-    let motionType: MotionType;
-    switch (state) {
-      case PhysicsState.Static:
-        motionType = this.havok.MotionType.STATIC;
-        break;
-      case PhysicsState.Kinematic:
-        motionType = this.havok.MotionType.KINEMATIC;
-        break;
-      case PhysicsState.Dynamic:
-      default:
-        motionType = this.havok.MotionType.DYNAMIC;
-    }
-    this.havok.HP_Body_SetMotionType(body, motionType);
-
-    this.havok.HP_World_AddBody(this.havokWorld, body, false);
-
-    return {
-      offset: this.havok.HP_Body_GetWorldTransformOffset(body)[1],
-      createdBody: body,
-    };
+  /** Prepare one exact-delta physics tick for an ECS debugger step. */
+  prepareDebugFrame(delta: number): void {
+    this.pendingDebugStepDelta =
+      Number.isFinite(delta) && delta > 0 ? delta : this.getStepInterval();
+    this.stepAccumulator = 0;
   }
 
   /**
-   * Push post-creation gravityFactor / linearDamping / angularDamping edits to
-   * Havok. Only overridden bodies are visited (see the value-predicate queries
-   * in the system definition); each sync diffs the component value against the
-   * last-pushed shadow, so a body whose field is unchanged this frame costs only
-   * a typed-array compare.
+   * Wait until all submitted physics work is reflected in ECS transforms.
+   * Used by debugger pause/step so worker and inline execution expose the same
+   * settled state at command boundaries.
    */
+  async flushDebugFrame(): Promise<void> {
+    this.applyCompletedExchange();
+    this.trySendPendingDebugStep();
+    await this.waitForDebugWork();
+    this.applyCompletedExchange();
+
+    // Pausing between fixed ticks must commit queued commands without moving
+    // simulation time; a zero-step exchange preserves the old inline behavior.
+    if (
+      this.pendingDebugStepDelta === undefined &&
+      this.pendingCommands.size > 0 &&
+      this.transportReady &&
+      this.sendExchange(0, 0)
+    ) {
+      await this.waitForDebugWork();
+      this.applyCompletedExchange();
+    }
+
+    this.renderInterpolatedTransforms(1);
+    for (const snapshot of this.bodySnapshots.values()) {
+      snapshot.previousPosition.copy(snapshot.currentPosition);
+      snapshot.previousQuaternion.copy(snapshot.currentQuaternion);
+    }
+  }
+
+  private handleTransportMessage(message: PhysicsWorkerOutputMessage): void {
+    switch (message.type) {
+      case 'ready':
+        this.transportReady = true;
+        this.trySendPendingDebugStep();
+        break;
+      case 'body-created': {
+        const entity = this.bodyEntities.get(message.handle);
+        if (entity?.hasComponent(PhysicsBody)) {
+          entity
+            .getVectorView(PhysicsBody, 'centerOfMass')
+            .set(message.centerOfMass);
+        }
+        break;
+      }
+      case 'step-result':
+        this.inFlightExchangeCount = Math.max(
+          0,
+          this.inFlightExchangeCount - 1,
+        );
+        const ints = new Int32Array(message.buffer);
+        this.completedExchanges.push({
+          buffer: message.buffer,
+          ints,
+          floats: new Float32Array(message.buffer),
+          sequence: ints[PhysicsHeaderIndex.Sequence],
+        });
+        if (this.pendingDebugStepDelta !== undefined) {
+          this.applyCompletedExchange();
+          this.trySendPendingDebugStep();
+        }
+        if (this.inFlightExchangeCount === 0) {
+          this.resolveDebugFlushWaiters();
+        }
+        break;
+      case 'error':
+        if (message.handle !== undefined) {
+          console.error(`Physics runtime: ${message.message}`);
+          const entity = this.bodyEntities.get(message.handle);
+          if (entity) {
+            this.failedBodyEntities.add(entity);
+            this.setEngineHandles(entity, 0);
+          }
+          this.bodyEntities.delete(message.handle);
+          this.bodySnapshots.delete(message.handle);
+          this.bodyResultSequenceFloors.delete(message.handle);
+          this.discardPendingCommand(message.handle);
+        } else {
+          this.handleTransportFailure(`Physics runtime: ${message.message}`);
+        }
+        break;
+    }
+  }
+
+  private handleTransportFailure(message: string): void {
+    console.error(
+      this.config.useWorker.value
+        ? `${message}. Set features.physics.useWorker to false to run physics on the main thread.`
+        : message,
+    );
+    this.transportReady = false;
+    this.transport?.terminate();
+    this.transport = undefined;
+    this.inFlightExchangeCount = 0;
+    this.pendingDebugStepDelta = undefined;
+    this.resolveDebugFlushWaiters();
+  }
+
+  private async waitForDebugWork(): Promise<void> {
+    if (
+      this.pendingDebugStepDelta === undefined &&
+      this.inFlightExchangeCount === 0
+    ) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.debugFlushWaiters.add(resolve);
+    });
+  }
+
+  private resolveDebugFlushWaiters(force = false): void {
+    if (
+      !force &&
+      (this.pendingDebugStepDelta !== undefined ||
+        this.inFlightExchangeCount > 0)
+    ) {
+      return;
+    }
+    for (const resolve of this.debugFlushWaiters) {
+      resolve();
+    }
+    this.debugFlushWaiters.clear();
+  }
+
+  private applyCompletedExchange(): void {
+    if (this.completedExchanges.length === 0) {
+      return;
+    }
+
+    this.completedExchanges.sort(
+      (left, right) => left.sequence - right.sequence,
+    );
+    for (const exchange of this.completedExchanges) {
+      this.applyExchangeBuffer(exchange);
+      this.freeExchangeBuffers.push(exchange.buffer);
+    }
+    this.completedExchanges.length = 0;
+  }
+
+  private applyExchangeBuffer({ ints, floats }: CompletedExchange): void {
+    const status = ints[PhysicsHeaderIndex.Status];
+    if (status & PhysicsExchangeStatus.ResultsTruncated) {
+      console.warn('Physics result buffer was unexpectedly truncated');
+    }
+    const resultCount = ints[PhysicsHeaderIndex.ResultCount];
+    const sequence = ints[PhysicsHeaderIndex.Sequence];
+    const stepCount = Math.max(1, ints[PhysicsHeaderIndex.StepCount]);
+
+    for (let index = 0; index < resultCount; index++) {
+      const base = PHYSICS_HEADER_WORDS + index * PHYSICS_OUTPUT_RECORD_FLOATS;
+      const handle = floats[base + PhysicsOutputOffset.Handle];
+      const entity = this.bodyEntities.get(handle);
+      if (!entity?.object3D || !entity.hasComponent(PhysicsBody)) {
+        continue;
+      }
+      const sequenceFloor = this.bodyResultSequenceFloors.get(handle);
+      if (sequenceFloor !== undefined) {
+        if (sequence < sequenceFloor) {
+          continue;
+        }
+        this.bodyResultSequenceFloors.delete(handle);
+      }
+
+      const linearVelocity = entity.getVectorView(
+        PhysicsBody,
+        '_linearVelocity',
+      );
+      linearVelocity[0] = floats[base + PhysicsOutputOffset.LinearVelocityX];
+      linearVelocity[1] = floats[base + PhysicsOutputOffset.LinearVelocityY];
+      linearVelocity[2] = floats[base + PhysicsOutputOffset.LinearVelocityZ];
+      const angularVelocity = entity.getVectorView(
+        PhysicsBody,
+        '_angularVelocity',
+      );
+      angularVelocity[0] = floats[base + PhysicsOutputOffset.AngularVelocityX];
+      angularVelocity[1] = floats[base + PhysicsOutputOffset.AngularVelocityY];
+      angularVelocity[2] = floats[base + PhysicsOutputOffset.AngularVelocityZ];
+
+      if (Grabbed.bitmask && entity.hasComponent(Grabbed)) {
+        continue;
+      }
+
+      const snapshot = this.bodySnapshots.get(handle);
+      if (!snapshot) {
+        continue;
+      }
+      if (stepCount === 1) {
+        snapshot.previousPosition.copy(snapshot.currentPosition);
+        snapshot.previousQuaternion.copy(snapshot.currentQuaternion);
+      }
+      snapshot.currentPosition.set(
+        floats[base + PhysicsOutputOffset.PositionX],
+        floats[base + PhysicsOutputOffset.PositionY],
+        floats[base + PhysicsOutputOffset.PositionZ],
+      );
+      snapshot.currentQuaternion.set(
+        floats[base + PhysicsOutputOffset.QuaternionX],
+        floats[base + PhysicsOutputOffset.QuaternionY],
+        floats[base + PhysicsOutputOffset.QuaternionZ],
+        floats[base + PhysicsOutputOffset.QuaternionW],
+      );
+      if (stepCount > 1) {
+        snapshot.previousPosition.copy(snapshot.currentPosition);
+        snapshot.previousQuaternion.copy(snapshot.currentQuaternion);
+      }
+    }
+  }
+
+  private renderInterpolatedTransforms(alpha: number): void {
+    for (const [handle, snapshot] of this.bodySnapshots) {
+      const entity = this.bodyEntities.get(handle);
+      if (
+        !entity?.object3D ||
+        (Grabbed.bitmask && entity.hasComponent(Grabbed))
+      ) {
+        continue;
+      }
+      entity.object3D.position.lerpVectors(
+        snapshot.previousPosition,
+        snapshot.currentPosition,
+        alpha,
+      );
+      entity.object3D.quaternion.slerpQuaternions(
+        snapshot.previousQuaternion,
+        snapshot.currentQuaternion,
+        alpha,
+      );
+    }
+  }
+
+  private syncSnapshotToObject(handle: number, object3D: Object3D): void {
+    const snapshot = this.bodySnapshots.get(handle);
+    if (!snapshot) {
+      return;
+    }
+    snapshot.previousPosition.copy(object3D.position);
+    snapshot.currentPosition.copy(object3D.position);
+    snapshot.previousQuaternion.copy(object3D.quaternion);
+    snapshot.currentQuaternion.copy(object3D.quaternion);
+  }
+
+  private getStepInterval(): number {
+    const configuredFrequency = this.config.updateFrequency.value;
+    const frequency =
+      Number.isFinite(configuredFrequency) && configuredFrequency > 0
+        ? Math.min(configuredFrequency, MAX_UPDATE_FREQUENCY)
+        : DEFAULT_UPDATE_FREQUENCY;
+    return 1 / frequency;
+  }
+
+  private sendExchange(delta: number, stepCount = 1): boolean {
+    const transport = this.transport;
+    const buffer = this.freeExchangeBuffers.pop();
+    if (!transport || !buffer) {
+      return false;
+    }
+
+    const resultCapacity = this.bodySnapshots.size;
+
+    const requiredByteLength = physicsExchangeByteLength(
+      this.pendingCommands.size,
+      resultCapacity,
+    );
+    const exchangeBuffer =
+      buffer.byteLength >= requiredByteLength
+        ? buffer
+        : new ArrayBuffer(requiredByteLength);
+    const ints = new Int32Array(exchangeBuffer);
+    const floats = new Float32Array(exchangeBuffer);
+    ints.fill(0, 0, PHYSICS_HEADER_WORDS);
+    ints[PhysicsHeaderIndex.Version] = PHYSICS_PROTOCOL_VERSION;
+    const sequence = this.nextSequence++;
+    ints[PhysicsHeaderIndex.Sequence] = sequence;
+    ints[PhysicsHeaderIndex.CommandCount] = this.pendingCommands.size;
+    ints[PhysicsHeaderIndex.StepCount] = stepCount;
+    floats[PhysicsHeaderIndex.Delta] = delta;
+
+    let commandIndex = 0;
+    for (const command of this.pendingCommands.values()) {
+      this.writeCommand(floats, commandIndex++, command);
+      if (command.flags & PhysicsCommandFlag.SetTransform) {
+        this.bodyResultSequenceFloors.set(command.handle, sequence);
+      }
+    }
+
+    try {
+      transport.postMessage({ type: 'step', buffer: exchangeBuffer }, [
+        exchangeBuffer,
+      ]);
+      this.inFlightExchangeCount++;
+      this.releasePendingCommands();
+      return true;
+    } catch (error) {
+      this.freeExchangeBuffers.push(exchangeBuffer);
+      console.error('Failed to post physics exchange buffer:', error);
+      return false;
+    }
+  }
+
+  private trySendPendingDebugStep(): void {
+    if (this.pendingDebugStepDelta === undefined) {
+      return;
+    }
+    if (!this.transport) {
+      this.pendingDebugStepDelta = undefined;
+      this.resolveDebugFlushWaiters();
+      return;
+    }
+    if (!this.transportReady) {
+      return;
+    }
+    if (this.sendExchange(this.pendingDebugStepDelta, 1)) {
+      this.pendingDebugStepDelta = undefined;
+    }
+  }
+
+  private writeCommand(
+    output: Float32Array,
+    index: number,
+    command: PendingBodyCommand,
+  ): void {
+    const base = PHYSICS_HEADER_WORDS + index * PHYSICS_INPUT_RECORD_FLOATS;
+    output[base + PhysicsInputOffset.Handle] = command.handle;
+    output[base + PhysicsInputOffset.Flags] = command.flags;
+    output[base + PhysicsInputOffset.PositionX] = command.position[0];
+    output[base + PhysicsInputOffset.PositionY] = command.position[1];
+    output[base + PhysicsInputOffset.PositionZ] = command.position[2];
+    output[base + PhysicsInputOffset.QuaternionX] = command.quaternion[0];
+    output[base + PhysicsInputOffset.QuaternionY] = command.quaternion[1];
+    output[base + PhysicsInputOffset.QuaternionZ] = command.quaternion[2];
+    output[base + PhysicsInputOffset.QuaternionW] = command.quaternion[3];
+    output[base + PhysicsInputOffset.ImpulsePointX] = command.impulsePoint[0];
+    output[base + PhysicsInputOffset.ImpulsePointY] = command.impulsePoint[1];
+    output[base + PhysicsInputOffset.ImpulsePointZ] = command.impulsePoint[2];
+    output[base + PhysicsInputOffset.ImpulseX] = command.impulse[0];
+    output[base + PhysicsInputOffset.ImpulseY] = command.impulse[1];
+    output[base + PhysicsInputOffset.ImpulseZ] = command.impulse[2];
+    output[base + PhysicsInputOffset.LinearVelocityX] =
+      command.linearVelocity[0];
+    output[base + PhysicsInputOffset.LinearVelocityY] =
+      command.linearVelocity[1];
+    output[base + PhysicsInputOffset.LinearVelocityZ] =
+      command.linearVelocity[2];
+    output[base + PhysicsInputOffset.AngularVelocityX] =
+      command.angularVelocity[0];
+    output[base + PhysicsInputOffset.AngularVelocityY] =
+      command.angularVelocity[1];
+    output[base + PhysicsInputOffset.AngularVelocityZ] =
+      command.angularVelocity[2];
+    output[base + PhysicsInputOffset.GravityFactor] = command.gravityFactor;
+    output[base + PhysicsInputOffset.LinearDamping] = command.linearDamping;
+    output[base + PhysicsInputOffset.AngularDamping] = command.angularDamping;
+  }
+
+  private getPendingCommand(handle: number): PendingBodyCommand {
+    let command = this.pendingCommands.get(handle);
+    if (!command) {
+      command = this.commandPool.pop() ?? createPendingCommand(handle);
+      command.handle = handle;
+      command.flags = 0;
+      command.impulse[0] = 0;
+      command.impulse[1] = 0;
+      command.impulse[2] = 0;
+      this.pendingCommands.set(handle, command);
+    }
+    return command;
+  }
+
+  private releasePendingCommands(): void {
+    for (const command of this.pendingCommands.values()) {
+      command.flags = 0;
+      this.commandPool.push(command);
+    }
+    this.pendingCommands.clear();
+  }
+
+  private discardPendingCommand(handle: number): void {
+    const command = this.pendingCommands.get(handle);
+    if (command) {
+      command.flags = 0;
+      this.commandPool.push(command);
+      this.pendingCommands.delete(handle);
+    }
+  }
+
+  private ensureBody(entity: Entity): void {
+    if (!this.transport || !entity.object3D) {
+      return;
+    }
+    if (this.failedBodyEntities.has(entity)) {
+      return;
+    }
+    if (entity.getValue(PhysicsBody, '_engineBody')) {
+      return;
+    }
+
+    const serialized = this.serializeShape(entity, entity.object3D);
+    if (!serialized) {
+      return;
+    }
+
+    const handle = this.nextBodyHandle++;
+    const linearDamping =
+      entity.getValue(PhysicsBody, 'linearDamping') ?? DEFAULT_LINEAR_DAMPING;
+    const angularDamping =
+      entity.getValue(PhysicsBody, 'angularDamping') ?? DEFAULT_ANGULAR_DAMPING;
+    const gravityFactor =
+      entity.getValue(PhysicsBody, 'gravityFactor') ?? DEFAULT_GRAVITY_FACTOR;
+    const centerOfMass = entity.getVectorView(PhysicsBody, 'centerOfMass');
+    const message: PhysicsWorkerAddBodyMessage = {
+      type: 'add-body',
+      handle,
+      shape: serialized.descriptor,
+      state: entity.getValue(PhysicsBody, 'state') as PhysicsWorkerBodyState,
+      position: [
+        entity.object3D.position.x,
+        entity.object3D.position.y,
+        entity.object3D.position.z,
+      ],
+      quaternion: [
+        entity.object3D.quaternion.x,
+        entity.object3D.quaternion.y,
+        entity.object3D.quaternion.z,
+        entity.object3D.quaternion.w,
+      ],
+      linearDamping,
+      angularDamping,
+      gravityFactor,
+      centerOfMass: [centerOfMass[0], centerOfMass[1], centerOfMass[2]],
+    };
+
+    this.setEngineHandles(entity, handle);
+    PhysicsBody.data._engineGravityFactor[entity.index] = gravityFactor;
+    PhysicsBody.data._engineLinearDamping[entity.index] = linearDamping;
+    PhysicsBody.data._engineAngularDamping[entity.index] = angularDamping;
+    this.bodyEntities.set(handle, entity);
+    if (message.state !== PhysicsState.Static) {
+      this.bodySnapshots.set(handle, {
+        previousPosition: entity.object3D.position.clone(),
+        currentPosition: entity.object3D.position.clone(),
+        previousQuaternion: entity.object3D.quaternion.clone(),
+        currentQuaternion: entity.object3D.quaternion.clone(),
+      });
+    }
+
+    try {
+      this.transport.postMessage(message, serialized.transfer);
+    } catch (error) {
+      this.failedBodyEntities.add(entity);
+      this.setEngineHandles(entity, 0);
+      this.bodyEntities.delete(handle);
+      this.bodySnapshots.delete(handle);
+      this.bodyResultSequenceFloors.delete(handle);
+      console.error('Failed to create physics body:', error);
+    }
+  }
+
+  private serializeShape(
+    entity: Entity,
+    object3D: Object3D,
+  ): SerializedShape | undefined {
+    const dimensionsView = entity.getVectorView(PhysicsShape, 'dimensions');
+    let shapeType = entity.getValue(PhysicsShape, 'shape');
+
+    if (shapeType === PhysicsShapeType.Auto) {
+      const detection = detectShapeFromGeometry(object3D);
+      entity.setValue(PhysicsShape, 'shape', detection.shapeType);
+      shapeType = detection.shapeType;
+      if (detection.dimensions) {
+        dimensionsView.set(detection.dimensions);
+      }
+    }
+
+    if (
+      shapeType === PhysicsShapeType.Capsules &&
+      !getCapsuleAxisEndpoints(dimensionsView[0], dimensionsView[1])
+    ) {
+      console.warn(
+        'PhysicsSystem: Capsule dimensions require a positive radius and a total height greater than or equal to twice the radius',
+      );
+      return;
+    }
+
+    const descriptor: PhysicsWorkerShapeDescriptor = {
+      type: shapeType as PhysicsWorkerShapeDescriptor['type'],
+      dimensions: [dimensionsView[0], dimensionsView[1], dimensionsView[2]],
+      density: entity.getValue(PhysicsShape, 'density') ?? 1,
+      restitution: entity.getValue(PhysicsShape, 'restitution') ?? 0,
+      friction: entity.getValue(PhysicsShape, 'friction') ?? 0.5,
+    };
+    const transfer: ArrayBuffer[] = [];
+
+    if (
+      shapeType === PhysicsShapeType.ConvexHull ||
+      shapeType === PhysicsShapeType.TriMesh
+    ) {
+      const ownsGeometry = !(object3D instanceof Mesh);
+      const geometry =
+        object3D instanceof Mesh
+          ? object3D.geometry
+          : generateMergedGeometry(object3D);
+      try {
+        const positionAttribute = geometry.attributes.position;
+        if (!positionAttribute) {
+          console.warn(
+            `PhysicsSystem: Failed to get vertices for ${shapeType} shape with object3D name ${object3D.name} &id ${object3D.id}`,
+          );
+          return;
+        }
+
+        const vertices = Float32Array.from(
+          positionAttribute.array as ArrayLike<number>,
+        );
+        descriptor.vertices = vertices.buffer as ArrayBuffer;
+        transfer.push(descriptor.vertices);
+
+        if (shapeType === PhysicsShapeType.TriMesh) {
+          const sourceIndices =
+            geometry.index?.array ?? sequentialIndices(positionAttribute.count);
+          const indices = Uint32Array.from(sourceIndices as ArrayLike<number>);
+          descriptor.indices = indices.buffer as ArrayBuffer;
+          transfer.push(descriptor.indices);
+        }
+      } finally {
+        if (ownsGeometry) {
+          geometry.dispose();
+        }
+      }
+    }
+
+    return { descriptor, transfer };
+  }
+
+  private removeBody(entity: Entity): void {
+    this.failedBodyEntities.delete(entity);
+    const handle = PhysicsBody.data._engineBody[entity.index];
+    if (!handle) {
+      return;
+    }
+
+    this.transport?.postMessage({ type: 'remove-body', handle });
+    this.bodyEntities.delete(handle);
+    this.bodySnapshots.delete(handle);
+    this.bodyResultSequenceFloors.delete(handle);
+    this.discardPendingCommand(handle);
+    this.setEngineHandles(entity, 0);
+  }
+
+  private setEngineHandles(entity: Entity, handle: number): void {
+    if (entity.hasComponent(PhysicsBody)) {
+      entity.setValue(PhysicsBody, '_engineBody', handle);
+      entity.setValue(PhysicsBody, '_engineOffset', 0);
+    } else {
+      PhysicsBody.data._engineBody[entity.index] = handle;
+      PhysicsBody.data._engineOffset[entity.index] = 0;
+    }
+    if (entity.hasComponent(PhysicsShape)) {
+      entity.setValue(PhysicsShape, '_engineShape', handle);
+    } else {
+      PhysicsShape.data._engineShape[entity.index] = handle;
+    }
+  }
+
+  private subscribeReactiveOverrides(): void {
+    this.cleanupFuncs.push(
+      this.queries.gravityOverrides.subscribe('disqualify', (entity) => {
+        if (
+          entity.hasComponent(PhysicsBody) &&
+          entity.hasComponent(PhysicsShape)
+        ) {
+          this.syncGravityFactor(entity);
+        }
+      }),
+      this.queries.linearDampingOverrides.subscribe('disqualify', (entity) => {
+        if (
+          entity.hasComponent(PhysicsBody) &&
+          entity.hasComponent(PhysicsShape)
+        ) {
+          this.syncLinearDamping(entity);
+        }
+      }),
+      this.queries.angularDampingOverrides.subscribe('disqualify', (entity) => {
+        if (
+          entity.hasComponent(PhysicsBody) &&
+          entity.hasComponent(PhysicsShape)
+        ) {
+          this.syncAngularDamping(entity);
+        }
+      }),
+    );
+  }
+
   private syncReactiveOverrides(): void {
     this.queries.gravityOverrides.entities.forEach((entity) => {
       this.syncGravityFactor(entity);
@@ -561,490 +1004,105 @@ export class PhysicsSystem extends createSystem(
     });
   }
 
-  /**
-   * Sync the entity's current {@link PhysicsBody.gravityFactor} onto its Havok
-   * body. Diffs the component value against `_engineGravityFactor` (the last
-   * value pushed) rather than reading back from Havok, so an unchanged body
-   * costs only a typed-array compare — no WASM call and no allocation. The Havok
-   * write and shadow update happen only on an actual change. No-op until the body
-   * exists. See {@link gravityOverrides}.
-   */
   private syncGravityFactor(entity: Entity): void {
-    if (!this.havok) {
-      return;
-    }
     const index = entity.index;
-    const engineBody = PhysicsBody.data._engineBody[index];
-    if (!engineBody) {
+    const handle = PhysicsBody.data._engineBody[index];
+    if (!handle) {
       return;
     }
     const target = PhysicsBody.data.gravityFactor[index];
     if (PhysicsBody.data._engineGravityFactor[index] === target) {
       return;
     }
-    this.havok.HP_Body_SetGravityFactor([BigInt(engineBody)], target);
+    const command = this.getPendingCommand(handle);
+    command.flags |= PhysicsCommandFlag.SetGravityFactor;
+    command.gravityFactor = target;
     PhysicsBody.data._engineGravityFactor[index] = target;
   }
 
-  /**
-   * Sync the entity's current {@link PhysicsBody.linearDamping} onto its Havok
-   * body. Diffs against `_engineLinearDamping` (the last value pushed) rather
-   * than reading back from Havok, so an unchanged body costs only a typed-array
-   * compare — no WASM call and no allocation. The Havok write and shadow update
-   * happen only on an actual change. No-op until the body exists.
-   * See {@link linearDampingOverrides}.
-   */
   private syncLinearDamping(entity: Entity): void {
-    if (!this.havok) {
-      return;
-    }
     const index = entity.index;
-    const engineBody = PhysicsBody.data._engineBody[index];
-    if (!engineBody) {
+    const handle = PhysicsBody.data._engineBody[index];
+    if (!handle) {
       return;
     }
     const target = PhysicsBody.data.linearDamping[index];
     if (PhysicsBody.data._engineLinearDamping[index] === target) {
       return;
     }
-    this.havok.HP_Body_SetLinearDamping([BigInt(engineBody)], target);
+    const command = this.getPendingCommand(handle);
+    command.flags |= PhysicsCommandFlag.SetLinearDamping;
+    command.linearDamping = target;
     PhysicsBody.data._engineLinearDamping[index] = target;
   }
 
-  /**
-   * Sync the entity's current {@link PhysicsBody.angularDamping} onto its Havok
-   * body. Diffs against `_engineAngularDamping` (the last value pushed) rather
-   * than reading back from Havok, so an unchanged body costs only a typed-array
-   * compare — no WASM call and no allocation. The Havok write and shadow update
-   * happen only on an actual change. No-op until the body exists.
-   * See {@link angularDampingOverrides}.
-   */
   private syncAngularDamping(entity: Entity): void {
-    if (!this.havok) {
-      return;
-    }
     const index = entity.index;
-    const engineBody = PhysicsBody.data._engineBody[index];
-    if (!engineBody) {
+    const handle = PhysicsBody.data._engineBody[index];
+    if (!handle) {
       return;
     }
     const target = PhysicsBody.data.angularDamping[index];
     if (PhysicsBody.data._engineAngularDamping[index] === target) {
       return;
     }
-    this.havok.HP_Body_SetAngularDamping([BigInt(engineBody)], target);
+    const command = this.getPendingCommand(handle);
+    command.flags |= PhysicsCommandFlag.SetAngularDamping;
+    command.angularDamping = target;
     PhysicsBody.data._engineAngularDamping[index] = target;
   }
 
-  private createHavokShapes(entity: Entity, dimensionsView: Float32Array) {
-    if (!entity.object3D) {
-      console.warn(
-        'PhysicsSystem: No object3D attached to entity',
-        entity.index,
-      );
-      return;
-    }
-
-    // Determine the actual shape type (resolve Auto if needed)
-    let shapeType = entity.getValue(PhysicsShape, 'shape');
-
-    if (shapeType === PhysicsShapeType.Auto) {
-      const detection = detectShapeFromGeometry(entity.object3D);
-      // Update the entity's shape type and dimensions if they were auto-detected
-      entity.setValue(PhysicsShape, 'shape', detection.shapeType);
-      shapeType = detection.shapeType;
-
-      if (detection.dimensions) {
-        // Re-read the updated dimensions view
-        dimensionsView.set(detection.dimensions);
+  private queueManipulations(delta: number): void {
+    this.queries.manipluatedEntities.entities.forEach((entity) => {
+      const handle = entity.getValue(PhysicsBody, '_engineBody');
+      if (!handle || !entity.object3D) {
+        return;
       }
-    }
 
-    switch (shapeType) {
-      case PhysicsShapeType.Sphere: {
-        const ballShape = this.createBallShape(
-          dimensionsView[0],
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (ballShape) {
-          PhysicsShape.data._engineShape[entity.index] = Number(ballShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create ball shape for entity',
-            entity.index,
-          );
-        }
-        break;
+      const force = entity.getVectorView(PhysicsManipulation, 'force');
+      const linearVelocity = entity.getVectorView(
+        PhysicsManipulation,
+        'linearVelocity',
+      );
+      const angularVelocity = entity.getVectorView(
+        PhysicsManipulation,
+        'angularVelocity',
+      );
+      const hasForce = !isZeroVector(force);
+      const hasLinearVelocity = !isZeroVector(linearVelocity);
+      const hasAngularVelocity = !isZeroVector(angularVelocity);
+      if (!hasForce && !hasLinearVelocity && !hasAngularVelocity) {
+        entity.removeComponent(PhysicsManipulation);
+        return;
       }
-      case PhysicsShapeType.Box: {
-        const boxShape = this.createBoxShape(
-          dimensionsView,
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (boxShape) {
-          PhysicsShape.data._engineShape[entity.index] = Number(boxShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create box shape for entity',
-            entity.index,
-          );
-        }
-        break;
+      const command = this.getPendingCommand(handle);
+
+      if (hasForce) {
+        command.flags |= PhysicsCommandFlag.ApplyImpulse;
+        const impulsePosition =
+          this.bodySnapshots.get(handle)?.currentPosition ??
+          entity.object3D.position;
+        command.impulsePoint[0] = impulsePosition.x;
+        command.impulsePoint[1] = impulsePosition.y;
+        command.impulsePoint[2] = impulsePosition.z;
+        command.impulse[0] += force[0] * delta;
+        command.impulse[1] += force[1] * delta;
+        command.impulse[2] += force[2] * delta;
       }
-      case PhysicsShapeType.Cylinder: {
-        const cylinderShape = this.createCylinderShape(
-          dimensionsView[0], // radius
-          dimensionsView[1], // height
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (cylinderShape) {
-          PhysicsShape.data._engineShape[entity.index] = Number(cylinderShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create cylinder shape for entity',
-            entity.index,
-          );
-        }
-        break;
+      if (hasLinearVelocity) {
+        command.flags |= PhysicsCommandFlag.SetLinearVelocity;
+        command.linearVelocity[0] = linearVelocity[0];
+        command.linearVelocity[1] = linearVelocity[1];
+        command.linearVelocity[2] = linearVelocity[2];
       }
-      case PhysicsShapeType.Capsules: {
-        const capsuleShape = this.createCapsuleShape(
-          dimensionsView[0], // radius
-          dimensionsView[1], // total end-to-end height
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (capsuleShape) {
-          PhysicsShape.data._engineShape[entity.index] = Number(capsuleShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create capsule shape for entity',
-            entity.index,
-          );
-        }
-        break;
+      if (hasAngularVelocity) {
+        command.flags |= PhysicsCommandFlag.SetAngularVelocity;
+        command.angularVelocity[0] = angularVelocity[0];
+        command.angularVelocity[1] = angularVelocity[1];
+        command.angularVelocity[2] = angularVelocity[2];
       }
-      case PhysicsShapeType.ConvexHull: {
-        const convexHullShape = this.createConvexHullShape(
-          entity.object3D,
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (convexHullShape) {
-          PhysicsShape.data._engineShape[entity.index] =
-            Number(convexHullShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create convex hull shape for entity',
-            entity.index,
-          );
-        }
-        break;
-      }
-      case PhysicsShapeType.TriMesh: {
-        const triMeshShape = this.createTriMeshShape(
-          entity.object3D,
-          entity.getValue(PhysicsShape, 'density') ?? 1.0,
-          entity.getValue(PhysicsShape, 'restitution') ?? 0,
-          entity.getValue(PhysicsShape, 'friction') ?? 0.5,
-        );
-        if (triMeshShape) {
-          PhysicsShape.data._engineShape[entity.index] = Number(triMeshShape);
-        } else {
-          console.warn(
-            'PhysicsSystem: Failed to create tri-mesh shape for entity',
-            entity.index,
-          );
-        }
-        break;
-      }
-    }
-  }
 
-  private createBallShape(
-    radius: number,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create ball shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    const ballShape = this.havok.HP_Shape_CreateSphere([0, 0, 0], radius)[1];
-    this.havok.HP_Shape_SetDensity(ballShape, density);
-    this.havok.HP_Shape_SetMaterial(ballShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-    return ballShape;
-  }
-
-  private createBoxShape(
-    scale: Float32Array,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create box shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    const boxShape = this.havok.HP_Shape_CreateBox(
-      [0, 0, 0],
-      [0, 0, 0, 1],
-      [scale[0], scale[1], scale[2]],
-    )[1];
-    this.havok.HP_Shape_SetDensity(boxShape, density);
-    this.havok.HP_Shape_SetMaterial(boxShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-    return boxShape;
-  }
-
-  private createCylinderShape(
-    radius: number,
-    height: number,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create cylinder shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    const cylinderShape = this.havok.HP_Shape_CreateCylinder(
-      [0, -height / 2, 0],
-      [0, height / 2, 0],
-      radius,
-    )[1];
-    this.havok.HP_Shape_SetDensity(cylinderShape, density);
-    this.havok.HP_Shape_SetMaterial(cylinderShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-    return cylinderShape;
-  }
-
-  private createCapsuleShape(
-    radius: number,
-    totalHeight: number,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create capsule shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    const endpoints = getCapsuleAxisEndpoints(radius, totalHeight);
-    if (!endpoints) {
-      console.warn(
-        'PhysicsSystem: Capsule dimensions require a positive radius and a total height greater than or equal to twice the radius',
-      );
-      return;
-    }
-    const [pointA, pointB] = endpoints;
-    const capsuleShape = this.havok.HP_Shape_CreateCapsule(
-      pointA,
-      pointB,
-      radius,
-    )[1];
-    this.havok.HP_Shape_SetDensity(capsuleShape, density);
-    this.havok.HP_Shape_SetMaterial(capsuleShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-    return capsuleShape;
-  }
-
-  private createConvexHullShape(
-    object3D: Object3D,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create convex hull shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    // When object3D is not a Mesh we build a merged geometry here and must
-    // dispose it once the shape is created; a Mesh's own geometry stays in use.
-    const ownsGeometry = !(object3D instanceof Mesh);
-    const geometry =
-      object3D instanceof Mesh
-        ? object3D.geometry
-        : generateMergedGeometry(object3D);
-    const positionAttribute = geometry.attributes.position;
-    if (!positionAttribute) {
-      console.warn(
-        'PhysicsSystem: Failed to get vertices for convex hull shape with object3D name ' +
-          object3D.name +
-          ' &id ' +
-          object3D.id,
-      );
-      if (ownsGeometry) {
-        geometry.dispose();
-      }
-      return;
-    }
-    const vertices = this.getVertices(positionAttribute.array);
-
-    const convexHullShape = this.havok.HP_Shape_CreateConvexHull(
-      vertices.offset,
-      vertices.numObjects / 3,
-    )[1];
-    this.havok._free(vertices.offset);
-
-    if (ownsGeometry) {
-      geometry.dispose();
-    }
-
-    this.havok.HP_Shape_SetDensity(convexHullShape, density);
-    this.havok.HP_Shape_SetMaterial(convexHullShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-
-    return convexHullShape;
-  }
-
-  private createTriMeshShape(
-    object3D: Object3D,
-    density: number,
-    restitution: number,
-    friction: number,
-  ) {
-    if (!this.havok) {
-      console.warn(
-        'PhysicsSystem: Cannot create tri-mesh shape - Havok physics engine not initialized',
-      );
-      return;
-    }
-
-    // When object3D is not a Mesh we build a merged geometry here and must
-    // dispose it once the shape is created; a Mesh's own geometry stays in use.
-    const ownsGeometry = !(object3D instanceof Mesh);
-    const geometry =
-      object3D instanceof Mesh
-        ? object3D.geometry
-        : generateMergedGeometry(object3D);
-
-    const positionAttribute = geometry.attributes.position;
-    if (!positionAttribute) {
-      console.warn(
-        'PhysicsSystem: Failed to get vertices for tri-mesh shape with object3D name ' +
-          object3D.name +
-          ' &id ' +
-          object3D.id,
-      );
-      if (ownsGeometry) {
-        geometry.dispose();
-      }
-      return;
-    }
-
-    const vertices = this.getVertices(positionAttribute.array);
-    // geometry.index is null for non-indexed geometry; synthesize the implicit
-    // sequential index list so non-indexed meshes don't dereference null here.
-    const indices = this.getIndices(
-      geometry.index?.array ?? sequentialIndices(positionAttribute.count),
-    );
-
-    const triMeshShape = this.havok.HP_Shape_CreateMesh(
-      vertices.offset,
-      vertices.numObjects / 3,
-      indices.offset,
-      indices.numObjects / 3,
-    )[1];
-    this.havok._free(vertices.offset);
-    this.havok._free(indices.offset);
-
-    if (ownsGeometry) {
-      geometry.dispose();
-    }
-
-    this.havok.HP_Shape_SetDensity(triMeshShape, density);
-    this.havok.HP_Shape_SetMaterial(triMeshShape, [
-      friction,
-      friction,
-      restitution,
-      this.havok.MaterialCombine.MINIMUM,
-      this.havok.MaterialCombine.MAXIMUM,
-    ]);
-
-    return triMeshShape;
-  }
-
-  private getVertices(vertices: TypedArray) {
-    const bytesPerFloat = 4;
-    const nBytes = vertices.length * bytesPerFloat;
-    const bufferBegin = this.havok!._malloc(nBytes);
-
-    const ret = new Float32Array(
-      this.havok!.HEAPU8.buffer,
-      bufferBegin,
-      vertices.length,
-    );
-    for (let i = 0; i < vertices.length; i++) {
-      ret[i] = vertices[i];
-    }
-
-    return { offset: bufferBegin, numObjects: vertices.length };
-  }
-
-  private getIndices(indices: TypedArray) {
-    const bytesPerInt = 4;
-    const nBytes = indices.length * bytesPerInt;
-    const bufferBegin = this.havok!._malloc(nBytes);
-    const ret = new Int32Array(
-      this.havok!.HEAPU8.buffer,
-      bufferBegin,
-      indices.length,
-    );
-    for (let i = 0; i < indices.length; i++) {
-      ret[i] = indices[i];
-    }
-
-    return { offset: bufferBegin, numObjects: indices.length };
+      entity.removeComponent(PhysicsManipulation);
+    });
   }
 }

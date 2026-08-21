@@ -770,7 +770,11 @@ describe('native editor route middleware', () => {
     plugin.config?.(userConfig as never, {} as never);
 
     expect(userConfig.optimizeDeps?.exclude).toEqual(
-      expect.arrayContaining(['existing-exclusion', '@zappar/msdf-generator']),
+      expect.arrayContaining([
+        'existing-exclusion',
+        '@iwsdk/core',
+        '@zappar/msdf-generator',
+      ]),
     );
     expect(userConfig.optimizeDeps?.include).toEqual(
       expect.arrayContaining([

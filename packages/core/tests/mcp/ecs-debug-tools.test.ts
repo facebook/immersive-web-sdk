@@ -106,6 +106,141 @@ describe('ecsStep', () => {
     vi.useRealTimers();
   });
 
+  it('waits for asynchronous systems before pause returns', async () => {
+    vi.resetModules();
+    const { ecsPause } = await import('../../src/mcp/ecs-debug-tools.js');
+    let release!: () => void;
+    const flushDebugFrame = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const mockWorld = {
+      getSystems: () => [{ flushDebugFrame }],
+    } as any;
+
+    let paused = false;
+    const pausePromise = ecsPause(mockWorld).then(() => {
+      paused = true;
+    });
+    await Promise.resolve();
+    expect(paused).toBe(false);
+
+    release();
+    await pausePromise;
+    expect(paused).toBe(true);
+    expect(flushDebugFrame).toHaveBeenCalledOnce();
+  });
+
+  it('rejects pause instead of hanging when a system never settles', async () => {
+    vi.resetModules();
+    const { ecsPause } = await import('../../src/mcp/ecs-debug-tools.js');
+    const mockWorld = {
+      getSystems: () => [{ flushDebugFrame: () => new Promise(() => {}) }],
+    } as any;
+    vi.useFakeTimers();
+
+    let rejection: Error | undefined;
+    const pausePromise = ecsPause(mockWorld).catch((error: Error) => {
+      rejection = error;
+    });
+    await vi.advanceTimersByTimeAsync(5001);
+    await pausePromise;
+
+    expect(rejection?.message).toContain('Pause timed out');
+    vi.useRealTimers();
+  });
+
+  it('does not resolve a debugger step until asynchronous systems settle', async () => {
+    vi.resetModules();
+    const { installDebugHook, ecsPause, ecsStep } = await import(
+      '../../src/mcp/ecs-debug-tools.js'
+    );
+    let releaseStep!: () => void;
+    const prepareDebugFrame = vi.fn();
+    const flushDebugFrame = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseStep = resolve;
+          }),
+      );
+    const mockWorld = {
+      update: vi.fn(),
+      getSystems: () => [{ prepareDebugFrame, flushDebugFrame }],
+      entityManager: { getEntityByIndex: () => null, indexLookup: [] },
+    } as any;
+
+    installDebugHook(mockWorld);
+    await ecsPause(mockWorld);
+    let stepped = false;
+    const stepPromise = ecsStep(mockWorld, { count: 1 }).then(() => {
+      stepped = true;
+    });
+    mockWorld.update(1 / 72, 100);
+    await Promise.resolve();
+    expect(stepped).toBe(false);
+
+    releaseStep();
+    await stepPromise;
+    expect(stepped).toBe(true);
+    expect(prepareDebugFrame).toHaveBeenCalledWith(1 / 72);
+    expect(flushDebugFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not overlap a retry with a step whose flush timed out', async () => {
+    vi.resetModules();
+    const { installDebugHook, ecsPause, ecsStep } = await import(
+      '../../src/mcp/ecs-debug-tools.js'
+    );
+    let releaseFirstStep!: () => void;
+    const flushDebugFrame = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirstStep = resolve;
+          }),
+      )
+      .mockResolvedValueOnce();
+    const originalUpdate = vi.fn();
+    const mockWorld = {
+      update: originalUpdate,
+      getSystems: () => [{ flushDebugFrame }],
+      entityManager: { getEntityByIndex: () => null, indexLookup: [] },
+    } as any;
+
+    installDebugHook(mockWorld);
+    await ecsPause(mockWorld);
+    vi.useFakeTimers();
+
+    let firstError: Error | undefined;
+    const firstStep = ecsStep(mockWorld, { count: 1 }).catch((error: Error) => {
+      firstError = error;
+    });
+    mockWorld.update(1 / 72, 100);
+    await vi.advanceTimersByTimeAsync(5001);
+    await firstStep;
+    expect(firstError?.message).toContain('Step timeout');
+
+    const retry = ecsStep(mockWorld, { count: 1 });
+    mockWorld.update(1 / 72, 101);
+    expect(originalUpdate).toHaveBeenCalledTimes(1);
+
+    releaseFirstStep();
+    await vi.advanceTimersByTimeAsync(0);
+    mockWorld.update(1 / 72, 102);
+    await vi.advanceTimersByTimeAsync(0);
+    await retry;
+
+    expect(originalUpdate).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it('should throw when not paused', async () => {
     vi.resetModules();
     const { installDebugHook, ecsStep } = await import(

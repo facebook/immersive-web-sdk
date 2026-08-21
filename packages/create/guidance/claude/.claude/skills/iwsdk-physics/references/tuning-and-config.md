@@ -32,7 +32,21 @@ world.registerSystem(MyPhysicsLogicSystem, { priority: 5 });
 
 ## PhysicsSystem Configuration
 
-The system accepts a `gravity` config (defaults to Earth gravity):
+The project manifest accepts execution, frequency, and interpolation options:
+
+```jsonc
+"physics": {
+  "useWorker": true,
+  "updateFrequency": 60,
+  "interpolation": true
+}
+```
+
+- `useWorker` defaults to `true`. Set it to `false` to run the same runtime and message protocol on the main thread.
+- `updateFrequency` defaults to 60 Hz and is capped at 240 Hz.
+- `interpolation` defaults to `true` and smooths rendered transforms between fixed physics snapshots.
+
+The system also accepts a reactive `gravity` config (defaults to Earth gravity):
 
 ```typescript
 import { PhysicsSystem } from '@iwsdk/core';
