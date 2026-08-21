@@ -13,7 +13,7 @@
     "build:model": "node ./scripts/build-model.mjs",
     "build:if-ready": "node ./scripts/build-assets.mjs --if-ready",
     "build:model:if-ready": "node ./scripts/build-model.mjs --if-ready",
-    "prepare": "corepack pnpm@10.18.3 run build:if-ready",
+    "prepare": "corepack pnpm@11.22.0 run build:if-ready",
     "test": "vitest run"
   },
   "files": [

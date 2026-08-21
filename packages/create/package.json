@@ -16,12 +16,12 @@
   ],
   "scripts": {
     "prebuild": "node scripts/gen-version.cjs && node scripts/build-template.mjs",
-    "prepublishOnly": "corepack pnpm@10.18.3 build && corepack pnpm@10.18.3 verify:release-ready",
+    "prepublishOnly": "corepack pnpm@11.22.0 build && corepack pnpm@11.22.0 verify:release-ready",
     "build": "rollup -c",
-    "dev": "corepack pnpm@10.18.3 -s build && node dist/cli.js",
+    "dev": "corepack pnpm@11.22.0 -s build && node dist/cli.js",
     "watch": "rollup -c --watch",
     "clean": "rm -rf dist",
-    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 build && vitest run",
+    "test": "corepack pnpm@11.22.0 --filter @iwsdk/scene-composition build && corepack pnpm@11.22.0 --filter @iwsdk/cli build && corepack pnpm@11.22.0 build && vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "verify:release-ready": "node scripts/verify-release-ready.mjs"

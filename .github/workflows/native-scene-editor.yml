@@ -15,6 +15,7 @@ on:
       - 'packages/vite-plugin-dev/**'
       - 'pnpm-lock.yaml'
       - 'scripts/**'
+      - 'test/pnpm-10-11/**'
   push:
     branches:
       - main
@@ -31,6 +32,7 @@ on:
       - 'packages/vite-plugin-dev/**'
       - 'pnpm-lock.yaml'
       - 'scripts/**'
+      - 'test/pnpm-10-11/**'
   workflow_dispatch:
 
 permissions:
@@ -47,13 +49,23 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 10
+          version: 11.22.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           cache: 'pnpm'
           node-version: 22
+
+      - name: Check Corepack 0.35.0
+        shell: bash
+        run: |
+          npm install --global --no-audit --no-fund corepack@0.35.0
+          test "$(corepack --version)" = "0.35.0"
+          test "$(corepack pnpm@11.22.0 --version)" = "11.22.0"
+
+      - name: Verify pnpm 10 to 11 bump
+        run: pnpm test:pnpm-10-11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -110,13 +122,23 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 10
+          version: 11.22.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           cache: 'pnpm'
           node-version: 22
+
+      - name: Check Corepack 0.35.0
+        shell: bash
+        run: |
+          npm install --global --no-audit --no-fund corepack@0.35.0
+          test "$(corepack --version)" = "0.35.0"
+          test "$(corepack pnpm@11.22.0 --version)" = "11.22.0"
+
+      - name: Verify pnpm 10 to 11 bump
+        run: pnpm test:pnpm-10-11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

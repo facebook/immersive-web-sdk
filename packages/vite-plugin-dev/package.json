@@ -28,12 +28,12 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
-    "prebuild:plugin": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
+    "prebuild": "corepack pnpm@11.22.0 --filter @iwsdk/cli build",
+    "prebuild:plugin": "corepack pnpm@11.22.0 --filter @iwsdk/cli build",
     "build": "rollup -c rollup.injection.config.js && rollup -c rollup.config.js",
     "build:plugin": "rollup -c rollup.config.js",
     "build:injection": "rollup -c rollup.injection.config.js",
-    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/core build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 run build:injection && rollup -c rollup.config.js && vitest run",
+    "test": "corepack pnpm@11.22.0 --filter @iwsdk/scene-composition build && corepack pnpm@11.22.0 --filter @iwsdk/core build && corepack pnpm@11.22.0 --filter @iwsdk/cli build && corepack pnpm@11.22.0 run build:injection && rollup -c rollup.config.js && vitest run",
     "test:watch": "vitest",
     "dev": "rollup -c --watch",
     "clean": "rm -rf dist"
@@ -66,7 +66,7 @@
     "playwright": "^1.58.2",
     "preact": "^10.29.7",
     "sharp": "^0.35.3",
-    "three": "npm:super-three@0.181.0",
+    "three": "npm:super-three@0.185.0",
     "three-viewport-gizmo": "^2.2.0",
     "ws": "^8.21.1"
   },

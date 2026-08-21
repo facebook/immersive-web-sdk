@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -38,7 +41,7 @@ import {
   MeshStandardMaterial,
   NoToneMapping,
   Object3D,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   Scene,
 } from '../../src/runtime/index.js';
 
@@ -660,7 +663,7 @@ describe('importer metadata and environment', () => {
     expect(clearAlpha).toBe(0.25);
     expect((renderer as any).toneMapping).toBe(ACESFilmicToneMapping);
     expect((renderer as any).shadowMap.enabled).toBe(true);
-    expect((renderer as any).shadowMap.type).toBe(PCFSoftShadowMap);
+    expect((renderer as any).shadowMap.type).toBe(PCFShadowMap);
 
     restoreSceneEnvironment(scene, renderer, previous);
     expect(scene.background).toBe(originalBackground);

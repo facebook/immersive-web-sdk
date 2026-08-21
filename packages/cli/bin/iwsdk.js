@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 const entrypoint = new URL('../dist/cli.js', import.meta.url);
 if (!existsSync(fileURLToPath(entrypoint))) {
   console.error(
-    'The local @iwsdk/cli package has not been built. Run "corepack pnpm@10.18.3 --filter @iwsdk/cli build" from the immersive-web-sdk repository, then retry.',
+    'The local @iwsdk/cli package has not been built. Run "corepack pnpm@11.22.0 --filter @iwsdk/cli build" from the immersive-web-sdk repository, then retry.',
   );
   process.exitCode = 1;
 } else {

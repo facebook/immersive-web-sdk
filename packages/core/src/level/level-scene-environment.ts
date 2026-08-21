@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,7 +18,6 @@ import {
   LinearToneMapping,
   NoToneMapping,
   PCFShadowMap,
-  PCFSoftShadowMap,
   ReinhardToneMapping,
   Scene,
   WebGLRenderer,
@@ -148,7 +150,8 @@ function resolveShadowMapType(
     case 'pcf':
       return PCFShadowMap;
     case 'pcf-soft':
-      return PCFSoftShadowMap;
+      // PCFShadowMap provides soft filtering in r182+ for WebGLRenderer.
+      return PCFShadowMap;
   }
 }
 

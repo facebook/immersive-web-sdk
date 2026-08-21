@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -66,7 +69,7 @@ export interface GetGLTFOptions {
   shared?: boolean;
 }
 
-const THREE_PATH = `https://unpkg.com/three@0.${REVISION}.0`;
+const THREE_PATH = `https://unpkg.com/super-three@0.${REVISION}.0`;
 
 /**
  * GLTF loader with DRACO/KTX2 support, de-duplication, and caching.

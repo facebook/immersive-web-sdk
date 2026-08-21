@@ -37,7 +37,7 @@ describe('source CLI launcher', () => {
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining(
-        'corepack pnpm@10.18.3 --filter @iwsdk/cli build',
+        'corepack pnpm@11.22.0 --filter @iwsdk/cli build',
       ),
     });
   });

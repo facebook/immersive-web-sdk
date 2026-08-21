@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -273,6 +276,8 @@ export class LightBinding {
     );
     this.light.matrix.copy(this.localMatrix);
     this.light.matrixWorld.copy(this.desiredWorldMatrix);
+    // r185 honors this flag in updateWorldMatrix(); mark the direct matrix write.
+    this.light.matrixWorldNeedsUpdate = true;
 
     if (this.target != null) {
       this.worldDirection

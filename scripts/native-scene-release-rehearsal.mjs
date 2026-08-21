@@ -15,7 +15,7 @@ const REPO_ROOT = path.resolve(
   '..',
 );
 
-const COREPACK_PNPM_SPEC = process.env.COREPACK_PNPM_VERSION || 'pnpm@10.18.3';
+const COREPACK_PNPM_SPEC = process.env.COREPACK_PNPM_VERSION || 'pnpm@11.22.0';
 const PNPM = resolvePnpmCommand();
 const DEFAULT_EDITOR_EVIDENCE_DIR =
   'docs/test-evidence/native-scene-editor/current';

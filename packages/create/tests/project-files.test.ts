@@ -1,5 +1,8 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) 2026 Sythos (https://www.sythos.net).
+ *
+ * SPDX-License-Identifier: MIT
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -140,7 +143,7 @@ describe('common starter project files', () => {
     ).toBeUndefined();
     expect(packageJson.devDependencies['@meta-quest/metavr']).toBe('^1.3.2');
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
-    expect(packageJson.devDependencies['@types/three']).toBe('^0.181.0');
+    expect(packageJson.devDependencies['@types/three']).toBe('^0.185.0');
     expect(packageJson.overrides).toEqual({ sharp: '0.35.3' });
     expect(packageJson.scripts.typecheck).toBe('tsc --noEmit');
     expect(JSON.stringify(packageJson)).not.toContain('@latest');
