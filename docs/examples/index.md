@@ -106,6 +106,7 @@ onUnmounted(() => {
   <div v-if="!selectedExample" class="example-placeholder">
     <h2>Welcome to IWSDK Examples</h2>
     <p>Select an example from the sidebar to view it in action.</p>
+    <p><a href="/guides/01b-minimal-scene">Start with the minimal commented scene walkthrough.</a></p>
     <p class="note">Note: WebXR features require HTTPS and may need user interaction to start.</p>
   </div>
   <iframe

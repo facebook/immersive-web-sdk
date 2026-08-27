@@ -113,6 +113,10 @@ gtag('config', 'G-V03QDNGKY3');`,
               link: '/guides/01a-project-manifest',
             },
             {
+              text: '01b · Minimal Scene',
+              link: '/guides/01b-minimal-scene',
+            },
+            {
               text: '02 · Testing Experience',
               link: '/guides/02-testing-experience',
             },
@@ -282,6 +286,10 @@ gtag('config', 'G-V03QDNGKY3');`,
         {
           text: 'Examples',
           items: [
+            {
+              text: 'Minimal Scene Walkthrough',
+              link: '/guides/01b-minimal-scene',
+            },
             { text: 'Audio', link: '/examples/#audio' },
             {
               text: 'Environment Raycast',

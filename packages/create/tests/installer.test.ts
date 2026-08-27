@@ -12,6 +12,7 @@ import crossSpawn, { spawn as mockedSpawn } from 'cross-spawn';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   installDependenciesFromBundle,
+  printNextSteps,
   warmupReference,
 } from '../src/installer.js';
 import type { ResolvedSource } from '../src/source.js';
@@ -248,5 +249,31 @@ describe('warmupReference', () => {
       false,
     );
     expect(child.kill).toHaveBeenCalledOnce();
+  });
+});
+
+describe('printNextSteps', () => {
+  it('links generated projects to the IWER controls', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    printNextSteps('example-app', true, [], false, true, true);
+
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'https://iwsdk.dev/guides/02-testing-experience.html#iwer-controls',
+      ),
+    );
+    log.mockRestore();
+  });
+
+  it('does not show IWER controls for browser-first projects', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    printNextSteps('example-app', true, [], false, true, false);
+
+    expect(log).not.toHaveBeenCalledWith(
+      expect.stringContaining('IWER controls:'),
+    );
+    log.mockRestore();
   });
 });

@@ -178,14 +178,20 @@ entity.object3D.scale.set(1, 0.5, 1); // Half height, normal width/depth
 
 - **X-axis**: Left (-) to Right (+)
 - **Y-axis**: Down (-) to Up (+)
-- **Z-axis**: Into screen (+) to Out of screen (-)
+- **Z-axis**: The starter faces toward negative Z, so objects placed in front
+  of its origin commonly use negative Z values
 
 **Rotation:** Three.js uses radians. To convert degrees to radians: `radians = degrees * (Math.PI / 180)`. Common conversions: 90° = π/2, 180° = π, 270° = 3π/2, 360° = 2π.
 :::
 
+For parent/local transforms, world-space transforms, and coordinate-system
+details, see [Transforms & 3D Math](/concepts/three-basics/transforms-math).
+
 ## Building Your First Scene
 
-Let's add some simple 3D objects to your starter app. You'll modify your existing `src/index.ts` (or `src/index.js`) file to include new primitive objects.
+Let's add some simple 3D objects to your starter app. You'll modify
+`src/index.ts` (or `src/index.js`). The current starter creates the world from
+`virtual:iwsdk-project`, then registers `RobotSystem` and `PanelSystem`.
 
 First, add the Three.js imports you'll need at the top of your file:
 
@@ -200,27 +206,31 @@ import {
 } from '@iwsdk/core';
 ```
 
-Then, find the `World.create().then((world) => {` section and add your objects after the existing code:
+Add your objects inside the existing `World.create(...).then((world) => { ... })`
+callback, before the system registrations:
 
 ```javascript
-World.create(/* ... existing options */).then((world) => {
-  // ... existing camera setup and asset loading code
+const sceneContainer = document.getElementById('scene-container');
+if (!(sceneContainer instanceof HTMLDivElement)) {
+  throw new Error('Missing #scene-container');
+}
 
-  // Add your primitive objects here:
+World.create(sceneContainer, projectOptions).then((world) => {
+  // Add procedural objects here, before registering application systems.
 
   // Create a red cube
   const cubeGeometry = new BoxGeometry(1, 1, 1);
   const redMaterial = new MeshStandardMaterial({ color: 0xff3333 });
   const cube = new Mesh(cubeGeometry, redMaterial);
   cube.position.set(-1, 0, -2);
-  const cubeEntity = world.createTransformEntity(cube);
+  world.createTransformEntity(cube);
 
   // Create a green sphere
   const sphereGeometry = new SphereGeometry(0.5, 32, 32);
   const greenMaterial = new MeshStandardMaterial({ color: 0x33ff33 });
   const sphere = new Mesh(sphereGeometry, greenMaterial);
   sphere.position.set(1, 0, -2);
-  const sphereEntity = world.createTransformEntity(sphere);
+  world.createTransformEntity(sphere);
 
   // Create a blue floor plane
   const floorGeometry = new PlaneGeometry(4, 4);
@@ -228,15 +238,22 @@ World.create(/* ... existing options */).then((world) => {
   const floor = new Mesh(floorGeometry, blueMaterial);
   floor.position.set(0, -1, -2);
   floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-  const floorEntity = world.createTransformEntity(floor);
+  world.createTransformEntity(floor);
 
-  // ... rest of existing code (systems registration, etc.)
+  world.registerSystem(RobotSystem);
+  world.registerSystem(PanelSystem);
 });
 ```
 
 ::: tip Where to Place Your Code
-Add your primitive objects after the existing asset loading code but before the `world.registerSystem()` calls. This ensures your objects are created after the world is properly initialized but before any systems that might need to interact with them start running.
+Add procedural runtime objects inside the `World.create()` callback and before
+the `world.registerSystem()` calls. Put static composition in
+`public/scenes/main.iwsdk.scene.json`; use TypeScript or JavaScript when an
+object must be created or controlled programmatically.
 :::
+
+For the smallest complete version of this file, see the
+[minimal scene walkthrough](/guides/01b-minimal-scene).
 
 ## What's Next
 

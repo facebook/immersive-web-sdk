@@ -89,6 +89,7 @@ npx iwsdk xr select --device controller-right
 - Runtime-first workflows: https://iwsdk.dev/ai/workflows.html
 - MCP tools reference: https://iwsdk.dev/ai/mcp-tools.html
 - Project setup: https://iwsdk.dev/guides/01-project-setup.html
+- Minimal commented scene: https://iwsdk.dev/guides/01b-minimal-scene.html
 - Browser-first systems: https://iwsdk.dev/guides/16-browser-first-systems.html
 - Examples: https://iwsdk.dev/examples/
 - API reference: https://iwsdk.dev/api/

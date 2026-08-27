@@ -549,6 +549,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         res.actionItems || [],
         projectTarget.inPlace,
         referenceReady,
+        res.xrEnabled,
       );
     } finally {
       await source.cleanup();

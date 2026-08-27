@@ -8,6 +8,11 @@
 import { AudioUtils, createSystem, Pressed, Vector3 } from '@iwsdk/core';
 import { Robot } from './robot-component.js';
 
+/**
+ * Starter-only behavior for the sample robot: face the player and play its
+ * configured audio when pressed. It is safe to delete with the robot scene
+ * node, Robot component declaration, and registration in src/index.ts.
+ */
 export class RobotSystem extends createSystem({
   robot: { required: [Robot] },
   robotClicked: { required: [Robot, Pressed] },

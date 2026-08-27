@@ -137,10 +137,50 @@ iwsdkDev({
 
 To test with IWER, open the Local URL reported by Vite or `npx iwsdk dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
 
-<video autoplay loop muted playsinline>
+<video autoplay loop muted playsinline poster="/testing-experience/starter-iwer-poster.jpg">
   <source src="/testing-experience/starter-iwer.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
+
+### IWER Controls
+
+After entering XR, use the IWER toolbar and controller panels overlaid on the
+page:
+
+1. Click the **Play mode** button (the circle-play icon) to lock the pointer.
+   Move the mouse to look around. Press <kbd>Esc</kbd> to leave play mode.
+2. Hold <kbd>Left Shift</kbd> while using <kbd>W</kbd>, <kbd>A</kbd>,
+   <kbd>S</kbd>, and <kbd>D</kbd> to move the emulated headset through the
+   scene. Use <kbd>Left Shift</kbd> +
+   <kbd>ArrowUp</kbd>/<kbd>ArrowDown</kbd> to adjust height.
+   These keys continue to drive their controller thumbsticks while Left Shift
+   is held, so the default XR starter moves both the emulated headset and the
+   player. If you need isolated headset free-flight, use the controller gear
+   buttons to remap the thumbstick keys first.
+3. Without <kbd>Left Shift</kbd>,
+   <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> drive the left
+   thumbstick. The arrow keys drive the right thumbstick.
+4. In play mode, left mouse is the right-controller **trigger/select** and
+   right mouse is the right-controller **grip/squeeze**. The starter plant's
+   `DistanceGrabbable` uses trigger/select; near-field `OneHandGrabbable` and
+   `TwoHandsGrabbable` interactions use grip/squeeze.
+5. Outside play mode, click a controller's **Trig** or **Grip** value for a
+   momentary press. Use the adjacent pin button to latch that value until you
+   release it. Open the gear button to inspect or remap keyboard bindings.
+6. To move the starter plant, leave play mode, latch **Trig**, and drag the
+   controller's transform handle in the scene. Use **Grip** instead when testing
+   a near-field grabbable. Click the handle to switch between translation and
+   rotation, then release the latch to drop the object.
+7. Use **Toggle input mode** in the toolbar to switch between controllers and
+   hands. Use **Reset device transforms** to return the headset and inputs to
+   their default pose.
+
+The default left-controller trigger and squeeze bindings are <kbd>Q</kbd> and
+<kbd>E</kbd>. The visible binding chips in each controller panel are the source
+of truth if you have remapped a control.
+
+For automated interaction, use the CLI sequence in
+[AI workflows: XR Interaction](/ai/workflows#xr-interaction).
 
 ## What's Next
 

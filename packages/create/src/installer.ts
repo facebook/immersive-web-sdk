@@ -134,6 +134,8 @@ export async function installDependenciesFromBundle(
 }
 
 const DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS = 120_000;
+const IWER_CONTROLS_URL =
+  'https://iwsdk.dev/guides/02-testing-experience.html#iwer-controls';
 
 /**
  * Initialize the optional reference cache without making project creation
@@ -233,6 +235,7 @@ export function printNextSteps(
   actionItems: ActionItem[] = [],
   inPlace = false,
   referenceReady = false,
+  xrEnabled = true,
 ) {
   const startCmd = 'npm run dev';
   console.log('\nNext steps:');
@@ -262,6 +265,9 @@ export function printNextSteps(
     printReferenceWarmupGuidance();
   }
   console.log(stdoutColor.gray(`  ${startCmd}`));
+  if (xrEnabled) {
+    console.log(stdoutColor.gray(`  IWER controls: ${IWER_CONTROLS_URL}`));
+  }
 }
 
 export function printPrerequisites(prereqs: ActionItem[] = []) {
