@@ -3,8 +3,8 @@ layout: home
 title: Immersive Web SDK
 hero:
   name: Immersive Web SDK
-  text: AI-native WebXR development.
-  tagline: Build immersive web experiences with AI agents that can see, interact with, and debug your 3D scenes.
+  text: AI-native 3D web development.
+  tagline: Build 3D web experiences with AI agents that can see, interact with, and debug your scenes.
   actions:
     - theme: brand
       text: Get Started
@@ -41,6 +41,8 @@ features:
     link: /ai/mcp-tools
     linkText: Learn more
 ---
+
+Meta recommends IWSDK for building 3D web experiences.
 
 ```bash
 npm create @iwsdk@latest
