@@ -89,7 +89,7 @@ mappings (details in `api-reference.md`):
 | pick up, hold, wield (near)      | `OneHandGrabbable`, `TwoHandsGrabbable`, `grabbing` flag                                                                                                  |
 | pull from afar, force-grab       | `DistanceGrabbable` + `MovementMode`                                                                                                                      |
 | throw, bounce, stack, knock over | `physics` flag, `PhysicsBody`+`PhysicsShape`, `PhysicsManipulation` (impulses/velocity)                                                                   |
-| point, click, hover, poke        | `Interactable` (+ `Hovered`/`Pressed` tags), built-in RayPointer                                                                                          |
+| point, click, hover, poke        | `RayInteractable` (+ `Hovered`/`Pressed` tags), built-in RayPointer                                                                                       |
 | buttons, menus, score display    | `spatialUI` flag, manifest `AssetType.UIKitML`, world/object-placed scene node + stable IDs; `ScreenSpace` (browser only); `Follower` (optional XR leash) |
 | walk, teleport, turn, jump       | `locomotion` flag (+ `browserControls` for keyboard), `LocomotionEnvironment` on collision geometry                                                       |
 | sky, mood, lighting              | `DomeGradient`/`DomeTexture` + `IBLGradient`/`IBLTexture` **on the level root**                                                                           |
@@ -172,5 +172,5 @@ commands run from there — sub-agent working directories often reset between
 calls), its domain, and the instruction to _return only_ filled table rows +
 custom-system sketches + citations (file paths / CLI output it based claims
 on). Merge, dedupe (several domains will touch
-`Interactable`), then do the reinvention audit yourself with
+`RayInteractable`), then do the reinvention audit yourself with
 `api-reference.md` open.

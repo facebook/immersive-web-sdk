@@ -146,7 +146,7 @@ Only the two most recent snapshot labels are retained.
 - Trigger vs squeeze mix-ups produce _no error and no effect_ — check the
   mechanic's grab type first (`DistanceGrabbable` → trigger/select-value;
   `OneHandGrabbable`/`TwoHandsGrabbable` → squeeze button 1).
-- Teleport is blocked while the ray hovers an `Interactable`.
+- Teleport is blocked while the ray hovers a `RayInteractable`.
 - Snap turn re-fires only after the stick returns to 0.
 - `--input-json` takes one single-quoted JSON argument; malformed JSON errors
   out — build it with a heredoc if it contains quotes.

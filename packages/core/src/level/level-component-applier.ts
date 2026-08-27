@@ -19,6 +19,8 @@ const LEVEL_COMPONENT_ALIASES: Record<string, string> = {
   Interactable: 'RayInteractable',
 };
 
+let didWarnInteractableAlias = false;
+
 export interface LevelComponentApplyOptions {
   allowUnprefixedComponents?: boolean;
   nodeId?: string;
@@ -45,7 +47,7 @@ export class LevelComponentApplier {
       }
 
       const componentKey = stripComponentPrefix(componentName);
-      const targetId = normalizeComponentId(componentKey);
+      const targetId = normalizeComponentId(componentKey, allComponents, true);
       if (targetId === 'PanelUI') {
         return;
       }
@@ -98,6 +100,7 @@ export class LevelComponentApplier {
     for (const componentName of Object.keys(components)) {
       const targetId = normalizeComponentId(
         stripComponentPrefix(componentName),
+        allComponents,
       );
       const component = allComponents.find((entry) => entry.id === targetId);
       if (component && entity.hasComponent(component)) {
@@ -246,10 +249,37 @@ function stripComponentPrefix(componentName: string): string {
     : componentName;
 }
 
-function normalizeComponentId(componentId: string): string {
-  return LEVEL_COMPONENT_ALIASES[componentId] ?? componentId;
+function normalizeComponentId(
+  componentId: string,
+  components: readonly Component<AnySchema>[],
+  warnDeprecatedAlias = false,
+): string {
+  const targetId = components.some((component) => component.id === componentId)
+    ? componentId
+    : (LEVEL_COMPONENT_ALIASES[componentId] ?? componentId);
+
+  if (
+    targetId !== componentId &&
+    warnDeprecatedAlias &&
+    !didWarnInteractableAlias &&
+    shouldEmitDevWarning()
+  ) {
+    didWarnInteractableAlias = true;
+    console.warn(
+      '[IWSDK] `Interactable` is deprecated; use `RayInteractable` instead. See https://iwsdk.dev/api/core/variables/Interactable.html',
+    );
+  }
+  return targetId;
 }
 
+function shouldEmitDevWarning(): boolean {
+  return (import.meta as any).env?.DEV !== false;
+}
+
+/** @internal */
+export function resetLevelComponentWarningStateForTests(): void {
+  didWarnInteractableAlias = false;
+}
 function withSceneComponentContext(
   message: string,
   nodeId: string | undefined,

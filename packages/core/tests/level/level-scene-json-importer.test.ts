@@ -11,12 +11,19 @@ import {
   validateSceneDocument,
 } from '@iwsdk/scene-composition';
 import { signal } from '@preact/signals-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createComponent, Types } from '../../src/ecs/component.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ComponentRegistry,
+  createComponent,
+  Types,
+} from '../../src/ecs/component.js';
 import type { Entity } from '../../src/ecs/entity.js';
 import { World } from '../../src/ecs/world.js';
 import { RayInteractable } from '../../src/input/state-tags.js';
-import { LevelComponentApplier } from '../../src/level/level-component-applier.js';
+import {
+  LevelComponentApplier,
+  resetLevelComponentWarningStateForTests,
+} from '../../src/level/level-component-applier.js';
 import {
   activateScenePlayerAttachments,
   SceneJSONImporter,
@@ -231,6 +238,10 @@ function makeEnvironmentRenderer() {
 }
 
 describe('SceneJSONImporter', () => {
+  beforeEach(() => {
+    resetLevelComponentWarningStateForTests();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -533,6 +544,8 @@ describe('SceneJSONImporter', () => {
     ];
 
     await SceneJSONImporter.loadDocument(world, scene, root);
+    const second = makeWorld();
+    await SceneJSONImporter.loadDocument(second.world, scene, second.root);
 
     expect(entities).toHaveLength(2);
     expect(entities[0]?.componentCalls).toContainEqual({
@@ -541,6 +554,38 @@ describe('SceneJSONImporter', () => {
     });
     expect(entities[1]?.componentCalls).toContainEqual({
       component: RayInteractable,
+      props: {},
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      '[IWSDK] `Interactable` is deprecated; use `RayInteractable` instead. See https://iwsdk.dev/api/core/variables/Interactable.html',
+    );
+  });
+
+  it('preserves a registered custom component named Interactable', () => {
+    const { root, world } = makeWorld();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const registered = ComponentRegistry.getAllComponents();
+    const customInteractable = {
+      ...RayInteractable,
+      id: 'Interactable',
+    };
+    vi.spyOn(ComponentRegistry, 'getAllComponents').mockReturnValue([
+      customInteractable,
+      ...registered,
+    ]);
+
+    LevelComponentApplier.applyComponents(
+      root,
+      {
+        Interactable: {},
+      },
+      world,
+      { strict: true },
+    );
+
+    expect(root.componentCalls).toContainEqual({
+      component: customInteractable,
       props: {},
     });
     expect(warn).not.toHaveBeenCalled();
