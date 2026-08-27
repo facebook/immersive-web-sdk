@@ -36,6 +36,7 @@ import {
   formatMissingRuntimeMessage,
   getLaunchMetadata,
   getRuntimeSession,
+  getRuntimeUrls,
   getWorkspaceRuntimeState,
   resolveWorkspaceRoot,
   setLaunchMetadata,
@@ -105,6 +106,17 @@ interface WaitForRuntimeSessionResult {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function writeRuntimeUrls(
+  io: ResolvedCliIo,
+  message: string,
+  session: RuntimeSession,
+): void {
+  io.stdout.write(`[IWSDK] ${message} ${session.localUrl}\n`);
+  for (const networkUrl of session.networkUrls ?? []) {
+    io.stdout.write(`[IWSDK] Network URL: ${networkUrl}\n`);
+  }
 }
 
 async function wasWorkspaceStoppedExternally(
@@ -638,14 +650,13 @@ export async function handleDevUp(
     }
     const adapters = await readAdapterStatus(workspaceRoot);
     if (foreground) {
-      io.stdout.write(
-        `[IWSDK] Runtime already running at ${waitResult.session.localUrl}\n`,
-      );
+      writeRuntimeUrls(io, 'Runtime already running at', waitResult.session);
       return null;
     }
     return createSuccess({
       action: 'attached',
       workspaceRoot,
+      runtimeUrls: getRuntimeUrls(waitResult.session),
       session: waitResult.session,
       launch,
       adapters,
@@ -760,9 +771,7 @@ export async function handleDevUp(
   }
 
   if (foreground) {
-    io.stdout.write(
-      `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
-    );
+    writeRuntimeUrls(io, 'Runtime ready at', waitResult.session);
     const exit = await childExitPromise;
     if (
       isAbnormalChildExit(exit) &&
@@ -782,6 +791,7 @@ export async function handleDevUp(
   return createSuccess({
     action: 'started',
     workspaceRoot,
+    runtimeUrls: getRuntimeUrls(waitResult.session),
     session: waitResult.session,
     launch,
     logPath,

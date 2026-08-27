@@ -20,6 +20,15 @@ command prints a JSON envelope `{ok, data|error}` on stdout — parse it and
 check the assertion **before** the next command. Add `--timeout 20000` to
 slow ops (reload, xr enter, animate-to, screenshot).
 
+Match verification depth to the app and the risk. A simple single-scene app
+needs a focused checklist and direct evidence for its few success criteria, not
+a full QA program. Multi-system behavior, physics, deployment, or interactions
+with meaningful failure modes need broader scenarios and stronger evidence.
+
+The developer owns headed versus headless mode. Announce any proposed change
+before restarting; do not silently replace their visible collaboration window
+with a headless session, or vice versa.
+
 ## The Standard Loop
 
 ```bash
@@ -44,6 +53,8 @@ npx iwsdk browser screenshot --output-file design/verify/base.png --timeout 2000
                                      #    temp dir (path in the JSON envelope)
 npx iwsdk xr enter --timeout 20000   # 6. enter emulated XR session
 sleep 2
+npx iwsdk xr status                  # 6a. confirm XR is active before making
+                                     #     pose/alignment/interaction claims
 npx iwsdk browser logs --input-json '{"count":30}'
                                      # 7. console clean — scan ALL levels (a
                                      #    level filter can miss important errors);
@@ -58,10 +69,13 @@ repeat up to ~60 s (a shell `until` loop around the _single_ CLI call is fine
 Then per-scenario: discover → simulate → assert. Finish with
 `npx iwsdk dev down` when done for the session.
 
-The dev server owns one managed headed Playwright Chromium window, with IWER enabled
-for XR starters. It starts with the dev server; do not launch a second browser or turn
-Vite's independent `server.open` back on. Use `scene screenshot` / `scene render-file`
-for editor evidence and `browser screenshot` for the application runtime.
+The dev server owns one managed Playwright Chromium workspace, visible when it
+is headed, with IWER enabled for XR starters. It starts with the dev server; do
+not launch a second browser or turn Vite's independent `server.open` back on.
+Use `scene screenshot` / `scene render-file` for editor evidence and
+`browser screenshot` for the application runtime.
+A flat screenshot taken outside an active XR session cannot prove controller or
+hand alignment, immersive pose, or XR interaction correctness.
 
 ## Discover (after every reload — entity indices are NOT stable)
 

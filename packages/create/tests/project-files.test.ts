@@ -262,6 +262,15 @@ describe('common starter project files', () => {
     ).toHaveLength(1);
     expect(textFile(files, 'AGENTS.md')).toContain('# IWSDK');
     expect(textFile(files, 'CLAUDE.md')).toContain('# IWSDK project');
+    for (const sharedGuidance of [
+      'Explain immersive terms in plain language',
+      'The developer owns whether that managed window is headed or headless',
+      'immersive interaction claims require an',
+      'data.runtimeUrls.network',
+    ]) {
+      expect(textFile(files, 'AGENTS.md')).toContain(sharedGuidance);
+      expect(textFile(files, 'CLAUDE.md')).toContain(sharedGuidance);
+    }
     expect(files.some((file) => file.path.startsWith('.claude/rules/'))).toBe(
       true,
     );

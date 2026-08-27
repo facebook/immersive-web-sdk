@@ -14,6 +14,7 @@ import type {
 } from '../cli-types.js';
 import {
   findNearestIwsdkAppRoot,
+  getRuntimeUrls,
   getWorkspaceRuntimeState,
   resolveWorkspaceRoot,
 } from '../runtime-state.js';
@@ -60,6 +61,7 @@ export async function handleStatus(
 
   return createSuccess({
     workspaceRoot,
+    runtimeUrls: getRuntimeUrls(state.session),
     state,
     adapters,
   });

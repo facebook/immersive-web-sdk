@@ -8,6 +8,12 @@ format. Harnesses that use `AGENTS.md` also receive equivalent nested files near
 the code they govern. Read the applicable scoped instructions before working in
 that area.
 
+Explain immersive terms in plain language when they first matter instead of
+assuming the reader knows them. In particular, introduce XR (an immersive
+session), IWER (IWSDK's browser-based XR emulator), ECS (entity-component
+system), and controller target-ray versus grip poses with a link to the
+applicable IWSDK guide or concept page.
+
 ## What is not standard Vite
 
 **`iwsdk.config.json` is the project authority, not `vite.config.ts`.** It selects
@@ -27,6 +33,13 @@ hand-build that options object.
 `browser.status: "not_launched"`, and browser-backed commands fail immediately
 with `browser_not_launched` plus restart guidance. One managed window hosts two
 roles, editor and runtime.
+
+The developer owns whether that managed window is headed or headless. Do not
+change modes silently: announce the change before restarting. In a visible
+collaboration session, use the Runtime/Editor toggle in the single managed
+Chromium window. Its expected unsupported-flag banner comes from
+`--ignore-certificate-errors` for the local development certificate. Playwright
+may add separate sandbox-related flags in constrained environments.
 
 **`src/assets.ts`/`src/assets.js` is evaluated twice, in two different JS
 realms** — once by the app runtime, once by the editor. It must be deterministic
@@ -78,6 +91,17 @@ expect.
 The non-obvious part is which observation proves what: the **editor** render does
 not run application systems, so anything driven by a system must be verified with
 `browser_screenshot` (runtime), not `scene_screenshot` (editor).
+
+Pose, controller/hand alignment, and immersive interaction claims require an
+active XR session (`npx iwsdk xr status`). A flat runtime screenshot taken
+outside XR can prove that the app renders, but it cannot prove immersive pose or
+interaction correctness.
+
+For a physical headset smoke test, run `npx iwsdk dev status`, open a URL from
+`data.runtimeUrls.network` on a headset connected to the same Wi-Fi network,
+and accept the expected local certificate warning. See
+[Testing Your Experience](https://iwsdk.dev/guides/02-testing-experience.html)
+for the complete workflow.
 
 ## MCP and CLI are one surface, not two
 

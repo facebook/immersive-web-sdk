@@ -348,6 +348,16 @@ export async function getWorkspaceRuntimeState(
   };
 }
 
+export function getRuntimeUrls(session: RuntimeSession | null): {
+  local: string | null;
+  network: string[];
+} {
+  return {
+    local: session?.localUrl ?? null,
+    network: session?.networkUrls ?? [],
+  };
+}
+
 export function formatMissingRuntimeMessage(workspaceRoot: string): string {
   return `No running IWSDK runtime found for ${workspaceRoot}. Start the dev server with "iwsdk dev up".`;
 }

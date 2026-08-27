@@ -18,6 +18,12 @@ no display server). It assumes Node.js satisfies IWSDK's package engine range:
 The managed dev browser uses Playwright Chromium; the dev plugin installs the
 matching Chromium binary when it is missing.
 
+Explain immersive terms in plain language when they first matter instead of
+assuming the reader knows them. In particular, introduce XR (an immersive
+session), IWER (IWSDK's browser-based XR emulator), ECS (entity-component
+system), and controller target-ray versus grip poses with a link to the
+applicable IWSDK guide or concept page.
+
 ### CLI-First Operating Model
 
 This guide is intentionally **CLI-first** for cloud-based harnesses. Treat
@@ -330,12 +336,23 @@ npx iwsdk dev logs           # View recorded background server logs
 npx iwsdk dev open           # Open in browser
 ```
 
-Generated apps use bare `iwsdkDev()` and the CLI launches the visible managed
-Playwright runtime/editor workspace, registers the MCP WebSocket endpoint, and
-records runtime state. AI, headed/headless, open, and screenshot behavior are
-launch-time `iwsdk dev up` flags. Use `npx iwsdk dev status` for the resolved `localUrl`;
-the generated starter template defaults to `https://localhost:8081/`, but
-examples or existing apps may use another Vite port.
+Generated apps use bare `iwsdkDev()` and the CLI launches the managed Playwright
+runtime/editor workspace, registers the MCP WebSocket endpoint, and records
+runtime state. AI, headed/headless, open, and screenshot behavior are
+launch-time `iwsdk dev up` flags. The developer owns the headed/headless choice;
+announce any change before restarting rather than silently changing their
+workspace. Use `npx iwsdk dev status` for the resolved `runtimeUrls.local` and
+`runtimeUrls.network` fields in the JSON result; the generated starter template
+defaults to `https://localhost:8081/`, but examples or existing apps may use
+another Vite port.
+
+### Physical Headset Smoke Test
+
+Run `npx iwsdk dev status`, then open one of the URLs in
+`data.runtimeUrls.network` on a headset connected to the same Wi-Fi network as
+the development computer. Accept the expected warning for IWSDK's untrusted
+local certificate. For alternate connection methods and complete instructions, see
+[Testing Your Experience](/guides/02-testing-experience).
 
 ### Node.js Requirement
 
@@ -556,6 +573,11 @@ also normalizes common aliases such as `"right"`, `"right-controller"`,
 `"rightController"`, and `"controllers.right"`, but unrecognized IDs still fail.
 Allowed devices vary by command: transforms support headset/controllers/hands;
 select supports controllers/hands; gamepad commands support controllers only.
+
+Before claiming that a pose, hand/controller alignment, or immersive
+interaction is correct, enter XR and confirm `npx iwsdk xr status` reports an
+active session. A flat screenshot outside XR can prove that the app renders,
+but not that immersive transforms or interactions are correct.
 
 ### Common Commands
 

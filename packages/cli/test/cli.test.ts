@@ -394,6 +394,7 @@ function buildManagedRuntimeScript(
     finalBrowserStatus?: RuntimeBrowserState['status'];
     finalBrowserDelayMs?: number;
     finalBrowserError?: RuntimeBrowserState['lastError'];
+    networkUrls?: string[];
     probeReadyDelayMs?: number;
     probeWritesSession?: boolean;
     workspaceOnly?: boolean;
@@ -459,7 +460,7 @@ async function writeSession(port, browser) {
     pid: process.pid,
     port,
     localUrl: 'http://localhost:' + port,
-    networkUrls: [],
+    networkUrls: ${JSON.stringify(options.networkUrls ?? [])},
     ${options.workspaceOnly ? '' : "aiMode: 'agent',"}
     aiTools: ['claude', 'cursor'],
     browser,
@@ -697,6 +698,16 @@ describe('runtime commands and project resolution', () => {
 });
 
 describe('runtime introspection and raw output', () => {
+  test('reports empty runtime URLs when no session is active', async () => {
+    const status = await runCli(['dev', 'status'], appA);
+    expect(status.exitCode).toBe(0);
+    const parsed = JSON.parse(status.stdout);
+    expect(parsed.data.runtimeUrls).toEqual({
+      local: null,
+      network: [],
+    });
+  });
+
   test('reports browser readiness in dev status', async () => {
     await registerRuntimeSession({
       sessionId: 'session-status',
@@ -704,6 +715,7 @@ describe('runtime introspection and raw output', () => {
       pid: process.pid,
       port: 5190,
       localUrl: 'http://localhost:5190',
+      networkUrls: ['https://192.0.2.10:5190'],
       aiMode: 'agent',
       aiTools: ['claude'],
       browser: createBrowserState('connected'),
@@ -715,6 +727,10 @@ describe('runtime introspection and raw output', () => {
     expect(parsed.data.state.browserConnected).toBe(true);
     expect(parsed.data.state.browserCommandReady).toBe(true);
     expect(parsed.data.state.session.browser.status).toBe('connected');
+    expect(parsed.data.runtimeUrls).toEqual({
+      local: 'http://localhost:5190',
+      network: ['https://192.0.2.10:5190'],
+    });
   });
 
   test('explains an intentional --no-open session in dev status', async () => {
@@ -1297,7 +1313,9 @@ process.exit(1);
     const fixtureScript = path.join(appA, 'dev-server.mjs');
     await writeFile(
       fixtureScript,
-      buildManagedRuntimeScript('fixture-dev'),
+      buildManagedRuntimeScript('fixture-dev', {
+        networkUrls: ['https://192.0.2.10:8443'],
+      }),
       'utf8',
     );
 
@@ -1312,6 +1330,9 @@ process.exit(1);
     const parsedUp = JSON.parse(up.stdout);
     expect(parsedUp.data.action).toBe('started');
     expect(parsedUp.data.session.localUrl).toContain('http://localhost:');
+    expect(parsedUp.data.runtimeUrls.network).toEqual([
+      'https://192.0.2.10:8443',
+    ]);
     expect(parsedUp.data.launch.scriptName).toBe('dev:runtime');
     expect(parsedUp.data.launch.port).toBe(parsedUp.data.session.port);
     expect(parsedUp.data.session.browser.status).toBe('connected');
@@ -1321,6 +1342,9 @@ process.exit(1);
     expect(again.exitCode).toBe(0);
     const parsedAgain = JSON.parse(again.stdout);
     expect(parsedAgain.data.action).toBe('attached');
+    expect(parsedAgain.data.runtimeUrls.network).toEqual([
+      'https://192.0.2.10:8443',
+    ]);
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
@@ -1332,7 +1356,9 @@ process.exit(1);
     const fixtureScript = path.join(appA, 'dev-foreground.mjs');
     await writeFile(
       fixtureScript,
-      buildManagedRuntimeScript('fixture-foreground'),
+      buildManagedRuntimeScript('fixture-foreground', {
+        networkUrls: ['https://192.0.2.10:8443'],
+      }),
       'utf8',
     );
     await createAppFixture(appA, {
@@ -1375,6 +1401,7 @@ process.exit(1);
       `foreground stdout:\n${stdout}\nforeground stderr:\n${stderr}`,
     ).toBe(0);
     expect(stdout).toContain('[IWSDK] Runtime ready at');
+    expect(stdout).toContain('[IWSDK] Network URL: https://192.0.2.10:8443');
     expect(stderr).not.toContain('dev_up_exit');
   });
 

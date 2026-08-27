@@ -8,6 +8,10 @@ IWSDK's AI integration supports two modes. Both use the same managed Playwright
 workspace, runtime preview, native scene editor, and MCP connection. The mode
 only changes whether that workspace is visible and how screenshots are sized.
 
+The developer owns this choice. An agent must announce any proposed change to
+headed/headless mode before restarting the workspace; it must not silently
+replace a visible collaboration window with a headless session, or vice versa.
+
 ## Collaborate Mode
 
 **Command:** `npx iwsdk dev up --ai-mode collaborate`
@@ -15,6 +19,12 @@ only changes whether that workspace is visible and how screenshots are sized.
 You and the AI share one visible Playwright-managed workspace. It opens at the
 clean application URL in runtime view; use the Runtime and Editor controls to
 switch views without opening another browser.
+
+Chromium may show an "unsupported command-line flag" banner for
+`--ignore-certificate-errors`. This is expected: the dedicated managed browser
+uses that flag only to accept IWSDK's untrusted local development certificate.
+Playwright may add separate platform flags such as `--no-sandbox` in constrained
+environments. The banner does not indicate that a second browser was opened.
 
 | Setting        | Value                              |
 | -------------- | ---------------------------------- |
