@@ -167,6 +167,14 @@ its authored world transform. Do not add `ScreenSpace`, a backdrop, or a tempora
 camera pose merely to make a panel easier to inspect—the editor already provides the
 correct isolated and in-scene render paths.
 
+For immersive XR, default to a world-space panel or attach contextual UI to the
+object it controls. Use a thresholded `Follower` targeting `world.player.head`
+only when compact global UI must remain discoverable. Do not head-lock menus,
+reading surfaces, or persistent panels; reserve direct `world.playerHeadEntity`
+parenting for tiny, transient, non-interactive markers that require exact view
+alignment. Do not use `ScreenSpace` expecting it to remain camera-attached in
+XR. See `docs/concepts/spatial-ui/hud.md` for the placement guidance.
+
 ## Completion checklist
 
 - Manifest ID resolves and `ui assets` lists it.

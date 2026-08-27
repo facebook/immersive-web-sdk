@@ -53,7 +53,9 @@ describe('defineAssets', () => {
     ).toThrow('must have a nonblank URL');
     expect(() =>
       defineAssets({ bad: { type: 'video', url: '/clip.mp4' } } as any),
-    ).toThrow('unsupported type "video"');
+    ).toThrow(
+      'unsupported type "video". Supported types: gltf, audio, texture, hdr-texture, uikitml',
+    );
     expect(() =>
       defineAssets({
         bad: { priority: 'eventually', type: AssetType.GLTF, url: '/x.glb' },

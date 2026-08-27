@@ -18,7 +18,9 @@ When you call `World.create(container, options)` IWSDK:
 5. Creates `XRInputManager`; wires `player` (XROrigin) and `input` into the world.
 6. Registers core feature systems (always‑on UI, Audio; optional Locomotion/Grabbing) with explicit priorities.
 7. Initializes `AssetManager`.
-8. Starts the render loop (`renderer.setAnimationLoop`): each tick sets `visibilityState`, runs `world.update(delta, time)`, then renders.
+8. Starts the render loop (`renderer.setAnimationLoop`): each tick sets
+   `visibilityState`, runs `world.update(delta, time)`, invokes registered
+   `world.onXRFrame` callbacks when an XR frame exists, then renders.
 9. If `options.xr.offer` is 'once' or 'always', IWSDK offers an XR session after init (and re‑offers on end if 'always'). Otherwise, call `world.launchXR()` manually when the user presses your XR button.
 10. Preloads assets (if provided) and requests an initial level load via `world.loadLevel(url?)`. Later scene swaps can use either `world.loadLevel(url)` or `world.loadSceneDocument(document)`.
 
@@ -27,6 +29,20 @@ Implications
 - Systems run on every animation frame in priority order before the scene is rendered.
 - Default priorities (negative numbers run earlier): Locomotion (−5), Input (−4), Grabbing (−3). You can pass `{ priority: number }` when registering a system.
 - `visibilityState` is updated each frame from the XR session (or `non-immersive`).
+
+## Choosing a per-frame API
+
+Use a System's `update(delta, time)` for ordinary animation and application
+logic. Systems run in browser and immersive modes, participate in priority
+ordering, and keep behavior inside the ECS lifecycle.
+
+Use `world.onXRFrame((frame, delta, time) => { ... })` only when code needs the
+live `XRFrame`, such as raw hit-test results, depth information, or viewer poses.
+These callbacks run only while an immersive XR frame exists, after systems and
+before rendering. Call the returned unsubscribe function during cleanup.
+
+Do not create a second `requestAnimationFrame` or `renderer.setAnimationLoop`
+for application behavior; IWSDK's existing render loop drives both APIs.
 
 ## System lifecycle (per class)
 
@@ -79,7 +95,7 @@ Parenting rules
 ## Frame order recap
 
 ```text
-set visibilityState → world.update(delta,time) → renderer.render(scene,camera)
+set visibilityState → world.update(delta,time) → onXRFrame callbacks → render
 ```
 
 Within `world.update`, systems run in ascending priority (more negative first). Use lower (more negative) priorities for input/physics that must run before visuals.
@@ -93,5 +109,6 @@ requestAnimationFrame / XRAnimationFrame
      ├─ world.update(delta,time)
      │   ├─ systems @ priority … -5, -4, -3, 0, 1 …
      │   └─ queries keep sets up to date (qualify/disqualify emitted)
+     ├─ world.onXRFrame callbacks (active XR sessions only)
      └─ renderer.render(scene,camera)
 ```

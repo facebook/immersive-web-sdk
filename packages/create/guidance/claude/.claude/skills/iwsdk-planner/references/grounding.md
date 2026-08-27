@@ -90,7 +90,7 @@ mappings (details in `api-reference.md`):
 | pull from afar, force-grab       | `DistanceGrabbable` + `MovementMode`                                                                                                                      |
 | throw, bounce, stack, knock over | `physics` flag, `PhysicsBody`+`PhysicsShape`, `PhysicsManipulation` (impulses/velocity)                                                                   |
 | point, click, hover, poke        | `Interactable` (+ `Hovered`/`Pressed` tags), built-in RayPointer                                                                                          |
-| buttons, menus, score display    | `spatialUI` flag, manifest `AssetType.UIKitML`, placed scene node + stable element IDs; `ScreenSpace` (intentional browser HUD); `Follower` (head-locked) |
+| buttons, menus, score display    | `spatialUI` flag, manifest `AssetType.UIKitML`, world/object-placed scene node + stable IDs; `ScreenSpace` (browser only); `Follower` (optional XR leash) |
 | walk, teleport, turn, jump       | `locomotion` flag (+ `browserControls` for keyboard), `LocomotionEnvironment` on collision geometry                                                       |
 | sky, mood, lighting              | `DomeGradient`/`DomeTexture` + `IBLGradient`/`IBLTexture` **on the level root**                                                                           |
 | sounds, music                    | `AudioSource` + `AudioUtils.play()`, `PlaybackMode`                                                                                                       |

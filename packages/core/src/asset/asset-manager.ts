@@ -642,7 +642,8 @@ function isObject3DManifestEntry(entry: AssetManifestEntry): entry is Object3D {
   return (entry as Object3D | undefined)?.isObject3D === true;
 }
 
-const SUPPORTED_ASSET_TYPES = new Set<string>(Object.values(AssetType));
+const SUPPORTED_ASSET_TYPE_NAMES = Object.values(AssetType);
+const SUPPORTED_ASSET_TYPES = new Set<string>(SUPPORTED_ASSET_TYPE_NAMES);
 const SUPPORTED_ASSET_PRIORITIES = new Set<string>([
   'critical',
   'background',
@@ -672,7 +673,7 @@ function assertAssetManifestEntry(id: string, entry: unknown): void {
     !SUPPORTED_ASSET_TYPES.has(candidate.type)
   ) {
     throw new Error(
-      `Asset manifest entry "${id}" has unsupported type "${String(candidate.type)}"`,
+      `Asset manifest entry "${id}" has unsupported type "${String(candidate.type)}". Supported types: ${SUPPORTED_ASSET_TYPE_NAMES.join(', ')}`,
     );
   }
   if (

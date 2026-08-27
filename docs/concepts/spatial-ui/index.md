@@ -55,6 +55,8 @@ Our stack is designed to mitigate each of these with Yoga‑based layout (predic
 - [UIKit](/concepts/spatial-ui/uikit) — the 3D UI runtime (layout, text, performance model).
 - [UIKitML](/concepts/spatial-ui/uikitml) — the authoring language, parser, and interpreter.
 - [UIKitDocument](/concepts/spatial-ui/uikit-document) — DOM‑like access to interpreted UI.
+- [HUD Placement](/concepts/spatial-ui/hud) — world-space-first placement,
+  browser overlays, optional leashed UI, and the limits of head locking.
 - [Flow](/concepts/spatial-ui/flow) — end‑to‑end: author → parse → instantiate → interact.
 
 ## Choosing an Approach (Quick Guidance)

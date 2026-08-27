@@ -354,15 +354,18 @@ this.scene.add(mesh);
 world.createTransformEntity(mesh, parentEntity);
 ```
 
-### 17. Manual Raycaster instead of RayInteractable
+### 17. Raw Raycaster used as an interaction system
 
-Flag: `new THREE.Raycaster()` or `new Raycaster()` for interaction detection.
+Flag: `new THREE.Raycaster()` or `new Raycaster()` used to reproduce IWSDK
+hover, press, grab, or pointer behavior. A raw raycaster is valid for a custom
+geometric query, but it does not map hits to ECS entities or share
+`InputSystem` target filtering and pointer-event lifecycle.
 
 ```typescript
-// ❌ BAD - no BVH acceleration, doesn't work in XR, no pointer events
+// ⚠️ Raw geometry query: caller owns entity mapping and target filtering.
 const raycaster = new Raycaster();
 
-// ✅ GOOD - add RayInteractable component, query Hovered/Pressed in system
+// ✅ For user interaction, use the shared IWSDK interaction path.
 entity.addComponent(RayInteractable);
 ```
 

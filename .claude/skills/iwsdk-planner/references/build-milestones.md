@@ -55,6 +55,8 @@ In priority order:
    grouped primitives under one `createTransformEntity`.
 2. **Assets already in the project** (`public/gltf/…` from the starter, or
    user-provided). List them in the manifest with paths.
+   Convert FBX, OBJ, and other source formats first: in Blender use **File →
+   Import**, then **File → Export → glTF 2.0**, and register the GLB/GLTF output.
 3. **Asset search tooling, if present** — if the environment has an asset
    MCP (e.g. a `meta_assets_search`-style tool) or the user offers a source,
    download GLB/GLTF into `public/gltf/<name>/` and record license/origin.

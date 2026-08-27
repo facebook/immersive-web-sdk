@@ -336,8 +336,8 @@ this.player; // XROrigin (Group) - VR rig root
 this.player.head; // Head tracking (viewer pose)
 this.player.raySpaces.left; // Left controller ray origin
 this.player.raySpaces.right; // Right controller ray origin
-this.player.gripSpaces.left; // Left controller grip position
-this.player.gripSpaces.right; // Right controller grip position
+this.player.gripSpaces.left; // Left controller grip pose
+this.player.gripSpaces.right; // Right controller grip pose
 this.player.secondaryRaySpaces.left; // Secondary left ray
 this.player.secondaryRaySpaces.right; // Secondary right ray
 this.player.secondaryGripSpaces.left; // Secondary left grip
@@ -349,6 +349,10 @@ this.player.head.getWorldPosition(headPos);
 
 const rightHandPos = new Vector3();
 this.player.gripSpaces.right.getWorldPosition(rightHandPos);
+
+// Attach a held model so it inherits both grip position and orientation.
+heldModel.position.set(0, -0.02, 0.05); // Model-local alignment offset.
+this.player.gripSpaces.right.add(heldModel);
 ```
 
 ### 10. Audio System
@@ -1007,7 +1011,8 @@ RaycastSpace.Screen; // Phone AR screen touch (tap-to-place)
 
 ### 23. Follower Component
 
-Makes an entity follow another Object3D (typically the player's head for head-locked UI).
+Makes an entity follow another Object3D with thresholded, smoothed motion. It
+can keep compact global UI discoverable without rigidly head-locking it.
 
 ```typescript
 import { Follower, FollowBehavior } from '@iwsdk/core';
@@ -1289,30 +1294,30 @@ Before writing custom code, check if IWSDK already provides the functionality. R
 
 ### Reinvention Risk Table
 
-| What you might build from scratch     | What IWSDK already provides                                                  |
-| ------------------------------------- | ---------------------------------------------------------------------------- |
-| GLTF loading with GLTFLoader          | `AssetManager.loadGLTF()` or a `defineAssets()` project catalog              |
-| Ray/line mesh for controller pointing | `RayPointer` — cylinder + gradient shader + cursor circle (auto)             |
-| Hover/click detection with Raycaster  | `Interactable` + `Hovered` + `Pressed` components                            |
-| Custom skybox sphere                  | `DomeGradient` or `DomeTexture` component                                    |
-| PBR environment lighting              | `IBLGradient` or `IBLTexture` component                                      |
-| Teleport arc + landing marker         | `LocomotionSystem` — full visuals included                                   |
-| Comfort vignette for motion           | `LocomotionSystem` — `comfortAssist` config                                  |
-| Controller 3D models                  | Auto-loaded from WebXR Input Profiles                                        |
-| Hand tracking meshes                  | `AnimatedHand` with skeletal mesh + outline                                  |
-| Object grab + manipulation            | `OneHandGrabbable` / `TwoHandsGrabbable` / `DistanceGrabbable`               |
-| Hit-test against real world           | `EnvironmentRaycastTarget` component                                         |
-| Spatial audio                         | `AudioSource` component with pooling                                         |
-| Camera feed texture                   | `CameraSource` component                                                     |
-| Depth occlusion shader                | `DepthOccludable` component                                                  |
-| HUD / screen-space UI                 | `ScreenSpace` component with CSS units                                       |
-| Follow-head billboard                 | `Follower` component                                                         |
-| Scene cleanup on level change         | `LevelSystem` + `LevelTag` (automatic)                                       |
-| Gamepad button debouncing             | `StatefulGamepad` — `getButtonDown()` / `getButtonUp()`                      |
-| Manual GPU cleanup with traverse      | `entity.dispose()` — destroys entity + cleans up geometry/materials/textures |
-| Manual world-space positioning        | `setWorldPosition()` / `setWorldQuaternion()` utilities                      |
-| Manual XR hit-test setup              | `EnvironmentRaycastTarget` component + `EnvironmentRaycastSystem`            |
-| Manual camera video feed              | `CameraSource` component + `CameraUtils` static class                        |
+| What you might build from scratch      | What IWSDK already provides                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| GLTF loading with GLTFLoader           | `AssetManager.loadGLTF()` or a `defineAssets()` project catalog              |
+| Ray/line mesh for controller pointing  | `RayPointer` — cylinder + gradient shader + cursor circle (auto)             |
+| Hover/click interaction with Raycaster | `Interactable` + `Hovered` + `Pressed` components                            |
+| Custom skybox sphere                   | `DomeGradient` or `DomeTexture` component                                    |
+| PBR environment lighting               | `IBLGradient` or `IBLTexture` component                                      |
+| Teleport arc + landing marker          | `LocomotionSystem` — full visuals included                                   |
+| Comfort vignette for motion            | `LocomotionSystem` — `comfortAssist` config                                  |
+| Controller 3D models                   | Auto-loaded from WebXR Input Profiles                                        |
+| Hand tracking meshes                   | `AnimatedHand` with skeletal mesh + outline                                  |
+| Object grab + manipulation             | `OneHandGrabbable` / `TwoHandsGrabbable` / `DistanceGrabbable`               |
+| Hit-test against real world            | `EnvironmentRaycastTarget` component                                         |
+| Spatial audio                          | `AudioSource` component with pooling                                         |
+| Camera feed texture                    | `CameraSource` component                                                     |
+| Depth occlusion shader                 | `DepthOccludable` component                                                  |
+| HUD / screen-space UI                  | `ScreenSpace` component with CSS units                                       |
+| Follow-head billboard                  | `Follower` component                                                         |
+| Scene cleanup on level change          | `LevelSystem` + `LevelTag` (automatic)                                       |
+| Gamepad button debouncing              | `StatefulGamepad` — `getButtonDown()` / `getButtonUp()`                      |
+| Manual GPU cleanup with traverse       | `entity.dispose()` — destroys entity + cleans up geometry/materials/textures |
+| Manual world-space positioning         | `setWorldPosition()` / `setWorldQuaternion()` utilities                      |
+| Manual XR hit-test setup               | `EnvironmentRaycastTarget` component + `EnvironmentRaycastSystem`            |
+| Manual camera video feed               | `CameraSource` component + `CameraUtils` static class                        |
 
 ### Asset Loading (AssetManager)
 
@@ -1463,7 +1468,7 @@ These visuals are automatically created and managed by IWSDK systems:
 10. **DON'T** confuse PhysicsBody (motion) with PhysicsShape (collision + material)
 11. **DON'T** use raw `GLTFLoader`/`TextureLoader` — use `AssetManager` for caching, DRACO/KTX2 setup
 12. **DON'T** use `scene.add()` — use `createTransformEntity()` for proper ECS integration
-13. **DON'T** use `new Raycaster()` — use `Interactable` component for BVH-accelerated XR interaction
+13. **DON'T** replace IWSDK interaction with `new Raycaster()` — raw raycasters are valid for custom geometric queries, but the caller owns ECS entity mapping, target filtering, and pointer lifecycle
 14. **DON'T** add environment components (`DomeGradient`/`IBLTexture`/etc.) to arbitrary entities — must go on the level root (`world.activeLevel.value`)
 15. **DON'T** forget `_needsUpdate` after changing environment properties — changes are silently ignored without `entity.setValue(DomeGradient, '_needsUpdate', true)`
 16. **DON'T** use `entity.destroy()` for objects with GPU resources — use `entity.dispose()` which also cleans up geometry/materials/textures

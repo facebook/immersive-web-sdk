@@ -171,6 +171,10 @@ Default is **No** because physics adds complexity. You can enable it later if ne
 
 New projects include native scene JSON under `public/scenes/`. You can load that scene directly from `World.create`, edit it through the development editor, or keep building entities in code when procedural behavior is a better fit.
 
+IWSDK loads 3D model assets as GLTF or GLB. Convert source formats such as FBX
+or OBJ before adding them to `src/assets.ts`; Chapter 4 covers the supported
+asset types and conversion workflow.
+
 ### Development Setup
 
 #### Git Repository

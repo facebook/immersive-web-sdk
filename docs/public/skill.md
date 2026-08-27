@@ -287,17 +287,23 @@ world.input.keyboard.getKeyUp('KeyE');        // released this frame
 
 ```typescript
 world.playerEntity           // Entity wrapping XROrigin Group
-world.playerHeadEntity       // Entity for head space
+world.playerHeadEntity       // Entity for head space; not a default UI parent
 world.playerSpaceEntities    // { head, raySpaces, gripSpaces, indexTipSpaces }
-
-// Attach a HUD to the player's head
-const hud = world.createTransformEntity(hudMesh, {
-  parent: world.playerHeadEntity,
-  persistent: true,
-});
 ```
 
+`ScreenSpace` is a browser-viewport HUD and returns to world space in XR. For
+immersive UI, default to an authored world transform or attach contextual UI to
+the object it controls. Use a thresholded `Follower` targeting
+`world.player.head` only when compact global UI must remain discoverable.
+Reserve direct `world.playerHeadEntity` parenting for tiny, transient,
+non-interactive markers that require exact view alignment; do not head-lock
+menus or persistent panels. See https://iwsdk.dev/concepts/spatial-ui/hud.html.
+
 ### Asset Management
+
+IWSDK loads 3D models as GLTF or GLB. For FBX, OBJ, or another source format,
+use Blender's **File → Import**, then **File → Export → glTF 2.0**, and register
+the converted output in the asset manifest.
 
 ```typescript
 // getGLTF returns a fresh scene graph clone by default

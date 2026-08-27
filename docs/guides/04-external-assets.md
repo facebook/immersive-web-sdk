@@ -172,7 +172,10 @@ GLTF is currently the only official 3D model format supported by IWSDK. We chose
 - **Industry standard**: Backed by Khronos Group and supported by all major 3D tools
 - **WebXR ready**: Perfect format for immersive web experiences
 
-If you're working with other 3D formats like FBX, OBJ, or 3DS Max files, you can easily convert them to GLTF using free, open-source software like [Blender](https://www.blender.org). Simply import your model into Blender and export as GLTF or GLB.
+If you're working with other 3D formats like FBX, OBJ, or 3DS Max files, convert
+them with [Blender](https://www.blender.org): **File → Import** the source file,
+then **File → Export → glTF 2.0** and choose GLB or GLTF. Add the converted file,
+not the source FBX/OBJ, to the IWSDK asset manifest.
 
 ::: tip GLTF Optimization
 

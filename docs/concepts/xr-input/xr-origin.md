@@ -10,9 +10,10 @@ For first-person browser movement, move `world.player` and leave `world.camera` 
 
 ## Spaces
 
-- `head`: viewer pose (HMD). Parent head‑attached UI here.
-- `raySpaces.left/right`: target‑ray spaces for pointing.
-- `gripSpaces.left/right`: grip spaces for holding tools/objects.
+- `head`: viewer pose (HMD). Use it as a tracking target; avoid parenting normal
+  UI panels directly to it.
+- `raySpaces.left/right`: target‑ray poses for pointing.
+- `gripSpaces.left/right`: full grip poses for holding tools/objects.
 - `secondaryRaySpaces.left/right`: additional spaces used when a non‑primary source is present.
 - `secondaryGripSpaces.left/right`: likewise for grips.
 
@@ -27,6 +28,19 @@ Each frame (`XRInputManager.update`):
 3. If the source lacks `gripSpace`, the adapter mirrors the ray transform into the grip.
 4. Update the head from `getViewerPose`.
 5. Call `xrOrigin.updateMatrixWorld(true)` before pointer updates.
+
+## Orientation conventions
+
+Each XR space contains both position and orientation. The local negative Z axis
+of a target-ray space is its pointing direction. A controller grip uses the
+device profile's physical holding pose, which is not necessarily parallel to
+the pointing ray.
+
+Parent a held model to a grip space, then adjust the model's local position and
+rotation so its handle aligns with the controller. Do not copy only the grip
+position or assume the ray and grip orientations are interchangeable. When an
+input source has no `gripSpace`, IWSDK mirrors its ray pose into the matching
+grip space.
 
 ## Using spaces in your app
 
@@ -43,13 +57,23 @@ gadget.position.set(0, -0.02, 0.05);
 world.input.xr.xrOrigin.gripSpaces.left.add(gadget);
 ```
 
-Head‑locked UI:
+If the model's authored axes do not match the controller handle, set its local
+`rotation` or `quaternion` before attaching it. That alignment is specific to
+the model; it is not a universal grip-space correction.
+
+Exact view-aligned marker (limited use):
 
 ```ts
-const hud = createReticleOrHUD();
-hud.position.set(0, 0, -0.6);
-world.input.xr.xrOrigin.head.add(hud);
+const marker = createSmallAimMarker();
+marker.position.set(0, 0, -1);
+world.input.xr.xrOrigin.head.add(marker);
 ```
+
+Direct children inherit every head movement. Reserve this for small, transient
+markers that require exact view alignment—not menus, text panels, or persistent
+status UI. Prefer world-space placement for ordinary UI and a thresholded
+`Follower` when compact global UI must remain discoverable. See
+[HUD Placement](/concepts/spatial-ui/hud).
 
 ## Coordinate spaces and conversions
 

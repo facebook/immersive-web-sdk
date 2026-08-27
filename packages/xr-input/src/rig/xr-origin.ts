@@ -8,23 +8,36 @@
 import { Group, Matrix4 } from 'three';
 
 export class XROrigin extends Group {
+  /** Viewer pose relative to this origin, updated from XRFrame.getViewerPose. */
   public readonly head: Group;
 
+  /**
+   * Primary target-ray poses copied from XRInputSource.targetRaySpace.
+   * Local -Z is the pointing direction used by WebXR ray interactions.
+   */
   public readonly raySpaces = {
     left: new Group(),
     right: new Group(),
   };
 
+  /**
+   * Primary controller grip poses copied from XRInputSource.gripSpace.
+   * Attach held objects as children and tune their local transform for the
+   * model; grip orientation is device/profile-defined and can differ from the
+   * target ray. Sources without a gripSpace fall back to the ray pose.
+   */
   public readonly gripSpaces = {
     left: new Group(),
     right: new Group(),
   };
 
+  /** Target-ray poses for additional same-handed input sources. */
   public readonly secondaryRaySpaces = {
     left: new Group(),
     right: new Group(),
   };
 
+  /** Grip poses for additional same-handed input sources. */
   public readonly secondaryGripSpaces = {
     left: new Group(),
     right: new Group(),
