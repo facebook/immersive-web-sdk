@@ -10,6 +10,7 @@
       "Skill(iwsdk-grab)",
       "Skill(iwsdk-hosting)",
       "Skill(iwsdk-physics)",
+      "Skill(iwsdk-pwa-packaging)",
       "Skill(iwsdk-scene-composer)",
       "Skill(iwsdk-planner)",
       "Skill(iwsdk-ray)",
