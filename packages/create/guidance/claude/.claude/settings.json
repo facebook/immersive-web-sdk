@@ -8,6 +8,7 @@
       "Skill(iwsdk-debug)",
       "Skill(iwsdk-depth-occlusion)",
       "Skill(iwsdk-grab)",
+      "Skill(iwsdk-hosting)",
       "Skill(iwsdk-physics)",
       "Skill(iwsdk-scene-composer)",
       "Skill(iwsdk-planner)",
