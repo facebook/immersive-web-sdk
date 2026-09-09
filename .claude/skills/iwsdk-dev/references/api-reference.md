@@ -1,10 +1,10 @@
 # IWSDK API Reference & Best Practices
 
-Ground-truth API patterns for IWSDK app development. This file backs the
-`iwsdk-planner` skill: load it whenever you are grounding a plan to real APIs,
-writing IWSDK code, or reviewing it. It contains no process guidance — the
-pipeline lives in `SKILL.md`; phase playbooks live in the sibling
-`references/*.md` files.
+Ground-truth API patterns for IWSDK app development. This file is the shared
+API reference behind `iwsdk-dev`; load it when grounding implementation details,
+writing IWSDK code, or reviewing it. It contains no process guidance. The router
+lives in `SKILL.md`, and the internal planner and iterate playbooks are siblings
+in this directory.
 
 **Version sensitivity:** this reference tracks the SDK at the time the skill
 shipped. For any API your plan depends on, verify the signature against the
@@ -1496,4 +1496,4 @@ These visuals are automatically created and managed by IWSDK systems:
 8. **VR vs AR** - Does this work differently in each mode?
 9. **Input handling** - What controller/hand inputs are needed?
 10. **Audio feedback** - What sounds should play on interactions?
-11. **Select 3D assets** - What models are needed? (see the Asset Strategy section in `build-milestones.md`)
+11. **Select 3D assets** - What models are needed, and what are their licensing, provenance, and performance constraints?

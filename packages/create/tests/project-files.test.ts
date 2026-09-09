@@ -248,8 +248,17 @@ describe('common starter project files', () => {
     expect(paths).toContain('CLAUDE.md');
     expect(paths).toContain('.claude/settings.json');
     expect(paths).toContain('.claude/skills/iwsdk-debug/SKILL.md');
+    expect(paths).toContain('.claude/skills/iwsdk-dev/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-debug/SKILL.md');
-    expect(paths).toContain('.agents/skills/iwsdk-planner/SKILL.md');
+    expect(paths).toContain('.agents/skills/iwsdk-dev/SKILL.md');
+    expect(paths).toContain('.agents/skills/iwsdk-dev/references/planner.md');
+    expect(paths).toContain('.agents/skills/iwsdk-dev/references/iterate.md');
+    expect(paths.some((file) => file.includes('/skills/iwsdk-planner/'))).toBe(
+      false,
+    );
+    expect(paths.some((file) => file.includes('/skills/iwsdk-iterate/'))).toBe(
+      false,
+    );
     expect(paths).toContain('.codex/config.toml');
     expect(paths).toContain('.cursor/rules/scene-json.mdc');
     expect(paths).toContain('.github/instructions/scene-json.instructions.md');
@@ -262,6 +271,33 @@ describe('common starter project files', () => {
     ).toHaveLength(1);
     expect(textFile(files, 'AGENTS.md')).toContain('# IWSDK');
     expect(textFile(files, 'CLAUDE.md')).toContain('# IWSDK project');
+    const emittedPathSet = new Set(paths);
+    for (const file of files.filter(
+      ({ path: filePath }) =>
+        filePath.startsWith('.claude/') && filePath.endsWith('.md'),
+    )) {
+      const contents =
+        typeof file.contents === 'string'
+          ? file.contents
+          : Buffer.from(file.contents).toString('utf8');
+      for (const match of contents.matchAll(/`(\.claude\/[^`\n]+)`/gu)) {
+        expect(emittedPathSet).toContain(match[1]);
+      }
+    }
+    const configuredSkills = JSON.parse(
+      textFile(files, '.claude/settings.json'),
+    )
+      .permissions.allow.filter((entry: string) => entry.startsWith('Skill('))
+      .map((entry: string) => entry.slice('Skill('.length, -1))
+      .sort();
+    const emittedSkills = [
+      ...new Set(
+        paths
+          .filter((filePath) => filePath.startsWith('.claude/skills/'))
+          .map((filePath) => filePath.split('/')[2]),
+      ),
+    ].sort();
+    expect(configuredSkills).toEqual(emittedSkills);
     for (const sharedGuidance of [
       'Explain immersive terms in plain language',
       'The developer owns whether that managed window is headed or headless',

@@ -130,14 +130,14 @@ and filter the JSON instead.
 
 ## Skills
 
-Scene composition, UI authoring, physics, depth occlusion, grab and ray
-interaction testing, ECS frame-stepping, and end-to-end planning each have a
-project skill in the selected harness's standard skill directory. Their
-descriptions handle routing, so they are not restated here.
+Invoke `iwsdk-dev` first for any request that builds, extends, fixes, tunes,
+or polishes the app. It privately selects the greenfield planner path or the
+bounded established-app iteration path; do not look for those paths as separate
+public skills.
 
-The failure worth guarding against is improvising a domain that already has a
-skill because the naive approach looks tractable. Before hand-authoring scene
-JSON, a UIKitML panel, or a physics body, invoke the skill.
+After routing, use scene composition, UI, physics, depth occlusion, grab, ray,
+ECS testing, and debugging skills only when the selected playbook calls for the
+matching specialty.
 
 ## Layout
 

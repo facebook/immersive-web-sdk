@@ -18,21 +18,18 @@ const PACKAGE_ROOT = path.resolve(
   '..',
 );
 const REPO_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
-const PLANNER_FILES = [
+const DEV_FILES = [
   'SKILL.md',
   'references/api-reference.md',
-  'references/build-milestones.md',
-  'references/design-deck.md',
-  'references/grounding.md',
-  'references/ideation.md',
-  'references/verification.md',
+  'references/iterate.md',
+  'references/planner.md',
 ] as const;
 const PORTABLE_SKILL_NAMES = [
   'iwsdk-debug',
   'iwsdk-depth-occlusion',
   'iwsdk-grab',
   'iwsdk-physics',
-  'iwsdk-planner',
+  'iwsdk-dev',
   'iwsdk-ray',
   'iwsdk-scene-composer',
   'iwsdk-ui',
@@ -81,6 +78,9 @@ describe('@iwsdk/create packed contract', () => {
       'dist/template/scenes/immersive.iwsdk.scene.json',
       'dist/guidance/common/AGENTS.md',
       'dist/guidance/agents/.agents/skills/iwsdk-debug/SKILL.md',
+      'dist/guidance/agents/.agents/skills/iwsdk-dev/SKILL.md',
+      'dist/guidance/agents/.agents/skills/iwsdk-dev/references/iterate.md',
+      'dist/guidance/agents/.agents/skills/iwsdk-dev/references/planner.md',
       'dist/guidance/agents/.agents/skills/iwsdk-ui/SKILL.md',
       'dist/guidance/claude/CLAUDE.md',
       'dist/guidance/claude/.claude/rules/scene-json.md',
@@ -91,6 +91,12 @@ describe('@iwsdk/create packed contract', () => {
     ]) {
       expect(files, required).toContain(required);
     }
+    expect([...files].some((file) => file.includes('iwsdk-planner'))).toBe(
+      false,
+    );
+    expect([...files].some((file) => file.includes('iwsdk-iterate'))).toBe(
+      false,
+    );
     expect([...files].some((file) => file.includes('iwsdk-migrate-0-5'))).toBe(
       false,
     );
@@ -213,18 +219,12 @@ describe('@iwsdk/create packed contract', () => {
     expect(copilotRule).toContain('applyTo: "public/scenes/**"');
   });
 
-  it.each(PLANNER_FILES)(
-    'keeps repository and starter planner guidance synchronized: %s',
+  it.each(DEV_FILES)(
+    'keeps repository and starter development guidance synchronized: %s',
     async (relativePath) => {
       const [repositoryCopy, starterCopy] = await Promise.all([
         readFile(
-          path.join(
-            REPO_ROOT,
-            '.claude',
-            'skills',
-            'iwsdk-planner',
-            relativePath,
-          ),
+          path.join(REPO_ROOT, '.claude', 'skills', 'iwsdk-dev', relativePath),
           'utf8',
         ),
         readFile(
@@ -234,7 +234,7 @@ describe('@iwsdk/create packed contract', () => {
             'claude',
             '.claude',
             'skills',
-            'iwsdk-planner',
+            'iwsdk-dev',
             relativePath,
           ),
           'utf8',

@@ -655,7 +655,7 @@ describe('create-iwsdk scene flow E2E', () => {
           appName,
           '.agents',
           'skills',
-          'iwsdk-planner',
+          'iwsdk-dev',
           'SKILL.md',
         ),
       );
