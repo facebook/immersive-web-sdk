@@ -1,201 +1,165 @@
 ---
 name: iwsdk-ui
-description: Create, place, preview, debug, and connect manifest-backed IWSDK UIKitML assets. Use for spatial panels, browser HUDs, UIKitML layout, fonts, editor previews, or runtime element behavior.
-argument-hint: '[panel-name or description of changes]'
+description: Build or modify manifest-backed IWSDK UIKitML with bounded preview, placement, and runtime verification. Use for spatial panels, browser HUDs, UIKitML layout, fonts, editor previews, and runtime element behavior.
+argument-hint: '(use the current request)'
 ---
 
-# UIKitML Asset Workflow
+# IWSDK UI
 
-Treat UIKitML as a first-class renderable asset. Use the managed editor's isolated
-renderer for layout, the scene editor for placement, and the application runtime for
-behavior. Do not change the scene, camera, or component model merely to inspect a
-panel.
+Deliver the requested UI as one verified vertical slice. Use the current request
+from conversation context; do not ask the user to repeat it or create a separate
+design document.
 
-User request is in `$ARGUMENTS`.
+## Choose the required surface
 
-## 1. Find the three stable identities
+Before editing, classify the request:
 
-Every scene-authored panel has three different identities:
+- **UIKitML only**: document layout, styling, fonts, or reusable controls;
+- **spatial panel**: UIKitML plus manifest registration and a scene instance;
+- **runtime UI**: either of the above plus element lookup, events, and state;
+- **ScreenSpace HUD**: browser-camera UI that intentionally returns to its
+  authored world transform in immersive XR.
 
-1. the manifest asset ID, which names the reusable UIKitML definition;
-2. the scene node ID, which names one placed instance;
-3. element `id` attributes, which name fields and controls inside the document.
+Do not add placement, ScreenSpace, runtime state, or camera changes when the
+request does not require them.
 
-Find or add the manifest entry in `src/assets.ts` and keep the source under
-`public/ui/`:
+## Fast path
+
+Inspect the relevant UI, asset manifest, active scene, and direct runtime caller
+with one shell command that prints those files; do not issue a separate Read
+tool call for every file. Then make the first coherent edit before broad
+reference or dependency discovery. Use focused IWSDK reference queries only for
+a concrete unsupported element, property, or runtime API question. Do not open,
+grep, or list `node_modules` at any point in this workflow.
+
+Strict image budget: during implementation, do not open any PNG, JPEG, or WebP
+with the Read tool. Finish the runtime checks first. At the final visual gate,
+create and open exactly one compact `artifacts/ui-runtime-review.jpg` contact
+sheet as described below.
+
+Keep the three stable identities explicit:
+
+1. manifest asset ID;
+2. scene node ID for a placed instance;
+3. UIKitML element IDs used by application code.
+
+Register each file under `public/ui/` as `AssetType.UIKitML` in the configured
+asset manifest. UIKitML is the source of truth; do not generate an intermediate
+JSON representation.
+
+## Author the complete first pass
+
+- UIKit numeric dimensions are centimeters (`100` is one meter).
+- Use stable `id` attributes for every element code must address.
+- Prefer supported explicit properties over CSS shorthand.
+- Reuse the configured Horizon kit and bundled Lucide icons instead of
+  registering replacements in application code.
+- In the stock Horizon kit, assume `<Panel>` renders an opaque light surface;
+  start with dark primary and secondary text unless a preview proves otherwise.
+- Remote fonts can reflow layout. Use a local font when offline availability is
+  a product requirement.
+- Use plain ASCII punctuation in runtime status copy. Do not use em dashes,
+  smart quotes, or other typographic punctuation unless the chosen local font
+  has already rendered that exact glyph successfully.
+
+For a scene-authored instance, use asset content and an explicit transform. In
+the stock starter composition, a front-facing UIKitML panel at negative Z faces
+the default player with identity rotation. Do not add `rotationDeg: [0, 180, 0]`
+unless the existing app establishes that convention or a measured render proves
+it necessary.
+
+The default XR player and an authored non-XR `hero` camera can be on opposite
+sides of a single-sided panel. Preserve the transform required by the requested
+player viewpoint; if an authored evidence camera sees the back face, move or aim
+that camera instead of rotating the product UI away from the player.
+
+When adding UI to an established composition, preserve existing primary UI and
+objects. Start from the app's scale and spacing. In the stock scaffold, use
+roughly `0.25`-`0.32` scale for a secondary panel and keep a same-band panel at
+least `0.75` world meters above the existing central panel, at the same or
+greater depth. Prefer a centered safe region over fragile frame edges.
+
+## Connect runtime behavior
+
+Resolve a scene-authored panel by scene node ID:
 
 ```ts
-import { AssetType, defineAssets } from '@iwsdk/core';
+const panel = world.requireSceneObject<UIKitMLAsset>('PanelNode');
+const status = panel.requireElementById<UIKit.Text>('StatusText');
+const action = panel.requireElementById('Btn_Action');
+status.name = 'StatusText';
+action.name = 'Btn_Action';
+action.addEventListener('click', onAction);
+cleanupFuncs.push(() => action.removeEventListener('click', onAction));
+```
 
-const publicAssetUrl = (path: string) =>
-  `${import.meta.env.BASE_URL}${path.replace(/^\/+/u, '')}`;
+Assign exact runtime names when the request requires controls to be addressable.
+Register listener cleanup. Do not locate panels by transient ECS index, manifest
+URL, or internal document implementation details.
 
-export default defineAssets({
-  'welcome-panel': {
-    name: 'Welcome panel',
-    type: AssetType.UIKitML,
-    url: publicAssetUrl('ui/welcome.uikitml'),
-  },
+For a small scene-authored state machine, use the public ECS surface directly;
+do not inspect `node_modules` to rediscover these contracts:
+
+```ts
+export const PanelState = createComponent('PanelState', {
+  step: { type: Types.Int8, default: 0 },
+  complete: { type: Types.Boolean, default: false },
 });
-```
+export default defineComponents([PanelState]);
 
-A file under `public/ui/` is not placeable until it is registered. The `.uikitml`
-file is the runtime source of truth; never generate an intermediate JSON file.
+class PanelSystem extends createSystem({
+  panel: { required: [PanelState] },
+  activated: { required: [ActionMarker, Pressed] },
+}) {
+  init(): void {
+    this.queries.activated.subscribe('qualify', () => this.advance());
+  }
 
-## 2. Reuse the managed editor
-
-Run commands from the application directory. Reuse a command-ready session instead
-of starting a second server or browser:
-
-```bash
-npx iwsdk dev status
-npx iwsdk dev up --timeout 60000
-npx iwsdk ui assets --raw
-```
-
-`dev up` owns the managed headed browser. Do not launch a second Playwright browser,
-enable Vite's independent opener, or implement a custom UIKit renderer.
-
-## 3. Render the panel in isolation
-
-Use the editor-backed isolated renderer before debugging scene placement:
-
-```bash
-npx iwsdk ui render-preview \
-  --input-json '{"assetId":"welcome-panel","width":800,"height":600}' \
-  --output-file artifacts/welcome-panel.png
-```
-
-This renders the real manifest entry through the real UIKitML parser, fonts, layout,
-and WebGL path on a neutral background. It waits for UIKit render and resource
-signals; do not add fixed frame delays. Re-run the command after every layout change.
-Same-URL sources are reloaded without restarting the server.
-
-## 4. Place and inspect it in the scene editor
-
-For a human-authored placement, open the scene and add the UIKitML asset from the
-asset drawer. For file authoring, use the same asset-only node contract:
-
-```json
-{
-  "id": "welcome-panel-instance",
-  "name": "Welcome panel",
-  "content": { "type": "asset", "asset": "welcome-panel" },
-  "transform": {
-    "position": [0, 1.4, -1.5],
-    "rotationDeg": [0, 180, 0],
-    "scale": 0.5
+  private advance(): void {
+    const panel = this.queries.panel.entities.values().next().value;
+    if (panel == null) return;
+    // Read and write scalar fields with getValue/setValue, then update UIKit.
   }
 }
 ```
 
-```bash
-npx iwsdk scene render-file \
-  --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
-  --output-file artifacts/main-editor.png
-npx iwsdk scene open \
-  --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
-```
+Query result `entities` is a `Set`; use iteration or
+`entities.values().next().value`, never array indexing. `@iwsdk/core` re-exports
+the Three.js types needed for visual feedback, and scene-authored systems may use
+`Pressed` qualification plus the existing app's marker component. Clone shared
+asset materials before per-instance color or emissive changes.
 
-UIKitML surfaces are single-sided. If the isolated preview works but the placed panel
-is invisible, inspect its rotation first. Size a world-space panel with its ordinary
-entity transform scale. There is no `maxWidth`/`maxHeight` fitting layer and no
-editor-visible legacy `PanelUI` component to configure.
+Imported models can use material arrays or emissive-capable material subclasses
+that do not satisfy a narrow `instanceof MeshStandardMaterial` check. For an
+explicit whole-body state tint, traverse every `Mesh`, normalize its material to
+an array, clone each material with `emissive` and `emissiveIntensity`, assign the
+clones back, and update all of them. If an existing `emissiveMap` masks the
+requested solid diagnostic color, clear that map on the clones and set
+`needsUpdate`; do not alter shared source materials.
 
-Use `scene screenshot` for editor/scene evidence. `browser screenshot` is intentionally
-runtime-only and switches the managed workspace to runtime before capturing.
-
-## 5. Edit UIKitML
-
-UIKitML is HTML/CSS-shaped, but it is not a browser engine. Before assuming browser
-behavior, use `npx iwsdk reference search` or the connected IWSDK reference tools to
-confirm supported elements and properties.
-
-Key rules:
-
-- numeric UIKit sizes are centimeters (`100` = 100 cm = 1 m);
-- use stable `id` attributes for elements application code must manipulate;
-- prefer explicit supported declarations over CSS shorthand;
-- parser errors include source locations;
-- relative and remote font URLs are supported, but font completion can change layout;
-- the managed preview settles from UIKit render/font/texture signals, so inspect logs
-  instead of compensating with arbitrary waits.
-
-### Reuse built-in kits, icons, and remote fonts
-
-IWSDK bundles the UIKitML Horizon component kit and Lucide icon set. Select the
-Horizon kit explicitly in `iwsdk.config.json` so the choice is visible to both the
-runtime and editor:
-
-```json
-{
-  "world": {
-    "features": {
-      "spatialUI": { "kit": "horizon" }
+```ts
+object3D.traverse((child) => {
+  if (!(child instanceof Mesh)) return;
+  const source = Array.isArray(child.material) ? child.material : [child.material];
+  const clones = source.map((material) => material.clone());
+  child.material = Array.isArray(child.material) ? clones : clones[0];
+  for (const material of clones) {
+    if ('emissive' in material && 'emissiveIntensity' in material) {
+      const stateMaterial = material as MeshStandardMaterial;
+      stateMaterial.emissiveMap = null;
+      stateMaterial.needsUpdate = true;
+      stateMaterials.push(stateMaterial);
     }
   }
-}
-```
-
-Horizon tags such as `<Panel>`, `<Button>`, `<ButtonIcon>`, and `<ButtonLabel>`
-can then be combined directly with Lucide tags such as `<RectangleGoggles>` or
-`<LogIn>`. Do not install or register either component set in application code.
-
-UIKitML also accepts remote TTF declarations. The starter's
-`public/ui/welcome.uikitml` demonstrates multiple DM Sans weights loaded from
-`fonts.gstatic.com` with `@font-face`; apply the declared family to a root class so
-all descendants inherit it. Keep a local font under `public/` when offline or
-cross-origin availability is a product requirement.
-
-After each edit:
-
-1. rerender with `ui render-preview` and inspect the image;
-2. rerender the scene when placement or scale matters;
-3. inspect `browser logs` for parser, font, texture, or runtime failures.
-
-## 6. Connect runtime behavior
-
-For a code-owned instance, keep the `UIKitMLAsset` returned by the asset manager:
-
-```ts
-import { UIKitMLAsset } from '@iwsdk/core';
-
-const panel = await world.assets.instantiate<UIKitMLAsset>('welcome-panel');
-const entity = world.createTransformEntity(panel);
-const button = panel.requireElementById('xr-button');
-button.addEventListener('click', () => world.launchXR());
-```
-
-For a scene-authored instance, resolve it by stable scene node ID after the level has
-loaded:
-
-```ts
-const panel = world.requireSceneObject<UIKitMLAsset>('welcome-panel-instance');
-const button = panel.requireElementById('xr-button');
-button.setProperties({ display: 'none' });
-```
-
-Do not locate a panel by transient ECS index, manifest URL, or a scan for an internal
-`PanelDocument`. Use the scene node ID and element IDs.
-
-## ScreenSpace is product behavior
-
-Add `ScreenSpace` only when the experience genuinely needs a browser-camera HUD:
-
-```ts
-entity.addComponent(ScreenSpace, {
-  width: '420px',
-  height: '240px',
-  top: '20px',
-  right: '20px',
-  zOffset: 0.2,
 });
 ```
 
-Position and size values are CSS strings. In immersive mode the document returns to
-its authored world transform. Do not add `ScreenSpace`, a backdrop, or a temporary
-camera pose merely to make a panel easier to inspect—the editor already provides the
-correct isolated and in-scene render paths.
+These are known public top-level exports: `createComponent`, `createSystem`,
+`defineComponents`, `Types`, `Entity`, `Pressed`, `UIKitMLAsset`, `UIKit`,
+`Color`, `Mesh`, `MeshStandardMaterial`, and `Object3D`. Import them directly
+from `@iwsdk/core`. Typecheck the implementation; if an import fails, use the
+compiler error or one focused IWSDK reference query. Do not inspect package
+source, declarations, exports, or directories to reconfirm the export chain.
 
 For immersive XR, default to a world-space panel or attach contextual UI to the
 object it controls. Use a thresholded `Follower` targeting `world.player.head`
@@ -206,12 +170,123 @@ alignment. Do not use `ScreenSpace` expecting it to remain camera-attached in
 XR. See https://iwsdk.dev/concepts/spatial-ui/hud.html for the placement
 guidance.
 
-## Completion checklist
+Use `ScreenSpace` only for a real HUD requirement. Its dimensions and offsets are
+CSS strings. Preserve the authored immersive transform and verify browser and XR
+views independently when both modes matter.
 
-- Manifest ID resolves and `ui assets` lists it.
-- Isolated preview is nonblank, correctly laid out, and uses the intended fonts.
-- Scene preview has correct facing, transform scale, and lighting-independent color.
-- Runtime behavior resolves the placed node and required element IDs.
-- Browser logs contain no UIKitML parser, resource, or font errors.
-- No generated UI JSON, temporary ScreenSpace component, backdrop, or camera hack
-  remains.
+## Verify with a bounded loop
+
+Typecheck after the complete first slice, then start or reuse one managed
+session. If no command-ready session exists, run `npx iwsdk dev up --open`
+once. Do not call `dev --help`, separately call `dev open`, restart a healthy
+session, start a second browser, or build a custom UIKit renderer.
+
+1. Run `npx iwsdk ui assets --raw` once to confirm registration.
+2. Render one isolated preview after the first complete layout:
+
+   ```bash
+   npx iwsdk ui render-preview \
+     --input-json '{"assetId":"panel-id","width":800,"height":600}' \
+     --output-file artifacts/panel-preview.png
+   ```
+
+   Always provide `--output-file`; do not accept a temporary screenshot path
+   and add a separate copy step.
+
+3. If spatial placement matters, render the authored hero view once; use
+   `view` only for built-in presets:
+
+   ```bash
+   npx iwsdk scene render-file \
+     --input-json '{"path":"public/scenes/main.iwsdk.scene.json","viewId":"hero"}' \
+     --output-file artifacts/scene-hero.png
+   ```
+
+   Keep the full render result from this call so `visibleNodeIds`, validity,
+   framing, and the PNG are checked together. Do not pipe it through
+   `head`/`tail`/`grep` and rerun only to recover discarded metadata.
+
+4. Exercise each required control through real pointer or XR input and query the
+   named state or live element needed to prove the result.
+5. Capture one final runtime preview from the intended viewpoint. Reuse a
+   required completion-state capture when it already provides that evidence.
+
+For common CLI verification, use these forms directly rather than discovery:
+
+```bash
+npx iwsdk xr status
+npx iwsdk xr enter --input-json '{}'
+npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":0,"y":1.5,"z":-2}}'
+npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}'
+npx iwsdk ecs find --input-json '{"withComponents":["ComponentName"]}'
+npx iwsdk ecs query --input-json '{"entityIndex":12}'
+npx iwsdk browser logs --input-json '{"count":30}'
+npx iwsdk browser reload --input-json '{}'
+```
+
+For a file capture, use `npx iwsdk browser screenshot --output-file <path>`;
+`browser_screenshot` does not accept an `outputPath` input field.
+
+When a UI change requires a regression smoke for an existing
+`DistanceGrabbable`, do not substitute a long `xr select` click. Aim at the
+object, hold select with
+`npx iwsdk xr set-select-value --input-json '{"device":"controller-right","value":1}'`,
+query the entity while held to observe `Grabbed`, then release with the same
+command and `"value":0`. Movement is unnecessary unless the request asks for
+it.
+
+The commands in this section are the supported path. Do not call broad
+`iwsdk`, `ui`, `browser`, `ecs`, or `xr` help. If a shown command fails, use its
+error output and the exact forms above to correct it instead of invoking
+`--help`.
+
+Batch layout fixes before rerendering. By default allow one isolated preview,
+one authored-scene render, and one final runtime capture; add one replacement
+preview only to verify a focused correction. Do not rerender after every small
+edit, repeatedly restart the runtime, or use screenshots to debug input state.
+Keep the whole task under roughly 80 tool calls by batching independent reads
+and related state queries. Check console logs once after final behavior unless a
+new edit creates a concrete reason to check again. Do not capture extra
+diagnostic screenshots for states already proven by named queries.
+For the final visual comparison, create one compact JPEG contact sheet with the
+supplied baseline above the final live-runtime capture, then load only that one
+image into model context. Do not load the full-size PNGs separately. On Windows,
+substitute the two paths in this known command:
+
+```powershell
+powershell.exe -NoProfile -Command 'Add-Type -AssemblyName System.Drawing; $a=[Drawing.Image]::FromFile((Resolve-Path "BASELINE.png")); $b=[Drawing.Image]::FromFile((Resolve-Path "FINAL.png")); $w=600; $ha=[int]($a.Height*$w/$a.Width); $hb=[int]($b.Height*$w/$b.Width); $o=[Drawing.Bitmap]::new($w,$ha+$hb); $g=[Drawing.Graphics]::FromImage($o); $g.DrawImage($a,0,0,$w,$ha); $g.DrawImage($b,0,$ha,$w,$hb); $o.Save((Join-Path (Get-Location) "artifacts/ui-runtime-review.jpg"),[Drawing.Imaging.ImageFormat]::Jpeg); $g.Dispose(); $o.Dispose(); $a.Dispose(); $b.Dispose()'
+```
+
+`artifacts/ui-runtime-review.jpg` is the only image file to open with the Read
+tool. Do not open isolated previews, hero renders, progress captures, completion
+captures, the baseline PNG, or the final PNG separately.
+
+Treat that contact sheet as a bounded layout sanity check, not a request to
+visually prove every state detail. If it shows no blocking overlap, clipping,
+unreadable primary UI, or accidental scene replacement, stop visual inspection.
+Do not create follow-up zooms, crops, or object close-ups. Use the named ECS
+state queries to prove interaction feedback; the evaluator will inspect the
+saved progress and completion artifacts.
+
+Render isolated, hero, progress, completion, and invalid-action files when the
+task requires them, but do not open those files in model context; use render
+metadata, named state queries, and file existence for those checks. After a
+context compaction, continue from the measured state instead of rediscovering
+package exports, CLI command families, or already accepted visual framing.
+
+The final visual check must confirm:
+
+- the complete panel is inside the expected frame;
+- important text and controls remain readable at a compact preview size;
+- primary text has clear contrast against the actual rendered surface;
+- new UI does not touch or obscure existing primary UI or objects;
+- required states differ through a coarse visible treatment, not only fine text.
+  When the task explicitly asks for visually distinct progress/completion or
+  success/error states, change at least a quarter of the panel surface (for
+  example a substantial header block or whole-surface tint) and/or a major
+  scene object's whole-body emissive treatment. A thin accent bar, small chips,
+  icons, and copy changes alone are not sufficient evidence.
+
+Finish with a passing typecheck and production build, no UIKit parser/resource
+errors, and concise runtime evidence. Remove temporary preview files or camera
+workarounds that are not deliverables.

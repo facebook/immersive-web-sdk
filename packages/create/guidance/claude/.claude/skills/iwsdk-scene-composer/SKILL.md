@@ -1,257 +1,244 @@
 ---
 name: iwsdk-scene-composer
-description: Compose editable static IWSDK scenes from text, images, or hybrid references using a shared application asset manifest, v1 scene JSON, modular scene files, and the managed editor's validation and rendering tools. Use for 3D environments, props, architecture, staged scenes, procedural Three.js assets, custom PBR or shader materials, glTF assets, prefabs, patterns, lighting, camera matching, or visual review.
+description: Compose editable IWSDK scenes from text or image references with manifest-backed assets, native scene JSON, bounded visual iteration, and runtime-safe output.
+argument-hint: '(use the current request)'
 ---
 
 # IWSDK Scene Composer
 
-Author native IWSDK assets and scene files. Application code owns geometry and
-materials; scene JSON owns composition; the managed editor provides visual feedback
-and human transform/component adjustment.
+Build the requested scene with the smallest workflow that preserves editability
+and visual quality. Application code owns geometry and materials; scene JSON owns
+composition; the managed editor provides authoritative rendering.
 
-Read these references when relevant:
+## Select a path before discovery
 
-- [scene-format.md](references/scene-format.md) before editing scene JSON;
-- [asset-authoring.md](references/asset-authoring.md) before creating or changing
-  glTF or procedural assets;
-- [text-intake.md](references/text-intake.md) for text-only requests;
-- [image-intake.md](references/image-intake.md) for image or hybrid requests;
-- [composition-patterns.md](references/composition-patterns.md) for decomposition
-  and repetition strategies;
-- [review-and-stop.md](references/review-and-stop.md) before final review.
+Use the **direct path** by default. Choose the **modular path** only when the
+request has multiple independently reusable scene sections, parallel authors,
+recursive imports, or image reconstruction that materially benefits from
+isolated modules.
 
-## Fixed Boundaries
+- Direct path: edit manifest/assets and the final flat scene in place. Do not
+  create scratch modules or run flatten.
+- Modular path: author independent valid modules, render them only when useful,
+  compose them through imports, then flatten exactly once before runtime use.
 
-- Use only `iwsdk.scene.v1`. There is no compatibility schema.
-- Scene files are the composition source of truth. Create and edit them with normal
-  filesystem tools under `public/scenes/`.
-- Scene JSON has one renderable content kind: `asset`. It does not define models,
-  primitive geometry, material resources, or material overrides.
-- The default export of the configured application asset manifest is the asset source
-  of truth. It may contain URL-backed glTF and UIKitML entries plus parentless
-  `Object3D` prototypes with arbitrary Three.js geometry and materials.
-- The application runtime and editor import the same manifest module independently.
-  Never depend on shared object identity, iframe messaging, DOM state, or a live
-  runtime world when defining assets.
-- Humans use the editor for selection, hierarchy, transforms, components, root
-  lighting, and preview visibility. They do not edit geometry or materials there.
-- Agents may edit asset TypeScript and scene JSON, then use the editor to validate and
-  render the result.
+A scene with many nodes is not automatically modular. Repetition belongs in
+prefabs or deterministic patterns, not one file per object.
 
-The public scene MCP surface is intentionally small:
+## Fixed boundaries
 
-```text
-scene_open
-scene_render_file
-scene_flatten_file
-scene_get_state
-scene_get_capabilities
-scene_screenshot
-scene_select
-scene_set_camera
-scene_set_preview_visibility
-scene_measure_image_regions
-```
+- Use `iwsdk.scene.v1` and meters.
+- Scene JSON contains composition, transforms, constraints, components,
+  prefabs, and patterns. It never contains URLs, primitive geometry, material
+  definitions, or material overrides.
+- Register glTF, UIKitML, and deterministic parentless `Object3D` prototypes in
+  the configured `defineAssets()` manifest.
+- Import Three.js runtime classes from `@iwsdk/core`.
+- Root environment components belong in the scene document `components` map.
+- Preserve existing authored IDs and human edits unless the request replaces
+  them explicitly.
 
-Document creation and mutation happen through direct file edits. Do not look for MCP
-create/add/update/remove/patch/save/compose/review/publish tools.
+## Bounded opening
 
-When MCP is unavailable, use the CLI equivalents:
+Read the applicable scoped scene/assets instructions and inspect
+`iwsdk.config.json`, the configured asset manifest, relevant asset modules, and
+active scene in one bounded pass. Load a skill reference only for the path that
+needs it:
 
-```bash
-npx iwsdk dev status
-npx iwsdk dev up
-npx iwsdk scene capabilities --raw
-npx iwsdk scene render-file \
-  --input-json '{"path":"public/scenes/room.iwsdk.scene.json","viewId":"hero"}' \
-  --output-file artifacts/room.png
-npx iwsdk scene flatten \
-  --input-json '{"path":"public/scenes/room.composition.iwsdk.scene.json","outputPath":"public/scenes/room.iwsdk.scene.json"}' --raw
-npx iwsdk scene open \
-  --input-json '{"path":"public/scenes/room.iwsdk.scene.json"}' --raw
-npx iwsdk scene state --raw
-```
+- `references/scene-format.md` for an uncertain scene construct;
+- `references/asset-authoring.md` for new procedural or imported assets;
+- `references/text-intake.md` or `references/image-intake.md` for the matching
+  input type;
+- `references/composition-patterns.md` only when prefabs, patterns, or modules
+  are genuinely useful.
 
-`iwsdk dev up` starts the server in the background, launches the configured
-managed editor browser, and waits for the command bridge. Do not edit
-`vite.config.ts` to change browser mode as an ad hoc startup workaround.
+Reach the first asset or scene edit within roughly eight tool calls. Do not begin
+with dependency-tree searches, generated declarations, repeated capability
+queries, or marketplace browsing.
 
-`scene_render_file` renders a file without replacing the editor's active document,
-but it still uses the managed editor browser for manifest evaluation and WebGL.
-If startup reports `dev_browser_not_ready`, inspect `iwsdk dev status` and
-`iwsdk dev logs --tail 100`. Retry only when the diagnostics indicate a transient
-startup failure. Do not invent a custom CPU or Playwright renderer and present it as
-authoritative editor evidence. Preserve the structured failure, continue
-type/schema/build checks that remain meaningful, and report the visual-verification
-gate as blocked.
+For the routine direct path, the scaffold's scoped asset/scene rules plus the
+existing manifest and scene are sufficient. Do not load the long scene-format
+reference for flat nodes, components, or authored views, even when the assets
+themselves use custom geometry. Load `scene-format.md` only for imports,
+prefabs, patterns, or after a concrete scene-schema rejection. Load
+`asset-authoring.md` only when external models, custom geometry, or shaders need
+contracts beyond the scoped asset rule.
 
-Camera parameters are intentionally distinct: `view` accepts only the built-in
-presets (`current`, `top`, `front`, `back`, `left`, `right`, `quarter`, `orbit`),
-while `viewId` selects an exact camera declared in `authoring.views`. Outside
-immersive XR, a loaded level's saved hero view owns runtime framing and
-supersedes the initial `World.create({ render: { camera } })` pose. In XR, the
-tracked player rig owns the camera, so the player-spawn view is a separate
-required framing check.
+## Compose from large decisions to detail
 
-## Workflow
+Reduce the request to required anchors, silhouette, scale, support contacts,
+negative space, material response, hero framing, and measurable acceptance
+criteria. A single source image proves only visible geometry; state assumptions
+instead of inventing hidden structure.
 
-### 1. Specify
+Build in this order:
 
-Turn the request into a compact implementation brief:
+1. support surface, room massing, and environment light;
+2. identity-critical assets and their proportions;
+3. repeated secondary detail with prefabs or deterministic patterns;
+4. deliberate hero and diagnostic views;
+5. material and lighting refinement.
 
-- required and optional features;
-- source evidence regions for image input;
-- silhouette, proportions, parts, negative space, contacts, and material response;
-- hero and diagnostic views;
-- measurable acceptance criteria;
-- assumptions, uncertainty, and fidelity ceiling.
+Prefer existing manifest assets when they fit. Search MetaVR or another asset
+source only when the request benefits from a ready-made model. Use procedural
+asset code when dimensions, articulation, semantic parts, or deterministic
+variation matter. Copy selected external files into project-owned storage; do
+not persist temporary CDN URLs.
 
-A single image proves visible composition, not hidden geometry. Do not silently invent
-occluded detail or lower requested fidelity.
+Every visible required anchor needs real asset content. Groups provide hierarchy,
+not visible mass. Keep transforms explicit and IDs stable.
 
-### 2. Plan Assets And Modules
+## Add stateful interaction without source archaeology
 
-Call `scene_get_capabilities` once. Inspect `src/assets.ts` and existing asset modules.
+When the requested scene includes a small stateful interaction, progression
+loop, or recovery path, keep it in one project system with project components.
+The supported
+public pattern is `createComponent` + `defineComponents`, then `createSystem`
+queries whose `entities` values are Sets. React to ray activation with a query
+qualified by `Pressed`; inspect or move scene-authored entities through each
+queried entity's `object3D`. Read and write scalar component fields with
+`getValue` and `setValue`.
 
-Choose an external asset source deliberately:
+Prefer `Types.Int8`, `Types.Boolean`, `Types.Float32`, or `Types.String` for
+ordinary authored state. Encode a small finite slot/state set as an integer or
+string; do not introduce `Types.Enum` and inspect ECS package declarations just
+to model a few values.
 
-- Use the configured MetaVR asset search, or
-  `npx @meta-quest/metavr --json asset search "<query>"`, for ready-made static
-  props and background dressing. Results provide previews plus GLB/FBX downloads,
-  but do not promise semantic subparts, rigging, articulation, or independently
-  editable pieces. Inspect the downloaded hierarchy, and copy selected files into
-  project-owned storage instead of persisting a returned CDN URL.
-- Use `npx @drawcall/market skill` and `npx @drawcall/market types`, then search a
-  concrete need with `npx @drawcall/market search "<query>" --type <type> --limit 3`,
-  when an installable reusable asset, template, or provider-generated result is a
-  better starting point. Preview finalists and install the exact printed
-  `name@version`; trust the install output for consumer paths.
-- Drawcall Market is a marketplace/install/generation CLI, not a universal
-  procedural-geometry engine. When the request depends on controllable parts,
-  parametric dimensions, articulation, or code-driven variation and no suitable
-  code-backed template exists, author a deterministic Three.js `Object3D` prototype.
+```ts
+export const InteractiveItem = createComponent('InteractiveItem', {
+  slot: { type: Types.Int8, default: 0 },
+  active: { type: Types.Boolean, default: false },
+});
+export default defineComponents([InteractiveItem]);
 
-For every visible form, choose one of:
+class InteractionSystem extends createSystem({
+  items: { required: [InteractiveItem] },
+  controlPressed: { required: [ControlState, Pressed] },
+}) {
+  init(): void {
+    this.queries.controlPressed.subscribe('qualify', () => this.evaluate());
+  }
 
-1. reuse an existing manifest asset;
-2. add a glTF entry to the manifest;
-3. register a UIKitML file with `AssetType.UIKitML`;
-4. create a deterministic parentless `Object3D` prototype in code and register it;
-5. assemble existing assets with a scene prefab or module.
-
-Create custom geometry and materials in asset code, not JSON. Prefer separate
-`*.scene-asset.ts` modules for substantial procedural assets and import their
-prototypes into `src/assets.ts`.
-
-For initial construction, plan independent semantic groups as standalone scratch
-scene modules. Give each module a local origin, size envelope, attachment points,
-required views, and asset IDs. Asset and component IDs are application-global;
-imported node and prefab IDs are namespaced. Imports are an authoring-only assembly
-mechanism, never a runtime or editable-project format.
-
-### 3. Build
-
-Author assets first, then scene JSON. Build in dependency order:
-
-1. support/stage and representative lighting;
-2. large composition masses;
-3. identity-critical groups;
-4. repeated secondary detail;
-5. hero camera and final environment.
-
-Use meters, stable descriptive IDs, deterministic ordering, and explicit transforms.
-Groups supply hierarchy, never visible mass. Use `castShadow` and `receiveShadow` on
-asset nodes only when needed. Use prefabs and patterns for repetition; keep repeated
-asset prototypes resource-sharing friendly.
-
-### 4. Validate And Materialize
-
-With the managed editor command-ready, call `scene_render_file` on every changed
-scratch module, then the composition root. It resolves imports for authoring preview,
-validates schema and manifest references, lowers the scene, and returns a PNG plus
-diagnostics without changing the active document. Fix failures in the owning asset or
-scratch file.
-
-After the composition root passes, run `scene_flatten_file` / `iwsdk scene flatten`
-once to materialize an import-free final scene. The command preserves import wrapper
-groups, validates the output, and refuses to write if its runtime hash differs from
-the composed source. This is a one-way publication boundary: the flat file becomes
-the sole source of truth, and later scratch-module changes must not be re-flattened
-over human edits.
-
-Call `scene_open` only on the flattened file for live collaboration. Import-bearing
-files remain renderable composition previews but are never opened as editable scenes
-and never load in the application runtime.
-
-Use `scene_get_state` for selection, hashes, diagnostics, dirty/conflict state, runtime
-readiness, and render statistics. Use camera, screenshot, selection, and preview
-visibility tools only when their live-editor context is useful.
-
-### 5. Review And Refine
-
-Review in three passes:
-
-1. **Layout**: hierarchy, scale, support contacts, and arrangement.
-2. **Geometry**: silhouette, proportions, parts, negative space, and alternate views.
-3. **Final**: material response, color, lighting, environment, and hero framing.
-
-Keep review orchestration and evidence outside the editor. The editor supplies
-authoritative screenshots, hashes, camera state, diagnostics, and render measurements.
-Derive comparisons, defect lists, lineage, and stop decisions in ordinary task files.
-
-Fix the highest-impact defect in its owning asset or scene module, rerender that file,
-then rerender the root. Default to two focused correction rounds. Stop earlier on a
-repeated defect, oscillation, plateau, missing input/asset, or representation ceiling.
-
-### 6. Finish
-
-Finish only when:
-
-- every scratch module and the composition root validates and renders;
-- the final editable scene is flattened and contains no `imports`;
-- the active editor state is clean and conflict-free;
-- required views are nonblank and correctly framed;
-- required features pass measurable and visual checks;
-- manifest asset IDs resolve in both editor and application runtime;
-- the application build and selected scene load without blocking errors.
-
-If a required gate is unavailable, finish with an explicit blocked or
-accepted-with-gaps result. Passing a local schema check, production build, or custom
-diagnostic image does not substitute for authoritative editor renders and state.
-
-## Modular Composition
-
-```json
-{
-  "version": "iwsdk.scene.v1",
-  "units": "meters",
-  "imports": [
-    {
-      "id": "reading-nook",
-      "src": "./modules/reading-nook.iwsdk.scene.json",
-      "transform": { "position": [1.8, 0, -0.6] }
+  private evaluate(): void {
+    for (const entity of this.queries.items.entities) {
+      const position = entity.object3D.position;
+      // Compare measured positions, update authored state, and render feedback.
     }
-  ],
-  "resources": {},
-  "nodes": []
+  }
 }
 ```
 
-Each scratch module must be valid by itself. Imports resolve recursively in
-declaration order. The import entry becomes a transform group. The composition root
-owns global components, environment, metadata, and authoring settings. Cycles, unsafe
-IDs, missing files, duplicate namespaced IDs, and invalid modules fail composition.
+`createComponent`, `createSystem`, `defineComponents`, `Types`, `Pressed`,
+`UIKitMLAsset`, `UIKit`, `Color`, `Mesh`, `MeshStandardMaterial`, `Object3D`, and
+`Vector3` are public top-level exports from `@iwsdk/core`. For a scene-authored
+UIKitML surface, resolve its stable node ID with
+`world.requireSceneObject<UIKitMLAsset>('ControlPanel')` and use stable element
+IDs. For a bespoke, size-controlled surface, use a styled root `<div>`; Horizon
+`<Panel>` and `<Button>` apply their own component chrome and should be used only
+when that appearance is wanted. UIKit numeric layout values are centimeters,
+and the surface front is local `+Z`. If a same-URL UIKitML edit looks stale,
+reload the managed browser once and rerender; do not add cache-probe content or
+inspect package source. Do not inspect `node_modules`, generated declarations,
+or package exports to reconfirm these contracts; use the compiler or one focused
+reference query only if a concrete call fails.
 
-For parallel initial construction, assign one scratch module file per worker. Never
-let two workers edit one file. Render modules independently, import only passing
-modules, correct cross-module scale, contact, occlusion, lighting, and framing at the
-composition root, then flatten exactly once. Parallel module iteration ends at that
-boundary; continue all later edits in the flat file.
+Use the common scene interaction payloads directly:
+`"OneHandGrabbable": {}` for nearby squeeze manipulation and
+`"RayInteractable": {}` for ray activation. `Grabbed` and `GrabSystem` are
+public top-level exports; `Grabbed` is a transient tag managed by `GrabSystem`,
+and `forceRelease(entity)` is its supported release method. These contracts do
+not require package-source or declaration inspection.
 
-## Regeneration And Provenance
+For visual state changes, mutate project-owned mesh materials/transforms and
+UIKit text or styles. When the experience needs a large environmental change,
+author that backdrop, light, particle field, or focal surface as a project-owned
+asset, give its scene node a project component, and mutate it through a normal
+system query. Do not reach through `world.activeLevel`, `LevelRoot`,
+`EnvironmentSystem`, or root `DomeGradient`/IBL internals merely to make a state
+look different. Project-owned lighting, color, particles, geometry, and panel
+feedback are sufficient and portable.
 
-Preserve stable IDs when revising the flat file. Never overwrite unrelated
-human-authored files or re-flatten over editor changes. Record the skill/runtime
-versions, input hashes, composition/final/module paths, capability hash,
-source/composed/runtime hashes, assumptions, and fidelity ceiling in authoring
-metadata or adjacent task evidence.
+## Validate and review
+
+Typecheck the complete first slice before starting the managed editor. Reuse one
+command-ready session; do not launch a separate browser or custom renderer.
+
+Compose the initial product view for the app's ordinary starting player pose,
+not only for an authored camera or a headset pose moved during testing. Keep the
+required anchors in a comfortable forward field of view and interaction range.
+In the stock scaffold, the starting viewer is near `[0, 1.6, 0]` and looks down
+negative Z: primary no-locomotion content normally belongs around `z = -0.5` to
+`-2.5`. Positive Z is behind the player. Do not place the main interaction
+surface or required hero anchors there and rely on the user turning around.
+After any diagnostic camera or headset movement, return to the starting pose and
+verify one live frame there. Initial, progress, and completion evidence should
+use the same useful product viewpoint unless the state itself requires a small
+change; do not make visual quality depend on a one-off inspection pose. If that
+starting-pose frame omits a required primary anchor or shows mostly empty space,
+correct authored transforms before continuing with behavior testing.
+
+For the direct path:
+
+1. render the authored hero view once with `viewId`:
+
+   ```bash
+   npx iwsdk scene render-file \
+     --input-json '{"path":"public/scenes/main.iwsdk.scene.json","viewId":"hero"}' \
+     --output-file artifacts/scene-hero.png
+   ```
+
+2. inspect one alternate built-in or authored diagnostic view only when it can
+   reveal scale, contact, or occlusion problems hidden by the hero view;
+3. make one batched correction and rerender only the affected final view;
+4. open the final scene only if live editor collaboration or state inspection is
+   required.
+
+For the modular path, validate modules that own meaningful independent geometry,
+then the composition root. Flatten once after the root passes. Never open an
+import-bearing scene as the runtime/editable document, and never re-flatten over
+later human edits.
+
+Use `view` only for built-in presets such as `front`, `top`, `quarter`, or
+`orbit`; use `viewId` for a camera declared in `authoring.views`. Check the
+default immersive player viewpoint separately when the experience runs in XR.
+The command above is the supported file-render path. Do not redirect its JSON
+to scratch files, copy screenshots out of temporary directories, parse nested
+result payloads, or call `render-file --help` after it succeeds.
+The authored hero view and the tracked XR player are separate evidence. Do not
+temporarily edit the project camera, restart the runtime, or manufacture a
+browser view solely to make a live screenshot duplicate the hero framing.
+
+Default visual budget: at most three scene renders, two compact image reads, and
+one correction round for the direct path. Expand only to diagnose a specific
+failed acceptance criterion. Do not rerender every node or asset independently,
+repeat successful status/capability probes, or turn review into an open-ended
+camera search.
+
+For stateful scenes, prove progression, rejection, recovery, and completion
+with component values, entity transforms, and interaction results. Save any
+required initial/progress/completion runtime screenshots, but do not read each
+raw PNG, move the headset solely to inspect transient text, or repeatedly chase
+a short-lived visual state. If a human-facing sanity check is still useful,
+inspect one compact final contact sheet and stop when it has no blocking defect.
+
+Use these common verification forms directly instead of opening CLI help:
+
+```bash
+npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.15}'
+npx iwsdk ecs query --input-json '{"entityIndex":12}'
+npx iwsdk browser screenshot --output-file artifacts/state.png
+```
+
+The final visual gate checks:
+
+- required anchors are present, recognizable, supported, and correctly scaled;
+- the composition has useful depth and intentional negative space;
+- materials, color, environment, and lighting form one coherent visual language;
+- hero and required diagnostic views are nonblank and avoid severe clipping or
+  occlusion;
+- runtime framing remains valid and no starter content survives unintentionally.
+
+Finish only when the final scene validates, manifest IDs resolve, the production
+build passes, and required visual checks pass. Do not create provenance reports,
+design decks, or review documents unless the user requests them; concise final
+evidence is enough.

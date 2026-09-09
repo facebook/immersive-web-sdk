@@ -1,31 +1,79 @@
 ---
 name: iwsdk-physics
-description: Guide for implementing physics in IWSDK projects. Use when adding physics simulation, configuring rigid bodies, collision shapes, applying forces, creating grabbable physics objects, or troubleshooting physics behavior.
+description: Add or repair IWSDK rigid-body simulation, collision shapes, forces, and physics-aware grabbing. Use for gravity, falling, collision, bouncing, kinematic motion, or physics tuning.
+argument-hint: '(use the current request)'
 ---
 
-# IWSDK Physics System Guide
+# IWSDK Physics
 
-This skill provides the complete reference and workflow for implementing Havok-powered physics simulation in IWSDK applications. Physics is built on three ECS components (`PhysicsBody`, `PhysicsShape`, `PhysicsManipulation`) orchestrated by the `PhysicsSystem`.
+Use the current request as the specification. Prefer the scaffold's project
+manifest and native scene components over rebuilding physics in TypeScript.
 
-## Enabling Physics
+## Implement the smallest complete physics path
 
-Enable physics in `iwsdk.config.json` with the `physics` feature flag:
+1. Inspect `iwsdk.config.json`, the active scene, and only the source file that
+   owns any requested custom behavior.
+   Make the complete first config/asset/scene edit before starting the dev
+   server. The contracts below are sufficient for the common path: do not call
+   `scene capabilities`, CLI `--help`, search `node_modules`, or inspect
+   generated declarations unless a concrete build/runtime error remains after
+   that edit.
+2. Set `world.features.physics` to `true`. The scaffold registers
+   `PhysicsSystem`, `PhysicsBody`, `PhysicsShape`, and `PhysicsManipulation`; do
+   not register them again unless the project deliberately replaced bootstrap.
+3. Every colliding entity needs both `PhysicsBody` and `PhysicsShape`:
 
-```jsonc
-{
-  "scene": "./public/scenes/physics.iwsdk.scene.json",
-  "world": {
-    "xr": { "mode": "vr" },
-    "features": {
-      "physics": true,
-      "grabbing": true,
-      "locomotion": true
-    }
-  }
-}
+   - moving under simulation: `PhysicsBody.state: "DYNAMIC"`;
+   - fixed floor or wall: `PhysicsBody.state: "STATIC"`;
+   - code-driven moving platform: `PhysicsBody.state: "KINEMATIC"`.
+
+4. Match shapes to visible geometry. Use `Sphere`, `Box`, or `Cylinder` with
+   explicit dimensions for primitives. Use `ConvexHull` for a dynamic complex
+   mesh and reserve `TriMesh` for static geometry.
+5. Add only requested material tuning. Start with low restitution and moderate
+   friction; avoid compensating for a missing collider with extreme damping.
+6. For a throwable object, combine a dynamic body and shape with the requested
+   grab component. `OneHandGrabbable` is proximity squeeze; a distance grab
+   also requires `RayInteractable` and `DistanceGrabbable`.
+7. Apply a one-shot force or velocity through `PhysicsManipulation`. For a
+   reset/teleport of an existing body, use `PhysicsSystem.setBodyTransform` so
+   Havok and the render transform remain synchronized.
+
+For simple primitive assets, import `Mesh`, `SphereGeometry`, `BoxGeometry`,
+and `MeshStandardMaterial` from `@iwsdk/core`, construct parentless meshes, and
+add those mesh values directly to the existing `defineAssets({...})` map. Keep
+the render geometry and collider dimensions identical: a sphere of radius `r`
+uses `PhysicsShape: { shape: "Sphere", dimensions: [r, 0, 0] }`; a box sized
+`[w, h, d]` uses `{ shape: "Box", dimensions: [w, h, d] }`.
+
+Read one bundled reference only when needed; do not read the complete set:
+
+- exact component fields and dimensions: `references/component-reference.md`;
+- implementation patterns: `references/workflows.md`;
+- material or system tuning: `references/tuning-and-config.md`.
+
+## Verify behavior, not just source
+
+Run the production build once. Start the app once and inspect the named live
+entities. For falling, collision, force, or kinematic behavior, pause before the
+interesting transition, take a `before` snapshot, step a small fixed number of
+frames, take an `after` snapshot, and diff them. Query the final transform and
+physics state. Capture one final runtime image when spatial layout matters.
+
+Use the documented CLI shape directly; do not call help to rediscover it:
+
+```bash
+npx iwsdk ecs pause --input-json '{}'
+npx iwsdk ecs snapshot --input-json '{"label":"before"}'
+npx iwsdk ecs step --input-json '{"count":8,"delta":0.016}'
+npx iwsdk ecs snapshot --input-json '{"label":"after"}'
+npx iwsdk ecs diff --input-json '{"from":"before","to":"after"}'
+npx iwsdk ecs resume --input-json '{}'
 ```
 
-Setting `physics: true` automatically registers `PhysicsBody`, `PhysicsShape`, `PhysicsManipulation` components and the `PhysicsSystem` at priority `-2`.
+If a gravity body has already settled by the time the bridge is ready, its
+resting transform plus a zero-motion stepped diff is valid collision evidence.
+Do not teleport the body solely to recreate the fall.
 
 Use an options object when you need to select the execution mode or simulation rate. Worker execution is the default; `useWorker: false` runs the same physics runtime and protocol on the main thread for compatibility and diagnostics.
 
@@ -39,63 +87,19 @@ Use an options object when you need to select the execution mode or simulation r
 
 **Only enable physics when needed.** If no objects require dynamic simulation, omit it to avoid overhead.
 
+For a newly composed test fixture, run `scene render-file` on the authored hero
+view once and inspect at most that one image. After a valid, readable hero,
+do not call `scene open`, `scene state`, or `scene screenshot`, and do not create
+alternate editor views. Save the final live browser screenshot to a file but do
+not read it back when the ECS measurements already prove the requested motion.
 
-## Reference files
+Pure rigid-body verification does not require entering XR. The authored `hero`
+view is composition evidence, while the live browser camera can differ. Do not
+temporarily edit `iwsdk.config.json`, restart the runtime, or render extra camera
+angles solely to make a screenshot match the hero view. Save the live capture
+directly with `npx iwsdk browser screenshot --output-file <path>` and let the
+authored render cover deliberate framing.
 
-Read the one the task needs; each is complete on its own.
-
-- **Component fields, enums and shape dimensions** → [references/component-reference.md](references/component-reference.md)
-- **Workflows** — dynamic bodies, static colliders, kinematic platforms, grabbables, forces, custom systems, a full playground example → [references/workflows.md](references/workflows.md)
-- **Material tuning, system priority, `PhysicsSystem` config, scene JSON** → [references/tuning-and-config.md](references/tuning-and-config.md)
-
-## Troubleshooting
-
-**Objects fall through the floor:**
-
-- Ensure the floor entity has both `PhysicsShape` and `PhysicsBody` with `state: PhysicsState.Static`
-- Verify the shape type and dimensions match the visual geometry
-- If the `Auto` or `ConvexHull` is selected for the PhysicsShape of static objects, try to change into `TriMesh`
-- Check that `physics: true` is set in `iwsdk.config.json` world features
-
-**Objects don't move:**
-
-- Confirm `state` is `PhysicsState.Dynamic` (not Static or Kinematic)
-- Check `gravityFactor` is > 0
-- Verify both `PhysicsShape` and `PhysicsBody` are added (both are required)
-
-**Objects are too bouncy or slide too much:**
-
-- Lower `restitution` to reduce bouncing (0 = no bounce)
-- Increase `friction` to reduce sliding (0.8+ for grippy surfaces)
-
-**Objects move too slowly or feel sluggish:**
-
-- Reduce `linearDamping` (0 = no air resistance)
-- Check `density` is not too high (high density = heavy = resists force)
-
-**Poor frame rate with many physics objects:**
-
-- Use simpler shape types (Sphere/Box instead of ConvexHull/TriMesh)
-- Use `TriMesh` only for static objects
-- Explicitly set shape types instead of `Auto` to avoid detection overhead
-- Reduce the number of dynamic bodies; make non-essential objects static
-
-**Grabbed object doesn't follow hand:**
-
-- Ensure `grabbing: true` in features
-- Verify the entity has `RayInteractable` and a grabbable component (`OneHandGrabbable`, `TwoHandsGrabbable`, or `DistanceGrabbable`)
-
-**PhysicsManipulation has no effect:**
-
-- The entity must have a `PhysicsBody` with an active engine body (`_engineBody != 0`)
-- The component is auto-removed after one frame; re-add it for sustained effects
-- Force values may need to be larger; they are scaled by frame delta time
-
-## Performance Tips
-
-1. **Use primitive shapes** (Sphere, Box, Cylinder) over ConvexHull/TriMesh whenever acceptable
-2. **Use `PhysicsState.Static`** for all non-moving objects; static bodies have zero simulation cost
-3. **Explicitly set shape types** in production; avoid `Auto` detection overhead
-4. **Minimize dynamic body count** -- each dynamic body requires per-frame transform sync
-5. **Use damping** to settle objects faster and reduce ongoing simulation work
-6. **TriMesh is for static only** -- it is computationally expensive and should never be used on dynamic bodies
+Make at most one focused correction, then replay the same observation. Stop
+when the requested bodies, collisions, and final state are evidenced. Resume
+ECS time and leave the app in a stable state.

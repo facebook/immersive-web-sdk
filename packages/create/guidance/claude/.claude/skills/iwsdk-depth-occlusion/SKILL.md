@@ -1,135 +1,87 @@
 ---
 name: iwsdk-depth-occlusion
-description: Guide for implementing depth sensing and occlusion in IWSDK projects. Use when adding depth-based occlusion to hide virtual objects behind real-world surfaces, configuring DepthSensingSystem, choosing occlusion modes, or troubleshooting objects that disappear or fail to occlude.
-argument-hint: '[description of depth occlusion task]'
+description: Add or repair IWSDK WebXR depth sensing and real-world occlusion in AR. Use for DepthSensingSystem, DepthOccludable, occlusion modes, or passthrough depth troubleshooting.
+argument-hint: '(use the current request)'
 ---
 
-# Depth Occlusion
+# IWSDK Depth Occlusion
 
-Hide virtual objects behind real-world surfaces using WebXR depth sensing. The system samples a per-pixel depth texture from the XR device and compares it against each virtual fragment's depth — if the real surface is closer, the fragment is faded out.
+Depth occlusion has three independent requirements: the AR session requests
+depth, one depth system is registered, and only intended virtual entities carry
+`DepthOccludable`.
 
-## Setup
+## Implement
 
-Three things are required: XR session depth config, the system, and the component.
+1. Inspect `iwsdk.config.json`, `src/index.ts`, and the active scene in one
+   bounded pass, then make the complete config/system/scene edit before starting
+   the dev server. The contracts below are sufficient for the normal path: do
+   not call scene capabilities, CLI `--help`, inspect `node_modules`, or read
+   generated declarations unless a concrete build/runtime error remains.
+2. Keep `world.xr.mode` as `"ar"`. Under `world.xr.features`, request:
 
-### 1. Enable depth sensing on the XR session
+   ```json
+   "depthSensing": {
+     "required": true,
+     "usage": "gpu-optimized",
+     "format": "float32"
+   }
+   ```
 
-```jsonc
-// iwsdk.config.json
-{
-  "world": {
-    "xr": {
-      "mode": "ar",
-      "referenceSpace": "unbounded",
-      "features": {
-        "depthSensing": {
-          "required": true,
-          "usage": "gpu-optimized",
-          "format": "float32"
-        },
-        "hitTest": { "required": true },
-        "anchors": { "required": true },
-        "unbounded": { "required": true }
-      }
-    }
-  }
-}
+   Preserve other required AR features. Use the living-room emulator (or the
+   environment requested by the task) so runtime depth exists.
+3. Import and register `DepthSensingSystem` exactly once after `World.create`:
+
+   ```ts
+   world.registerSystem(DepthSensingSystem, {
+     configData: {
+       enableDepthTexture: true,
+       enableOcclusion: true,
+       useFloat32: true,
+       blurRadius: 20,
+     },
+   });
+   ```
+
+   `DepthOccludable` is built in. Do not call `registerComponent` for it.
+4. Add `DepthOccludable` only to the requested scene nodes. These scene payloads
+   are exact: `{}` means soft occlusion and `{ "mode": "HardOcclusion" }` means
+   sharp low-cost occlusion. Use `"MinMaxSoftOcclusion"` only when the task needs
+   the higher-quality path. Write the literal scene value directly; do not load
+   the scene-composer format reference, import `OcclusionShadersMode`, or inspect
+   its declaration to reconfirm it.
+5. Leave a deliberate non-occludable reference object when comparison is part
+   of the request. Do not mark UI or guidance surfaces occludable by default.
+
+## Verify
+
+Run the production build once, start the AR app once, enter XR, and query the
+named entities and registered systems. Check the console for missing
+depth-sensing warnings. Capture one runtime screenshot in the configured room;
+source inspection or an authored scene render alone cannot prove passthrough
+occlusion. Make one focused correction if the measured runtime disagrees, then
+stop. Do not repeatedly restart the emulator or tune blur from screenshots when
+the session never exposed depth data.
+
+Use one XR entry, one bounded entity/system query set, and one console check.
+Save the final live screenshot but do not read it back when those runtime checks
+already prove that depth was requested, the system is live, and the intended
+entities carry the correct occlusion modes.
+
+Use the CLI action names below; do not substitute MCP method names or probe
+`--help` first:
+
+```bash
+npx iwsdk xr enter
+npx iwsdk xr status
+npx iwsdk ecs find --input-json '{"namePattern":"<requested node regex>"}'
+npx iwsdk ecs query --input-json '{"entityIndex":<index from find>}'
+npx iwsdk ecs systems
+npx iwsdk browser logs --count 80
+npx iwsdk browser screenshot --output-file artifacts/<name>.png
 ```
 
-### 2. Register `DepthSensingSystem` and `DepthOccludable`
-
-```typescript
-import { DepthSensingSystem, DepthOccludable } from '@iwsdk/core';
-
-world
-  .registerSystem(DepthSensingSystem, {
-    configData: {
-      enableDepthTexture: true,
-      enableOcclusion: true,
-      useFloat32: true,
-      blurRadius: 20.0,
-    },
-  });
-```
-
-### 3. Add `DepthOccludable` to entities
-
-```typescript
-import { DepthOccludable, OcclusionShadersMode } from '@iwsdk/core';
-
-// Soft occlusion (default) — smooth edges via 13-tap blur
-entity.addComponent(DepthOccludable);
-
-// Hard occlusion — sharp edges, single depth sample
-entity.addComponent(DepthOccludable, {
-  mode: OcclusionShadersMode.HardOcclusion,
-});
-
-// MinMax occlusion — best quality, extra preprocessing pass
-entity.addComponent(DepthOccludable, {
-  mode: OcclusionShadersMode.MinMaxSoftOcclusion,
-});
-```
-
-The material must have `transparent: true`. The system sets this automatically, but verify it on custom materials.
-
-## Occlusion Modes
-
-| Mode                  | Quality | Cost   | Best For                                                          |
-| --------------------- | ------- | ------ | ----------------------------------------------------------------- |
-| `SoftOcclusion`       | Good    | Low    | Most objects — smooth edges, hides depth aliasing                 |
-| `HardOcclusion`       | Basic   | Lowest | Small objects or when sharp edges are acceptable                  |
-| `MinMaxSoftOcclusion` | Best    | Medium | Large objects with complex silhouettes against varied backgrounds |
-
-## DepthSensingSystem Config
-
-| Property             | Type    | Default | Description                               |
-| -------------------- | ------- | ------- | ----------------------------------------- |
-| `enableOcclusion`    | Boolean | `true`  | Master switch for all occlusion           |
-| `enableDepthTexture` | Boolean | `true`  | Create GPU textures from depth data       |
-| `useFloat32`         | Boolean | `true`  | Float32 depth textures (higher precision) |
-| `blurRadius`         | Float32 | `20.0`  | Blur radius for soft occlusion (pixels)   |
-
-## Depth Sensing Modes
-
-| Mode            | When to use                                                                                                                                                                                                     |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cpu-optimized` | Simpler, works everywhere. Depth as linear meters in a DataArrayTexture.                                                                                                                                        |
-| `gpu-optimized` | **Recommended.** Matches Quest hardware format. Depth as reverse-Z inverse depth in an ExternalTexture. Required for production parity with on-device behavior. Note that Quest devices only support this mode. |
-
-## AR Session Requirements
-
-Depth occlusion only works in AR mode. The scene background must be `null` for passthrough:
-
-```typescript
-scene.background = null;
-```
-
-## Troubleshooting
-
-**Objects never occlude (always visible on top)**
-
-- Verify the entity has `DepthOccludable` component
-- Verify `DepthSensingSystem` is registered with `enableOcclusion: true`
-- Check that `depthSensing` is in the XR features config
-
-**Objects always invisible in IWER**
-
-- In the IWER emulator, the SEM must have loaded environment geometry. If no room is loaded, no depth data is produced.
-- Check the console for "Warning: depth-sensing feature not enabled"
-
-**Flickering or noisy occlusion edges**
-
-- Increase `blurRadius` (try 30-40)
-- Switch from `HardOcclusion` to `SoftOcclusion`
-- Use `MinMaxSoftOcclusion` for best edge quality
-
-## Notes
-
-- **Only works in AR mode** — set `world.xr.mode` to `"ar"` and configure
-  `world.xr.features.depthSensing` in `iwsdk.config.json`.
-- **`DepthOccludable` may be incompatible with custom shaders** that override `diffuse` or `fog_vertex` includes, since the occlusion code is injected at those shader hook points.
-- **Non-occludable objects** are simply entities without `DepthOccludable` — they render normally on top of everything.
-- **`DepthOccludable` is built into IWSDK** and is already registered — it appears
-  in `scene_get_capabilities` under `registeredComponents`. Do not call
-  `world.registerComponent()` for it; only the system needs registering.
+Use `npx iwsdk browser screenshot --output-file <path>` for file evidence. Do
+not alter the project camera or render extra authored angles to manufacture an
+occlusion view; stage the requested nodes once, then judge the live AR capture.
+Do not inspect framework source when the build, registered-system query, entity
+components, and console warnings already establish the failing layer.

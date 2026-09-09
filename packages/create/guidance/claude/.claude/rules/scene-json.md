@@ -8,8 +8,10 @@ paths:
 Format reference lives in
 `.claude/skills/iwsdk-scene-composer/references/scene-format.md`: the document
 boundary, content kinds, prefabs, patterns, light fields, authoring views. Read
-it before composing. This file is only the short list of behaviours that produce
-no error when you get them wrong.
+it for imports, prefabs, patterns, or a schema detail not covered by active
+guidance. For ordinary flat node, component, and authored-view edits, this rule,
+the existing scene, and the active specialist are sufficient. This file is only
+the short list of behaviours that produce no error when you get them wrong.
 
 Only `iwsdk.scene.v1` exists, units are always meters, and structural objects are
 closed — an unknown field fails validation.
