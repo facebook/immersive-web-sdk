@@ -14,6 +14,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
 const lockfilePath = path.join(rootDir, 'pnpm-lock.yaml');
 const packageJsonPath = path.join(rootDir, 'package.json');
+const packagesDir = path.join(rootDir, 'packages');
+const ALLOWED_PUBLISHED_THREE_DECLARATIONS = new Map([
+  ['@iwsdk/locomotor:peerDependencies', '>=0.160.0'],
+  ['@iwsdk/xr-input:peerDependencies', '>=0.160.0'],
+]);
 
 /**
  * Read expected versions from package.json pnpm overrides
@@ -53,13 +58,78 @@ function getExpectedVersions() {
   }
 
   return {
+    installSpec: threeOverride,
     three: `super-three@${threeMatch[1]}`,
     typesThree: `@types/three@${typesThreeOverride}`,
   };
 }
 
-const { three: EXPECTED_THREE_VERSION, typesThree: EXPECTED_TYPES_VERSION } =
-  getExpectedVersions();
+const {
+  installSpec: EXPECTED_THREE_INSTALL_SPEC,
+  three: EXPECTED_THREE_VERSION,
+  typesThree: EXPECTED_TYPES_VERSION,
+} = getExpectedVersions();
+
+/** Ensure every published runtime dependency pins the supported build. */
+function checkPublishedPackageVersions() {
+  const mismatches = fs
+    .readdirSync(packagesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(packagesDir, entry.name, 'package.json'))
+    .filter((manifestPath) => fs.existsSync(manifestPath))
+    .map((manifestPath) => ({
+      manifestPath,
+      packageJson: JSON.parse(fs.readFileSync(manifestPath, 'utf-8')),
+    }))
+    .flatMap(({ manifestPath, packageJson }) =>
+      packageJson.private === true
+        ? []
+        : findUnsupportedThreeDeclarations(
+            packageJson,
+            EXPECTED_THREE_INSTALL_SPEC,
+          ).map((declaration) => ({
+            ...declaration,
+            manifestPath,
+            packageJson,
+          })),
+    );
+
+  if (mismatches.length > 0) {
+    console.error(
+      '❌ Published packages must pin the supported Three.js build.',
+    );
+    for (const {
+      dependencyType,
+      manifestPath,
+      packageJson,
+      version,
+    } of mismatches) {
+      console.error(
+        `   ${packageJson.name ?? path.relative(rootDir, manifestPath)} (${dependencyType}): ${version}`,
+      );
+    }
+    console.error('   Expected:', EXPECTED_THREE_INSTALL_SPEC);
+    process.exit(1);
+  }
+}
+
+export function findUnsupportedThreeDeclarations(
+  packageJson,
+  expectedInstallSpec,
+) {
+  return ['dependencies', 'peerDependencies', 'devDependencies'].flatMap(
+    (dependencyType) => {
+      const version = packageJson?.[dependencyType]?.three;
+      if (version == null || version === expectedInstallSpec) {
+        return [];
+      }
+      const exception = ALLOWED_PUBLISHED_THREE_DECLARATIONS.get(
+        `${packageJson.name}:${dependencyType}`,
+      );
+      return exception === version ? [] : [{ dependencyType, version }];
+    },
+  );
+}
 
 /**
  * Check that pnpm-lock.yaml only contains the correct three.js version
@@ -134,9 +204,14 @@ function checkThreeVersion() {
     );
     process.exit(1);
   }
+}
 
+if (
+  process.argv[1] != null &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  checkThreeVersion();
+  checkPublishedPackageVersions();
   console.log('✅ Three.js version check passed');
   console.log(`   All packages correctly use: ${EXPECTED_THREE_VERSION}`);
 }
-
-checkThreeVersion();

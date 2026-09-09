@@ -92,7 +92,7 @@
     "@types/three": "^0.181.0",
     "@types/webxr": "^0.5.0",
     "elics": "^3.4.1",
-    "three": "*",
+    "three": "npm:super-three@0.181.0",
     "three-mesh-bvh": "^0.9.1"
   },
   "engines": {
