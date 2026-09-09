@@ -239,6 +239,9 @@ describe('editor runtime source', () => {
   test('reloads watched root and module files without exposing mutation tools', () => {
     const source = createRuntimeSource();
 
+    expect(source).toContain(
+      "import.meta.hot.on('iwsdk:runtime-source-change'",
+    );
     expect(source).toContain("import.meta.hot.on('iwsdk:scene-file-change'");
     expect(source).toContain('session.replaceFromDisk(loaded.document)');
     expect(source).toContain("status: 'invalid'");

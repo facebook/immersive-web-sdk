@@ -301,7 +301,7 @@ if (command === 'start') {
     const logPath = `/tmp/iwsdk-dev-${dir}.log`;
     const logFd = openSync(logPath, 'w');
 
-    const child = spawn('npm', ['run', 'dev'], {
+    const child = spawn('npm', ['run', 'dev', '--', '--ai-mode', 'agent'], {
       cwd,
       detached: true,
       env: process.env,

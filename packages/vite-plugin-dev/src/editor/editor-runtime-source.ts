@@ -1125,6 +1125,9 @@ function installSceneFileWatcher(session, getCamera) {
   if (!import.meta.hot) {
     return;
   }
+  import.meta.hot.on('iwsdk:runtime-source-change', () => {
+    reloadWorkspaceRuntimeFrame();
+  });
   import.meta.hot.on('iwsdk:scene-file-change', (event) => {
     const changedPath = String(event?.path || '');
     if (!sceneDependencyPaths.has(changedPath)) {

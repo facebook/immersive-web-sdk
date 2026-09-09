@@ -51,7 +51,13 @@ import {
 } from '@iwsdk/scene-composition';
 import { getCertificate } from '@vitejs/plugin-basic-ssl';
 import open from 'open';
-import type { ModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
+import type {
+  ModuleNode,
+  Plugin,
+  ResolvedConfig,
+  ViteDevServer,
+  WebSocketClient,
+} from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
 import {
@@ -142,6 +148,8 @@ const COMPONENT_MANIFEST_ID = '/@iwsdk-component-manifest';
 const RESOLVED_COMPONENT_MANIFEST_ID = '\0' + COMPONENT_MANIFEST_ID;
 const PROJECT_MODULE_ID = 'virtual:iwsdk-project';
 const RESOLVED_PROJECT_MODULE_ID = '\0' + PROJECT_MODULE_ID;
+const HOT_CLIENT_ROLE_EVENT = 'iwsdk:hot-client-role';
+const RUNTIME_SOURCE_CHANGE_EVENT = 'iwsdk:runtime-source-change';
 const EDITOR_ROUTE = '/__iwsdk/editor';
 const WORKSPACE_ROUTE = '/__iwsdk/workspace';
 const WORKSPACE_SCENES_ROUTE = `${WORKSPACE_ROUTE}/scenes`;
@@ -530,6 +538,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let mcpClients: Set<WebSocket> | null = null;
   let managedBrowser: ManagedBrowser | null = null;
   let closeManagedWorkspace: (() => Promise<void>) | null = null;
+  const hotClientRoles = new WeakMap<
+    WebSocketClient,
+    'editor' | 'preview' | 'runtime'
+  >();
   const managedWorkspaceToken =
     process.env.NODE_ENV === 'test' &&
     process.env.IWSDK_TEST_MANAGED_WORKSPACE_TOKEN
@@ -660,6 +672,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       if (loadedProject != null) {
         server.watcher.add(loadedProject.configPath);
       }
+      const registerHotClient = (
+        data: { role?: unknown },
+        client: WebSocketClient,
+      ) => {
+        if (
+          data?.role === 'editor' ||
+          data?.role === 'preview' ||
+          data?.role === 'runtime'
+        ) {
+          hotClientRoles.set(client, data.role);
+        }
+      };
+      server.ws?.on?.(HOT_CLIENT_ROLE_EVENT, registerHotClient);
       const publishSceneFileChange = (
         kind: 'add' | 'change' | 'unlink',
         absolutePath: string,
@@ -691,6 +716,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       server.watcher?.on('change', onSceneChange);
       server.watcher?.on('unlink', onSceneUnlink);
       server.httpServer?.once?.('close', () => {
+        server.ws?.off?.(HOT_CLIENT_ROLE_EVENT, registerHotClient);
         server.watcher?.off('add', onSceneAdd);
         server.watcher?.off('change', onSceneChange);
         server.watcher?.off('unlink', onSceneUnlink);
@@ -2008,7 +2034,16 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         if (!injectionBundle) {
           return 'console.warn("[IWSDK Dev] Runtime not available - injection bundle not loaded");';
         }
-        return injectionBundle.code;
+        return `${injectionBundle.code}
+if (import.meta.hot) {
+  const role =
+    window.__IWSDK_MCP_PAGE_ROLE === 'editor'
+      ? 'editor'
+      : window.parent === window
+        ? 'runtime'
+        : 'preview';
+  import.meta.hot.send('${HOT_CLIENT_ROLE_EVENT}', { role });
+}`;
       }
       if (id === RESOLVED_EDITOR_RUNTIME_ID) {
         return createEditorRuntimeModuleSource(
@@ -2082,11 +2117,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         }, 0);
         return [];
       }
-      if (pluginOptions.componentManifest == null) {
-        return;
-      }
       const changedModules = context.modules ?? [];
       if (
+        pluginOptions.componentManifest != null &&
         changedModules.some((module) =>
           moduleImportsComponentManifest(
             module,
@@ -2103,6 +2136,51 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         context.server.ws.send({ type: 'full-reload' });
         return [];
       }
+
+      const isProjectSource =
+        isPathInside(config.root, context.file) &&
+        changedModules.some(
+          (module) =>
+            module.file != null &&
+            isPathInside(config.root, module.file) &&
+            pathsReferToSameFile(module.file, context.file),
+        );
+      const relativePath = path.relative(config.root, context.file);
+      const clients = [...(context.server.ws?.clients ?? [])];
+      if (
+        !isProjectSource ||
+        !clients.some((client) => hotClientRoles.get(client) === 'editor')
+      ) {
+        return;
+      }
+
+      // Let Vite deliver ordinary HMR updates when every affected module
+      // accepts its own update or is accepted by all of its importers.
+      // Intercepting those updates here would suppress the accept handler in
+      // both the runtime and preview frames. This direct-importer check is
+      // deliberately conservative: an extra runtime-only reload is safer than
+      // letting a transitive boundary trigger an editor reload.
+      const isAcceptedByViteHmr = (module: ModuleNode) =>
+        module.isSelfAccepting ||
+        (module.importers.size > 0 &&
+          [...module.importers].every((importer) =>
+            importer.acceptedHmrDeps.has(module),
+          ));
+      if (changedModules.every(isAcceptedByViteHmr)) {
+        return;
+      }
+
+      for (const client of clients) {
+        const role = hotClientRoles.get(client);
+        if (role === 'editor') {
+          client.send(RUNTIME_SOURCE_CHANGE_EVENT, {
+            path: toPosixPath(relativePath),
+          });
+        } else if (role === 'runtime') {
+          client.send({ type: 'full-reload' });
+        }
+      }
+      return [];
     },
 
     async buildStart() {

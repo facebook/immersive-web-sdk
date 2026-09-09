@@ -294,6 +294,125 @@ describe('manifest-first Vite integration', () => {
     vi.useRealTimers();
   });
 
+  it('leaves Vite-accepted project modules to ordinary HMR', async () => {
+    const plugin = iwsdkDev({ https: false });
+    await callHook(
+      plugin.config,
+      plugin,
+      { root: projectRoot },
+      { command: 'serve', mode: 'development' },
+    );
+    callHook(plugin.configResolved, plugin, {
+      command: 'serve',
+      root: projectRoot,
+      publicDir: path.join(projectRoot, 'public'),
+      server: {},
+    });
+
+    let registerHotClient:
+      | ((data: { role: string }, client: unknown) => void)
+      | undefined;
+    const editorClient = { send: vi.fn() };
+    const runtimeClient = { send: vi.fn() };
+    const unknownClient = { send: vi.fn() };
+    const clients = new Set([editorClient, runtimeClient, unknownClient]);
+    const ws = {
+      clients,
+      on: vi.fn((event: string, handler: typeof registerHotClient) => {
+        if (event === 'iwsdk:hot-client-role') {
+          registerHotClient = handler;
+        }
+      }),
+      send: vi.fn(),
+    };
+    callHook(plugin.configureServer, plugin, {
+      watcher: {
+        add: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+      },
+      middlewares: { use: vi.fn() },
+      ws,
+    });
+    expect(registerHotClient).toBeDefined();
+    registerHotClient?.({ role: 'editor' }, editorClient);
+    registerHotClient?.({ role: 'runtime' }, runtimeClient);
+
+    const sourcePath = path.join(projectRoot, 'src', 'assets.ts');
+    const selfAcceptingModule = {
+      file: sourcePath,
+      isSelfAccepting: true,
+      importers: new Set(),
+    };
+    await expect(
+      callHook(plugin.handleHotUpdate, plugin, {
+        file: sourcePath,
+        modules: [selfAcceptingModule],
+        server: { ws },
+      }),
+    ).resolves.toBeUndefined();
+    expect(editorClient.send).not.toHaveBeenCalled();
+    expect(runtimeClient.send).not.toHaveBeenCalled();
+    expect(unknownClient.send).not.toHaveBeenCalled();
+
+    selfAcceptingModule.isSelfAccepting = false;
+    const acceptingImporter = {
+      acceptedHmrDeps: new Set([selfAcceptingModule]),
+      importers: new Set(),
+    };
+    selfAcceptingModule.importers.add(acceptingImporter);
+    await expect(
+      callHook(plugin.handleHotUpdate, plugin, {
+        file: sourcePath,
+        modules: [selfAcceptingModule],
+        server: { ws },
+      }),
+    ).resolves.toBeUndefined();
+    expect(editorClient.send).not.toHaveBeenCalled();
+    expect(runtimeClient.send).not.toHaveBeenCalled();
+    expect(unknownClient.send).not.toHaveBeenCalled();
+
+    const nonAcceptingImporter = {
+      acceptedHmrDeps: new Set(),
+      importers: new Set(),
+    };
+    selfAcceptingModule.importers.add(nonAcceptingImporter);
+    await expect(
+      callHook(plugin.handleHotUpdate, plugin, {
+        file: sourcePath,
+        modules: [selfAcceptingModule],
+        server: { ws },
+      }),
+    ).resolves.toEqual([]);
+    expect(editorClient.send).toHaveBeenCalledWith(
+      'iwsdk:runtime-source-change',
+      { path: 'src/assets.ts' },
+    );
+    expect(runtimeClient.send).toHaveBeenCalledWith({
+      type: 'full-reload',
+    });
+    expect(unknownClient.send).not.toHaveBeenCalled();
+
+    editorClient.send.mockClear();
+    runtimeClient.send.mockClear();
+    selfAcceptingModule.importers.clear();
+    await expect(
+      callHook(plugin.handleHotUpdate, plugin, {
+        file: sourcePath,
+        modules: [selfAcceptingModule],
+        server: { ws },
+      }),
+    ).resolves.toEqual([]);
+    expect(editorClient.send).toHaveBeenCalledWith(
+      'iwsdk:runtime-source-change',
+      { path: 'src/assets.ts' },
+    );
+    expect(runtimeClient.send).toHaveBeenCalledWith({
+      type: 'full-reload',
+    });
+    expect(unknownClient.send).not.toHaveBeenCalled();
+  });
+
   it('does not inject the development workspace into production builds', async () => {
     const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
