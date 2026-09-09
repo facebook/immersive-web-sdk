@@ -5,9 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { Container } from '@pmndrs/uikit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CanvasPointerSystem } from '../../src/input/canvas-pointer-system.js';
-import { Object3D, PerspectiveCamera, Scene } from '../../src/runtime/index.js';
+import {
+  EventDispatcher,
+  Object3D,
+  PerspectiveCamera,
+  Scene,
+} from '../../src/runtime/index.js';
 import type { ScenePointerDescendants } from '../../src/runtime/scene-pointer-descendants.js';
 
 const mocks = vi.hoisted(() => {
@@ -38,6 +44,9 @@ vi.mock('@pmndrs/pointer-events', () => ({
 }));
 
 function createCanvasPointerSystem(scene: Scene, camera: PerspectiveCamera) {
+  const xr = Object.assign(new EventDispatcher(), {
+    getSession: () => undefined,
+  });
   const world = {
     camera,
     globals: {},
@@ -47,6 +56,7 @@ function createCanvasPointerSystem(scene: Scene, camera: PerspectiveCamera) {
     playerHeadEntity: {},
     renderer: {
       domElement: {},
+      xr,
     },
     scene,
     session: undefined,
@@ -62,6 +72,15 @@ function getForwardedRoot() {
     ScenePointerDescendants;
 }
 
+function getForwardingOptions() {
+  return mocks.forwardHtmlEvents.mock.calls[0][3] as
+    | {
+        batchEvents?: boolean;
+        filter?: (object: Object3D) => boolean;
+      }
+    | undefined;
+}
+
 describe('CanvasPointerSystem', () => {
   beforeEach(() => {
     mocks.destroy.mockReset();
@@ -71,6 +90,82 @@ describe('CanvasPointerSystem', () => {
       destroy: mocks.destroy,
       update: mocks.update,
     });
+  });
+
+  it('forwards events synchronously to preserve browser user activation', () => {
+    const system = createCanvasPointerSystem(
+      new Scene(),
+      new PerspectiveCamera(),
+    );
+
+    expect(getForwardingOptions()?.batchEvents).toBe(false);
+    system.destroy();
+  });
+
+  it('removes synchronous canvas listeners while XR forwarding is disabled', () => {
+    const system = createCanvasPointerSystem(
+      new Scene(),
+      new PerspectiveCamera(),
+    );
+
+    expect(mocks.forwardHtmlEvents).toHaveBeenCalledTimes(1);
+    system.xrManager.dispatchEvent({ type: 'sessionstart' });
+    expect(mocks.destroy).toHaveBeenCalledTimes(1);
+    expect(mocks.forwardHtmlEvents).toHaveBeenCalledTimes(1);
+
+    system.update();
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    system.xrManager.dispatchEvent({ type: 'sessionend' });
+    expect(mocks.forwardHtmlEvents).toHaveBeenCalledTimes(2);
+    system.destroy();
+  });
+
+  it('filters objects hidden directly or by an ancestor', () => {
+    const system = createCanvasPointerSystem(
+      new Scene(),
+      new PerspectiveCamera(),
+    );
+    const filter = getForwardingOptions()?.filter;
+    const visibleParent = new Object3D();
+    const visibleChild = new Object3D();
+    visibleParent.add(visibleChild);
+    const hiddenParent = new Object3D();
+    const hiddenChild = new Object3D();
+    hiddenParent.visible = false;
+    hiddenParent.add(hiddenChild);
+
+    expect(filter?.(visibleChild)).toBe(true);
+    expect(filter?.(hiddenChild)).toBe(false);
+    visibleChild.visible = false;
+    expect(filter?.(visibleChild)).toBe(false);
+    system.destroy();
+  });
+
+  it('keeps semantically visible renderless UIKit components interactive', async () => {
+    const scene = new Scene();
+    const system = createCanvasPointerSystem(scene, new PerspectiveCamera());
+    const filter = getForwardingOptions()?.filter;
+    const root = new Container({ height: 100, width: 100 });
+    const button = new Container({
+      height: 50,
+      onClick: () => {},
+      width: 50,
+    });
+    const renderlessChild = new Container({ height: 10, width: 10 });
+    button.add(renderlessChild);
+    root.add(button);
+    scene.add(root);
+
+    await vi.waitFor(() => {
+      root.update(0.016);
+      expect(button.isVisible.value).toBe(true);
+    });
+    expect(button.visible).toBe(false);
+    expect(filter?.(button)).toBe(true);
+
+    root.dispose();
+    system.destroy();
   });
 
   it('uses ray and screen-space descendants without sweeping all camera children', () => {

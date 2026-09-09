@@ -109,23 +109,23 @@ export class CursorVisual {
       scratchNormal.copy(normal);
       scratchNormalMatrix.getNormalMatrix(intersection.object.matrixWorld);
       scratchNormal.applyNormalMatrix(scratchNormalMatrix).normalize();
-      // Build world-space orientation from +Z to world normal
+      // Offset in world space while the intersection position is world-space.
+      cursorPosition.addScaledVector(scratchNormal, this.zOffset);
+
+      // Build a world-space orientation, then express it in xrOrigin space.
       this.cursor.quaternion.setFromUnitVectors(ZAxis, scratchNormal);
-      // Convert world orientation to xrOrigin local space
-      quaternionHelper.copy(this.xrOrigin.quaternion).invert();
-      this.cursor.quaternion.multiply(quaternionHelper);
-      // Offset slightly along the oriented normal to avoid z-fighting
-      offsetHelper.set(0, 0, this.zOffset);
-      offsetHelper.applyQuaternion(this.cursor.quaternion);
-      cursorPosition.add(offsetHelper);
+      this.xrOrigin.getWorldQuaternion(quaternionHelper).invert();
+      this.cursor.quaternion.premultiply(quaternionHelper);
     } else if (intersection.pointerQuaternion) {
-      // Fallback: align cursor with pointer direction when no surface normal is available
-      this.cursor.quaternion.copy(intersection.pointerQuaternion);
-      quaternionHelper.copy(this.xrOrigin.quaternion).invert();
-      this.cursor.quaternion.multiply(quaternionHelper);
+      // Offset along the world-space pointer direction before local conversion.
       offsetHelper.set(0, 0, this.zOffset);
-      offsetHelper.applyQuaternion(this.cursor.quaternion);
+      offsetHelper.applyQuaternion(intersection.pointerQuaternion);
       cursorPosition.add(offsetHelper);
+
+      // Fallback: align cursor with the pointer's world-space orientation.
+      this.cursor.quaternion.copy(intersection.pointerQuaternion);
+      this.xrOrigin.getWorldQuaternion(quaternionHelper).invert();
+      this.cursor.quaternion.premultiply(quaternionHelper);
     }
 
     this.xrOrigin.worldToLocal(cursorPosition);

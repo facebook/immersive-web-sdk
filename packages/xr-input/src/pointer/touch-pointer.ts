@@ -8,6 +8,7 @@
 import { Pointer, createTouchPointer } from '@pmndrs/pointer-events';
 import type { PerspectiveCamera } from 'three';
 import type { XROrigin } from '../rig/xr-origin.js';
+import { isObjectTreeVisible } from './visibility.js';
 
 /**
  * Default distance thresholds for poke/touch interactions (in meters)
@@ -46,6 +47,7 @@ export class TouchPointer {
       { current: xrOrigin.indexTipSpaces[handedness] },
       {},
       {
+        filter: isObjectTreeVisible,
         hoverRadius: TOUCH_DEFAULTS.hoverRadius,
         downRadius: TOUCH_DEFAULTS.downRadius,
         clickThresholdMs: TOUCH_DEFAULTS.clickThresholdMs,

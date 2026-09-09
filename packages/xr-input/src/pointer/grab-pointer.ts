@@ -8,6 +8,7 @@
 import { Pointer, createGrabPointer } from '@pmndrs/pointer-events';
 import type { PerspectiveCamera } from 'three';
 import type { XROrigin } from '../rig/xr-origin.js';
+import { isObjectTreeVisible } from './visibility.js';
 
 export class GrabPointer {
   public pointer: Pointer;
@@ -21,6 +22,7 @@ export class GrabPointer {
       () => camera,
       { current: xrOrigin.gripSpaces[handedness] },
       {},
+      { filter: isObjectTreeVisible },
     );
   }
 

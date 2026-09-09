@@ -16,6 +16,7 @@ import {
   ShaderMaterial,
 } from 'three';
 import { XROrigin } from '../rig/xr-origin.js';
+import { isObjectTreeVisible } from './visibility.js';
 
 const { lerp } = MathUtils;
 
@@ -66,6 +67,7 @@ export class RayPointer {
       { current: xrOrigin.raySpaces[handedness] },
       {},
       {
+        filter: isObjectTreeVisible,
         // XR trigger presses are commonly longer than a mouse click, especially
         // through controller emulation. Match the poke pointer's forgiving
         // activation window so a normal select gesture reaches child UI clicks.

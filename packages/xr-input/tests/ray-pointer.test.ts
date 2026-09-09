@@ -6,17 +6,45 @@
  */
 
 import {
+  BoxGeometry,
   Group,
+  Mesh,
+  MeshBasicMaterial,
   PerspectiveCamera,
   Quaternion,
+  Scene,
   Vector3,
   type Intersection,
 } from 'three';
 import { describe, expect, test } from 'vitest';
 import { RayPointer } from '../src/pointer/ray-pointer.js';
+import { isObjectTreeVisible } from '../src/pointer/visibility.js';
 import type { XROrigin } from '../src/rig/xr-origin.js';
 
 describe('RayPointer', () => {
+  test('uses UIKit semantic visibility for renderless components', () => {
+    const root = new Group() as Group & {
+      isVisible: { value: boolean };
+      needsRenderTraversal: { value: boolean };
+    };
+    const button = new Group() as Group & {
+      isVisible: { value: boolean };
+      needsRenderTraversal: { value: boolean };
+    };
+    root.isVisible = { value: true };
+    root.needsRenderTraversal = { value: false };
+    root.visible = false;
+    button.isVisible = { value: true };
+    button.needsRenderTraversal = { value: false };
+    button.visible = false;
+    root.add(button);
+
+    expect(isObjectTreeVisible(button)).toBe(true);
+
+    root.isVisible.value = false;
+    expect(isObjectTreeVisible(button)).toBe(false);
+  });
+
   test('allows normal XR trigger presses to synthesize click events', () => {
     const left = new Group();
     const pointer = new RayPointer(
@@ -66,5 +94,43 @@ describe('RayPointer', () => {
 
     expect(clicks).toBe(1);
     pointer.dispose();
+  });
+
+  test('ignores invisible meshes when choosing the nearest ray target', () => {
+    const scene = new Scene();
+    const hiddenRoot = new Group();
+    const visibleRoot = new Group();
+    const geometry = new BoxGeometry(1, 1, 0.1);
+    const material = new MeshBasicMaterial();
+    const hiddenMesh = new Mesh(geometry, material);
+    const visibleMesh = new Mesh(geometry, material);
+    hiddenMesh.position.z = -1;
+    hiddenMesh.visible = false;
+    visibleMesh.position.z = -2;
+    (hiddenRoot as any).pointerEvents = 'auto';
+    (visibleRoot as any).pointerEvents = 'auto';
+    hiddenRoot.add(hiddenMesh);
+    visibleRoot.add(visibleMesh);
+    scene.add(hiddenRoot, visibleRoot);
+    scene.updateMatrixWorld(true);
+
+    const raySpace = new Group();
+    raySpace.updateMatrixWorld(true);
+    const pointer = new RayPointer(
+      new PerspectiveCamera(),
+      {
+        raySpaces: { left: raySpace, right: new Group() },
+      } as unknown as XROrigin,
+      'left',
+    );
+
+    const intersection = pointer.pointer.computeIntersection('pointer', scene, {
+      timeStamp: 0,
+    });
+
+    expect(intersection.object).toBe(visibleMesh);
+    pointer.dispose();
+    geometry.dispose();
+    material.dispose();
   });
 });

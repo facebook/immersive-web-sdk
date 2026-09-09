@@ -5,7 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { isObjectTreeVisible } from '@iwsdk/xr-input';
 import { forwardHtmlEvents } from '@pmndrs/pointer-events';
+import { effect } from '@preact/signals-core';
 // Keep this leaf system out of the ecs/index -> World -> init barrel cycle.
 import { Types } from '../ecs/component.js';
 import { createSystem } from '../ecs/system.js';
@@ -28,25 +30,31 @@ export class CanvasPointerSystem extends createSystem(
   private readonly canvasPointerRoot = new Object3D();
   private readonly canvasPointerTraversalMarker = new Object3D();
   private readonly canvasPointerDescendants: Object3D[] = [];
+  private xrSessionActive = false;
 
   init(): void {
     // @pmndrs/pointer-events returns early for childless objects before
     // reading interactableDescendants, so keep this synthetic root traversable.
     this.canvasPointerRoot.add(this.canvasPointerTraversalMarker);
+    this.xrSessionActive =
+      this.world.session != null || this.xrManager.getSession() != null;
+    const onSessionStart = () => {
+      this.xrSessionActive = true;
+      this.syncHtmlHandler();
+    };
+    const onSessionEnd = () => {
+      this.xrSessionActive = false;
+      this.syncHtmlHandler();
+    };
+    this.xrManager.addEventListener('sessionstart', onSessionStart);
+    this.xrManager.addEventListener('sessionend', onSessionEnd);
     this.cleanupFuncs.push(
-      this.config.enabled.subscribe((enabled) => {
-        this.htmlHandler?.destroy();
-        this.clearCanvasPointerRoot();
-        if (enabled) {
-          this.prepareCanvasPointerRoot();
-          this.htmlHandler = forwardHtmlEvents(
-            this.renderer.domElement,
-            () => this.camera,
-            this.canvasPointerRoot,
-          );
-        } else {
-          this.htmlHandler = undefined;
-        }
+      () => this.xrManager.removeEventListener('sessionstart', onSessionStart),
+      () => this.xrManager.removeEventListener('sessionend', onSessionEnd),
+      effect(() => {
+        this.config.enabled.value;
+        this.config.activeDuringXR.value;
+        this.syncHtmlHandler();
       }),
     );
   }
@@ -55,11 +63,30 @@ export class CanvasPointerSystem extends createSystem(
     if (!this.htmlHandler) {
       return;
     }
-    if (this.world.session && !this.config.activeDuringXR.value) {
+    this.prepareCanvasPointerRoot();
+    this.htmlHandler.update();
+  }
+
+  private syncHtmlHandler(): void {
+    this.htmlHandler?.destroy();
+    this.htmlHandler = undefined;
+    this.clearCanvasPointerRoot();
+    if (
+      !this.config.enabled.value ||
+      (this.xrSessionActive && !this.config.activeDuringXR.value)
+    ) {
       return;
     }
     this.prepareCanvasPointerRoot();
-    this.htmlHandler.update();
+    this.htmlHandler = forwardHtmlEvents(
+      this.renderer.domElement,
+      () => this.camera,
+      this.canvasPointerRoot,
+      {
+        batchEvents: false,
+        filter: isObjectTreeVisible,
+      },
+    );
   }
 
   private prepareCanvasPointerRoot(): void {

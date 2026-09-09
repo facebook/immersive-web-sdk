@@ -7,7 +7,7 @@
 
 import { HandleOptions, HandleStore } from '@pmndrs/handle';
 import { Types, createComponent } from '../ecs/component.js';
-import { Object3D, Quaternion, Vector3 } from '../runtime/index.js';
+import { Euler, Object3D, Quaternion, Vector3 } from '../runtime/index.js';
 
 export const Handle = createComponent(
   'Handle',
@@ -32,6 +32,12 @@ export const MovementMode = {
 export class DistanceGrabHandle<T> extends HandleStore<T> {
   private previousPointerOrigin: Vector3 | undefined;
   private isSnapped: boolean = false;
+  private returnOriginCaptured = false;
+  private returnTargetParent: Object3D | null = null;
+  private readonly returnTargetPosition = new Vector3();
+  private readonly returnTargetQuaternion = new Quaternion();
+  private readonly returnTargetRotation = new Euler();
+  private readonly returnTargetScale = new Vector3();
   private static SNAP_THRESHOLD = 0.005;
   private static MOVE_SPEED_SCALE = 100;
   private static _tmp = new Vector3();
@@ -198,14 +204,41 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
   }
 
   protected apply(target: Object3D): T {
-    // On release (last frame), if configured to return to origin,
-    // restore the initially saved transform instead of leaving the final drag state.
-    if (this.returnToOrigin && (this as any).outputState?.last) {
-      target.position.copy(this.initialTargetPosition);
-      // Keep rotation order consistent when restoring
-      target.rotation.order = (this as any).initialTargetRotation.order;
-      target.quaternion.copy(this.initialTargetQuaternion);
-      target.scale.copy(this.initialTargetScale);
+    if (
+      this.returnToOrigin &&
+      this.inputState.size === 1 &&
+      this.outputState.first &&
+      !this.returnOriginCaptured
+    ) {
+      this.returnTargetParent = target.parent;
+      this.returnTargetPosition.copy(target.position);
+      this.returnTargetQuaternion.copy(target.quaternion);
+      this.returnTargetRotation.copy(target.rotation);
+      this.returnTargetScale.copy(target.scale);
+      this.returnOriginCaptured = true;
+    }
+
+    // HandleStore intentionally saves a new manipulation baseline whenever a
+    // second pointer joins or one pointer leaves. Return-to-origin needs the
+    // transform from the start of the whole gesture, not a handoff baseline.
+    if (
+      this.returnToOrigin &&
+      this.outputState.last &&
+      this.returnOriginCaptured
+    ) {
+      if (this.detachOnGrab && target.parent !== this.returnTargetParent) {
+        if (this.returnTargetParent == null) {
+          target.removeFromParent();
+        } else {
+          this.returnTargetParent.add(target);
+        }
+      }
+      target.position.copy(this.returnTargetPosition);
+      target.rotation.order = this.returnTargetRotation.order;
+      target.quaternion.copy(this.returnTargetQuaternion);
+      target.scale.copy(this.returnTargetScale);
+      this.returnTargetParent = null;
+      this.returnOriginCaptured = false;
       // Do not call super.apply to avoid re-applying the drag transform.
       return undefined as unknown as T;
     }

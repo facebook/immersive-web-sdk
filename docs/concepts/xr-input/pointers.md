@@ -62,6 +62,8 @@ scene.add(button);
 
 The `RayPointer` uses an optimized raycaster (`firstHitOnly = true`) for BVH‑accelerated scenes. Browser canvas events use the same interactable target lists maintained by `InputSystem`, so `RayInteractable` means "selectable by a pointer/ray" rather than "XR only."
 
+Pointers treat objects whose Three.js `visible` property is `false` as transparent to hit testing, including descendants hidden by an ancestor, so a pointer reaches whatever sits behind the hidden object instead of stopping on it. UIKit components use UIKit's semantic visibility signal instead of the raw Three.js flag, so a renderless UIKit component can remain interactive while a hidden UIKit component is excluded. Only the built-in pointers set `filter: isObjectTreeVisible` in their pointer options by default. To get the same behavior on a custom pointer, import `isObjectTreeVisible` from `@iwsdk/xr-input` and pass it as the `filter` option.
+
 ## Browser canvas pointers
 
 Canvas pointer forwarding is enabled by default:

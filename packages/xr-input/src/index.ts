@@ -34,3 +34,4 @@ export * from './pointer/touch-pointer.js';
 export * from './pointer/ray-pointer.js';
 export * from './pointer/multi-pointer.js';
 export * from './pointer/cursor-visual.js';
+export * from './pointer/visibility.js';
