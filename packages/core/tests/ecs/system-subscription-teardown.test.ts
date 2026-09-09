@@ -50,6 +50,7 @@ function baseWorld(extra: Record<string, unknown> = {}) {
 describe('CameraSystem teardown', () => {
   it('unsubscribes from visibilityState on destroy()', () => {
     const unsubscribe = vi.fn();
+    const queryUnsubscribe = vi.fn();
     const world = baseWorld({
       visibilityState: {
         value: 'non-immersive',
@@ -57,7 +58,12 @@ describe('CameraSystem teardown', () => {
       },
     });
     const system = new CameraSystem(world as any, {} as any, 0);
-    (system as any).queries = { cameras: { entities: [] } };
+    (system as any).queries = {
+      cameras: {
+        entities: [],
+        subscribe: vi.fn(() => queryUnsubscribe),
+      },
+    };
 
     system.init();
     expect(world.visibilityState.subscribe).toHaveBeenCalledTimes(1);
@@ -65,6 +71,7 @@ describe('CameraSystem teardown', () => {
     system.destroy();
     // Regression: the subscription was previously not registered, so destroy()
     // (which runs cleanupFuncs) never released it.
+    expect(queryUnsubscribe).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 });

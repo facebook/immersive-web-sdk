@@ -9,6 +9,7 @@ import { Entity } from '../ecs/entity.js';
 import { CameraSource } from './camera-source.js';
 import {
   CameraFacing,
+  CameraState,
   type CameraDeviceInfo,
   type CameraFacingType,
 } from './types.js';
@@ -109,6 +110,14 @@ export class CameraUtils {
       // Permissions API not supported
       return false;
     }
+  }
+
+  /**
+   * Restart a camera source after changing its configuration or handling an
+   * error. CameraSystem releases the previous resources before starting again.
+   */
+  static restart(entity: Entity): void {
+    entity.setValue(CameraSource, 'state', CameraState.Inactive);
   }
 
   /**

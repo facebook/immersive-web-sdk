@@ -22,38 +22,62 @@ import {
  * CameraSystem - Manages camera stream lifecycle for CameraSource components
  * Automatically starts streams when the world is visible, including browser
  * non-immersive mode and immersive XR sessions.
- *
- * System is stateless - all state is stored in CameraSource components
  */
 export class CameraSystem extends createSystem({
   cameras: { required: [CameraSource] },
 }) {
+  private readonly operationIds = new WeakMap<Entity, number>();
+
   init() {
-    // Stop all cameras only when the page/session is hidden. Register the
-    // unsubscribe so the callback (and its closure over `this`) is released on
-    // system teardown rather than leaking.
+    const stopIfDocumentHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        this.stopAllCameras();
+      }
+    };
+    const hasDocumentVisibility =
+      typeof document !== 'undefined' &&
+      typeof document.addEventListener === 'function';
+    if (hasDocumentVisibility) {
+      document.addEventListener('visibilitychange', stopIfDocumentHidden);
+    }
+
     this.cleanupFuncs.push(
       this.world.visibilityState.subscribe((state) => {
         if (state === VisibilityState.Hidden) {
-          for (const entity of this.queries.cameras.entities) {
-            this.stopCamera(entity);
-          }
+          this.stopAllCameras();
         }
       }),
+      this.queries.cameras.subscribe('disqualify', (entity) => {
+        this.stopCamera(entity);
+      }),
+      () => {
+        if (hasDocumentVisibility) {
+          document.removeEventListener(
+            'visibilitychange',
+            stopIfDocumentHidden,
+          );
+        }
+        this.stopAllCameras();
+      },
     );
   }
 
   update() {
     // CameraSource uses browser media APIs and works outside immersive XR.
-    if (this.world.visibilityState.value === VisibilityState.Hidden) {
+    const documentHidden =
+      typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (
+      documentHidden ||
+      this.world.visibilityState.value === VisibilityState.Hidden
+    ) {
       return;
     }
 
     for (const entity of this.queries.cameras.entities) {
       const state = entity.getValue(CameraSource, 'state') as CameraStateType;
 
-      // Start camera if inactive (not started or errored)
-      if (state === CameraState.Inactive || state === CameraState.Error) {
+      // Error is terminal until callers explicitly set the source inactive.
+      if (state === CameraState.Inactive) {
         this.startCamera(entity);
       }
     }
@@ -64,11 +88,18 @@ export class CameraSystem extends createSystem({
    * Async operation - sets state to Starting, then Active when complete
    * Users should check state or null-check texture/videoElement before using
    *
-   * Checks state after each async operation to abort if stopCamera was called
+   * Checks an operation generation after each async operation so a restarted
+   * camera cannot be overwritten by an older request that resolves later.
    */
   private async startCamera(entity: Entity) {
+    const operationId = this.beginOperation(entity);
+    this.releaseCameraResources(entity);
+
     // Set state to Starting to prevent duplicate attempts
     entity.setValue(CameraSource, 'state', CameraState.Starting);
+    let stream: MediaStream | null = null;
+    let video: HTMLVideoElement | null = null;
+    let texture: VideoTexture | null = null;
 
     try {
       let deviceId = entity.getValue(CameraSource, 'deviceId') as string;
@@ -77,12 +108,7 @@ export class CameraSystem extends createSystem({
       if (!deviceId) {
         const devices = await CameraUtils.getDevices();
 
-        // Check if we should abort (stopCamera was called during async operation)
-        const currentState = entity.getValue(
-          CameraSource,
-          'state',
-        ) as CameraStateType;
-        if (currentState !== CameraState.Starting) {
+        if (!this.isCurrentStart(entity, operationId)) {
           return; // Aborted
         }
 
@@ -125,7 +151,7 @@ export class CameraSystem extends createSystem({
       const frameRate = entity.getValue(CameraSource, 'frameRate');
 
       // Request camera stream
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: deviceId },
           width: { ideal: width as number | undefined },
@@ -134,67 +160,53 @@ export class CameraSystem extends createSystem({
         },
       });
 
-      // Check if we should abort after getting stream
-      const currentState = entity.getValue(
-        CameraSource,
-        'state',
-      ) as CameraStateType;
-      if (currentState !== CameraState.Starting) {
+      if (!this.isCurrentStart(entity, operationId)) {
         // Aborted - clean up the stream we just created
         this.cleanupCameraResources(stream, null, null);
         return;
       }
 
       // Create video element
-      const video = document.createElement('video');
-      video.setAttribute('playsinline', '');
-      video.setAttribute('autoplay', '');
-      video.muted = true;
-      video.srcObject = stream;
+      const createdVideo = document.createElement('video');
+      video = createdVideo;
+      createdVideo.setAttribute('playsinline', '');
+      createdVideo.setAttribute('autoplay', '');
+      createdVideo.muted = true;
+      createdVideo.srcObject = stream;
 
       // Wait for video to be ready
       await new Promise<void>((resolve, reject) => {
         const onCanPlay = () => {
-          video.removeEventListener('canplay', onCanPlay);
-          video.removeEventListener('error', onError);
+          createdVideo.removeEventListener('canplay', onCanPlay);
+          createdVideo.removeEventListener('error', onError);
           resolve();
         };
 
         const onError = (error: Event) => {
-          video.removeEventListener('canplay', onCanPlay);
-          video.removeEventListener('error', onError);
+          createdVideo.removeEventListener('canplay', onCanPlay);
+          createdVideo.removeEventListener('error', onError);
           reject(error);
         };
 
-        video.addEventListener('canplay', onCanPlay);
-        video.addEventListener('error', onError);
+        createdVideo.addEventListener('canplay', onCanPlay);
+        createdVideo.addEventListener('error', onError);
       });
 
-      // Check if we should abort after video ready
-      const finalState = entity.getValue(
-        CameraSource,
-        'state',
-      ) as CameraStateType;
-      if (finalState !== CameraState.Starting) {
+      if (!this.isCurrentStart(entity, operationId)) {
         // Aborted - clean up everything
         this.cleanupCameraResources(stream, video, null);
         return;
       }
 
       // Start playback
-      await video.play();
+      await createdVideo.play();
 
       // Create VideoTexture
-      const texture = new VideoTexture(video);
+      texture = new VideoTexture(createdVideo);
       texture.minFilter = LinearFilter;
       texture.magFilter = LinearFilter;
 
-      // Final check before committing - ensure state is still Starting
-      const committingState = entity.getValue(
-        CameraSource,
-        'state',
-      ) as CameraStateType;
-      if (committingState !== CameraState.Starting) {
+      if (!this.isCurrentStart(entity, operationId)) {
         // Aborted at the last moment - clean up everything
         this.cleanupCameraResources(stream, video, texture);
         return;
@@ -206,28 +218,14 @@ export class CameraSystem extends createSystem({
       entity.setValue(CameraSource, 'texture', texture);
       entity.setValue(CameraSource, 'state', CameraState.Active);
     } catch (error) {
-      console.error('Failed to start camera:', error);
-
-      // Clean up any partial state
-      const stream = entity.getValue(
-        CameraSource,
-        'stream',
-      ) as MediaStream | null;
-      const video = entity.getValue(
-        CameraSource,
-        'videoElement',
-      ) as HTMLVideoElement | null;
-      const texture = entity.getValue(
-        CameraSource,
-        'texture',
-      ) as VideoTexture | null;
-
       this.cleanupCameraResources(stream, video, texture);
-
-      entity.setValue(CameraSource, 'stream', null);
-      entity.setValue(CameraSource, 'videoElement', null);
-      entity.setValue(CameraSource, 'texture', null);
-      entity.setValue(CameraSource, 'state', CameraState.Error);
+      if (this.isCurrentStart(entity, operationId)) {
+        console.error('Failed to start camera:', error);
+        entity.setValue(CameraSource, 'stream', null);
+        entity.setValue(CameraSource, 'videoElement', null);
+        entity.setValue(CameraSource, 'texture', null);
+        entity.setValue(CameraSource, 'state', CameraState.Error);
+      }
     }
   }
 
@@ -235,6 +233,12 @@ export class CameraSystem extends createSystem({
    * Stop camera stream for an entity
    */
   private stopCamera(entity: Entity) {
+    this.beginOperation(entity);
+    this.releaseCameraResources(entity);
+    entity.setValue(CameraSource, 'state', CameraState.Inactive);
+  }
+
+  private releaseCameraResources(entity: Entity): void {
     const stream = entity.getValue(
       CameraSource,
       'stream',
@@ -250,11 +254,28 @@ export class CameraSystem extends createSystem({
 
     this.cleanupCameraResources(stream, video, texture);
 
-    // Clear component values and set state to Inactive
     entity.setValue(CameraSource, 'stream', null);
     entity.setValue(CameraSource, 'videoElement', null);
     entity.setValue(CameraSource, 'texture', null);
-    entity.setValue(CameraSource, 'state', CameraState.Inactive);
+  }
+
+  private stopAllCameras(): void {
+    for (const entity of this.queries.cameras.entities) {
+      this.stopCamera(entity);
+    }
+  }
+
+  private beginOperation(entity: Entity): number {
+    const operationId = (this.operationIds.get(entity) ?? 0) + 1;
+    this.operationIds.set(entity, operationId);
+    return operationId;
+  }
+
+  private isCurrentStart(entity: Entity, operationId: number): boolean {
+    return (
+      this.operationIds.get(entity) === operationId &&
+      entity.getValue(CameraSource, 'state') === CameraState.Starting
+    );
   }
 
   /**

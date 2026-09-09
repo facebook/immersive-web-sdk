@@ -1079,7 +1079,7 @@ CameraFacing.Unknown; // Any available camera (default)
 CameraState.Inactive; // Not started
 CameraState.Starting; // Async initialization in progress
 CameraState.Active; // Stream running
-CameraState.Error; // Failed to start
+CameraState.Error; // Failed to start; terminal until explicitly restarted
 ```
 
 **CameraUtils** static class:
@@ -1089,6 +1089,9 @@ CameraState.Error; // Failed to start
 const devices = await CameraUtils.getDevices();
 const backCam = CameraUtils.findByFacing(devices, CameraFacing.Back);
 
+// Retry after correcting a startup error or changing camera configuration
+CameraUtils.restart(cameraEntity);
+
 // Capture current frame as canvas (for snapshot/processing)
 const canvas = CameraUtils.captureFrame(cameraEntity);
 if (canvas) {
@@ -1096,7 +1099,7 @@ if (canvas) {
 }
 ```
 
-**Requires:** `features: { camera: true }`. Camera stream only activates during XR sessions.
+**Requires:** `features: { camera: true }`, a secure context, camera permission, and a camera exposed through browser `MediaDevices`. Streams can run while the world is visible in browser-only or immersive XR mode. `CameraSource` does not expose Quest passthrough or raw headset-camera frames.
 
 ### 25. PhysicsManipulation Component
 

@@ -1,451 +1,565 @@
 ---
+title: Camera access
+description: Use browser-exposed cameras with CameraSource, render live video, capture frames, and manage the camera lifecycle safely
+last_updated: 2026-09-05
 outline: [2, 4]
 ---
 
-# Chapter 13: Camera Access
+IWSDK's camera system captures video from cameras exposed through the browser's `navigator.mediaDevices` API. It provides a Three.js `VideoTexture`, an `HTMLVideoElement`, and the underlying `MediaStream`.
 
-The IWSDK provides a camera access system that enables browser and XR applications to access device cameras for video streaming, photo capture, and computer vision tasks.
+`CameraSource` does not expose Meta Quest passthrough imagery or raw headset tracking-camera frames. Those are separate from browser `MediaDevices` inputs. If a browser does not expose a camera as a `videoinput`, IWSDK cannot access it through this API.
 
-## What You'll Build
+`CameraSystem` runs in browser-only and XR-enabled worlds. It attempts to start inactive camera sources only when neither document visibility nor world visibility is hidden.
+
+## What you'll build
 
 By the end of this chapter, you'll be able to:
 
-- Set up camera access with automatic device selection
-- Display live camera feeds in your XR experience
-- Capture video frames for photo capture or computer vision
-- Handle camera permissions and device switching
-- Configure camera resolution and frame rate
+- Request browser camera access from a user action
+- Select any available camera or request a specific facing direction
+- Display a live camera feed in a 3D scene
+- Capture video frames as canvases
+- Switch devices and retry failed requests
+- Handle camera ownership and cleanup correctly
 
-## Overview
+## Prerequisites
 
-The camera system leverages the browser's MediaDevices API. The system automatically manages the camera lifecycle while the world is visible, including non-immersive browser mode and immersive XR sessions.
+Camera access requires:
 
-### Key Components
+- A secure context, such as HTTPS or localhost
+- Camera permission from the user
+- A browser that supports `navigator.mediaDevices`
+- At least one camera exposed by the browser as a `videoinput`
+- When embedded in an iframe, both the containing page's Permissions Policy and the `allow` attribute on the iframe must permit `camera`
 
-- **`CameraSystem`** - Manages camera stream lifecycle
-- **`CameraSource`** - Component holding camera configuration and output (texture, video element)
-- **`CameraUtils`** - Static utilities for device enumeration, permissions, and frame capture
-- **`CameraState`** - Enum for camera lifecycle states (Inactive, Starting, Active, Error)
+Available cameras vary by browser and device. A headset's passthrough view is not automatically available as a browser camera.
 
-## Quick Start
+## Quick start
 
-Here's a minimal example to get camera working in your XR scene:
+In an existing IWSDK project, add a camera button and status output alongside the existing scene container. Keep the project's normal CSS that gives the scene container a non-zero size.
 
-```javascript
-import { World, CameraSource, CameraUtils, SessionMode } from '@iwsdk/core';
+```html
+<div id="scene-container"></div>
+<button id="enable-camera" type="button">Enable camera</button>
+<button id="capture-photo" type="button">Capture photo</button>
+<output id="camera-status">Camera disabled</output>
+```
 
-// Optional: Request camera permission early for better UX
-CameraUtils.getDevices()
-  .then(() => console.log('Cameras ready'))
-  .catch((error) => console.warn('Camera unavailable'));
+Use the following module code. Permission and `CameraSource` creation both happen after the user clicks the button. This browser-only preview is attached directly to `world.camera`.
 
-World.create(document.getElementById('scene-container'), {
-  xr: {
-    sessionMode: SessionMode.ImmersiveAR,
-  },
+```typescript
+import {
+  CameraFacing,
+  CameraSource,
+  CameraState,
+  CameraUtils,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  World,
+  createSystem,
+  type Entity,
+  type VideoTexture,
+} from '@iwsdk/core';
+
+const container = document.getElementById('scene-container');
+const enableButton =
+  document.querySelector<HTMLButtonElement>('#enable-camera');
+const status = document.querySelector<HTMLOutputElement>('#camera-status');
+
+if (!container || !enableButton || !status) {
+  throw new Error('Camera example elements are missing');
+}
+
+class CameraPreviewSystem extends createSystem({
+  cameras: { required: [CameraSource] },
+}) {
+  private readonly material = new MeshBasicMaterial();
+  private readonly preview = new Mesh(
+    new PlaneGeometry(0.32, 0.18),
+    this.material,
+  );
+
+  init() {
+    this.preview.position.set(0, 0, -0.5);
+    this.preview.visible = false;
+    this.camera.add(this.preview);
+
+    this.cleanupFuncs.push(() => {
+      this.preview.removeFromParent();
+      this.preview.geometry.dispose();
+      this.material.dispose();
+    });
+  }
+
+  update() {
+    const cameraEntity = this.queries.cameras.entities.values().next().value;
+    const state = cameraEntity?.getValue(CameraSource, 'state');
+    const texture = cameraEntity
+      ? (cameraEntity.getValue(CameraSource, 'texture') as VideoTexture | null)
+      : null;
+
+    if (this.material.map !== texture) {
+      this.material.map = texture;
+      this.material.needsUpdate = true;
+    }
+
+    this.preview.visible = texture !== null;
+
+    if (state === CameraState.Active && texture) {
+      status.value = 'Camera active: live preview visible';
+      enableButton.textContent = 'Camera active';
+    } else if (state === CameraState.Error) {
+      status.value = 'Camera failed to start';
+      enableButton.textContent = 'Try camera again';
+      enableButton.disabled = false;
+    }
+  }
+}
+
+const world = await World.create(container, {
+  xr: false,
   features: {
-    camera: true, // Enable CameraSystem
+    camera: true,
   },
-}).then((world) => {
-  // Create camera entity
-  const cameraEntity = world.createEntity();
-  cameraEntity.addComponent(CameraSource, {
-    facing: 'back',
-    width: 1920,
-    height: 1080,
-    frameRate: 30,
-  });
+});
 
-  // Store for later access
-  world.globals.cameraEntity = cameraEntity;
+world.registerSystem(CameraPreviewSystem);
+
+let cameraEntity: Entity | null = null;
+
+enableButton.addEventListener('click', async () => {
+  enableButton.disabled = true;
+  status.value = 'Requesting camera permission';
+
+  try {
+    const devices = await CameraUtils.getDevices(true);
+    if (devices.length === 0) {
+      throw new Error('No browser camera input is available');
+    }
+
+    if (cameraEntity) {
+      CameraUtils.restart(cameraEntity);
+    } else {
+      cameraEntity = world.createEntity();
+      cameraEntity.addComponent(CameraSource, {
+        facing: CameraFacing.Unknown,
+      });
+    }
+
+    status.value = 'Starting camera';
+  } catch (error) {
+    console.error('Unable to enable the camera', error);
+    status.value = 'Camera permission or startup failed';
+    enableButton.textContent = 'Try camera again';
+    enableButton.disabled = false;
+  }
 });
 ```
 
-## System Setup
+After permission and startup succeed, the output reads **Camera active: live preview visible**, and a live video plane appears in front of the browser camera. `CameraFacing.Unknown` selects the first browser-exposed camera without requiring its label to identify a facing direction.
 
-### Step 1: Enable Camera Feature
+The same source can be used in an XR-enabled world, but it still accesses only browser `MediaDevices` inputs.
 
-```javascript
-World.create(container, {
+## Key components
+
+- **`CameraSystem`** manages camera stream lifecycle.
+- **`CameraSource`** stores camera configuration and exposes system-owned state and outputs.
+- **`CameraUtils`** provides device enumeration, permission checks, restart control, facing lookup, and frame capture.
+- **`CameraFacing`** selects any, front-facing, or back-facing cameras.
+- **`CameraState`** reports the current lifecycle state.
+
+Enable the camera feature when creating the world:
+
+```typescript
+const world = await World.create(container, {
   features: {
-    camera: true, // Registers CameraSystem and CameraSource
+    camera: true,
   },
 });
 ```
 
-### Step 2: Request Permissions Early (Optional)
+This registers `CameraSystem` and `CameraSource`.
 
-```javascript
-CameraUtils.getDevices()
-  .then(() => {
-    // Permission granted - camera will start quickly in XR
-  })
-  .catch((error) => {
-    // Show UI warning that camera won't be available
-  });
-```
+## Understand `CameraSource`
 
-**Why request early?**
+`CameraSource` contains input configuration and system-owned lifecycle values.
 
-- Avoids permission prompt interrupting XR session
-- Caches available cameras for instant access
+### Input properties
 
-### Step 3: Create Camera Entity
+| Property    | Default                | Description                                       |
+| ----------- | ---------------------- | ------------------------------------------------- |
+| `deviceId`  | `''`                   | Exact device ID, or empty for automatic selection |
+| `facing`    | `CameraFacing.Unknown` | Facing direction used for automatic selection     |
+| `width`     | `1920`                 | Ideal video width in pixels                       |
+| `height`    | `1080`                 | Ideal video height in pixels                      |
+| `frameRate` | `30`                   | Ideal frame rate                                  |
 
-```javascript
-const cameraEntity = world.createEntity();
-cameraEntity.addComponent(CameraSource, {
-  deviceId: '', // Empty = auto-select based on facing
-  facing: 'back', // 'front' | 'back'
-  width: 1920,
-  height: 1080,
-  frameRate: 30,
-});
-```
+Width, height, and frame rate are ideal constraints. The browser chooses the actual stream settings.
 
-**Important**: The camera activates while the world is visible. It works in browser-only worlds created with `xr: false` and in visible XR sessions, and it stops streams when the page/session is hidden.
+### State and output properties
 
-## Understanding the Components
+| Property       | Description                                  |
+| -------------- | -------------------------------------------- |
+| `state`        | `Inactive`, `Starting`, `Active`, or `Error` |
+| `texture`      | System-owned `VideoTexture`                  |
+| `videoElement` | System-owned `HTMLVideoElement`              |
+| `stream`       | System-owned `MediaStream`                   |
 
-### CameraSource
+The output objects use `Types.Object`, so cast them when reading them in TypeScript. Callers should use the stream, video element, and texture only while the source is `CameraState.Active`. After `CameraUtils.restart()` marks a source inactive, its previous outputs can remain until the next `CameraSystem` update, when the system releases them before attempting a new start.
 
-Holds camera configuration (input) and output (texture, video element, stream).
+```typescript
+import { CameraSource, CameraState, type VideoTexture } from '@iwsdk/core';
 
-#### Input Properties
-
-- **`deviceId`** - Specific camera device ID (default: `''` for auto-selection)
-- **`facing`** - Camera facing: `'front'` | `'back'` (default: `'back'`)
-- **`width`** - Ideal video width in pixels (default: `1920`)
-- **`height`** - Ideal video height in pixels (default: `1080`)
-- **`frameRate`** - Ideal frame rate (default: `30`)
-
-#### Output Properties (Read-only)
-
-- **`state`** - Current state: `CameraState.Inactive | Starting | Active | Error`
-- **`texture`** - `VideoTexture` for rendering (null until Active)
-- **`videoElement`** - `HTMLVideoElement` for advanced access (null until Active)
-- **`stream`** - `MediaStream` (internal, null until Active)
-
-```javascript
-// Get texture from CameraSource
-const texture = cameraEntity.getValue(CameraSource, 'texture');
 const state = cameraEntity.getValue(CameraSource, 'state');
+const texture = cameraEntity.getValue(
+  CameraSource,
+  'texture',
+) as VideoTexture | null;
+const video = cameraEntity.getValue(
+  CameraSource,
+  'videoElement',
+) as HTMLVideoElement | null;
 
-// Check if ready
-if (texture && state === CameraState.Active) {
-  material.map = texture;
+if (state === CameraState.Active && texture && video) {
+  console.log({
+    texture,
+    width: video.videoWidth,
+    height: video.videoHeight,
+  });
 }
 ```
 
-### CameraUtils
+Treat `state`, `texture`, `videoElement`, and `stream` as read-only. Do not stop the stream's tracks, replace `videoElement.srcObject`, or dispose the texture. `CameraSystem` owns those resources. Use `CameraUtils.restart()` to request a restart, and remove `CameraSource` or destroy the entity to stop it permanently.
 
-Static utility class for camera operations.
+## Use `CameraUtils`
 
-#### getDevices(refresh?: boolean)
+### `getDevices(refresh?)`
 
-```javascript
-// Get cached devices (fast)
+```typescript
 const devices = await CameraUtils.getDevices();
-
-// Force re-enumeration (slow)
-const devices = await CameraUtils.getDevices(true);
-
-// Each device: { deviceId, label, facing: 'front' | 'back' | 'unknown' }
+const refreshedDevices = await CameraUtils.getDevices(true);
 ```
 
-#### findByFacing(devices, facing)
+The first call requests camera permission with a temporary video stream, stops that stream, enumerates video inputs, and caches the result. Later calls return the cached list unless `refresh` is `true`.
 
-```javascript
-const devices = await CameraUtils.getDevices();
-const backCamera = CameraUtils.findByFacing(devices, 'back');
+Each result contains a `deviceId`, `label`, and inferred `facing` value.
+
+### `findByFacing(devices, facing)`
+
+```typescript
+const frontCamera = CameraUtils.findByFacing(devices, CameraFacing.Front);
 ```
 
-#### hasPermission()
+Facing is inferred from the browser-provided device label:
 
-```javascript
+- `back`, `environment`, or `rear` maps to `CameraFacing.Back`.
+- `front`, `user`, or `face` maps to `CameraFacing.Front`.
+- Other labels map to `CameraFacing.Unknown`.
+
+Matching is strict. `findByFacing()` returns `null` instead of falling back to a camera with a different or unknown facing.
+
+### `hasPermission()`
+
+```typescript
 const granted = await CameraUtils.hasPermission();
 ```
 
-#### captureFrame(entity)
+This checks permission without requesting it. It returns `false` when permission is not granted or when the browser does not support the required Permissions API query.
 
-```javascript
+### `restart(entity)`
+
+```typescript
+CameraUtils.restart(cameraEntity);
+```
+
+Call `restart()` after changing camera configuration or correcting an error. It schedules a restart; when neither document visibility nor world visibility is hidden, `CameraSystem` releases the previous resources and attempts to start the source on a subsequent update.
+
+### `captureFrame(entity)`
+
+```typescript
 const canvas = CameraUtils.captureFrame(cameraEntity);
 
 if (canvas) {
-  // Canvas at full video resolution
-  const texture = new CanvasTexture(canvas);
+  document.body.append(canvas);
+}
+```
 
-  // Or export as image
+This returns a canvas at the video's current resolution. It returns `null` when the video element is unavailable, its dimensions are zero, or a 2D canvas context cannot be created.
+
+## Select a camera at creation time
+
+The following snippets are alternatives. Add `CameraSource` only once to a given entity.
+
+### Use any available camera
+
+```typescript
+const cameraEntity = world.createEntity();
+cameraEntity.addComponent(CameraSource, {
+  facing: CameraFacing.Unknown,
+});
+```
+
+With an empty `deviceId`, `CameraFacing.Unknown` selects the first enumerated video input.
+
+### Request a front- or back-facing camera
+
+```typescript
+const cameraEntity = world.createEntity();
+cameraEntity.addComponent(CameraSource, {
+  facing: CameraFacing.Back,
+});
+```
+
+`CameraFacing.Front` and `CameraFacing.Back` require a matching inferred device label. If no matching device is exposed, the source enters `CameraState.Error`; it does not fall back to another camera.
+
+### Select a specific device
+
+```typescript
+const devices = await CameraUtils.getDevices(true);
+const selectedDevice = devices[0];
+
+if (!selectedDevice) {
+  throw new Error('No browser camera input is available');
+}
+
+const cameraEntity = world.createEntity();
+cameraEntity.addComponent(CameraSource, {
+  deviceId: selectedDevice.deviceId,
+});
+```
+
+A non-empty `deviceId` takes precedence over `facing` and is passed to `getUserMedia()` as an exact constraint.
+
+## Manage lifecycle and retries
+
+`CameraSystem` attempts to start an inactive source only when neither document visibility nor world visibility is hidden. This applies in non-immersive browser mode and in XR-enabled worlds.
+
+The system releases camera resources when:
+
+- The document becomes hidden
+- The world's visibility state becomes hidden
+- The entity loses its `CameraSource` component
+- The system or world is destroyed
+- A source is restarted
+
+Cleanup stops media tracks, pauses the video, clears its `srcObject`, disposes the video texture, and clears the component outputs. Superseded requests cannot overwrite newer camera state, and any resources they acquire are released when those requests resolve.
+
+After a visibility-related stop, the source is inactive. The system attempts to start it again once neither document visibility nor world visibility is hidden.
+
+A failed start enters `CameraState.Error`. The system does not retry errors every frame. Correct the cause, then schedule an explicit retry:
+
+```typescript
+CameraUtils.restart(cameraEntity);
+```
+
+`CameraUtils.restart()` is a restart request, not a way to keep an enabled source stopped. Remove `CameraSource` or destroy the entity when the camera is no longer needed.
+
+## Change the selected camera
+
+For an existing source, update its configuration and then call `CameraUtils.restart()`.
+
+To switch by facing, clear the current device ID first:
+
+```typescript
+await CameraUtils.getDevices(true);
+
+cameraEntity.setValue(CameraSource, 'deviceId', '');
+cameraEntity.setValue(CameraSource, 'facing', CameraFacing.Front);
+CameraUtils.restart(cameraEntity);
+```
+
+Choose an exact device from a fresh enumeration before updating the source:
+
+```typescript
+const devices = await CameraUtils.getDevices(true);
+const selectedDevice = devices[0];
+
+if (!selectedDevice) {
+  throw new Error('No browser camera input is available');
+}
+
+cameraEntity.setValue(CameraSource, 'deviceId', selectedDevice.deviceId);
+CameraUtils.restart(cameraEntity);
+```
+
+## Common patterns
+
+### Capture a photo intentionally
+
+Call frame capture from an explicit user action:
+
+```typescript
+import { CameraUtils, type Entity } from '@iwsdk/core';
+
+function savePhoto(cameraEntity: Entity) {
+  const canvas = CameraUtils.captureFrame(cameraEntity);
+  if (!canvas) return;
+
   canvas.toBlob(
     (blob) => {
-      const url = URL.createObjectURL(blob);
-      // Download or upload
-    },
-    'image/jpeg',
-    0.95,
-  );
-}
-```
-
-### CameraSystem
-
-Automatically manages camera lifecycle:
-
-- Starts cameras when XR visible
-- Stops cameras when XR hidden
-- Retries failed cameras
-- Cleans up resources
-
-**You don't need to interact with the system directly.**
-
-## Camera Configuration
-
-### Auto-Selection by Facing
-
-```javascript
-cameraEntity.addComponent(CameraSource, {
-  facing: 'back', // System picks best matching camera
-});
-```
-
-### Manual Device Selection
-
-```javascript
-const devices = await CameraUtils.getDevices();
-cameraEntity.addComponent(CameraSource, {
-  deviceId: devices[0].deviceId,
-});
-```
-
-### Resolution and Frame Rate
-
-```javascript
-cameraEntity.addComponent(CameraSource, {
-  facing: 'back',
-  width: 1920, // Ideal (may be adjusted by browser)
-  height: 1080,
-  frameRate: 30,
-});
-```
-
-### Switching Cameras
-
-```javascript
-cameraEntity.setValue(CameraSource, 'facing', 'front');
-cameraEntity.setValue(CameraSource, 'deviceId', '');
-cameraEntity.setValue(CameraSource, 'state', CameraState.Inactive); // Restart
-```
-
-## Common Patterns
-
-### AR Camera Viewfinder
-
-```javascript
-class ViewfinderSystem extends createSystem({}) {
-  private viewfinderPlane: Mesh | null = null;
-
-  update() {
-    if (!this.viewfinderPlane) this.createViewfinder();
-  }
-
-  private createViewfinder() {
-    const cameraEntity = this.globals.cameraEntity;
-    if (!cameraEntity) return;
-
-    const texture = cameraEntity.getValue(CameraSource, 'texture');
-    const videoElement = cameraEntity.getValue(CameraSource, 'videoElement');
-
-    if (!texture || !videoElement) return; // Not ready
-
-    // Calculate aspect ratio
-    const aspectRatio = videoElement.videoWidth / videoElement.videoHeight;
-    const width = 0.24;
-    const height = width / aspectRatio;
-
-    // Create plane with camera texture
-    const geometry = new PlaneGeometry(width, height);
-    const material = new MeshBasicMaterial({ map: texture });
-
-    this.viewfinderPlane = new Mesh(geometry, material);
-    this.viewfinderPlane.position.set(0, 0, -0.4);
-    this.player.head.add(this.viewfinderPlane);
-  }
-}
-```
-
-### Photo Capture
-
-```javascript
-class PhotoCaptureSystem extends createSystem({}) {
-  update() {
-    if (this.input.xr.gamepads.right?.getSelectEnd()) {
-      this.capturePhoto();
-    }
-  }
-
-  private capturePhoto() {
-    const canvas = CameraUtils.captureFrame(this.globals.cameraEntity);
-    if (!canvas) return;
-
-    // Create texture
-    const texture = new CanvasTexture(canvas);
-    texture.minFilter = LinearFilter;
-
-    // Save photo
-    canvas.toBlob((blob) => {
       if (!blob) return;
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `photo-${Date.now()}.jpg`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 100);
-    }, 'image/jpeg', 0.95);
-  }
-}
-```
-
-### Digital Zoom
-
-```javascript
-private capturePhotoWithZoom(zoomLevel: number) {
-  const canvas = CameraUtils.captureFrame(this.globals.cameraEntity);
-  if (!canvas || zoomLevel === 1.0) return canvas;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // Create temp canvas with original
-  const temp = document.createElement('canvas');
-  temp.width = canvas.width;
-  temp.height = canvas.height;
-  temp.getContext('2d')?.drawImage(canvas, 0, 0);
-
-  // Calculate crop for zoom
-  const sourceWidth = temp.width / zoomLevel;
-  const sourceHeight = temp.height / zoomLevel;
-  const sourceX = (temp.width - sourceWidth) / 2;
-  const sourceY = (temp.height - sourceHeight) / 2;
-
-  // Draw zoomed region
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(
-    temp,
-    sourceX, sourceY, sourceWidth, sourceHeight,
-    0, 0, canvas.width, canvas.height,
+    },
+    'image/jpeg',
+    0.95,
   );
-
-  return canvas;
 }
+
+document
+  .querySelector<HTMLButtonElement>('#capture-photo')
+  ?.addEventListener('click', () => {
+    if (cameraEntity) savePhoto(cameraEntity);
+  });
 ```
 
-### Device Switching UI
+### Switch with a controller button
 
-```javascript
-class CameraSwitcherSystem extends createSystem({}) {
-  private availableCameras: CameraDeviceInfo[] = [];
-  private currentIndex = 0;
+Use the successfully enumerated device list from the Quick start click handler. This factory does not request permission itself and switches the first queried camera source:
 
-  async init() {
-    this.availableCameras = await CameraUtils.getDevices();
-  }
+```typescript
+import {
+  CameraSource,
+  CameraUtils,
+  createSystem,
+  type CameraDeviceInfo,
+} from '@iwsdk/core';
 
-  update() {
-    if (this.input.xr.gamepads.right?.getButtonDown(0)) {
-      this.switchCamera();
+function createCameraSwitcherSystem(availableCameras: CameraDeviceInfo[]) {
+  return class CameraSwitcherSystem extends createSystem({
+    cameras: { required: [CameraSource] },
+  }) {
+    update() {
+      if (this.input.xr.gamepads.right?.getButtonDownByIdx(0)) {
+        this.switchCamera();
+      }
     }
-  }
 
-  private switchCamera() {
-    if (this.availableCameras.length === 0) return;
+    private switchCamera() {
+      const cameraEntity = this.queries.cameras.entities.values().next().value;
+      if (!cameraEntity || availableCameras.length === 0) return;
 
-    this.currentIndex = (this.currentIndex + 1) % this.availableCameras.length;
-    const next = this.availableCameras[this.currentIndex];
+      const currentDeviceId = cameraEntity.getValue(
+        CameraSource,
+        'deviceId',
+      ) as string;
+      const currentIndex = currentDeviceId
+        ? availableCameras.findIndex(
+            ({ deviceId }) => deviceId === currentDeviceId,
+          )
+        : -1;
+      const nextIndex =
+        currentIndex < 0 ? 0 : (currentIndex + 1) % availableCameras.length;
+      const next = availableCameras[nextIndex];
+      if (!next) return;
 
-    const cameraEntity = this.globals.cameraEntity;
-    cameraEntity.setValue(CameraSource, 'deviceId', next.deviceId);
-    cameraEntity.setValue(CameraSource, 'state', CameraState.Inactive);
-  }
+      cameraEntity.setValue(CameraSource, 'deviceId', next.deviceId);
+      CameraUtils.restart(cameraEntity);
+    }
+  };
 }
 ```
+
+Inside the successful branch of the Quick start click handler, register the system once after `getDevices(true)` returns and after the empty-list guard:
+
+```typescript
+world.registerSystem(createCameraSwitcherSystem(devices));
+```
+
+`getButtonDownByIdx(0)` checks button index `0`; use the index appropriate for the target controller.
 
 ## Troubleshooting
 
-### Common Issues
+### Permission is denied or blocked
 
-**Camera not starting:**
+- Serve the app over HTTPS or localhost.
+- Request access from an intentional user action.
+- Check the browser's site permission and the operating system's camera privacy setting.
+- After granting access, call `CameraUtils.getDevices(true)` and then `CameraUtils.restart(cameraEntity)` for an existing source.
 
-- Verify `features: { camera: true }` is set
-- Check camera permissions granted
-- Ensure XR session is active
-- Check console for errors
+An active XR session is not required.
 
-**Black screen:**
+### The app is embedded in an iframe
 
-- Check `state === CameraState.Active`
-- Verify texture is not null
-- Check `videoElement.videoWidth > 0`
+- Configure the containing page's Permissions Policy to permit camera access for the embedded origin.
+- Add camera permission to the iframe, for example `<iframe src="..." allow="camera"></iframe>`.
+- Reload the embedded app before requesting permission again.
 
-**Permission denied:**
+### The camera is already in use
 
-- Request early with `CameraUtils.getDevices()`
-- Provide UI fallback
+If `getUserMedia()` reports that the camera cannot be read, close other applications or tabs using the camera. Then refresh device enumeration and retry the source.
 
-**Wrong camera:**
+### The device ID is stale or invalid
 
-- Verify `facing` value
-- Manually specify `deviceId`
+Re-enumerate devices and use an ID from the new result. To return to automatic selection, clear `deviceId`, select `CameraFacing.Unknown`, and restart:
 
-**Poor quality:**
+```typescript
+await CameraUtils.getDevices(true);
+cameraEntity.setValue(CameraSource, 'deviceId', '');
+cameraEntity.setValue(CameraSource, 'facing', CameraFacing.Unknown);
+CameraUtils.restart(cameraEntity);
+```
 
-- Increase `width` and `height`
-- Check actual resolution: `videoElement.videoWidth/videoHeight`
+### Stream constraints fail
 
-### Debug Tips
+Inspect the browser's `getUserMedia()` error. Keep width, height, and frame rate as ideal preferences, try the component defaults, and verify that an exact `deviceId` still exists before retrying.
 
-```javascript
-// Log camera state
+### Requested facing is unavailable
+
+Front/back selection depends on browser-provided labels. A physically present camera with an unrecognized label is classified as `CameraFacing.Unknown` and does not satisfy a strict front/back request.
+
+Use `CameraFacing.Unknown` when any camera is acceptable, or enumerate devices and set an exact `deviceId`.
+
+### Preview is blank
+
+Check `CameraState.Active`, then cast and inspect the system-owned outputs:
+
+```typescript
 const state = cameraEntity.getValue(CameraSource, 'state');
-const deviceId = cameraEntity.getValue(CameraSource, 'deviceId');
-console.log({ state, deviceId });
+const texture = cameraEntity.getValue(
+  CameraSource,
+  'texture',
+) as VideoTexture | null;
+const video = cameraEntity.getValue(
+  CameraSource,
+  'videoElement',
+) as HTMLVideoElement | null;
 
-// Check devices
-const devices = await CameraUtils.getDevices();
-console.log('Available cameras:', devices);
+console.log({ state, hasTexture: texture !== null });
 
-// Monitor video
-const video = cameraEntity.getValue(CameraSource, 'videoElement');
-console.log({
-  width: video.videoWidth,
-  height: video.videoHeight,
-  readyState: video.readyState,
-});
+if (video) {
+  console.log({
+    width: video.videoWidth,
+    height: video.videoHeight,
+    readyState: video.readyState,
+  });
+}
 ```
 
-## Performance Considerations
+Wait for a non-null texture and video element with non-zero video dimensions.
 
-1. **Resolution** - Use 1280x720 for balanced quality/performance
-2. **Frame rate** - 30 FPS is sufficient for most use cases
-3. **Cleanup** - Stop cameras when not needed
-4. **Updates** - VideoTexture updates automatically each frame
+### Quest passthrough is unavailable
 
-## Best Practices
+`CameraSource` cannot retrieve Quest passthrough imagery or raw headset tracking-camera frames. It can use only video inputs exposed by the browser through `MediaDevices`.
 
-1. Request permissions early with `CameraUtils.getDevices()`
-2. Check `state === CameraState.Active` before using texture
-3. Handle failures gracefully with UI feedback
-4. Stop camera when not actively used
-5. Test on target devices (capabilities vary)
-6. Use appropriate resolution for your needs
+## Privacy and captured media
 
-## Example Projects
+- Request camera access and capture frames only after an intentional user action.
+- Show clear feedback while the camera is active and when a frame is captured.
+- Tell users whether captured media is stored, uploaded, or retained, and for how long.
+- Do not upload or retain a captured frame unless the user-facing experience discloses that behavior.
 
-Check out the complete implementation in the SDK:
+## Best practices
 
-- **`examples/cami`** - Full AR camera app with viewfinder, photo capture, zoom, and gallery
-
-```bash
-cd examples/cami
-pnpm install
-pnpm dev
-```
+1. Start with `CameraFacing.Unknown` unless a specific facing direction is required.
+2. Treat front/back selection as strict and handle `CameraState.Error`.
+3. Check `CameraState.Active` and cast and null-check camera outputs before using them.
+4. Use `CameraUtils.restart()` instead of mutating system-owned state or resources.
+5. Remove `CameraSource` or destroy its entity when the camera is no longer needed.
+6. Test device enumeration and labels on every target browser and device.
