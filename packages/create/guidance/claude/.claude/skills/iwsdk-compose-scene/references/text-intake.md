@@ -46,16 +46,14 @@ Call `scene_get_capabilities`, inspect the configured asset manifest, then choos
 this order:
 
 1. reuse a registered glTF or procedural asset when it satisfies the required form;
-2. author a new manifest asset when identity, geometry, or material response is
-   missing;
+2. invoke `iwsdk-build-model` when identity, geometry, or material response is missing;
 3. assemble registered assets in a scene prefab for a reusable semantic object;
 4. use a deterministic pattern for repeated compatible prefabs;
 5. accept an approximation with a named fidelity ceiling;
 6. block when a required feature has no supportable representation.
 
-Do not fabricate catalog IDs. Procedural code is an explicit asset-authoring surface,
-not a hidden scene escape hatch: keep it deterministic in a dedicated asset module,
-register its parentless `Object3D` in the manifest, and reference that ID from JSON.
+Do not fabricate catalog IDs or build model-local geometry from scene nodes. Continue
+composition only after a new asset has a registered manifest id.
 
 ## Establish Scale And Coordinates
 

@@ -77,6 +77,10 @@ and subtle breakage. Exception: `import type { GLTF } from 'three/addons/...'`.
 **Always `npx tsc --noEmit` before testing.** Type errors stop systems
 initialising without necessarily logging anything in the browser.
 
+For a new multi-file procedural model, finish the initial asset module and manifest
+registration before `npx iwsdk dev up`; do not keep the browser live while its import
+graph is half-written. Typecheck first, then launch the managed editor for inspection.
+
 Then check the right status for the task — these are not interchangeable:
 
 - scene/editor work → `scene_get_state`
@@ -117,7 +121,8 @@ every scene/ecs/xr/browser/ui command fails either way. Only `dev status`,
 
 Choose by the shape of the call, not by availability:
 
-- **MCP** for one-off calls, and whenever you want the image returned inline.
+- **MCP** for one-off calls. Screenshot tools persist the PNG locally and return
+  `screenshotPath`; read that file only when visual inspection is needed.
 - **CLI** when you need to loop or script — rendering six views, or sampling a
   value twice to measure a rate — or when the response is big enough to be worth
   filtering before it reaches context. A render of a scene containing an
@@ -135,9 +140,24 @@ or polishes the app. It privately selects the greenfield planner path or the
 bounded established-app iteration path; do not look for those paths as separate
 public skills.
 
-After routing, use scene composition, UI, physics, depth occlusion, grab, ray,
-ECS testing, and debugging skills only when the selected playbook calls for the
-matching specialty.
+The selected playbook routes work to the narrowest owning specialist:
+
+- creating or materially changing one glTF or procedural 3D asset →
+  `iwsdk-build-model`;
+- arranging existing assets, scene JSON, cross-asset contacts, lighting,
+  environment, or cameras → `iwsdk-compose-scene`;
+- a mixed build → finish every new or changed model, including support and set assets,
+  with `iwsdk-build-model`, then compose the scene with `iwsdk-compose-scene`;
+- a model-local defect found during composition routes back to `iwsdk-build-model`;
+  a placement or lighting defect stays in `iwsdk-compose-scene`.
+
+UI authoring, physics, depth occlusion, grab and ray interaction testing, ECS
+frame-stepping, and debugging have their own project skills. Use them only when
+the selected `iwsdk-dev` playbook calls for the matching specialty.
+
+The failure worth guarding against is improvising a domain that already has a
+skill because the naive approach looks tractable. Before hand-authoring scene
+JSON, a 3D model, a UIKitML panel, or a physics body, invoke the owning skill.
 
 ## Layout
 

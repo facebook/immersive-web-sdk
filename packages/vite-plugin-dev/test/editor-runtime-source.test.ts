@@ -6,6 +6,21 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  Box3,
+  BoxGeometry,
+  Group,
+  InstancedMesh,
+  Mesh,
+  MeshStandardMaterial,
+  type BufferGeometry,
+  type Object3D,
+} from 'three';
 import { describe, expect, test } from 'vitest';
 import {
   createEditorRuntimeModuleSource,
@@ -37,6 +52,57 @@ function section(source: string, start: string, end: string): string {
   expect(startIndex).toBeGreaterThan(-1);
   expect(endIndex).toBeGreaterThan(startIndex);
   return source.slice(startIndex, endIndex);
+}
+
+type AssetPreviewHierarchyEntry = {
+  name: string;
+  object: Object3D;
+  path: string;
+  type: string;
+};
+
+type AssetPreviewHelpers = {
+  assetPreviewHierarchyBounds(
+    entries: AssetPreviewHierarchyEntry[],
+  ): Map<Object3D, Box3>;
+  assetPreviewHierarchyEntries(root: Object3D): AssetPreviewHierarchyEntry[];
+  assetPreviewRenderedTriangleCount(
+    object: Mesh | InstancedMesh,
+    geometry: BufferGeometry,
+    position: { count: number },
+    index: { count: number } | null,
+  ): number;
+  objectPreviewGeometryBounds(object: Mesh): Box3 | null;
+  resolveAssetPreviewFocus(
+    entries: AssetPreviewHierarchyEntry[],
+    focus: string,
+  ): AssetPreviewHierarchyEntry | null;
+};
+
+async function loadAssetPreviewHelpers(): Promise<AssetPreviewHelpers> {
+  const source = createRuntimeSource();
+  const helpers = section(
+    source,
+    'const ASSET_PREVIEW_FOCUS_PATH_LIMIT',
+    'function inspectAssetPreviewGeometry',
+  );
+  const require = createRequire(import.meta.url);
+  const threeUrl = pathToFileURL(require.resolve('three')).href;
+  const directory = await mkdtemp(
+    path.join(tmpdir(), 'iwsdk-asset-preview-helpers-'),
+  );
+  const modulePath = path.join(directory, 'helpers.mjs');
+  try {
+    await writeFile(
+      modulePath,
+      `import { AdditiveBlending, Box3 } from ${JSON.stringify(threeUrl)};\n${helpers}\nexport { assetPreviewHierarchyBounds, assetPreviewHierarchyEntries, assetPreviewRenderedTriangleCount, objectPreviewGeometryBounds, resolveAssetPreviewFocus };\n`,
+    );
+    return (await import(
+      pathToFileURL(modulePath).href
+    )) as AssetPreviewHelpers;
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 }
 
 describe('editor runtime source', () => {
@@ -222,6 +288,209 @@ describe('editor runtime source', () => {
     expect(detachedRender).toContain(
       'scheduleEditorSceneLowering(temporarySession, { force: true })',
     );
+  });
+
+  test('uses context-efficient defaults for isolated model previews', () => {
+    const source = createRuntimeSource();
+    const assetPreview = section(
+      source,
+      'async function renderSceneAssetPreview',
+      'function scenePrefabs',
+    );
+
+    expect(assetPreview).toContain(
+      'boundedAssetPreviewDimension(options.width, 640, 320)',
+    );
+    expect(assetPreview).toContain(
+      'boundedAssetPreviewDimension(options.height, 480, 240)',
+    );
+  });
+
+  test('keeps isolated model preview metadata complete', () => {
+    const source = createRuntimeSource();
+    const diagnostics = section(
+      source,
+      'function inspectAssetPreviewGeometry',
+      'function applyAssetPreviewClayMaterial',
+    );
+
+    expect(diagnostics).toContain('root.traverseVisible((object) => {');
+    expect(diagnostics).toContain('const namedParts = namedEntries.map');
+    expect(diagnostics).toContain('namedPartsTruncated: false');
+    expect(diagnostics).not.toContain('namedEntries.slice(0, 200)');
+  });
+
+  test('executes isolated model preview geometry diagnostics', async () => {
+    const helpers = await loadAssetPreviewHelpers();
+    const sharedGeometry = new BoxGeometry(1, 1, 1);
+    const translatedMesh = new Mesh(sharedGeometry, new MeshStandardMaterial());
+    translatedMesh.position.x = 5;
+    translatedMesh.updateWorldMatrix(true, false);
+
+    const translatedBounds =
+      helpers.objectPreviewGeometryBounds(translatedMesh);
+    expect(sharedGeometry.boundingBox).toBeNull();
+    expect(translatedBounds?.min.x).toBeCloseTo(4.5);
+    expect(translatedBounds?.max.x).toBeCloseTo(5.5);
+
+    const triangleCount = (mesh: Mesh | InstancedMesh) =>
+      helpers.assetPreviewRenderedTriangleCount(
+        mesh,
+        mesh.geometry,
+        mesh.geometry.getAttribute('position'),
+        mesh.geometry.getIndex(),
+      );
+    const box = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+    expect(triangleCount(box)).toBe(12);
+    box.material.visible = false;
+    expect(triangleCount(box)).toBe(0);
+
+    const ranged = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial(),
+    );
+    ranged.geometry.setDrawRange(3, 9);
+    expect(triangleCount(ranged)).toBe(3);
+
+    const groupedMaterials = Array.from(
+      { length: 6 },
+      () => new MeshStandardMaterial(),
+    );
+    groupedMaterials[0].visible = false;
+    const grouped = new Mesh(new BoxGeometry(1, 1, 1), groupedMaterials);
+    expect(triangleCount(grouped)).toBe(10);
+
+    const instanced = new InstancedMesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial(),
+      4,
+    );
+    expect(triangleCount(instanced)).toBe(48);
+
+    const root = new Group();
+    root.name = 'Root';
+    const visible = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial(),
+    );
+    visible.name = 'Visible';
+    const hidden = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial(),
+    );
+    hidden.name = 'Hidden';
+    hidden.position.x = 10;
+    hidden.visible = false;
+    root.add(visible, hidden);
+    root.updateWorldMatrix(true, true);
+    const entries = helpers.assetPreviewHierarchyEntries(root);
+    const hierarchyBounds = helpers.assetPreviewHierarchyBounds(entries);
+    expect(hierarchyBounds.get(root)?.max.x).toBeCloseTo(0.5);
+
+    const duplicateRoot = new Group();
+    duplicateRoot.name = 'DuplicateRoot';
+    for (let index = 0; index < 50; index += 1) {
+      const duplicate = new Group();
+      duplicate.name = 'Duplicate';
+      duplicateRoot.add(duplicate);
+    }
+    const duplicateEntries =
+      helpers.assetPreviewHierarchyEntries(duplicateRoot);
+    expect(duplicateEntries).toHaveLength(51);
+    expect(() =>
+      helpers.resolveAssetPreviewFocus(duplicateEntries, 'Duplicate'),
+    ).toThrow('and 42 more');
+
+    const deepRoot = new Group();
+    deepRoot.name = 'RootAssemblyNode0000';
+    let deepParent = deepRoot;
+    for (let index = 0; index < 8; index += 1) {
+      const group = new Group();
+      group.name = `SubAssemblyNode${String(index).padStart(4, '0')}`;
+      deepParent.add(group);
+      deepParent = group;
+    }
+    for (let index = 0; index < 2; index += 1) {
+      const duplicate = new Group();
+      duplicate.name = 'TerminalDetailPart01';
+      deepParent.add(duplicate);
+    }
+    const deepEntries = helpers.assetPreviewHierarchyEntries(deepRoot);
+    const deepLeaves = deepEntries.filter(
+      (entry) => entry.name === 'TerminalDetailPart01',
+    );
+    expect(deepLeaves[0].path.length).toBeGreaterThan(160);
+    expect(deepLeaves[0].path.length).toBeLessThanOrEqual(512);
+    expect(
+      helpers.resolveAssetPreviewFocus(deepEntries, deepLeaves[0].path),
+    ).toBe(deepLeaves[0]);
+    let ambiguityMessage = '';
+    try {
+      helpers.resolveAssetPreviewFocus(deepEntries, 'TerminalDetailPart01');
+    } catch (error) {
+      ambiguityMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(ambiguityMessage).toContain('…');
+    expect(ambiguityMessage).toContain('TerminalDetailPart01[1]');
+    expect(ambiguityMessage).toContain('TerminalDetailPart01[2]');
+    expect(ambiguityMessage.length).toBeLessThan(500);
+
+    const sharedPrefix = `Root/${'a'.repeat(95)}`;
+    const sharedSuffix = 'z'.repeat(90);
+    const collidingPaths = [
+      `${sharedPrefix}/first/${sharedSuffix}`,
+      `${sharedPrefix}/second/${sharedSuffix}`,
+    ];
+    const collidingEntries = collidingPaths.map((entryPath) => ({
+      name: 'CollidingLeaf',
+      object: new Group(),
+      path: entryPath,
+      type: 'Group',
+    }));
+    let collidingMessage = '';
+    try {
+      helpers.resolveAssetPreviewFocus(collidingEntries, 'CollidingLeaf');
+    } catch (error) {
+      collidingMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(collidingMessage).toContain(collidingPaths[0]);
+    expect(collidingMessage).toContain(collidingPaths[1]);
+    expect(collidingMessage).not.toContain('…');
+
+    const oversizedPrefix = `Root/${'a'.repeat(600)}`;
+    const oversizedPaths = [
+      `${oversizedPrefix}/first/${sharedSuffix}`,
+      `${oversizedPrefix}/second/${sharedSuffix}`,
+    ];
+    const oversizedEntries = oversizedPaths.map((entryPath) => ({
+      name: 'OversizedLeaf',
+      object: new Group(),
+      path: entryPath,
+      type: 'Group',
+    }));
+    let oversizedMessage = '';
+    try {
+      helpers.resolveAssetPreviewFocus(oversizedEntries, 'OversizedLeaf');
+    } catch (error) {
+      oversizedMessage = error instanceof Error ? error.message : String(error);
+    }
+    const oversizedSuggestions = oversizedMessage
+      .split('hierarchy paths: ')[1]
+      .split(', ');
+    expect(oversizedMessage.length).toBeLessThan(500);
+    expect(oversizedSuggestions).toHaveLength(2);
+    expect(oversizedSuggestions.every((path) => path.length <= 512)).toBe(true);
+    expect(oversizedMessage).not.toContain(oversizedPaths[0]);
+    expect(oversizedMessage).not.toContain(oversizedPaths[1]);
+
+    let notFoundMessage = '';
+    try {
+      helpers.resolveAssetPreviewFocus(entries, 'z'.repeat(5_000));
+    } catch (error) {
+      notFoundMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(notFoundMessage).toContain('was not found');
+    expect(notFoundMessage.length).toBeLessThan(300);
   });
 
   test('settles UIKitML previews from render and resource signals', () => {

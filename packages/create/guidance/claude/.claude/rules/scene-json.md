@@ -6,7 +6,7 @@ paths:
 # Scene JSON — things that fail silently
 
 Format reference lives in
-`.claude/skills/iwsdk-scene-composer/references/scene-format.md`: the document
+`.claude/skills/iwsdk-compose-scene/references/scene-format.md`: the document
 boundary, content kinds, prefabs, patterns, light fields, authoring views. Read
 it for imports, prefabs, patterns, or a schema detail not covered by active
 guidance. For ordinary flat node, component, and authored-view edits, this rule,

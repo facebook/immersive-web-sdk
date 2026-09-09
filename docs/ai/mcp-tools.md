@@ -18,9 +18,9 @@ documents atomically. Invalid files keep the previous valid render and expose
 diagnostics. Unsaved human changes cause an explicit conflict instead of being
 overwritten.
 
-The public `scene_*` surface is exactly nine tools. Document mutation, creation,
-composition, validation-only, review, proof, and publish tools are intentionally not
-part of MCP.
+The public authoring surface keeps scene observation separate from isolated asset
+inspection. Document mutation, creation, composition, validation-only, review, proof,
+and publish tools are intentionally not part of MCP.
 
 ### `scene_open`
 
@@ -93,8 +93,10 @@ orthographic views use `projection: "orthographic"` and `orthographicHeight`.
 
 Capture the active scene. `captureMode: "render"` omits editor grid, selection,
 transform, helper, and orientation overlays; `captureMode: "editor"` includes the UI
-diagnostic state. Results include PNG data plus active file, hashes, camera, renderer
-environment, visible node IDs, validation diagnostics, and render statistics.
+diagnostic state. The PNG is written to a local temporary file and the result returns
+`screenshotPath` plus active file, hashes, camera, renderer environment, visible node
+IDs, validation diagnostics, and render statistics. Image bytes are not embedded in
+the MCP response.
 
 ### `scene_set_preview_visibility`
 
@@ -107,6 +109,35 @@ persisted to the scene file.
 Measure explicitly aligned image regions for semantic color, luma, highlight, or
 shadow comparison. Use only when the source/render alignment and requested statistic
 are meaningful. The hierarchy and authored geometry remain in the file.
+
+## Model Inspection
+
+### `asset_render_preview`
+
+Render one glTF or procedural manifest asset in isolation without modifying the open
+scene. The result persists one labelled contact sheet to `screenshotPath` and returns
+deterministic geometry diagnostics without embedding image bytes. UIKitML assets use
+`ui_render_preview` instead.
+
+| Parameter    | Type       | Required | Default  | Minimum | Maximum | Description                              |
+| ------------ | ---------- | -------- | -------- | ------- | ------- | ---------------------------------------- |
+| `assetId`    | `string`   | Yes      | —        | —       | —       | Manifest id of the model                 |
+| `views`      | `string[]` | No       | 5 views  | 1       | 6       | Ordered canonical views                  |
+| `mode`       | `string`   | No       | material | —       | —       | `material` or neutral `clay`             |
+| `focus`      | `string`   | No       | —        | —       | 512     | Exact named part or named hierarchy path |
+| `width`      | `number`   | No       | 640      | 320     | 2048    | Composite width in pixels                |
+| `height`     | `number`   | No       | 480      | 240     | 2048    | Composite height in pixels               |
+| `background` | `string`   | No       | #202226  | —       | —       | Three.js-compatible background color     |
+
+Diagnostics include raw and framing bounds, object/mesh/geometry/material counts,
+rendered triangles, and warnings for malformed geometry or weak inspection identity.
+To keep model context bounded, MCP responses include at most 40 named part paths
+without their bounds plus the total named-part count. CLI JSON retains the complete
+named-part bounds.
+
+Transparent/additive effects remain visible but do not control automatic camera
+framing. Use `focus` after the contact sheet exposes a suspicious part; the full
+asset remains rendered so attachment context is preserved.
 
 ## Modular Scenes
 
@@ -138,9 +169,10 @@ rendering.
 
 ### `browser_screenshot`
 
-Capture the runtime, editor, or complete managed workspace surface. Use the `target`
-parameter (`runtime`, `editor`, or `workspace`) instead of relying on the currently
-visible tab.
+Capture the runtime, editor, or complete managed workspace surface. The PNG is
+written to a local temporary file and returned as `screenshotPath`, without inline
+base64 image data. Use the `target` parameter (`runtime`, `editor`, or `workspace`)
+instead of relying on the currently visible tab.
 
 ### `browser_get_console_logs`
 

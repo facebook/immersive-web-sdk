@@ -706,7 +706,10 @@ export interface SceneCompositionFeasibility {
 
 export interface SceneCompilationProvenance {
   adapter: { id: string; version: string };
-  skill: { id: 'iwsdk-scene-composer'; version: string };
+  skill: {
+    id: 'iwsdk-compose-scene' | 'iwsdk-scene-composer';
+    version: string;
+  };
   capabilityHash: Sha256;
   inputHashes: Sha256[];
 }

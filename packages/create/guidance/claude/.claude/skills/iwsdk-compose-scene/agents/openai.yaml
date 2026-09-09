@@ -1,0 +1,4 @@
+interface:
+  display_name: 'IWSDK Compose Scene'
+  short_description: 'Arrange, light, and review editable IWSDK scenes'
+  default_prompt: 'Use $iwsdk-compose-scene to compose this request from validated manifest assets.'

@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir, writeFile } from 'fs/promises';
-import os from 'os';
-import path from 'path';
 import { parseIntegerOption, safeJsonParse } from '../argv.js';
 import { createRawOutput, createSuccess } from '../cli-results.js';
 import type {
@@ -33,6 +30,7 @@ import {
   RuntimeCommandExecutionError,
   sendRuntimeCommand,
 } from '../runtime-transport.js';
+import { isScreenshotResult, saveScreenshot } from '../screenshot-output.js';
 
 const COMMON_RUNTIME_OPTIONS = new Set([
   'help',
@@ -90,6 +88,7 @@ function resolveRuntimeParams(
     operationName === 'browser_screenshot' ||
     operationName === 'scene_screenshot' ||
     operationName === 'scene_render_file' ||
+    operationName === 'asset_render_preview' ||
     operationName === 'ui_render_preview'
   ) {
     allowed.add('outputFile');
@@ -128,12 +127,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isScreenshotResult(
-  value: unknown,
-): value is { imageData: string; mimeType?: string } {
-  return isRecord(value) && typeof value.imageData === 'string';
-}
-
 function isBrowserRelaunchedResult(value: unknown): boolean {
   return isRecord(value) && value.status === 'browser_relaunched';
 }
@@ -161,19 +154,6 @@ function withBrowserStatus(
     browserConnected,
     browserCommandReady,
   };
-}
-
-async function saveScreenshot(
-  result: { imageData: string },
-  requestedPath?: string | boolean,
-): Promise<string> {
-  const outputPath =
-    typeof requestedPath === 'string'
-      ? requestedPath
-      : path.join(os.tmpdir(), `iwsdk-screenshot-${Date.now()}.png`);
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, Buffer.from(result.imageData, 'base64'));
-  return outputPath;
 }
 
 export async function handleRuntimeOperation(
@@ -248,6 +228,7 @@ export async function handleRuntimeOperation(
     operation.mcpName === 'browser_screenshot' ||
     operation.mcpName === 'scene_screenshot' ||
     operation.mcpName === 'scene_render_file' ||
+    operation.mcpName === 'asset_render_preview' ||
     operation.mcpName === 'ui_render_preview';
   const hasExplicitScreenshotPath = typeof options.outputFile === 'string';
   if (options.outputFile === true) {
@@ -262,8 +243,14 @@ export async function handleRuntimeOperation(
     isScreenshotResult(result) &&
     (hasExplicitScreenshotPath || !options.raw)
   ) {
-    const screenshotPath = await saveScreenshot(result, options.outputFile);
-    if (operation.mcpName === 'scene_render_file') {
+    const screenshotPath = await saveScreenshot(
+      result,
+      typeof options.outputFile === 'string' ? options.outputFile : undefined,
+    );
+    if (
+      operation.mcpName === 'scene_render_file' ||
+      operation.mcpName === 'asset_render_preview'
+    ) {
       const { imageData: _imageData, ...metadata } = result;
       return createSuccess({
         workspaceRoot,

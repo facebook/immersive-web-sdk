@@ -95,7 +95,7 @@ The following old branches are invalid and must never be emitted:
 
 Create procedural shapes and custom PBR/shader materials in TypeScript, register the
 resulting parentless `Object3D`, then reference its asset ID. See
-[asset-authoring.md](asset-authoring.md).
+`iwsdk-build-model`.
 
 ## Nodes And Content
 
@@ -368,7 +368,7 @@ Use `authoring.composition` as a fixed brief, not a process transcript:
       "feasibility": { "status": "supported" },
       "provenance": {
         "adapter": { "id": "hybrid-intake", "version": "1.0.0" },
-        "skill": { "id": "iwsdk-scene-composer", "version": "1.0.0" },
+        "skill": { "id": "iwsdk-compose-scene", "version": "1.0.0" },
         "capabilityHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "inputHashes": []
       },

@@ -325,6 +325,7 @@ async function startRuntimeFixture(
                 }
               : request.method === 'screenshot' ||
                   request.method === 'scene_screenshot' ||
+                  request.method === 'asset_render_preview' ||
                   request.method === 'ui_render_preview'
                 ? {
                     imageData: ONE_BY_ONE_PNG_BASE64,
@@ -621,6 +622,24 @@ describe('runtime commands and project resolution', () => {
       );
       expect(existsSync(requestedSceneScreenshot)).toBe(true);
       expect(parsedSceneScreenshot.imageData).toBeUndefined();
+
+      const requestedAssetPreview = path.join(appA, 'asset-preview.png');
+      const assetPreview = await runCli(
+        [
+          'asset',
+          'render-preview',
+          '--input-json',
+          '{"assetId":"robot","mode":"clay"}',
+          '--output-file',
+          requestedAssetPreview,
+        ],
+        path.join(appA, 'src'),
+      );
+      expect(assetPreview.exitCode).toBe(0);
+      expect(JSON.parse(assetPreview.stdout).data.screenshotPath).toBe(
+        requestedAssetPreview,
+      );
+      expect(existsSync(requestedAssetPreview)).toBe(true);
 
       const requestedUIPreview = path.join(appA, 'ui-preview.png');
       const uiPreview = await runCli(

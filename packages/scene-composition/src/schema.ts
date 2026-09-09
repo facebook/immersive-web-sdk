@@ -976,7 +976,7 @@ export const SCENE_DOCUMENT_JSON_SCHEMA = {
           additionalProperties: false,
           required: ['id', 'version'],
           properties: {
-            id: { const: 'iwsdk-scene-composer' },
+            id: { enum: ['iwsdk-compose-scene', 'iwsdk-scene-composer'] },
             version: { type: 'string', minLength: 1 },
           },
         },

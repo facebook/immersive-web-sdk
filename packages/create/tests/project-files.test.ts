@@ -249,16 +249,46 @@ describe('common starter project files', () => {
     expect(paths).toContain('.claude/settings.json');
     expect(paths).toContain('.claude/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-dev/SKILL.md');
+    expect(paths).toContain('.claude/skills/iwsdk-build-model/SKILL.md');
+    expect(paths).toContain(
+      '.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
+    );
+    expect(paths).toContain('.claude/skills/iwsdk-compose-scene/SKILL.md');
+    expect(paths).toContain(
+      '.claude/skills/iwsdk-compose-scene/references/extended-workflow.md',
+    );
     expect(paths).toContain('.agents/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/planner.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/iterate.md');
+    expect(paths).toContain('.agents/skills/iwsdk-build-model/SKILL.md');
+    expect(paths).toContain(
+      '.agents/skills/iwsdk-build-model/assets/hardsurface.ts.template',
+    );
+    const claudeModelKit = textFile(
+      files,
+      '.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
+    );
+    const agentModelKit = textFile(
+      files,
+      '.agents/skills/iwsdk-build-model/assets/hardsurface.ts.template',
+    );
+    expect(claudeModelKit).toContain('frameToward(');
+    expect(claudeModelKit).toContain('mirrorSurfaceFrameX(');
+    expect(agentModelKit).toBe(claudeModelKit);
+    expect(paths).toContain('.agents/skills/iwsdk-compose-scene/SKILL.md');
+    expect(paths).toContain(
+      '.agents/skills/iwsdk-compose-scene/references/extended-workflow.md',
+    );
     expect(paths.some((file) => file.includes('/skills/iwsdk-planner/'))).toBe(
       false,
     );
     expect(paths.some((file) => file.includes('/skills/iwsdk-iterate/'))).toBe(
       false,
     );
+    expect(
+      paths.some((file) => file.includes('/skills/iwsdk-scene-composer/')),
+    ).toBe(false);
     expect(paths).toContain('.codex/config.toml');
     expect(paths).toContain('.cursor/rules/scene-json.mdc');
     expect(paths).toContain('.github/instructions/scene-json.instructions.md');

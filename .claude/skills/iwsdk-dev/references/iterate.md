@@ -47,8 +47,10 @@ lookup between the bounded inspection and the first edit.
   0.75 world meters above the preserved panel center, and at the same or greater
   depth. Keep that separation during corrections; move laterally into clear
   space rather than lowering it into the object interaction band.
-- Invoke a matching specialist only after a concrete uncertainty or the first
-  failed required interaction. After that first failure, do not sweep
+- Invoke `iwsdk-build-model` before materially changing a model and
+  `iwsdk-compose-scene` before changing scene placement, lighting, environment,
+  or cameras. Invoke other matching specialists only after a concrete uncertainty
+  or the first failed required interaction. After that first failure, do not sweep
   coordinates, read screenshots for interaction debugging, or inspect pointer,
   input, grab, ray, or UIKit internals in `node_modules`; use the specialist and
   measured ECS/UI state.

@@ -105,6 +105,7 @@ export function buildRuntimeCommandHelp(
     operation.mcpName === 'browser_screenshot' ||
     operation.mcpName === 'scene_screenshot' ||
     operation.mcpName === 'scene_render_file' ||
+    operation.mcpName === 'asset_render_preview' ||
     operation.mcpName === 'ui_render_preview';
 
   const lines = [
@@ -305,6 +306,7 @@ export function usageLines(): string[] {
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',
     '  browser <action>',
+    '  asset <action>',
     '  scene <action>',
     '  ui <action>',
     '  ecs <action>',

@@ -55,9 +55,9 @@ exact fast path before broad discovery:
    `assets-and-manifest.md`; do not list directories first;
 2. in one bounded shell call, print `package.json`, `iwsdk.config.json`, the
    small scaffold `src/*.ts` files, the authored scene JSON, and UIKitML;
-3. read only `iwsdk-scene-composer/references/scene-format.md` and
-   `iwsdk-ui/SKILL.md`; the scoped asset rule is sufficient for procedural
-   scene assets;
+3. use `iwsdk-build-model` for every new or materially changed model, then use
+   `iwsdk-compose-scene` for scene placement, lighting, environment, and cameras;
+   load `iwsdk-ui/SKILL.md` only when UIKitML is part of the request;
 4. create or replace the first implementation files immediately, then let
    typecheck/runtime errors identify any
    additional API question.
@@ -167,7 +167,10 @@ Avoid broad repeated discovery:
 Specialist skills are optional focused references, not mandatory phases. Use
 only the skills needed by the contract, normally at most once each:
 
-- `iwsdk-scene-composer` for nontrivial scene JSON/composition or camera views;
+- `iwsdk-build-model` for new or materially changed model geometry, materials,
+  hierarchy, or surface detail;
+- `iwsdk-compose-scene` for scene JSON, placement, cross-asset contacts,
+  lighting, environment, or camera views after model work is complete;
 - `iwsdk-ui` for UIKitML authoring or layout debugging;
 - `iwsdk-grab` / `iwsdk-ray` for unfamiliar live interaction simulation;
 - `iwsdk-debug` after a concrete runtime failure.

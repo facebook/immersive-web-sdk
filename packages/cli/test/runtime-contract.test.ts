@@ -16,6 +16,9 @@ import {
 } from '../src/runtime-contract.js';
 
 test('allows isolated UI rendering extra time for editor resource settling', () => {
+  expect(getDefaultRuntimeCommandTimeoutMs('asset_render_preview')).toBe(
+    120_000,
+  );
   expect(getDefaultRuntimeCommandTimeoutMs('ui_render_preview')).toBe(60_000);
   expect(getDefaultRuntimeCommandTimeoutMs('ecs_find_entities')).toBe(30_000);
 });
@@ -43,6 +46,41 @@ describe('runtime contract scene tools', () => {
         wsMethod: toolName,
       });
     }
+  });
+
+  test('routes isolated model previews to the managed editor page', () => {
+    const preview = getRuntimeOperationByToolName('asset_render_preview');
+
+    expect(preview).toMatchObject({
+      cliPath: ['asset', 'render-preview'],
+      target: { role: 'editor' },
+      wsMethod: 'asset_render_preview',
+    });
+    expect(preview?.inputSchema.required).toEqual(['assetId']);
+    expect(preview?.inputSchema.properties?.mode).toMatchObject({
+      enum: ['material', 'clay'],
+    });
+    expect(preview?.inputSchema.properties?.focus).toMatchObject({
+      maxLength: 512,
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(preview!, {
+        assetId: 'ship',
+        focus: 'x'.repeat(512),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      resolveRuntimeOperationRequest(preview!, {
+        assetId: 'ship',
+        focus: 'x'.repeat(513),
+      }),
+    ).toThrow('asset_render_preview.focus allows at most 512 characters');
+    expect(preview?.inputSchema.properties?.width).toMatchObject({
+      description: expect.stringContaining('use focus rather than more pixels'),
+    });
+    expect(preview?.inputSchema.properties?.height).toMatchObject({
+      description: expect.stringContaining('use focus rather than more pixels'),
+    });
   });
 
   test('routes runtime inspection tools to the application page', () => {
@@ -80,6 +118,12 @@ describe('runtime contract scene tools', () => {
     expect(render?.inputSchema.required).toEqual(['path']);
     expect(render?.description).toContain('Invalid files');
     expect(render?.description).toContain('PNG');
+    expect(render?.inputSchema.properties?.width).toMatchObject({
+      description: expect.stringContaining('512 or smaller'),
+    });
+    expect(render?.inputSchema.properties?.height).toMatchObject({
+      description: expect.stringContaining('384 or smaller'),
+    });
   });
 
   test('exposes one-way hash-verified scene flattening', () => {

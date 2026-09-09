@@ -17,9 +17,9 @@
  * The harness:
  *   - builds fresh local .tgz packages unless explicitly skipped
  *   - creates two temporary copies of examples/poke
- *   - installs dependencies and starts both apps through `iwsdk dev up`
+ *   - installs dependencies and starts both apps through headless `iwsdk dev up`
  *   - compares representative CLI vs `iwsdk mcp stdio` interface seams
- *   - verifies tool discovery, object/array/image payloads, structured errors,
+ *   - verifies tool discovery, object/array/screenshot payloads, structured errors,
  *     and MCP tab metadata / tab-change behavior
  *   - normalizes tab ids, Vite hashes, timestamps, and other per-instance noise
  */
@@ -39,6 +39,12 @@ import { runBrowserWarmup } from './browser-warmup-utils.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const SOURCE_EXAMPLE = path.join(ROOT, 'examples', 'poke');
+const SOURCE_EXAMPLE_ASSETS = path.join(
+  ROOT,
+  'packages',
+  'example-assets',
+  'assets',
+);
 const CLI_PATH = path.join(ROOT, 'packages', 'cli', 'dist', 'cli.js');
 const cliPackageRequire = createRequire(
   path.join(ROOT, 'packages', 'cli', 'package.json'),
@@ -275,7 +281,10 @@ async function runCliJson(args, cwd = ROOT, options = {}) {
     {
       captureOutput: true,
       cwd,
-      env: options.trace ? HARNESS_RUNTIME_ENV : {},
+      env: {
+        ...(options.trace ? HARNESS_RUNTIME_ENV : {}),
+        ...options.env,
+      },
     },
   );
 
@@ -513,6 +522,26 @@ async function callMcpToolOutcome(client, toolName, args) {
     };
   }
 
+  if (
+    toolName === 'browser_screenshot' &&
+    isRecord(payload) &&
+    typeof payload.screenshotPath === 'string'
+  ) {
+    const image = await readFile(payload.screenshotPath);
+    await rm(payload.screenshotPath, { force: true });
+    return {
+      ok: true,
+      result: {
+        kind: 'image',
+        hash: sha256(image),
+        bytes: image.length,
+      },
+      warnings: parsed.warnings,
+      tab: parsed.tab,
+      raw: response,
+    };
+  }
+
   return {
     ok: true,
     result: payload,
@@ -622,6 +651,11 @@ async function prepareExampleClone(targetRoot, packageName) {
       return !EXCLUDE_NAMES.has(path.basename(source));
     },
   });
+  await cp(
+    SOURCE_EXAMPLE_ASSETS,
+    path.join(targetRoot, 'public', 'iwsdk-example-assets'),
+    { recursive: true },
+  );
 
   const packageJsonPath = path.join(targetRoot, 'package.json');
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
@@ -682,9 +716,14 @@ async function installWorkspace(workspaceRoot, label) {
 async function ensureRuntimeStarted(workspaceRoot, label) {
   console.log(`[${label}] starting dev server`);
   const data = await runCliJson(
-    ['dev', 'up', '--timeout', String(DEFAULT_DEV_TIMEOUT_MS)],
+    ['dev', 'up', '--headless', '--timeout', String(DEFAULT_DEV_TIMEOUT_MS)],
     workspaceRoot,
-    { trace: true },
+    {
+      trace: true,
+      env: {
+        VITE_IWSDK_EXAMPLE_ASSET_BASE_URL: '/iwsdk-example-assets',
+      },
+    },
   );
   console.log(`[${label}] dev server ${data.action}`);
   console.log(`[${label}] runtime log: ${data.logPath ?? 'n/a'}`);

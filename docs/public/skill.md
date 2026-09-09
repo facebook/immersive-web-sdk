@@ -674,13 +674,14 @@ assets.
 ## 11. Bundled AI Skills
 
 Generated coding-tool configurations copy their skills from the canonical
-sources packaged under `@iwsdk/create`. The canonical skill tree is emitted
-for both Claude and Codex:
+sources packaged under `@iwsdk/create`. Portable skills are emitted for both Claude
+and Codex:
 
 | Skill | Purpose |
 |-------|---------|
-| `iwsdk-scene-composer` | Text/image/hybrid to editable native scene composition |
-| `iwsdk-dev` | Routed greenfield development and established-app iteration |
+| `iwsdk-dev` | Route greenfield development and established-app iteration |
+| `iwsdk-build-model` | Build and inspect one reusable glTF or procedural model |
+| `iwsdk-compose-scene` | Arrange, light, and review editable native scenes |
 | `iwsdk-grab` | Grab interaction implementation |
 | `iwsdk-ray` | Ray interaction implementation |
 | `iwsdk-ui` | Spatial UI implementation |

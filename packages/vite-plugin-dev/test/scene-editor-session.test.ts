@@ -948,6 +948,60 @@ describe('SceneEditorSession', () => {
     });
   });
 
+  test('renders isolated model previews through the injected renderer', async () => {
+    const renderAssetPreview = vi.fn().mockResolvedValue({
+      assetId: 'ship',
+      background: '#202226',
+      diagnostics: {
+        bounds: { min: [-1, -1, -2], max: [1, 1, 2] },
+        focusBounds: { min: [0, 0, 0], max: [0.2, 0.1, 0.4] },
+        framingBounds: { min: [-1, -1, -2], max: [1, 1, 2] },
+        geometryCount: 3,
+        materialCount: 2,
+        meshCount: 5,
+        namedPartCount: 0,
+        namedParts: [],
+        namedPartsTruncated: false,
+        objectCount: 8,
+        renderedTriangles: 96,
+        warnings: [],
+      },
+      focus: 'Ship/Vent',
+      height: 768,
+      imageData: 'png',
+      mimeType: 'image/png',
+      mode: 'clay',
+      views: ['front', 'right', 'quarter'],
+      width: 1024,
+    });
+    const session = new SceneEditorSession({
+      document: DOCUMENT,
+      renderAssetPreview,
+    });
+
+    await expect(
+      session.dispatch('asset_render_preview', {
+        assetId: 'ship',
+        focus: 'Vent',
+        mode: 'clay',
+        views: ['front', 'right', 'quarter'],
+      }),
+    ).resolves.toMatchObject({
+      assetId: 'ship',
+      focus: 'Ship/Vent',
+      imageData: 'png',
+      mimeType: 'image/png',
+    });
+    expect(renderAssetPreview).toHaveBeenCalledWith('ship', {
+      background: undefined,
+      focus: 'Vent',
+      height: undefined,
+      mode: 'clay',
+      views: ['front', 'right', 'quarter'],
+      width: undefined,
+    });
+  });
+
   test('renders isolated UIKitML asset previews through the injected renderer', async () => {
     const renderUIPreview = vi.fn().mockResolvedValue({
       assetId: 'welcome-panel',

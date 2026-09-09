@@ -23,6 +23,65 @@ afterEach(async () => {
 });
 
 describe('editor asset catalog', () => {
+  test('renders a focused isolated model contact sheet without mutating the scene', async () => {
+    harness = await createEditorTestHarness('editor-model-preview');
+    const editor = await harness.openEditor();
+    await dispatchSceneTool(editor.page, 'scene_select', {
+      nodeIds: ['table-1'],
+    });
+    const before = await editor.page.evaluate(() => ({
+      document: JSON.stringify(
+        (window as any).IWSDK_SCENE_EDITOR.session.document,
+      ),
+      selection: [...((window as any).__IWSDK_EDITOR_SELECTION || [])],
+    }));
+
+    const rendered = await dispatchSceneTool(
+      editor.page,
+      'asset_render_preview',
+      {
+        assetId: 'procedural-plinth',
+        focus: 'Procedural plinth',
+        height: 480,
+        mode: 'clay',
+        views: ['front', 'right', 'top', 'quarter'],
+        width: 640,
+      },
+    );
+
+    expect(rendered).toMatchObject({
+      assetId: 'procedural-plinth',
+      diagnostics: {
+        geometryCount: 1,
+        materialCount: 1,
+        meshCount: 1,
+        objectCount: 1,
+        renderedTriangles: 12,
+      },
+      focus: 'Procedural plinth',
+      height: 480,
+      imageData: expect.stringMatching(/^[A-Za-z0-9+/=]+$/u),
+      mimeType: 'image/png',
+      mode: 'clay',
+      width: 640,
+    });
+    expect(rendered.imageData.length).toBeGreaterThan(100);
+    expect(
+      await editor.page.evaluate(() => ({
+        document: JSON.stringify(
+          (window as any).IWSDK_SCENE_EDITOR.session.document,
+        ),
+        selection: [...((window as any).__IWSDK_EDITOR_SELECTION || [])],
+      })),
+    ).toEqual(before);
+    await expect(
+      dispatchSceneTool(editor.page, 'asset_render_preview', {
+        assetId: 'welcome-panel',
+      }),
+    ).rejects.toThrow('use ui_render_preview instead');
+    expect(editor.errors()).toEqual([]);
+  }, 30_000);
+
   test('preserves rounded alpha on an initially loaded legacy panel preview', async () => {
     harness = await createEditorTestHarness('editor-legacy-uikitml-preview');
     await writeFile(

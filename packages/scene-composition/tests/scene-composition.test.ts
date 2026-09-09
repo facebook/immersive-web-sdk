@@ -172,7 +172,7 @@ function makeScene(): SceneDocument {
         feasibility: { status: 'supported' },
         provenance: {
           adapter: { id: 'hybrid-intake', version: '1.0.0' },
-          skill: { id: 'iwsdk-scene-composer', version: '1.0.0' },
+          skill: { id: 'iwsdk-compose-scene', version: '1.0.0' },
           capabilityHash: HASH_C,
           inputHashes: [
             'sha256:03e49b58c84b95d6939257508689e845fd1366da227ccd33177eb2d345b3ec56',

@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -271,7 +271,7 @@ describe('mcp stdio interface shaping', () => {
     }
   });
 
-  test('returns screenshots as MCP image content', async () => {
+  test('persists browser screenshots and returns a compact path', async () => {
     let observedTarget: unknown;
     const runtime = await startRuntimeFixture(appRoot, ({ method, target }) => {
       if (method === 'screenshot') {
@@ -302,11 +302,18 @@ describe('mcp stdio interface shaping', () => {
 
       expect(result.isError).not.toBe(true);
       expect(result.content).toHaveLength(1);
-      expect(result.content[0]).toMatchObject({
-        type: 'image',
-        data: ONE_BY_ONE_PNG_BASE64,
+      expect(result.content[0]?.type).toBe('text');
+      const payload = JSON.parse(result.content[0]?.text ?? '');
+      expect(payload).toMatchObject({
+        _tab: { generation: 1, id: 'tab-1' },
         mimeType: 'image/png',
       });
+      expect(payload.imageData).toBeUndefined();
+      expect(path.isAbsolute(payload.screenshotPath)).toBe(true);
+      expect(await readFile(payload.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(payload.screenshotPath, { force: true });
       expect(observedTarget).toEqual({ role: 'app' });
     } finally {
       await mcp.close();
@@ -345,11 +352,17 @@ describe('mcp stdio interface shaping', () => {
 
       expect(result.isError).not.toBe(true);
       expect(result.content).toHaveLength(1);
-      expect(result.content[0]).toMatchObject({
-        type: 'image',
-        data: ONE_BY_ONE_PNG_BASE64,
+      expect(result.content[0]?.type).toBe('text');
+      const payload = JSON.parse(result.content[0]?.text ?? '');
+      expect(payload).toMatchObject({
+        _tab: { generation: 1, id: 'editor-tab' },
         mimeType: 'image/png',
       });
+      expect(payload.imageData).toBeUndefined();
+      expect(await readFile(payload.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(payload.screenshotPath, { force: true });
       expect(observedTarget).toEqual({ role: 'editor' });
     } finally {
       await mcp.close();
@@ -357,7 +370,7 @@ describe('mcp stdio interface shaping', () => {
     }
   });
 
-  test('returns render-file metadata and PNG together', async () => {
+  test('returns render-file metadata with a persisted PNG path', async () => {
     const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
       if (method === 'scene_render_file') {
         return {
@@ -384,19 +397,166 @@ describe('mcp stdio interface shaping', () => {
       });
 
       expect(result.isError).not.toBe(true);
-      expect(result.content).toHaveLength(3);
-      expect(JSON.parse(result.content[0]?.text ?? '')).toMatchObject({
+      expect(result.content).toHaveLength(1);
+      const payload = JSON.parse(result.content[0]?.text ?? '');
+      expect(payload).toMatchObject({
+        _tab: { generation: 2, id: 'editor-tab' },
+        mimeType: 'image/png',
         path: 'public/scenes/test.iwsdk.scene.json',
         valid: true,
       });
-      expect(result.content[1]).toMatchObject({
-        type: 'image',
-        data: ONE_BY_ONE_PNG_BASE64,
+      expect(payload.imageData).toBeUndefined();
+      expect(await readFile(payload.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(payload.screenshotPath, { force: true });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
+  test('returns model-preview diagnostics with a persisted PNG path', async () => {
+    const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
+      if (method === 'asset_render_preview') {
+        return {
+          result: {
+            assetId: 'ship',
+            diagnostics: {
+              meshCount: 12,
+              namedPartCount: 518,
+              namedParts: Array.from({ length: 60 }, (_, index) => ({
+                bounds: {
+                  max: [index + 1, index + 1, index + 1],
+                  min: [index, index, index],
+                },
+                name: `Part${index}`,
+                path: `Ship/Part${index}`,
+                type: 'Mesh',
+              })),
+              namedPartsTruncated: true,
+              renderedTriangles: 480,
+              warnings: [
+                ...Array.from({ length: 10 }, (_, index) => ({
+                  code: 'degenerate_triangles',
+                  message: '4 triangles have effectively zero area.',
+                  path: `Ship/Plate${index}`,
+                })),
+                ...Array.from({ length: 4 }, (_, index) => ({
+                  code: 'missing_normals',
+                  message: 'Geometry has no normal attribute.',
+                  path: `Ship/Raw${index}`,
+                })),
+                { code: 'non_front_side_materials', message: 'Verify this.' },
+              ],
+            },
+            imageData: ONE_BY_ONE_PNG_BASE64,
+            mimeType: 'image/png',
+            mode: 'clay',
+            views: ['front', 'right', 'quarter'],
+          },
+          _tabId: 'editor-tab',
+          _tabGeneration: 2,
+        };
+      }
+      return { result: { ok: true } };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'asset_render_preview',
+        arguments: { assetId: 'ship', mode: 'clay' },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(1);
+      const metadata = JSON.parse(result.content[0]?.text ?? '');
+      expect(metadata).toMatchObject({
+        _tab: { generation: 2, id: 'editor-tab' },
+        assetId: 'ship',
+        diagnostics: {
+          meshCount: 12,
+          namedPartCount: 518,
+          namedPartsTruncated: true,
+          renderedTriangles: 480,
+          warningCodeCounts: {
+            degenerate_triangles: 10,
+            missing_normals: 4,
+            non_front_side_materials: 1,
+          },
+          warningCount: 15,
+          warningsTruncated: true,
+        },
+        mode: 'clay',
+      });
+      expect(metadata.diagnostics.namedParts).toHaveLength(40);
+      expect(metadata.diagnostics.namedParts[0]).toEqual({
+        name: 'Part0',
+        path: 'Ship/Part0',
+        type: 'Mesh',
+      });
+      expect(metadata.diagnostics.warnings).toHaveLength(7);
+      expect(
+        metadata.diagnostics.warnings.map(
+          (warning: { code: string }) => warning.code,
+        ),
+      ).toEqual([
+        'degenerate_triangles',
+        'degenerate_triangles',
+        'degenerate_triangles',
+        'missing_normals',
+        'missing_normals',
+        'missing_normals',
+        'non_front_side_materials',
+      ]);
+      expect(metadata.imageData).toBeUndefined();
+      expect(await readFile(metadata.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(metadata.screenshotPath, { force: true });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
+  test('persists UIKit previews and returns a compact path', async () => {
+    const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
+      if (method === 'ui_render_preview') {
+        return {
+          result: {
+            assetId: 'panel',
+            imageData: ONE_BY_ONE_PNG_BASE64,
+            mimeType: 'image/png',
+          },
+          _tabId: 'editor-tab',
+          _tabGeneration: 2,
+        };
+      }
+      return { result: { ok: true } };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'ui_render_preview',
+        arguments: { assetId: 'panel' },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(1);
+      const payload = JSON.parse(result.content[0]?.text ?? '');
+      expect(payload).toMatchObject({
+        _tab: { generation: 2, id: 'editor-tab' },
+        assetId: 'panel',
         mimeType: 'image/png',
       });
-      expect(JSON.parse(result.content[2]?.text ?? '')).toEqual({
-        _tab: { generation: 2, id: 'editor-tab' },
-      });
+      expect(payload.imageData).toBeUndefined();
+      expect(await readFile(payload.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(payload.screenshotPath, { force: true });
     } finally {
       await mcp.close();
       await runtime.close();

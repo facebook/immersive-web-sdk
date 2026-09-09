@@ -9,11 +9,16 @@ export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex' | 'opencode';
 
 export const DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS = 30_000;
 export const UI_RENDER_PREVIEW_TIMEOUT_MS = 60_000;
+export const ASSET_RENDER_PREVIEW_TIMEOUT_MS = 120_000;
 
 export function getDefaultRuntimeCommandTimeoutMs(method: string): number {
-  return method === 'ui_render_preview'
-    ? UI_RENDER_PREVIEW_TIMEOUT_MS
-    : DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
+  if (method === 'asset_render_preview') {
+    return ASSET_RENDER_PREVIEW_TIMEOUT_MS;
+  }
+  if (method === 'ui_render_preview') {
+    return UI_RENDER_PREVIEW_TIMEOUT_MS;
+  }
+  return DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
 }
 
 export type JsonSchema = {
@@ -29,6 +34,7 @@ export type JsonSchema = {
   minimum?: number;
   exclusiveMinimum?: number;
   maximum?: number;
+  maxLength?: number;
   minItems?: number;
   maxItems?: number;
   pattern?: string;
@@ -121,12 +127,13 @@ function assertSchemaValue(
       throw new Error(`${path} must be at most ${schema.maximum}`);
     }
   }
-  if (
-    typeof value === 'string' &&
-    schema.pattern &&
-    !new RegExp(schema.pattern).test(value)
-  ) {
-    throw new Error(`${path} must match ${schema.pattern}`);
+  if (typeof value === 'string') {
+    if (schema.maxLength != null && value.length > schema.maxLength) {
+      throw new Error(`${path} allows at most ${schema.maxLength} characters`);
+    }
+    if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
+      throw new Error(`${path} must match ${schema.pattern}`);
+    }
   }
   if (Array.isArray(value)) {
     if (schema.minItems != null && value.length < schema.minItems) {
@@ -1079,7 +1086,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'browser_screenshot',
     description:
-      'Capture the managed application runtime. If the workspace editor is visible, switches to the runtime before capturing.',
+      'Capture the managed application runtime, persist the PNG locally, and return screenshotPath. If the workspace editor is visible, switches to the runtime before capturing.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -1332,7 +1339,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'scene_render_file',
     description:
-      'Validate, compose, and render an IWSDK scene JSON file without opening it in the live editor. Invalid files return structured diagnostics and no PNG; valid files return hashes, render metadata, and PNG image data.',
+      'Validate, compose, and render an IWSDK scene JSON file without opening it in the live editor. Invalid files return structured diagnostics and no PNG; valid files persist the PNG locally and return screenshotPath with hashes and render metadata.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -1350,8 +1357,18 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           description:
             'Stable id of an exact camera declared in document.authoring.views. Use this, not view, for names such as "hero".',
         },
-        width: { type: 'number', minimum: 1 },
-        height: { type: 'number', minimum: 1 },
+        width: {
+          type: 'number',
+          minimum: 1,
+          description:
+            'Render width in pixels. For agent-loop review use 512 or smaller; use 384 or smaller when verifying a correction.',
+        },
+        height: {
+          type: 'number',
+          minimum: 1,
+          description:
+            'Render height in pixels. For agent-loop review use 512 or smaller; use 384 or smaller when verifying a correction.',
+        },
       },
       required: ['path'],
     },
@@ -1880,7 +1897,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'scene_screenshot',
     description:
-      'Capture a native scene editor screenshot. Supports exact saved authoring viewId cameras, current/top/front/back/left/right/quarter/orbit views, and explicit perspective/orthographic poses.',
+      'Capture a native scene editor screenshot, persist the PNG locally, and return screenshotPath. Supports exact saved authoring viewId cameras, current/top/front/back/left/right/quarter/orbit views, and explicit perspective/orthographic poses.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1907,6 +1924,65 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'asset_render_preview',
+    description:
+      'Render an isolated manifest model as one labelled multi-view contact sheet without changing the open scene. Supports authored materials or a neutral clay pass, optional framing around one named subtree, persists the PNG locally, and returns screenshotPath with deterministic geometry diagnostics. UIKitML assets must use ui_render_preview.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        assetId: {
+          type: 'string',
+          description:
+            'Renderable glTF or Object3D manifest asset id. UIKitML assets are rejected with guidance to use ui_render_preview.',
+        },
+        views: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 6,
+          items: {
+            type: 'string',
+            enum: ['front', 'back', 'left', 'right', 'top', 'quarter'],
+          },
+          description:
+            'Ordered contact-sheet views. Defaults to front, back, right, top, and quarter.',
+        },
+        mode: {
+          type: 'string',
+          enum: ['material', 'clay'],
+          description:
+            'Use authored materials or a fixed neutral clay material. Defaults to material.',
+        },
+        focus: {
+          type: 'string',
+          maxLength: 512,
+          description:
+            'Optional exact object name or slash-separated named hierarchy path to frame. The full asset remains visible for attachment context.',
+        },
+        width: {
+          type: 'number',
+          minimum: 320,
+          maximum: 2048,
+          description:
+            'Composite contact-sheet width in pixels. Defaults to 640. Keep agent-loop previews at 640 or smaller; use focus rather than more pixels for detail review.',
+        },
+        height: {
+          type: 'number',
+          minimum: 240,
+          maximum: 2048,
+          description:
+            'Composite contact-sheet height in pixels. Defaults to 480. Keep agent-loop previews at 480 or smaller; use focus rather than more pixels for detail review.',
+        },
+        background: {
+          type: 'string',
+          description:
+            'Three.js-compatible background color. Defaults to #202226.',
+        },
+      },
+      required: ['assetId'],
+    },
+  },
+  {
     name: 'ui_list_assets',
     description:
       'List UIKitML assets available in the project asset manifest. Use a returned asset id with ui_render_preview or a PanelUI component config.',
@@ -1925,7 +2001,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'ui_render_preview',
     description:
-      'Render one UIKitML asset from the project asset manifest in isolation against a plain background. Use this to inspect panel layout without the surrounding scene.',
+      'Render one UIKitML asset from the project asset manifest in isolation against a plain background, persist the PNG locally, and return screenshotPath. Use this to inspect panel layout without the surrounding scene.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -2862,6 +2938,7 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   scene_get_logs: ['scene', 'logs'],
   scene_set_camera: ['scene', 'set-camera'],
   scene_screenshot: ['scene', 'screenshot'],
+  asset_render_preview: ['asset', 'render-preview'],
   ui_list_assets: ['ui', 'assets'],
   ui_render_preview: ['ui', 'render-preview'],
   scene_compare_screenshots: ['scene', 'compare-screenshots'],
@@ -2912,6 +2989,7 @@ export const SCENE_EDITOR_MCP_TOOL_NAMES = [
   'scene_screenshot',
   'scene_set_preview_visibility',
   'scene_measure_image_regions',
+  'asset_render_preview',
   'ui_list_assets',
   'ui_render_preview',
 ] as const;

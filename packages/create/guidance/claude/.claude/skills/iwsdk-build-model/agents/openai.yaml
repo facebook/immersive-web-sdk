@@ -1,0 +1,4 @@
+interface:
+  display_name: 'IWSDK Build Model'
+  short_description: 'Build and inspect one reusable IWSDK 3D model'
+  default_prompt: 'Use $iwsdk-build-model to build or repair this model and prove it with isolated multi-view inspection.'

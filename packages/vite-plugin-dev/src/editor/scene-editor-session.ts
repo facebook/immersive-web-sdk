@@ -47,6 +47,7 @@ export const SCENE_EDITOR_TOOL_METHODS = [
   'scene_select',
   'scene_set_camera',
   'scene_screenshot',
+  'asset_render_preview',
   'ui_list_assets',
   'ui_render_preview',
 ] as const;
@@ -112,6 +113,60 @@ export interface SceneEditorUIPreviewResult {
   height: number;
   imageData: string;
   mimeType: 'image/png';
+  width: number;
+}
+
+export type SceneEditorAssetPreviewMode = 'material' | 'clay';
+
+export type SceneEditorAssetPreviewView =
+  | 'front'
+  | 'back'
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'quarter';
+
+export interface SceneEditorAssetPreviewOptions {
+  background?: string;
+  focus?: string;
+  height?: number;
+  mode?: SceneEditorAssetPreviewMode;
+  views?: SceneEditorAssetPreviewView[];
+  width?: number;
+}
+
+export interface SceneEditorAssetPreviewResult {
+  assetId: string;
+  background: string;
+  diagnostics: {
+    bounds: SceneBounds | null;
+    focusBounds: SceneBounds | null;
+    framingBounds: SceneBounds | null;
+    geometryCount: number;
+    materialCount: number;
+    meshCount: number;
+    namedPartCount: number;
+    namedParts: Array<{
+      bounds: SceneBounds | null;
+      name: string;
+      path: string;
+      type: string;
+    }>;
+    namedPartsTruncated: boolean;
+    objectCount: number;
+    renderedTriangles: number;
+    warnings: Array<{
+      code: string;
+      message: string;
+      path?: string;
+    }>;
+  };
+  focus?: string;
+  height: number;
+  imageData: string;
+  mimeType: 'image/png';
+  mode: SceneEditorAssetPreviewMode;
+  views: SceneEditorAssetPreviewView[];
   width: number;
 }
 
@@ -205,6 +260,10 @@ export interface SceneEditorSessionOptions {
     assetId: string,
     options: SceneEditorUIPreviewOptions,
   ) => Promise<SceneEditorUIPreviewResult> | SceneEditorUIPreviewResult;
+  renderAssetPreview?: (
+    assetId: string,
+    options: SceneEditorAssetPreviewOptions,
+  ) => Promise<SceneEditorAssetPreviewResult> | SceneEditorAssetPreviewResult;
   registerReviewCapture?: (
     capture: Record<string, unknown>,
   ) => Promise<{ captureToken: Sha256 }> | { captureToken: Sha256 };
@@ -394,6 +453,8 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
         return this.screenshot(params);
       case 'scene_compare_screenshots':
         return this.compareScreenshots(params);
+      case 'asset_render_preview':
+        return this.renderAssetPreview(params);
       case 'ui_list_assets':
         return this.listUIAssets(params);
       case 'ui_render_preview':
@@ -1113,6 +1174,23 @@ export class SceneEditorSession implements FrameworkMCPRuntime {
       height: getOptionalNumber(params.height),
       width: getOptionalNumber(params.width),
     });
+  }
+
+  private async renderAssetPreview(params: Record<string, unknown>) {
+    if (this.options.renderAssetPreview == null) {
+      throw new Error('The editor runtime cannot render model previews');
+    }
+    return this.options.renderAssetPreview(
+      getRequiredString(params.assetId, 'assetId'),
+      {
+        background: getOptionalString(params.background),
+        focus: getOptionalString(params.focus),
+        height: getOptionalNumber(params.height),
+        mode: getOptionalAssetPreviewMode(params.mode),
+        views: getOptionalAssetPreviewViews(params.views),
+        width: getOptionalNumber(params.width),
+      },
+    );
   }
 
   private async renderUIPreview(params: Record<string, unknown>) {
@@ -1976,6 +2054,46 @@ function getReviewLens(value: unknown): SceneEditorReviewLens {
     return value;
   }
   throw new Error('lens must be one of layout, geometry, final');
+}
+
+function getOptionalAssetPreviewMode(
+  value: unknown,
+): SceneEditorAssetPreviewMode | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (value === 'material' || value === 'clay') {
+    return value;
+  }
+  throw new Error('mode must be one of material, clay');
+}
+
+function getOptionalAssetPreviewViews(
+  value: unknown,
+): SceneEditorAssetPreviewView[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const views = getStringArray(value, 'views');
+  if (views.length < 1 || views.length > 6) {
+    throw new Error('views must contain between 1 and 6 entries');
+  }
+  if (
+    !views.every(
+      (view): view is SceneEditorAssetPreviewView =>
+        view === 'front' ||
+        view === 'back' ||
+        view === 'left' ||
+        view === 'right' ||
+        view === 'top' ||
+        view === 'quarter',
+    )
+  ) {
+    throw new Error(
+      'views entries must be front, back, left, right, top, or quarter',
+    );
+  }
+  return views;
 }
 
 function getCaptureMode(value: unknown): SceneEditorCaptureMode {

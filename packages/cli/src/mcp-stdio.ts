@@ -24,10 +24,10 @@ import {
   sendRuntimeCommand,
   type RuntimeCommandResponse,
 } from './runtime-transport.js';
+import { isScreenshotResult, saveScreenshot } from './screenshot-output.js';
 
 type JsonObject = Record<string, unknown>;
 type McpTextContent = { type: 'text'; text: string };
-type McpImageContent = { type: 'image'; data: string; mimeType: string };
 
 export interface StartRuntimeMcpStdioServerOptions {
   serverName?: string;
@@ -37,6 +37,81 @@ export interface StartRuntimeMcpStdioServerOptions {
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const MAX_ASSET_PREVIEW_MCP_NAMED_PARTS = 40;
+const MAX_ASSET_PREVIEW_MCP_WARNINGS = 24;
+const MAX_ASSET_PREVIEW_MCP_WARNINGS_PER_CODE = 3;
+
+function compactAssetPreviewMetadata(metadata: JsonObject): JsonObject {
+  if (!isRecord(metadata.diagnostics)) {
+    return metadata;
+  }
+  const diagnostics = metadata.diagnostics;
+  const namedPartRecords = Array.isArray(diagnostics.namedParts)
+    ? diagnostics.namedParts.filter(isRecord)
+    : null;
+  const namedParts = (namedPartRecords ?? [])
+    .slice(0, MAX_ASSET_PREVIEW_MCP_NAMED_PARTS)
+    .map((part) => ({
+      ...(typeof part.name === 'string' ? { name: part.name } : {}),
+      ...(typeof part.path === 'string' ? { path: part.path } : {}),
+      ...(typeof part.type === 'string' ? { type: part.type } : {}),
+    }));
+  const namedPartCount =
+    typeof diagnostics.namedPartCount === 'number'
+      ? diagnostics.namedPartCount
+      : namedPartRecords?.length;
+  const warningRecords = Array.isArray(diagnostics.warnings)
+    ? diagnostics.warnings.filter(isRecord)
+    : null;
+  const warningCodeCounts = new Map<string, number>();
+  const warningSampleCounts = new Map<string, number>();
+  const warnings: JsonObject[] = [];
+  for (const warning of warningRecords ?? []) {
+    const code =
+      typeof warning.code === 'string' ? warning.code : 'unknown_warning';
+    warningCodeCounts.set(code, (warningCodeCounts.get(code) ?? 0) + 1);
+    const sampledForCode = warningSampleCounts.get(code) ?? 0;
+    if (
+      warnings.length >= MAX_ASSET_PREVIEW_MCP_WARNINGS ||
+      sampledForCode >= MAX_ASSET_PREVIEW_MCP_WARNINGS_PER_CODE
+    ) {
+      continue;
+    }
+    warningSampleCounts.set(code, sampledForCode + 1);
+    warnings.push({
+      code,
+      ...(typeof warning.message === 'string'
+        ? { message: warning.message }
+        : {}),
+      ...(typeof warning.path === 'string' ? { path: warning.path } : {}),
+    });
+  }
+
+  return {
+    ...metadata,
+    diagnostics: {
+      ...diagnostics,
+      ...(namedPartRecords == null
+        ? {}
+        : {
+            namedPartsTruncated:
+              diagnostics.namedPartsTruncated === true ||
+              (namedPartCount ?? namedPartRecords.length) > namedParts.length,
+            namedPartCount: namedPartCount ?? namedPartRecords.length,
+            namedParts,
+          }),
+      ...(warningRecords == null
+        ? {}
+        : {
+            warningCodeCounts: Object.fromEntries(warningCodeCounts),
+            warningCount: warningRecords.length,
+            warnings,
+            warningsTruncated: warningRecords.length > warnings.length,
+          }),
+    },
+  };
 }
 
 function createTabMetadataText(
@@ -280,34 +355,20 @@ export async function startRuntimeMcpStdioServer({
         (name === 'browser_screenshot' ||
           name === 'scene_screenshot' ||
           name === 'scene_render_file' ||
+          name === 'asset_render_preview' ||
           name === 'ui_render_preview') &&
-        isRecord(result) &&
-        typeof result.imageData === 'string' &&
-        typeof result.mimeType === 'string'
+        isScreenshotResult(result)
       ) {
-        const image: McpImageContent = {
-          type: 'image',
-          data: result.imageData,
-          mimeType: result.mimeType,
-        };
-        if (name === 'scene_render_file') {
-          const { imageData: _imageData, ...metadata } = result;
-          const content: Array<McpTextContent | McpImageContent> = [
-            { type: 'text', text: JSON.stringify(metadata, null, 2) },
-            image,
-          ];
-          if (normalizedResponse._tabId != null) {
-            content.push(
-              createTabMetadataText(
-                normalizedResponse._tabId,
-                normalizedResponse._tabGeneration,
-              ),
-            );
-          }
-          return { content };
-        }
-        const content: McpImageContent[] = [image];
-        return { content };
+        const screenshotPath = await saveScreenshot(result);
+        const { imageData: _imageData, ...metadata } = result;
+        const responseMetadata =
+          name === 'asset_render_preview'
+            ? compactAssetPreviewMetadata(metadata)
+            : metadata;
+        return tabTracker.processResponse({
+          ...normalizedResponse,
+          result: { ...responseMetadata, screenshotPath },
+        });
       }
 
       return tabTracker.processResponse(normalizedResponse);

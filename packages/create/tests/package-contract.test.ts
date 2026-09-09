@@ -25,13 +25,14 @@ const DEV_FILES = [
   'references/planner.md',
 ] as const;
 const PORTABLE_SKILL_NAMES = [
+  'iwsdk-build-model',
+  'iwsdk-compose-scene',
   'iwsdk-debug',
   'iwsdk-depth-occlusion',
   'iwsdk-grab',
   'iwsdk-physics',
   'iwsdk-dev',
   'iwsdk-ray',
-  'iwsdk-scene-composer',
   'iwsdk-ui',
 ] as const;
 

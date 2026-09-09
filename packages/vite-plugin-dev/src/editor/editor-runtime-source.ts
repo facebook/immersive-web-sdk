@@ -422,6 +422,7 @@ let OrbitControls;
 let TransformControls;
 let ViewportGizmo;
 const LucideIcons = ${JSON.stringify(lucideIconNodes)};
+let AdditiveBlending;
 let AmbientLight;
 let applySceneEnvironment;
 let applyScenePatch;
@@ -440,6 +441,7 @@ let CylinderGeometry;
 let DirectionalLight;
 let Float32BufferAttribute;
 let Frustum;
+let FrontSide;
 let finalizeSceneReviewDraft;
 let Group;
 let hashSceneDocument;
@@ -535,6 +537,7 @@ async function loadEditorRuntimeDependencies() {
     validateSceneReviewAgainstDocument,
   } = sceneCompositionModule);
   ({
+    AdditiveBlending,
     AmbientLight,
     applySceneEnvironment,
     Box3,
@@ -552,6 +555,7 @@ async function loadEditorRuntimeDependencies() {
     DirectionalLight,
     Float32BufferAttribute,
     Frustum,
+    FrontSide,
     Group,
     LevelComponentApplier,
     LineBasicMaterial,
@@ -3698,6 +3702,725 @@ async function renderUIKitMLAssetPreview(assetId, options = {}) {
     mimeType: 'image/png',
     width,
   };
+}
+
+const ASSET_PREVIEW_DEFAULT_VIEWS = Object.freeze([
+  'front',
+  'back',
+  'right',
+  'top',
+  'quarter',
+]);
+
+const ASSET_PREVIEW_VIEW_DIRECTIONS = Object.freeze({
+  back: [0, 0.08, -1],
+  front: [0, 0.08, 1],
+  left: [-1, 0.08, 0],
+  quarter: [1, 0.65, 1],
+  right: [1, 0.08, 0],
+  top: [0, 1, 0],
+});
+
+const ASSET_PREVIEW_FOCUS_PATH_LIMIT = 8;
+const ASSET_PREVIEW_FOCUS_PATH_LENGTH_LIMIT = 160;
+const ASSET_PREVIEW_FOCUS_INPUT_LENGTH_LIMIT = 512;
+
+function abbreviatedAssetPreviewFocusPath(path) {
+  if (path.length <= ASSET_PREVIEW_FOCUS_PATH_LENGTH_LIMIT) {
+    return path;
+  }
+  const prefixLength = Math.floor(
+    (ASSET_PREVIEW_FOCUS_PATH_LENGTH_LIMIT - 1) / 2,
+  );
+  const suffixLength =
+    ASSET_PREVIEW_FOCUS_PATH_LENGTH_LIMIT - prefixLength - 1;
+  return path.slice(0, prefixLength) + '…' + path.slice(-suffixLength);
+}
+
+function abbreviatedAssetPreviewFocusPaths(paths) {
+  const abbreviatedPaths = paths.map(abbreviatedAssetPreviewFocusPath);
+  const counts = new Map();
+  for (const path of abbreviatedPaths) {
+    counts.set(path, (counts.get(path) || 0) + 1);
+  }
+  return abbreviatedPaths.map((path, index) =>
+    counts.get(path) > 1 &&
+    paths[index].length <= ASSET_PREVIEW_FOCUS_INPUT_LENGTH_LIMIT
+      ? paths[index]
+      : path,
+  );
+}
+
+function boundedAssetPreviewDimension(value, fallback, minimum) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(minimum, Math.min(2048, Math.round(value)))
+    : fallback;
+}
+
+function serializeAssetPreviewBounds(bounds) {
+  if (!bounds || bounds.isEmpty()) {
+    return null;
+  }
+  return {
+    max: bounds.max.toArray(),
+    min: bounds.min.toArray(),
+  };
+}
+
+function objectPreviewGeometryBounds(object) {
+  const geometry = object.geometry;
+  if (!geometry) {
+    return null;
+  }
+  let localBounds;
+  if (object.isInstancedMesh === true || object.isSkinnedMesh === true) {
+    object.computeBoundingBox?.();
+    localBounds = object.boundingBox;
+  } else {
+    const previewGeometry = geometry.clone();
+    previewGeometry.computeBoundingBox?.();
+    localBounds = previewGeometry.boundingBox;
+  }
+  return localBounds && !localBounds.isEmpty()
+    ? localBounds.clone().applyMatrix4(object.matrixWorld)
+    : null;
+}
+
+function materialExcludedFromAssetPreviewFraming(material) {
+  return (
+    material &&
+    (material.blending === AdditiveBlending ||
+      (material.transparent === true && Number(material.opacity) < 0.5))
+  );
+}
+
+function objectExcludedFromAssetPreviewFraming(object) {
+  if (object.userData?.iwsdkPreviewBounds === 'exclude') {
+    return true;
+  }
+  const materials = Array.isArray(object.material)
+    ? object.material
+    : [object.material];
+  return (
+    materials.length > 0 &&
+    materials.every(materialExcludedFromAssetPreviewFraming)
+  );
+}
+
+function measureAssetPreviewBounds(root, framingOnly = false) {
+  root.updateWorldMatrix(true, true);
+  const bounds = new Box3().makeEmpty();
+  let excludedGeometryCount = 0;
+  root.traverseVisible((object) => {
+    if (framingOnly && objectExcludedFromAssetPreviewFraming(object)) {
+      if (object.geometry) {
+        excludedGeometryCount += 1;
+      }
+      return;
+    }
+    const geometryBounds = objectPreviewGeometryBounds(object);
+    if (geometryBounds) {
+      bounds.union(geometryBounds);
+    }
+  });
+  return { bounds, excludedGeometryCount };
+}
+
+function assetPreviewHierarchyEntries(root) {
+  const entries = [];
+  const visit = (object, parentPath, siblingIndex) => {
+    const name =
+      typeof object.name === 'string' && object.name.trim().length > 0
+        ? object.name.trim()
+        : '';
+    const baseSegment = name || object.type || 'Object3D';
+    const segment = siblingIndex == null
+      ? baseSegment
+      : baseSegment + '[' + siblingIndex + ']';
+    const path = parentPath ? parentPath + '/' + segment : segment;
+    entries.push({ name, object, path, type: object.type || 'Object3D' });
+
+    const totals = new Map();
+    for (const child of object.children || []) {
+      const childName =
+        typeof child.name === 'string' && child.name.trim().length > 0
+          ? child.name.trim()
+          : child.type || 'Object3D';
+      totals.set(childName, (totals.get(childName) || 0) + 1);
+    }
+    const seen = new Map();
+    for (const child of object.children || []) {
+      const childName =
+        typeof child.name === 'string' && child.name.trim().length > 0
+          ? child.name.trim()
+          : child.type || 'Object3D';
+      const index = (seen.get(childName) || 0) + 1;
+      seen.set(childName, index);
+      visit(child, path, totals.get(childName) > 1 ? index : null);
+    }
+  };
+  visit(root, '', null);
+  return entries;
+}
+
+function resolveAssetPreviewFocus(entries, focus) {
+  if (!focus) {
+    return null;
+  }
+  const boundedFocus = String(focus).slice(
+    0,
+    ASSET_PREVIEW_FOCUS_PATH_LENGTH_LIMIT,
+  );
+  const exactPaths = entries.filter((entry) => entry.path === focus);
+  if (exactPaths.length === 1) {
+    return exactPaths[0];
+  }
+  const exactNames = entries.filter((entry) => entry.name === focus);
+  if (exactNames.length === 1) {
+    return exactNames[0];
+  }
+  if (exactNames.length > 1) {
+    const fullPaths = exactNames
+      .slice(0, ASSET_PREVIEW_FOCUS_PATH_LIMIT)
+      .map((entry) => String(entry.path));
+    const paths = abbreviatedAssetPreviewFocusPaths(fullPaths);
+    const remaining = exactNames.length - paths.length;
+    throw new Error(
+      'Asset preview focus "' +
+        boundedFocus +
+        '" is ambiguous. Use one of these hierarchy paths: ' +
+        paths.join(', ') +
+        (remaining > 0 ? ', … and ' + String(remaining) + ' more' : ''),
+    );
+  }
+  throw new Error(
+    'Asset preview focus "' +
+      boundedFocus +
+      '" was not found. Name model parts before requesting a focused preview.',
+  );
+}
+
+function assetPreviewRenderedTriangleCount(object, geometry, position, index) {
+  const elementCount = index?.count ?? position.count;
+  const drawStart = Math.max(
+    0,
+    Math.min(elementCount, Math.floor(geometry.drawRange?.start || 0)),
+  );
+  const requestedCount = geometry.drawRange?.count;
+  const drawEnd = Math.max(
+    drawStart,
+    Math.min(
+      elementCount,
+      Number.isFinite(requestedCount)
+        ? drawStart + Math.max(0, Math.floor(requestedCount))
+        : elementCount,
+    ),
+  );
+  const materials = Array.isArray(object.material)
+    ? object.material
+    : [object.material];
+  let triangles = 0;
+
+  if (Array.isArray(object.material)) {
+    for (const group of geometry.groups || []) {
+      const material = materials[group.materialIndex || 0];
+      if (!material || material.visible === false) {
+        continue;
+      }
+      const groupStart = Math.max(0, Math.floor(group.start || 0));
+      const groupCount = Number.isFinite(group.count)
+        ? Math.max(0, Math.floor(group.count))
+        : elementCount - groupStart;
+      const start = Math.max(drawStart, groupStart);
+      const end = Math.min(drawEnd, groupStart + groupCount);
+      triangles += Math.floor(Math.max(0, end - start) / 3);
+    }
+  } else if (materials[0] && materials[0].visible !== false) {
+    triangles = Math.floor(Math.max(0, drawEnd - drawStart) / 3);
+  }
+
+  const instanceCount = object.isInstancedMesh === true ? object.count : 1;
+  return triangles * Math.max(0, instanceCount || 0);
+}
+
+function assetPreviewHierarchyBounds(entries) {
+  const boundsByObject = new Map();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const object = entries[index].object;
+    const bounds = new Box3().makeEmpty();
+    if (object.visible !== false) {
+      const geometryBounds = objectPreviewGeometryBounds(object);
+      if (geometryBounds) {
+        bounds.union(geometryBounds);
+      }
+      for (const child of object.children || []) {
+        const childBounds = boundsByObject.get(child);
+        if (childBounds && !childBounds.isEmpty()) {
+          bounds.union(childBounds);
+        }
+      }
+    }
+    boundsByObject.set(object, bounds);
+  }
+  return boundsByObject;
+}
+
+function inspectAssetPreviewGeometry(root, entries, rawBounds, framingBounds) {
+  const geometries = new Set();
+  const inspectedGeometries = new Set();
+  const materials = new Set();
+  const warnings = [];
+  let meshCount = 0;
+  let objectCount = 0;
+  let renderedTriangles = 0;
+  let unnamedMeshCount = 0;
+  let doubleSidedMeshCount = 0;
+
+  const pathByObject = new Map(entries.map((entry) => [entry.object, entry.path]));
+  root.traverseVisible((object) => {
+    objectCount += 1;
+    const path = pathByObject.get(object) || object.name || object.type;
+    if (
+      !Array.from(object.matrixWorld.elements || []).every((value) =>
+        Number.isFinite(value),
+      )
+    ) {
+      warnings.push({
+        code: 'non_finite_transform',
+        message: 'Object has a non-finite world transform.',
+        path,
+      });
+    }
+    if (object.isMesh !== true) {
+      return;
+    }
+    meshCount += 1;
+    if (!object.name) {
+      unnamedMeshCount += 1;
+    }
+    const geometry = object.geometry;
+    if (!geometry) {
+      warnings.push({
+        code: 'missing_geometry',
+        message: 'Mesh has no geometry.',
+        path,
+      });
+      return;
+    }
+    geometries.add(geometry);
+    const objectMaterials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of objectMaterials) {
+      if (material) {
+        materials.add(material);
+        if (material.side !== FrontSide) {
+          doubleSidedMeshCount += 1;
+        }
+      }
+    }
+
+    const position = geometry.getAttribute?.('position');
+    if (!position) {
+      warnings.push({
+        code: 'missing_positions',
+        message: 'Geometry has no position attribute.',
+        path,
+      });
+      return;
+    }
+    const index = geometry.getIndex?.() || geometry.index;
+    const baseTriangles = Math.floor((index?.count || position.count) / 3);
+    renderedTriangles += assetPreviewRenderedTriangleCount(
+      object,
+      geometry,
+      position,
+      index,
+    );
+
+    if (inspectedGeometries.has(geometry)) {
+      return;
+    }
+    inspectedGeometries.add(geometry);
+    if (!geometry.getAttribute?.('normal')) {
+      warnings.push({
+        code: 'missing_normals',
+        message: 'Geometry has no normal attribute.',
+        path,
+      });
+    }
+    let nonFinitePositions = 0;
+    for (let vertex = 0; vertex < position.count; vertex += 1) {
+      if (
+        !Number.isFinite(position.getX(vertex)) ||
+        !Number.isFinite(position.getY(vertex)) ||
+        !Number.isFinite(position.getZ(vertex))
+      ) {
+        nonFinitePositions += 1;
+      }
+    }
+    if (nonFinitePositions > 0) {
+      warnings.push({
+        code: 'non_finite_positions',
+        message:
+          String(nonFinitePositions) + ' vertices contain non-finite positions.',
+        path,
+      });
+    }
+    let invalidIndices = 0;
+    if (index) {
+      for (let cursor = 0; cursor < index.count; cursor += 1) {
+        const value = index.getX(cursor);
+        if (!Number.isInteger(value) || value < 0 || value >= position.count) {
+          invalidIndices += 1;
+        }
+      }
+    }
+    if (invalidIndices > 0) {
+      warnings.push({
+        code: 'invalid_indices',
+        message:
+          String(invalidIndices) + ' geometry indices are outside the position attribute.',
+        path,
+      });
+    }
+
+    let degenerateTriangles = 0;
+    for (let triangle = 0; triangle < baseTriangles; triangle += 1) {
+      const offset = triangle * 3;
+      const a = index ? index.getX(offset) : offset;
+      const b = index ? index.getX(offset + 1) : offset + 1;
+      const c = index ? index.getX(offset + 2) : offset + 2;
+      if (
+        a < 0 ||
+        b < 0 ||
+        c < 0 ||
+        a >= position.count ||
+        b >= position.count ||
+        c >= position.count
+      ) {
+        continue;
+      }
+      const abx = position.getX(b) - position.getX(a);
+      const aby = position.getY(b) - position.getY(a);
+      const abz = position.getZ(b) - position.getZ(a);
+      const acx = position.getX(c) - position.getX(a);
+      const acy = position.getY(c) - position.getY(a);
+      const acz = position.getZ(c) - position.getZ(a);
+      const crossX = aby * acz - abz * acy;
+      const crossY = abz * acx - abx * acz;
+      const crossZ = abx * acy - aby * acx;
+      if (crossX * crossX + crossY * crossY + crossZ * crossZ < 1e-16) {
+        degenerateTriangles += 1;
+      }
+    }
+    if (degenerateTriangles > 0) {
+      warnings.push({
+        code: 'degenerate_triangles',
+        message:
+          String(degenerateTriangles) + ' triangles have effectively zero area.',
+        path,
+      });
+    }
+  });
+
+  if (!rawBounds || rawBounds.isEmpty()) {
+    warnings.push({
+      code: 'empty_bounds',
+      message: 'The asset has no visible renderable bounds.',
+    });
+  }
+  if (unnamedMeshCount > 0) {
+    warnings.push({
+      code: 'unnamed_meshes',
+      message:
+        String(unnamedMeshCount) +
+        ' meshes are unnamed, which prevents stable focused inspection.',
+    });
+  }
+  if (doubleSidedMeshCount > 0) {
+    warnings.push({
+      code: 'non_front_side_materials',
+      message:
+        String(doubleSidedMeshCount) +
+        ' mesh material assignments render back faces; verify this is intentional.',
+    });
+  }
+  if (
+    rawBounds &&
+    framingBounds &&
+    !rawBounds.isEmpty() &&
+    !framingBounds.isEmpty() &&
+    !rawBounds.equals(framingBounds)
+  ) {
+    warnings.push({
+      code: 'effects_excluded_from_framing',
+      message:
+        'Transparent, additive, or explicitly excluded geometry was omitted from preview framing.',
+    });
+  }
+
+  const namedEntries = entries.filter((entry) => entry.name);
+  const hierarchyBounds = assetPreviewHierarchyBounds(entries);
+  const namedParts = namedEntries.map((entry) => ({
+    bounds: serializeAssetPreviewBounds(hierarchyBounds.get(entry.object)),
+    name: entry.name,
+    path: entry.path,
+    type: entry.type,
+  }));
+
+  return {
+    bounds: serializeAssetPreviewBounds(rawBounds),
+    framingBounds: serializeAssetPreviewBounds(framingBounds),
+    geometryCount: geometries.size,
+    materialCount: materials.size,
+    meshCount,
+    namedPartCount: namedEntries.length,
+    namedParts,
+    namedPartsTruncated: false,
+    objectCount,
+    renderedTriangles,
+    warnings,
+  };
+}
+
+function applyAssetPreviewClayMaterial(root) {
+  const clay = new MeshStandardMaterial({
+    color: 0xb8bdc4,
+    metalness: 0,
+    roughness: 0.82,
+  });
+  root.traverse((object) => {
+    if (object.isMesh !== true) {
+      return;
+    }
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    const additiveEffect =
+      materials.length > 0 &&
+      materials.every((material) => material?.blending === AdditiveBlending);
+    if (object.userData?.iwsdkPreviewBounds === 'exclude' || additiveEffect) {
+      object.visible = false;
+      return;
+    }
+    object.material = clay;
+  });
+  return clay;
+}
+
+function assetPreviewCameraDirection(view) {
+  const direction = ASSET_PREVIEW_VIEW_DIRECTIONS[view];
+  if (!direction) {
+    throw new Error('Unsupported asset preview view "' + String(view) + '"');
+  }
+  return new Vector3(direction[0], direction[1], direction[2]).normalize();
+}
+
+function configureAssetPreviewCamera(camera, view, bounds, aspect) {
+  const center = bounds.getCenter(new Vector3());
+  const direction = assetPreviewCameraDirection(view);
+  camera.up.set(0, 1, 0);
+  if (view === 'top') {
+    camera.up.set(0, 0, -1);
+  }
+
+  const forward = direction.clone().negate();
+  const right = forward.clone().cross(camera.up).normalize();
+  const vertical = right.clone().cross(forward).normalize();
+  const verticalFov = MathUtils.degToRad(camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+  const tanVertical = Math.tan(Math.max(0.01, verticalFov / 2));
+  const tanHorizontal = Math.tan(Math.max(0.01, horizontalFov / 2));
+  const relativeCorner = new Vector3();
+  let minimumDepth = Infinity;
+  let maximumDepth = -Infinity;
+  let requiredDistance = 0.1;
+  for (const x of [bounds.min.x, bounds.max.x]) {
+    for (const y of [bounds.min.y, bounds.max.y]) {
+      for (const z of [bounds.min.z, bounds.max.z]) {
+        relativeCorner.set(x, y, z).sub(center);
+        const depth = relativeCorner.dot(direction);
+        minimumDepth = Math.min(minimumDepth, depth);
+        maximumDepth = Math.max(maximumDepth, depth);
+        const lateralDistance = Math.max(
+          Math.abs(relativeCorner.dot(right)) / tanHorizontal,
+          Math.abs(relativeCorner.dot(vertical)) / tanVertical,
+        );
+        requiredDistance = Math.max(
+          requiredDistance,
+          depth + lateralDistance * 1.18,
+        );
+      }
+    }
+  }
+
+  const distance = requiredDistance;
+  camera.aspect = aspect;
+  camera.position.copy(center).addScaledVector(direction, distance);
+  camera.near = Math.max(0.001, (distance - maximumDepth) * 0.5);
+  camera.far = Math.max(
+    camera.near + 1,
+    (distance - minimumDepth) * 1.5,
+  );
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+  return { center, direction, distance };
+}
+
+async function renderSceneAssetPreview(assetId, options = {}) {
+  const asset = sceneAssets(editorWorldState?.currentSession?.document).find(
+    (entry) => entry.id === assetId,
+  );
+  if (!asset) {
+    throw new Error('Unknown asset "' + assetId + '"');
+  }
+  if (asset.kind === 'uikitml') {
+    throw new Error(
+      'Asset "' + assetId + '" is UIKitML; use ui_render_preview instead.',
+    );
+  }
+
+  const views = options.views || ASSET_PREVIEW_DEFAULT_VIEWS;
+  const mode = options.mode || 'material';
+  const background = options.background || '#202226';
+  const width = boundedAssetPreviewDimension(options.width, 640, 320);
+  const height = boundedAssetPreviewDimension(options.height, 480, 240);
+  const columns = Math.min(3, views.length);
+  const rows = Math.ceil(views.length / columns);
+  const cellWidth = Math.max(1, Math.floor(width / columns));
+  const cellHeight = Math.max(1, Math.floor(height / rows));
+  const labelHeight = Math.min(28, Math.max(20, Math.floor(cellHeight * 0.1)));
+  const renderHeight = Math.max(1, cellHeight - labelHeight);
+
+  const renderCanvas = document.createElement('canvas');
+  const renderer = new WebGLRenderer({
+    alpha: false,
+    antialias: true,
+    canvas: renderCanvas,
+    preserveDrawingBuffer: true,
+  });
+  renderer.setPixelRatio(1);
+  renderer.setSize(cellWidth, renderHeight, false);
+  renderer.setClearColor(new Color(background), 1);
+
+  const composite = document.createElement('canvas');
+  composite.width = width;
+  composite.height = height;
+  const context = composite.getContext('2d');
+  if (!context) {
+    renderer.dispose();
+    renderer.forceContextLoss?.();
+    throw new Error('Could not create asset preview contact sheet');
+  }
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+
+  const previewScene = new Scene();
+  previewScene.background = new Color(background);
+  const camera = new PerspectiveCamera(34, cellWidth / renderHeight, 0.001, 1000);
+  const ambient = new AmbientLight('#ffffff', 1.15);
+  const key = new DirectionalLight('#fff4df', 2.4);
+  const fill = new DirectionalLight('#b9d4ff', 0.9);
+  const lightTarget = new Group();
+  key.target = lightTarget;
+  fill.target = lightTarget;
+  previewScene.add(ambient, key, fill, lightTarget);
+
+  let object = null;
+  let clayMaterial = null;
+  try {
+    object = await editorWorldState.world.assets.instantiate(assetId);
+    if (!object || object.isObject3D !== true) {
+      throw new Error('Asset "' + assetId + '" did not instantiate an Object3D');
+    }
+    previewScene.add(object);
+    object.updateWorldMatrix(true, true);
+
+    const entries = assetPreviewHierarchyEntries(object);
+    const focusEntry = resolveAssetPreviewFocus(entries, options.focus);
+    const rawBoundsResult = measureAssetPreviewBounds(object);
+    const framingBoundsResult = measureAssetPreviewBounds(object, true);
+    const focusBoundsResult = focusEntry
+      ? measureAssetPreviewBounds(focusEntry.object)
+      : null;
+    const renderBounds = focusBoundsResult?.bounds?.isEmpty() === false
+      ? focusBoundsResult.bounds
+      : framingBoundsResult.bounds.isEmpty()
+        ? rawBoundsResult.bounds
+        : framingBoundsResult.bounds;
+    if (renderBounds.isEmpty()) {
+      throw new Error('Renderable asset "' + assetId + '" has empty bounds');
+    }
+
+    const diagnostics = inspectAssetPreviewGeometry(
+      object,
+      entries,
+      rawBoundsResult.bounds,
+      framingBoundsResult.bounds,
+    );
+    diagnostics.focusBounds = serializeAssetPreviewBounds(
+      focusBoundsResult?.bounds,
+    );
+    if (mode === 'clay') {
+      clayMaterial = applyAssetPreviewClayMaterial(object);
+    }
+
+    for (let index = 0; index < views.length; index += 1) {
+      const view = views[index];
+      const cameraState = configureAssetPreviewCamera(
+        camera,
+        view,
+        renderBounds,
+        cellWidth / renderHeight,
+      );
+      lightTarget.position.copy(cameraState.center);
+      key.position
+        .copy(cameraState.center)
+        .addScaledVector(cameraState.direction, cameraState.distance)
+        .add(new Vector3(0, cameraState.distance * 0.8, 0));
+      fill.position
+        .copy(cameraState.center)
+        .addScaledVector(cameraState.direction, -cameraState.distance * 0.55)
+        .add(new Vector3(-cameraState.distance * 0.45, cameraState.distance * 0.2, 0));
+      renderer.render(previewScene, camera);
+
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = column * cellWidth;
+      const y = row * cellHeight;
+      context.drawImage(renderCanvas, x, y, cellWidth, renderHeight);
+      context.fillStyle = 'rgba(0, 0, 0, 0.78)';
+      context.fillRect(x, y + renderHeight, cellWidth, labelHeight);
+      context.fillStyle = '#ffffff';
+      context.font = Math.max(12, Math.floor(labelHeight * 0.55)) + 'px sans-serif';
+      context.textBaseline = 'middle';
+      context.fillText(
+        String(view) + (focusEntry ? ' · ' + focusEntry.path : ''),
+        x + 10,
+        y + renderHeight + labelHeight / 2,
+        cellWidth - 20,
+      );
+    }
+
+    return {
+      assetId,
+      background,
+      diagnostics,
+      ...(focusEntry ? { focus: focusEntry.path } : {}),
+      height,
+      imageData: composite.toDataURL('image/png').split(',')[1] || '',
+      mimeType: 'image/png',
+      mode,
+      views: [...views],
+      width,
+    };
+  } finally {
+    object?.removeFromParent?.();
+    clayMaterial?.dispose?.();
+    renderer.dispose();
+    renderer.forceContextLoss?.();
+  }
 }
 
 function scenePrefabs(documentValue) {
@@ -11700,6 +12423,7 @@ async function init() {
       }
       return stats;
     },
+    renderAssetPreview: renderSceneAssetPreview,
     renderUIPreview: renderUIKitMLAssetPreview,
     rollbackDocument: rollbackEditorDocument,
     saveDocument: async (serializedDocument) => {
