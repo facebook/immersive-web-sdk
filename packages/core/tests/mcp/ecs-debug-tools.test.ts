@@ -351,3 +351,100 @@ describe('ecsFindEntities', () => {
     });
   });
 });
+
+describe('ecsSnapshot retention', () => {
+  it('keeps rolling retention active for repeated unlabeled snapshots', async () => {
+    vi.resetModules();
+    const { ecsSnapshot } = await import('../../src/mcp/ecs-debug-tools.js');
+    const world = {
+      entityManager: { indexLookup: [] },
+    } as any;
+
+    const first = ecsSnapshot(world, {});
+    const second = ecsSnapshot(world, {});
+    const third = ecsSnapshot(world, {});
+    const fourth = ecsSnapshot(world, {});
+
+    expect([first.label, second.label, third.label, fourth.label]).toEqual([
+      'snap-0',
+      'snap-1',
+      'snap-2',
+      'snap-3',
+    ]);
+    expect(third).toMatchObject({
+      evictedSnapshots: ['snap-0'],
+      storedSnapshots: ['snap-1', 'snap-2'],
+    });
+    expect(fourth).toMatchObject({
+      evictedSnapshots: ['snap-1'],
+      storedSnapshots: ['snap-2', 'snap-3'],
+    });
+  });
+
+  it('does not overwrite an explicit label with an automatic label', async () => {
+    vi.resetModules();
+    const { ecsSnapshot } = await import('../../src/mcp/ecs-debug-tools.js');
+    const world = {
+      entityManager: { indexLookup: [] },
+    } as any;
+
+    ecsSnapshot(world, { label: 'snap-0' });
+    const automatic = ecsSnapshot(world, {});
+
+    expect(automatic).toMatchObject({
+      label: 'snap-1',
+      storedSnapshots: ['snap-0', 'snap-1'],
+    });
+  });
+
+  it('keeps a configurable rolling window and reports evictions', async () => {
+    vi.resetModules();
+    const { ecsSnapshot } = await import('../../src/mcp/ecs-debug-tools.js');
+    const world = {
+      entityManager: { indexLookup: [] },
+    } as any;
+
+    ecsSnapshot(world, { capacity: 3, label: 'one' });
+    ecsSnapshot(world, { label: 'two' });
+    ecsSnapshot(world, { label: 'three' });
+    const fourth = ecsSnapshot(world, { label: 'four' });
+
+    expect(fourth).toMatchObject({
+      evictedSnapshots: ['one'],
+      snapshotCapacity: 3,
+      storedSnapshots: ['two', 'three', 'four'],
+    });
+  });
+
+  it('retains a replaced label when reducing the rolling capacity', async () => {
+    vi.resetModules();
+    const { ecsSnapshot } = await import('../../src/mcp/ecs-debug-tools.js');
+    const world = {
+      entityManager: { indexLookup: [] },
+    } as any;
+
+    ecsSnapshot(world, { capacity: 3, label: 'one' });
+    ecsSnapshot(world, { label: 'two' });
+    ecsSnapshot(world, { label: 'three' });
+    const replacement = ecsSnapshot(world, { capacity: 2, label: 'one' });
+
+    expect(replacement).toMatchObject({
+      label: 'one',
+      evictedSnapshots: ['two'],
+      snapshotCapacity: 2,
+      storedSnapshots: ['three', 'one'],
+    });
+  });
+
+  it('rejects unbounded snapshot capacities', async () => {
+    vi.resetModules();
+    const { ecsSnapshot } = await import('../../src/mcp/ecs-debug-tools.js');
+    const world = {
+      entityManager: { indexLookup: [] },
+    } as any;
+
+    expect(() => ecsSnapshot(world, { capacity: 21 })).toThrow(
+      'integer from 2 to 20',
+    );
+  });
+});

@@ -218,6 +218,10 @@ ECS tools observe or control the live application runtime. Scene hierarchy and s
 resources remain authored in JSON files; ECS tools are for runtime behavior and state,
 not scene composition.
 
+`ecs_snapshot` retains two labels by default. Pass `capacity` from 2 through 20
+to configure a larger rolling window for the current runtime. Its result lists
+the active capacity, stored labels, and any label evicted by that capture.
+
 ## Review Evidence
 
 Review orchestration is performed outside the editor. Save screenshots, hashes,

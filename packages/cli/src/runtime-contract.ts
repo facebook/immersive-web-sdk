@@ -2759,7 +2759,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'ecs_snapshot',
     description:
-      'Capture a snapshot of all ECS entity/component state. Stores up to 2 snapshots. Use with ecs_diff to compare. Requires FRAMEWORK_MCP_RUNTIME.',
+      'Capture a snapshot of all ECS entity/component state. Retains 2 snapshots by default; set capacity (2-20) to keep a larger rolling window. Use with ecs_diff to compare. Requires FRAMEWORK_MCP_RUNTIME.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2767,6 +2767,11 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           type: 'string',
           description:
             'Label for this snapshot (default: auto-generated). Use to reference in ecs_diff.',
+        },
+        capacity: {
+          type: 'number',
+          description:
+            'Rolling snapshot capacity for this runtime (integer 2-20). Omit to keep the current capacity; defaults to 2.',
         },
       },
     },

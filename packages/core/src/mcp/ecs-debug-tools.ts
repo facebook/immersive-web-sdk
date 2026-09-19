@@ -856,6 +856,18 @@ export function ecsSetComponent(
 
 // Module-scoped snapshot storage
 const snapshots = new Map<string, EcsSnapshot>();
+const DEFAULT_SNAPSHOT_CAPACITY = 2;
+const MAX_SNAPSHOT_CAPACITY = 20;
+let snapshotCapacity = DEFAULT_SNAPSHOT_CAPACITY;
+let nextSnapshotSequence = 0;
+
+function nextSnapshotLabel(): string {
+  let label: string;
+  do {
+    label = `snap-${nextSnapshotSequence++}`;
+  } while (snapshots.has(label));
+  return label;
+}
 
 interface EntitySnapshot {
   entityIndex: number;
@@ -872,6 +884,7 @@ export interface EcsSnapshot {
 
 export interface EcsSnapshotParams {
   label?: string;
+  capacity?: number;
 }
 
 export interface EcsSnapshotResult {
@@ -879,13 +892,28 @@ export interface EcsSnapshotResult {
   entityCount: number;
   componentCount: number;
   storedSnapshots: string[];
+  snapshotCapacity: number;
+  evictedSnapshots: string[];
 }
 
 export function ecsSnapshot(
   world: World,
   params: Record<string, unknown>,
 ): EcsSnapshotResult {
-  const { label = `snap-${snapshots.size}` } = params as EcsSnapshotParams;
+  const { capacity, label: requestedLabel } = params as EcsSnapshotParams;
+  const label = requestedLabel ?? nextSnapshotLabel();
+  if (capacity !== undefined) {
+    if (
+      !Number.isInteger(capacity) ||
+      capacity < DEFAULT_SNAPSHOT_CAPACITY ||
+      capacity > MAX_SNAPSHOT_CAPACITY
+    ) {
+      throw new Error(
+        `Snapshot capacity must be an integer from ${DEFAULT_SNAPSHOT_CAPACITY} to ${MAX_SNAPSHOT_CAPACITY}.`,
+      );
+    }
+    snapshotCapacity = capacity;
+  }
 
   // See comment in ecsFindEntities — indexLookup is internal to ELICS.
   const lookup = (world.entityManager as any).indexLookup as (
@@ -932,18 +960,28 @@ export function ecsSnapshot(
     entities,
   };
 
-  // Evict oldest if at capacity
-  if (snapshots.size >= 2 && !snapshots.has(label)) {
+  // Replacing a named snapshot should make the new capture the most recent
+  // entry. Map.set() preserves an existing key's insertion order, which could
+  // otherwise evict the snapshot we just wrote when capacity is reduced.
+  snapshots.delete(label);
+  snapshots.set(label, snapshot);
+
+  // Map insertion order makes retention deterministic: oldest labels leave
+  // first and replaced labels move to the newest position.
+  const evictedSnapshots: string[] = [];
+  while (snapshots.size > snapshotCapacity) {
     const oldest = snapshots.keys().next().value!;
     snapshots.delete(oldest);
+    evictedSnapshots.push(oldest);
   }
-  snapshots.set(label, snapshot);
 
   return {
     label,
     entityCount: entities.length,
     componentCount,
     storedSnapshots: Array.from(snapshots.keys()),
+    snapshotCapacity,
+    evictedSnapshots,
   };
 }
 
