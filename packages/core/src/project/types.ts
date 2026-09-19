@@ -59,6 +59,7 @@ export interface ProjectXROptions {
   offer?: ProjectXROffer;
   referenceSpace?: ProjectReferenceSpaceSpec;
   restoreCameraOnExit?: boolean;
+  launchOnSessionGranted?: boolean;
   features?: ProjectXRFeatureOptions;
 }
 

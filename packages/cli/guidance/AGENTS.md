@@ -30,9 +30,10 @@ hand-build that options object.
 **The dev server is CLI-managed.** Use `npx iwsdk dev up` (or `npm run dev`), not
 `vite`. It launches a managed browser that hosts the MCP command bridge.
 `--no-open` intentionally starts only the server: status reports
-`browser.status: "not_launched"`, and browser-backed commands fail immediately
-with `browser_not_launched` plus restart guidance. One managed window hosts two
-roles, editor and runtime.
+`browser.status: "not_launched"`, and browser-backed commands fail with
+`browser_not_launched` unless a physical loopback app client connects. In that
+case, `browserCommandReady` becomes true and commands target that client. One
+managed window hosts two roles, editor and runtime when it is launched.
 
 The developer owns whether that managed window is headed or headless. Do not
 change modes silently: announce the change before restarting. In a visible

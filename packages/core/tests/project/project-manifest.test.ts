@@ -34,6 +34,7 @@ const vrManifest = {
         fallbackOrder: ['local', 'viewer'],
       },
       restoreCameraOnExit: true,
+      launchOnSessionGranted: true,
       features: {
         handTracking: { required: true },
         anchors: false,
@@ -115,6 +116,7 @@ describe('iwsdk.project.v1 validation and normalization', () => {
           fallbackOrder: ['local', 'viewer'],
         },
         restoreCameraOnExit: true,
+        launchOnSessionGranted: true,
         features: {
           handTracking: { required: true },
           anchors: false,

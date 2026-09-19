@@ -20,6 +20,7 @@ import { AssetManager, RenderableAssetRegistry } from '../asset/index.js';
 // the bundler to emit System classes before their referenced Component
 // constants, producing `undefined.bitmask` crashes at QueryManager.registerQuery.
 // `initializeWorld` is loaded lazily inside `World.create` for the same reason.
+import { armSessionGrantCaptureForOptions } from '../init/session-grant.js';
 import type { WorldOptions } from '../init/world-initializer.js';
 import { launchXR } from '../init/xr.js';
 import type { XROptions } from '../init/xr.js';
@@ -117,6 +118,8 @@ export class World extends ElicsWorld {
   public visibilityState = signal(VisibilityState.NonImmersive);
   /** Whether this world was created with XR support enabled. */
   public xrEnabled = true;
+  /** Whether an explicit XR session request is currently settling. @internal */
+  public sessionRequestPending = false;
   public requestedLevelUrl: string | undefined;
   public requestedLevelDocument: SceneDocument | undefined;
   public _resolveLevelLoad: (() => void) | undefined;
@@ -630,6 +633,7 @@ export class World extends ElicsWorld {
     container: HTMLElement,
     options?: WorldOptions,
   ): Promise<World> {
+    armSessionGrantCaptureForOptions(options?.xr);
     const { initializeWorld } = await import('../init/world-initializer.js');
     return initializeWorld(container, options);
   }

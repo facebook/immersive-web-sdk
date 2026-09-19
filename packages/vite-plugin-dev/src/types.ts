@@ -285,6 +285,7 @@ export interface ProcessedDevOptions {
   verbose: boolean;
   userAgentException?: RegExp | string;
   iwer: boolean;
+  nativeXRControl?: boolean;
 }
 
 /** @deprecated Use `ProcessedDevOptions` instead */

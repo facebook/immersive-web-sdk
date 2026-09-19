@@ -5,5 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-export * from './xr.js';
-export * from './world-initializer.js';
+export {
+  ReferenceSpaceType,
+  SessionMode,
+  buildSessionInit,
+  launchXR,
+  normalizeReferenceSpec,
+  resolveReferenceSpaceType,
+  type DepthSensingFlag,
+  type FeatureFlag,
+  type ReferenceSpaceSpec,
+  type XRFeatureOptions,
+  type XROptions,
+} from './xr.js';
+export { initializeWorld, type WorldOptions } from './world-initializer.js';

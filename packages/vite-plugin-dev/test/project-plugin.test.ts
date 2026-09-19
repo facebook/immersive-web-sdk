@@ -283,7 +283,7 @@ describe('manifest-first Vite integration', () => {
     const source = await callHook(plugin.load, { resolve: vi.fn() }, projectId);
 
     expect(source).toContain(
-      'const projectOptions = { ...normalized, level };',
+      'const projectOptions = { ...normalized, xr, level };',
     );
     expect(source).not.toContain('level, assets');
     expect(source).not.toContain('level, components');
@@ -312,6 +312,7 @@ describe('manifest-first Vite integration', () => {
 
   it('accepts explicit dev-session environment overrides', async () => {
     vi.stubEnv('IWSDK_DEV_AI_MODE', 'collaborate');
+    vi.stubEnv('IWSDK_DEV_NATIVE_XR_CONTROL', 'true');
     vi.stubEnv('IWSDK_DEV_HEADLESS', 'false');
     vi.stubEnv('IWSDK_DEV_OPEN', 'false');
     vi.stubEnv('IWSDK_DEV_SCREENSHOT_WIDTH', '1024');
@@ -329,6 +330,56 @@ describe('manifest-first Vite integration', () => {
       }),
     ).resolves.toBeUndefined();
     expect(userConfig.server.open).toBe(false);
+
+    callHook(plugin.configResolved, plugin, {
+      command: 'serve',
+      root: projectRoot,
+      server: {},
+    });
+    const projectId = callHook(
+      plugin.resolveId,
+      plugin,
+      'virtual:iwsdk-project',
+    );
+    const source = await callHook(plugin.load, { resolve: vi.fn() }, projectId);
+    expect(source).toContain("offer: 'none'");
+    expect(source).toContain('launchOnSessionGranted: true');
+
+    await callHook(plugin.buildStart, { addWatchFile: vi.fn() });
+    const runtimeId = callHook(
+      plugin.resolveId,
+      plugin,
+      '/@iwer-injection-runtime',
+    );
+    const runtimeSource = await callHook(
+      plugin.load,
+      { resolve: vi.fn() },
+      runtimeId,
+    );
+    expect(runtimeSource).toContain('"nativeXRControl": true');
+    expect(runtimeSource).toContain(
+      'Native XR control requires Meta Quest Browser',
+    );
+  });
+
+  it('rejects native XR control when IWER is disabled', async () => {
+    const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.dev.emulator.iwer = false;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    vi.stubEnv('IWSDK_DEV_NATIVE_XR_CONTROL', 'true');
+    const plugin = iwsdkDev({ https: false });
+
+    await expect(
+      callHook(
+        plugin.config,
+        plugin,
+        { root: projectRoot },
+        { command: 'serve', mode: 'development' },
+      ),
+    ).rejects.toThrow(
+      '--native-xr-control requires dev.emulator.iwer to be enabled',
+    );
   });
 
   it('keeps IWER enabled when a Desktop manifest uses the target-independent default', async () => {

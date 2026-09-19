@@ -115,6 +115,7 @@
             "offer": { "enum": ["none", "once", "always"] },
             "referenceSpace": { "$ref": "#/$defs/referenceSpace" },
             "restoreCameraOnExit": { "type": "boolean" },
+            "launchOnSessionGranted": { "type": "boolean", "default": false },
             "features": { "$ref": "#/$defs/xrFeatures" }
           }
         }

@@ -8,6 +8,8 @@
 import { DevUI } from '@iwer/devui';
 import { SyntheticEnvironmentModule } from '@iwer/sem';
 import {
+  getNativeOverrideSupport,
+  installNativeOverride,
   XRDevice,
   metaQuest2,
   metaQuest3,
@@ -117,6 +119,19 @@ function initDevRuntime(config: ProcessedDevOptions): void {
   };
 
   const isManagedTab = (window as any).__IWER_MCP_MANAGED === true;
+  const isQuestBrowser = /OculusBrowser/i.test(navigator.userAgent || '');
+  const nativeOverrideRequested = config.nativeXRControl;
+
+  // Native control is deliberately scoped to Meta Quest Browser. Never fall
+  // through to force-installing desktop emulation when the caller explicitly
+  // requested native ownership on an unsupported browser.
+  if (nativeOverrideRequested && !isQuestBrowser) {
+    console.error(
+      '[IWSDK Dev] Native XR control requires Meta Quest Browser; refusing ' +
+        "to replace this browser's native navigator.xr with desktop emulation.",
+    );
+    return;
+  }
 
   // The native command surface does not depend on WebXR emulation.
   // Browser-first starters intentionally keep IWER disabled; connect both the
@@ -127,7 +142,7 @@ function initDevRuntime(config: ProcessedDevOptions): void {
 
   const shouldActivateResult = shouldActivate(
     config.activation,
-    config.userAgentException,
+    nativeOverrideRequested ? undefined : config.userAgentException,
     config.iwer,
   );
 
@@ -169,24 +184,50 @@ function initDevRuntime(config: ProcessedDevOptions): void {
         deviceConfig ? config.device : 'metaQuest3 (fallback)',
       );
     }
-    // The dev emulator must own navigator.xr even when desktop Chrome exposes
-    // a native-but-unusable WebXR surface in headless mode.
-    xrDevice.installRuntime({ forceInstall: true });
+
+    if (nativeOverrideRequested) {
+      const support = getNativeOverrideSupport();
+      if (!support.supported) {
+        console.error(
+          '[IWSDK Dev] Native XR control is unavailable:',
+          support.notes.join(' '),
+        );
+        return;
+      }
+      const nativeOverride = installNativeOverride(xrDevice, {
+        onUnsupported: 'warn',
+      });
+      if (!nativeOverride.installed) {
+        console.error(
+          '[IWSDK Dev] Native XR control could not patch this browser:',
+          nativeOverride.capabilities.notes.join(' '),
+        );
+        return;
+      }
+      (window as any).IWER_NATIVE_OVERRIDE = nativeOverride;
+    } else {
+      // The desktop emulator must own navigator.xr even when Chrome exposes a
+      // native-but-unusable WebXR surface in headless mode.
+      xrDevice.installRuntime({ forceInstall: true });
+    }
     (window as any).__IWSDK_EMULATION_PROFILE = {
       active: true,
       device: config.device,
-      runtime: 'IWER',
+      runtime: nativeOverrideRequested ? 'IWER-native-override' : 'IWER',
     };
 
     // DevUI visibility per session:
     // - Normal browser tabs (not Playwright-managed): always show DevUI
     // - Playwright-managed tabs: follow the mode's devUI setting
-    if (!config.ai || !isManagedTab || config.ai.devUI) {
+    if (
+      !nativeOverrideRequested &&
+      (!config.ai || !isManagedTab || config.ai.devUI)
+    ) {
       xrDevice.installDevUI(DevUI);
     }
 
     // Configure SEM if provided
-    if (config.sem) {
+    if (config.sem && !nativeOverrideRequested) {
       if (config.verbose) {
         console.log(
           '[IWSDK Dev] 🌐 Installing SEM with scene:',
@@ -208,14 +249,15 @@ function initDevRuntime(config: ProcessedDevOptions): void {
       xrDevice.sem?.loadDefaultEnvironment(config.sem.defaultScene);
     }
 
-    // Initialize MCP client only in the Playwright-managed tab.
-    // Manual browser tabs get IWER + DevUI but are not remote-controlled.
-    if (config.workspace && isManagedTab) {
+    // Managed desktop tabs and the explicitly enabled physical headset expose
+    // the same command surface.
+    if (config.workspace && (isManagedTab || nativeOverrideRequested)) {
       if (config.verbose) {
         console.log('[IWSDK Dev] 🔌 Initializing MCP client...');
       }
 
       const mcpClient = initMCPClient(xrDevice, {
+        deviceClass: nativeOverrideRequested ? 'physical' : 'managed',
         verbose: config.verbose,
       });
 

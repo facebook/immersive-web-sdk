@@ -155,7 +155,14 @@ function validateXR(
   const xr = objectValue(
     value,
     path,
-    ['mode', 'offer', 'referenceSpace', 'restoreCameraOnExit', 'features'],
+    [
+      'mode',
+      'offer',
+      'referenceSpace',
+      'restoreCameraOnExit',
+      'launchOnSessionGranted',
+      'features',
+    ],
     ['mode'],
     issues,
   );
@@ -171,6 +178,13 @@ function validateXR(
   }
   if ('restoreCameraOnExit' in xr) {
     booleanValue(xr.restoreCameraOnExit, `${path}.restoreCameraOnExit`, issues);
+  }
+  if ('launchOnSessionGranted' in xr) {
+    booleanValue(
+      xr.launchOnSessionGranted,
+      `${path}.launchOnSessionGranted`,
+      issues,
+    );
   }
   if ('features' in xr) {
     validateXRFeatures(xr.features, `${path}.features`, issues);

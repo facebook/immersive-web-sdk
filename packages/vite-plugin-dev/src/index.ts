@@ -26,6 +26,7 @@ import {
   INTERNAL_BROWSER_PROBE_METHOD,
   INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV,
   INTERNAL_RUNTIME_SHUTDOWN_METHOD,
+  type RuntimeBrowserClient,
   type RuntimeBrowserProbeResult,
   type RuntimeBrowserState,
   type RuntimeIssueCause,
@@ -62,6 +63,11 @@ import type {
   WebSocketClient,
 } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
+import {
+  hasReadyBrowserCommandPath,
+  isBrowserBridgeConnectionAllowed,
+  normalizeDeviceClass,
+} from './browser-client-routing.js';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
 import {
   BUNDLED_FONT_MODULES,
@@ -267,6 +273,8 @@ type ResolvedDevPluginOptions = DevPluginOptions & {
   /** Internal module paths resolved exclusively from iwsdk.config.json. */
   assetManifest?: string;
   componentManifest?: string;
+  /** Operator-session switch populated only from the IWSDK CLI. */
+  nativeXRControl?: boolean;
 };
 
 /**
@@ -299,6 +307,7 @@ function processOptions(
     userAgentException:
       emulator.userAgentException || new RegExp('OculusBrowser'),
     iwer: emulator.iwer ?? true,
+    nativeXRControl: options.nativeXRControl ?? false,
     bridgeReadyTimeoutMs,
   };
 
@@ -307,6 +316,12 @@ function processOptions(
     processed.sem = {
       defaultScene: emulator.environment,
     };
+  }
+
+  if (processed.nativeXRControl && processed.iwer === false) {
+    throw new Error(
+      '[IWSDK] --native-xr-control requires dev.emulator.iwer to be enabled.',
+    );
   }
 
   const normalizeScreenshotSize = (input?: {
@@ -434,6 +449,13 @@ function projectManifestPluginOptions(
   projectRoot: string,
   command: 'serve' | 'build',
 ): ResolvedDevPluginOptions {
+  const nativeXRControl =
+    command === 'serve'
+      ? (optionalBooleanEnvironment(
+          'IWSDK_DEV_NATIVE_XR_CONTROL',
+          process.env.IWSDK_DEV_NATIVE_XR_CONTROL,
+        ) ?? false)
+      : false;
   const dev = normalizeProjectDevOptions(manifest);
   const aiMode =
     command === 'serve'
@@ -504,6 +526,7 @@ function projectManifestPluginOptions(
       : { emulator: dev.emulator as EmulatorOptions }),
     ...(ai == null ? {} : { ai }),
     ...(workspace == null ? {} : { workspace }),
+    ...(nativeXRControl ? { nativeXRControl } : {}),
     ...(options.https == null ? {} : { https: options.https }),
     ...(options.verbose == null ? {} : { verbose: options.verbose }),
     ...(options.bridgeReadyTimeoutMs == null
@@ -568,6 +591,7 @@ function optionalPositiveIntegerEnvironment(
 
 function createProjectVirtualModuleSource(
   manifest: IwsdkProjectManifestV1,
+  nativeXRControl = false,
 ): string {
   const optionBindings = [
     'level',
@@ -580,8 +604,9 @@ function createProjectVirtualModuleSource(
     `import components from ${JSON.stringify(COMPONENT_MANIFEST_ID)};`,
     `const manifest = ${JSON.stringify(manifest)};`,
     `const normalized = normalizeProjectWorldOptions(manifest);`,
+    `const xr = normalized.xr === false ? false : { ...normalized.xr${nativeXRControl ? ", offer: 'none', launchOnSessionGranted: true" : ''} };`,
     `const level = import.meta.env.BASE_URL + normalized.level.replace(/^\\.\\//, '');`,
-    `const projectOptions = { ...normalized, ${optionBindings.join(', ')} };`,
+    `const projectOptions = { ...normalized, xr, ${optionBindings.join(', ')} };`,
     `export { manifest };`,
     `export default projectOptions;`,
   ].join('\n');
@@ -591,6 +616,11 @@ function shouldInjectRuntime(
   command: 'serve' | 'build',
   options: ProcessedDevOptions,
 ): boolean {
+  if (command === 'build' && options.nativeXRControl) {
+    throw new Error(
+      '[IWSDK] Native XR control is a development-session capability and cannot be injected into a production build.',
+    );
+  }
   if (command === 'serve') {
     return options.iwer !== false || options.workspace != null;
   }
@@ -678,6 +708,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // Preserve Vite's own HTTPS configuration when the app supplies one.
       if (
         environment.command === 'serve' &&
+        !pluginOptions.nativeXRControl &&
         options.https !== false &&
         userConfig.server?.https === undefined
       ) {
@@ -1083,6 +1114,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         WebSocket,
         'app' | 'editor' | 'preview'
       >();
+      const browserClientMetadata = new Map<WebSocket, RuntimeBrowserClient>();
       let serverShuttingDown = false;
       let browserUrl = '';
       let consecutiveFailures = 0;
@@ -1134,6 +1166,21 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           ? 'permission_denied'
           : 'browser_launch_failed';
 
+      const listBrowserClients = (): RuntimeBrowserClient[] =>
+        [...browserClientMetadata.entries()]
+          .filter(([client]) => browserRuntimeClients?.has(client))
+          .map(([client, metadata]) => ({
+            ...metadata,
+            commandReady: browserCommandReadyClients?.has(client) ?? false,
+          }))
+          .sort(
+            (left, right) =>
+              left.deviceClass.localeCompare(right.deviceClass) ||
+              left.role.localeCompare(right.role) ||
+              left.pageId.localeCompare(right.pageId) ||
+              left.tabGeneration - right.tabGeneration,
+          );
+
       const createBrowserState = (
         status: RuntimeBrowserState['status'],
         options: {
@@ -1156,6 +1203,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           connected,
           commandReady,
           connectedClientCount,
+          clients: listBrowserClients(),
           lastTransitionAt: new Date().toISOString(),
           ...((options.lastBridgeConnectedAt ?? previous?.lastBridgeConnectedAt)
             ? {
@@ -1174,19 +1222,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         };
       };
 
-      const isBrowserCommandPathReady = (): boolean => {
-        let appReady = false;
-        let editorReady = false;
-        for (const client of browserCommandReadyClients ?? []) {
-          if (!browserRuntimeClients?.has(client)) {
-            continue;
-          }
-          const role = browserPageRoles.get(client);
-          appReady ||= role === 'app';
-          editorReady ||= role === 'editor';
-        }
-        return appReady && editorReady;
-      };
+      const isBrowserCommandPathReady = (): boolean =>
+        hasReadyBrowserCommandPath(listBrowserClients());
 
       const browserLaunchAllowed = pluginOptions.workspace.open !== false;
       // --no-open is an explicit no-browser session. Record that state so CLI
@@ -1810,7 +1847,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           }),
       });
 
-      mcpWss.on('connection', (ws: WebSocket) => {
+      mcpWss.on('connection', (ws: WebSocket, request: IncomingMessage) => {
         const connectionId = randomUUID();
         wsConnectionIds.set(ws, connectionId);
         markConnectionKind(ws, 'command');
@@ -1845,6 +1882,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               method?: string;
               params?: Record<string, unknown>;
               type?: string;
+              deviceClass?: string;
               pageId?: string;
               pageRole?: string;
               role?: string;
@@ -1857,17 +1895,37 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
             if (parsed?.type === 'iwsdk_browser_hello') {
               intercepted = true;
+              const deviceClass = normalizeDeviceClass(parsed.deviceClass);
+              const remoteAddress = request.socket.remoteAddress;
+              if (!isBrowserBridgeConnectionAllowed(remoteAddress)) {
+                traceRuntime('browser_bridge_rejected', {
+                  connectionId,
+                  deviceClass,
+                  remoteAddress: remoteAddress ?? null,
+                });
+                ws.close(
+                  1008,
+                  'IWSDK browser command control requires a loopback connection.',
+                );
+                return;
+              }
               markConnectionKind(ws, 'bridge');
               const pageRole = normalizePageRole(
                 parsed.pageRole ?? parsed.role,
               );
               browserPageRoles.set(ws, pageRole);
-              relay.registerBrowserClient(ws, {
-                pageId: parsed.pageId ?? parsed.tabId ?? connectionId,
+              const pageId = parsed.pageId ?? parsed.tabId ?? connectionId;
+              const tabGeneration = parsed.tabGeneration ?? 1;
+              const browserClient: RuntimeBrowserClient = {
+                commandReady: parsed.commandReady === true,
+                deviceClass,
+                pageId,
                 role: pageRole,
                 sceneSessionId: parsed.sceneSessionId,
-                tabGeneration: parsed.tabGeneration ?? 1,
-              });
+                tabGeneration,
+              };
+              browserClientMetadata.set(ws, browserClient);
+              relay.registerBrowserClient(ws, browserClient);
               if (!browserRuntimeClients!.has(ws)) {
                 browserRuntimeClients!.add(ws);
                 if (parsed.commandReady === true) {
@@ -1888,7 +1946,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               }
               traceRuntime('bridge_hello', {
                 connectionId,
-                pageId: parsed.pageId ?? parsed.tabId ?? connectionId,
+                deviceClass,
+                pageId,
                 pageRole,
                 sceneSessionId: parsed.sceneSessionId ?? null,
                 tabId: parsed.tabId ?? null,
@@ -1901,6 +1960,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             if (parsed?.type === 'iwsdk_browser_ready') {
               intercepted = true;
               if (browserRuntimeClients!.has(ws)) {
+                const metadata = browserClientMetadata.get(ws);
+                if (metadata != null) {
+                  browserClientMetadata.set(ws, {
+                    ...metadata,
+                    commandReady: true,
+                  });
+                }
                 browserCommandReadyClients!.add(ws);
                 const commandReady = isBrowserCommandPathReady();
                 publishBrowserState(
@@ -2096,7 +2162,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
             if (
               parsed.method === 'reload_page' &&
-              typeof parsed.id === 'string'
+              typeof parsed.id === 'string' &&
+              !pluginOptions.nativeXRControl
             ) {
               intercepted = true;
               await handleManagedBrowserRequest(
@@ -2258,6 +2325,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           relay.unregisterClient(ws);
           const removedBridge = browserRuntimeClients!.delete(ws);
           browserCommandReadyClients!.delete(ws);
+          browserClientMetadata.delete(ws);
           if (removedBridge) {
             browserCommandReadyPromise = null;
             const remainingBridgeCount = browserRuntimeClients!.size;
@@ -2666,7 +2734,10 @@ if (import.meta.hot) {
             '[IWSDK] virtual:iwsdk-project requires iwsdk.config.json at the Vite project root.',
           );
         }
-        return createProjectVirtualModuleSource(loadedProject.manifest);
+        return createProjectVirtualModuleSource(
+          loadedProject.manifest,
+          pluginOptions.nativeXRControl,
+        );
       }
       if (id === RESOLVED_EDITOR_STYLESHEET_ID) {
         return EDITOR_SHELL_CSS;

@@ -11,6 +11,7 @@
       "Skill(iwsdk-depth-occlusion)",
       "Skill(iwsdk-grab)",
       "Skill(iwsdk-hosting)",
+      "Skill(iwsdk-native-xr-test)",
       "Skill(iwsdk-physics)",
       "Skill(iwsdk-pwa-packaging)",
       "Skill(iwsdk-dev)",

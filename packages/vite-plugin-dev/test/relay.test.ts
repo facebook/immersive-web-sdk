@@ -505,6 +505,45 @@ describe('createRelayHandler', () => {
     vi.useRealTimers();
   });
 
+  test('keeps a parked physical target away from managed clients', () => {
+    vi.useFakeTimers();
+    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
+    const command = createMockWs();
+    const clients = new Set<RelayWebSocket>([command]);
+    const request = JSON.stringify({
+      id: 'physical-coming-back',
+      method: 'get_session_status',
+      params: {},
+      target: { deviceClass: 'physical' },
+    });
+
+    relay.onMessage(command, request, clients);
+    expect(relay.pendingCount()).toBe(1);
+
+    const managed = createMockWs();
+    clients.add(managed);
+    relay.registerBrowserClient(managed, {
+      deviceClass: 'managed',
+      pageId: 'managed-app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    expect(managed.send).not.toHaveBeenCalled();
+    expect(relay.pendingCount()).toBe(1);
+
+    const physical = createMockWs();
+    clients.add(physical);
+    relay.registerBrowserClient(physical, {
+      deviceClass: 'physical',
+      pageId: 'quest-app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    expect(physical.send).toHaveBeenCalledWith(request);
+
+    vi.useRealTimers();
+  });
+
   test('waits briefly for a missing role-only target but not a stale exact target', () => {
     vi.useFakeTimers();
     const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
@@ -541,5 +580,163 @@ describe('createRelayHandler', () => {
       error: { code: -32004 },
     });
     vi.useRealTimers();
+  });
+
+  test('prefers one physical app over managed app clients', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const managed = createMockWs();
+    const physical = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, managed, physical]);
+    relay.registerBrowserClient(managed, {
+      deviceClass: 'managed',
+      pageId: 'managed-app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(physical, {
+      deviceClass: 'physical',
+      pageId: 'quest-app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    const request = JSON.stringify({
+      id: 'physical-preferred',
+      method: 'get_session_status',
+      params: {},
+    });
+
+    relay.onMessage(command, request, clients);
+
+    expect(physical.send).toHaveBeenCalledWith(request);
+    expect(managed.send).not.toHaveBeenCalled();
+  });
+
+  test('returns an ambiguity error instead of racing physical headsets', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const questA = createMockWs();
+    const questB = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, questA, questB]);
+    relay.registerBrowserClient(questA, {
+      deviceClass: 'physical',
+      pageId: 'quest-a',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(questB, {
+      deviceClass: 'physical',
+      pageId: 'quest-b',
+      role: 'app',
+      tabGeneration: 2,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'ambiguous',
+        method: 'get_session_status',
+        params: {},
+      }),
+      clients,
+    );
+
+    expect(questA.send).not.toHaveBeenCalled();
+    expect(questB.send).not.toHaveBeenCalled();
+    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
+      id: 'ambiguous',
+      error: {
+        code: -32005,
+        data: {
+          code: 'ambiguous_target',
+          candidates: [
+            { pageId: 'quest-a', tabGeneration: 1 },
+            { pageId: 'quest-b', tabGeneration: 2 },
+          ],
+        },
+      },
+    });
+  });
+
+  test('rejects a broad explicit target and lists only routable physical tabs', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const staleQuestA = createMockWs();
+    const questA = createMockWs();
+    const questB = createMockWs();
+    const clients = new Set<RelayWebSocket>([
+      command,
+      staleQuestA,
+      questA,
+      questB,
+    ]);
+    relay.registerBrowserClient(staleQuestA, {
+      deviceClass: 'physical',
+      pageId: 'quest-a',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    relay.registerBrowserClient(questA, {
+      deviceClass: 'physical',
+      pageId: 'quest-a',
+      role: 'app',
+      tabGeneration: 2,
+    });
+    relay.registerBrowserClient(questB, {
+      deviceClass: 'physical',
+      pageId: 'quest-b',
+      role: 'app',
+      tabGeneration: 1,
+    });
+
+    relay.onMessage(
+      command,
+      JSON.stringify({
+        id: 'broad-physical-target',
+        method: 'get_session_status',
+        params: {},
+        target: { deviceClass: 'physical', role: 'app' },
+      }),
+      clients,
+    );
+
+    expect(staleQuestA.send).not.toHaveBeenCalled();
+    expect(questA.send).not.toHaveBeenCalled();
+    expect(questB.send).not.toHaveBeenCalled();
+    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
+      id: 'broad-physical-target',
+      error: {
+        code: -32005,
+        data: {
+          code: 'ambiguous_target',
+          candidates: [
+            { pageId: 'quest-a', tabGeneration: 2 },
+            { pageId: 'quest-b', tabGeneration: 1 },
+          ],
+        },
+      },
+    });
+  });
+
+  test('routes an explicit device-class target', () => {
+    const relay = createRelayHandler();
+    const command = createMockWs();
+    const managed = createMockWs();
+    const clients = new Set<RelayWebSocket>([command, managed]);
+    relay.registerBrowserClient(managed, {
+      pageId: 'managed-app',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    const request = JSON.stringify({
+      id: 'managed-only',
+      method: 'get_session_status',
+      params: {},
+      target: { deviceClass: 'managed', role: 'app' },
+    });
+
+    relay.onMessage(command, request, clients);
+
+    expect(managed.send).toHaveBeenCalledWith(request);
   });
 });

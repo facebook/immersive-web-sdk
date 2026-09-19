@@ -92,6 +92,15 @@ export type XROptions = {
    * @defaultValue true
    */
   restoreCameraOnExit?: boolean;
+  /**
+   * Launch XR when the browser grants an immersive session through an external
+   * entry point such as a headset deep link. The listener is armed before
+   * asynchronous world initialization so an early grant is not lost.
+   * This takes precedence over `offer`; IWSDK does not run both native grant
+   * and offer flows for the same world.
+   * @defaultValue false
+   */
+  launchOnSessionGranted?: boolean;
 };
 
 /** Default optional features appended to requests/offers. */
@@ -225,6 +234,8 @@ function mergeXROptions(
     referenceSpace: o.referenceSpace ?? b.referenceSpace,
     features: Object.keys(mergedFeatures).length ? mergedFeatures : undefined,
     restoreCameraOnExit: o.restoreCameraOnExit ?? b.restoreCameraOnExit ?? true,
+    launchOnSessionGranted:
+      o.launchOnSessionGranted ?? b.launchOnSessionGranted ?? false,
   };
   return merged;
 }
@@ -256,6 +267,137 @@ export async function resolveReferenceSpaceType(
   throw new Error('No supported reference space available');
 }
 
+type SessionEndedCallback = () => void;
+
+type PendingSessionAdoption = {
+  session: XRSession;
+  promise: Promise<boolean>;
+};
+
+const pendingSessionAdoptions = new WeakMap<World, PendingSessionAdoption>();
+
+async function safelyEndSession(session: XRSession): Promise<void> {
+  try {
+    await session.end();
+  } catch {}
+}
+
+/**
+ * Adopt a native or emulated session into the world's renderer. Concurrent
+ * offer/request paths reconcile here: the first successfully adopted session
+ * wins and any later session is ended.
+ *
+ * @internal
+ */
+export async function adoptXRSession(
+  world: World,
+  session: XRSession,
+  options: XROptions,
+  onSessionEnded?: SessionEndedCallback,
+): Promise<boolean> {
+  if (world.session != null) {
+    if (world.session !== session) {
+      await safelyEndSession(session);
+    }
+    return world.session === session;
+  }
+
+  const existingPending = pendingSessionAdoptions.get(world);
+  if (existingPending?.session === session) {
+    return existingPending.promise;
+  }
+
+  const refSpec = normalizeReferenceSpec(options.referenceSpace);
+  let sessionEnded = false;
+  let sessionEndNotified = false;
+  const notifySessionEnded = () => {
+    if (sessionEndNotified) {
+      return;
+    }
+    sessionEndNotified = true;
+    onSessionEnded?.();
+  };
+  const onEnd = () => {
+    sessionEnded = true;
+    session.removeEventListener('end', onEnd);
+    if (world.session === session) {
+      world.session = undefined;
+    }
+    notifySessionEnded();
+  };
+  session.addEventListener('end', onEnd);
+
+  while (true) {
+    const pending = pendingSessionAdoptions.get(world);
+    if (pending == null) {
+      break;
+    }
+    if (pending.session === session) {
+      session.removeEventListener('end', onEnd);
+      return pending.promise;
+    }
+    const adopted = await pending.promise;
+    if (sessionEnded) {
+      return false;
+    }
+    if (adopted || world.session != null) {
+      session.removeEventListener('end', onEnd);
+      await safelyEndSession(session);
+      return false;
+    }
+    // Another waiter may have claimed the now-free adoption slot before this
+    // continuation ran. Loop and reconcile with it instead of racing it.
+  }
+
+  const adoption = (async (): Promise<boolean> => {
+    try {
+      const resolvedType = await resolveReferenceSpaceType(
+        session,
+        refSpec.type,
+        refSpec.required ? [] : refSpec.fallbackOrder,
+      );
+      if (sessionEnded) {
+        return false;
+      }
+      world.renderer.xr.getDepthSensingMesh = function () {
+        return null;
+      };
+      world.renderer.xr.setReferenceSpaceType(
+        resolvedType as unknown as XRReferenceSpaceType,
+      );
+      if (options.restoreCameraOnExit !== false) {
+        attachBrowserCameraRestore(world.camera, session);
+      }
+      await world.renderer.xr.setSession(session);
+      if (sessionEnded) {
+        session.removeEventListener('end', onEnd);
+        return false;
+      }
+      if (world.session != null && world.session !== session) {
+        session.removeEventListener('end', onEnd);
+        await safelyEndSession(session);
+        return false;
+      }
+      world.session = session;
+      return true;
+    } catch (err) {
+      session.removeEventListener('end', onEnd);
+      console.error('[XR] Failed to acquire reference space:', err);
+      await safelyEndSession(session);
+      notifySessionEnded();
+      return false;
+    }
+  })();
+  pendingSessionAdoptions.set(world, { session, promise: adoption });
+  try {
+    return await adoption;
+  } finally {
+    if (pendingSessionAdoptions.get(world)?.promise === adoption) {
+      pendingSessionAdoptions.delete(world);
+    }
+  }
+}
+
 /**
  * Explicitly request a WebXR session with the given options.
  *
@@ -270,56 +412,39 @@ export function launchXR(world: World, options?: Partial<XROptions>) {
     );
   }
 
+  if (world.session != null) {
+    console.error('XRSession already exists');
+    return;
+  }
+  if (world.sessionRequestPending) {
+    return;
+  }
+
   const merged = mergeXROptions(world.xrDefaults, options);
   const { sessionMode = SessionMode.ImmersiveVR } = merged;
-  const refSpec = normalizeReferenceSpec(merged.referenceSpace);
   const sessionOptions = buildSessionInit(merged);
 
-  const onSessionStart = async (session: XRSession) => {
-    session.addEventListener('end', onSessionEnd);
-    try {
-      const resolvedType = await resolveReferenceSpaceType(
-        session,
-        refSpec.type,
-        refSpec.required ? [] : refSpec.fallbackOrder,
-      );
-      // disable built-in occlusion
-      world.renderer.xr.getDepthSensingMesh = function () {
-        return null;
-      };
-      world.renderer.xr.setReferenceSpaceType(
-        resolvedType as unknown as XRReferenceSpaceType,
-      );
-      if (merged.restoreCameraOnExit !== false) {
-        attachBrowserCameraRestore(world.camera, session);
-      }
-      await world.renderer.xr.setSession(session);
-      world.session = session;
-    } catch (err) {
-      console.error('[XR] Failed to acquire reference space:', err);
-      try {
-        await session.end();
-      } catch {}
-    }
-  };
-
-  const onSessionEnd = () => {
-    world.session?.removeEventListener('end', onSessionEnd);
-    world.session = undefined;
-  };
-
-  if (!world.session) {
-    world.renderer.xr.enabled = true;
-    Promise.resolve(navigator.xr?.requestSession?.(sessionMode, sessionOptions))
-      .then((session) => (session ? onSessionStart(session) : undefined))
-      .catch((error) => {
-        // requestSession rejects when the user denies permission, the device is
-        // unavailable, or the requested features are unsupported. Without this
-        // handler the rejection was unhandled (and silently swallowed); surface
-        // it instead of leaving the caller with a half-enabled XR manager.
-        console.error('[XR] Failed to start XR session:', error);
-      });
-  } else {
-    console.error('XRSession already exists');
+  world.sessionRequestPending = true;
+  world.renderer.xr.enabled = true;
+  let request: Promise<XRSession> | undefined;
+  try {
+    request = navigator.xr?.requestSession?.(sessionMode, sessionOptions);
+  } catch (error) {
+    world.sessionRequestPending = false;
+    console.error('[XR] Failed to start XR session:', error);
+    return;
   }
+
+  Promise.resolve(request)
+    .then((session) =>
+      session == null ? undefined : adoptXRSession(world, session, merged),
+    )
+    .catch((error) => {
+      // requestSession rejects when the user denies permission, the device is
+      // unavailable, or the requested features are unsupported.
+      console.error('[XR] Failed to start XR session:', error);
+    })
+    .finally(() => {
+      world.sessionRequestPending = false;
+    });
 }

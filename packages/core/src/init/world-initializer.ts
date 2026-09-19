@@ -98,14 +98,16 @@ import {
   loadUIKitMLAsset,
 } from '../ui/index.js';
 import { Visibility, VisibilitySystem } from '../visibility/index.js';
-import { attachBrowserCameraRestore } from './browser-camera.js';
 import { attachCameraToPlayer } from './player-camera.js';
+import {
+  armSessionGrantCaptureForOptions,
+  onSessionGrant,
+} from './session-grant.js';
 import {
   ReferenceSpaceType,
   SessionMode,
   XROptions,
-  normalizeReferenceSpec,
-  resolveReferenceSpaceType,
+  adoptXRSession,
   buildSessionInit,
 } from './xr.js';
 
@@ -125,7 +127,11 @@ export type WorldOptions = {
   /** Native scene JSON level to load after initialization. Accepts a URL string or an object with a `url` field. */
   level?: { url?: string } | string;
 
-  /** XR session options and offer behavior. Set to `false` for browser-only worlds. */
+  /**
+   * XR session options and offer behavior. Set to `false` for browser-only
+   * worlds. Set `launchOnSessionGranted` to handle immersive browser entry
+   * that grants a session before or after asynchronous world initialization.
+   */
   xr?: false | (XROptions & { offer?: 'none' | 'once' | 'always' });
 
   /** Renderer & camera configuration. */
@@ -238,6 +244,10 @@ export async function initializeWorld(
   container: HTMLElement,
   options: WorldOptions = {},
 ): Promise<World> {
+  // This public entry point can be called without World.create(). Capture a
+  // browser-delivered grant before any asynchronous initialization can yield.
+  armSessionGrantCaptureForOptions(options.xr);
+
   // Create and configure world instance
   const world = createWorldInstance();
   registerApplicationComponents(world, options.components);
@@ -266,6 +276,7 @@ export async function initializeWorld(
     referenceSpace: config.xr.referenceSpace,
     features: config.xr.features,
     restoreCameraOnExit: config.xr.restoreCameraOnExit,
+    launchOnSessionGranted: config.xr.launchOnSessionGranted,
   };
   world.xrEnabled = config.xr.enabled;
 
@@ -307,6 +318,17 @@ export async function initializeWorld(
         await w.loadLevel(levelUrl);
       } else {
         await w.loadLevel();
+      }
+      if (config.xr.launchOnSessionGranted) {
+        const unsubscribe = onSessionGrant(
+          () => {
+            if (w.xrEnabled && w.session == null && !w.sessionRequestPending) {
+              w.launchXR();
+            }
+          },
+          { persistent: true },
+        );
+        w.addCleanup(unsubscribe);
       }
       if (config.xr.offer && config.xr.offer !== 'none') {
         manageOfferFlow(w, config.xr.offer);
@@ -350,7 +372,8 @@ function registerApplicationComponents(
 /**
  * Extract and normalize configuration options
  */
-function extractConfiguration(options: WorldOptions) {
+/** @internal Exported for focused policy tests; not part of the package barrel. */
+export function extractConfiguration(options: WorldOptions) {
   const xrOptions = options.xr === false ? undefined : options.xr;
   const spatialUI = options.features?.spatialUI;
   const legacyForwardHtmlEvents =
@@ -372,8 +395,12 @@ function extractConfiguration(options: WorldOptions) {
       referenceSpace:
         xrOptions?.referenceSpace ?? ReferenceSpaceType.LocalFloor,
       features: xrOptions?.features,
-      offer: options.xr === false ? 'none' : (xrOptions?.offer ?? 'always'),
+      offer:
+        options.xr === false || xrOptions?.launchOnSessionGranted === true
+          ? 'none'
+          : (xrOptions?.offer ?? 'always'),
       restoreCameraOnExit: xrOptions?.restoreCameraOnExit ?? true,
+      launchOnSessionGranted: xrOptions?.launchOnSessionGranted ?? false,
     },
     input: {
       canvasPointerEvents,
@@ -568,44 +595,17 @@ function manageOfferFlow(world: World, mode: 'once' | 'always') {
       if (!session) {
         return;
       }
-
-      const refSpec = normalizeReferenceSpec(opts.referenceSpace);
-      session.addEventListener('end', onEnd);
-      try {
-        // disable built-in occlusion
-        world.renderer.xr.getDepthSensingMesh = function () {
-          return null;
-        };
-        const resolvedType = await resolveReferenceSpaceType(
-          session,
-          refSpec.type,
-          refSpec.required ? [] : refSpec.fallbackOrder,
-        );
-        world.renderer.xr.setReferenceSpaceType(
-          resolvedType as unknown as XRReferenceSpaceType,
-        );
-        if (opts.restoreCameraOnExit !== false) {
-          attachBrowserCameraRestore(world.camera, session);
-        }
-        await world.renderer.xr.setSession(session);
-        world.session = session;
-      } catch (err) {
-        console.error('[XR] Failed to acquire reference space:', err);
-        try {
-          await session.end();
-        } catch {}
-      }
+      await adoptXRSession(world, session, opts as XROptions, onEnd);
     } finally {
       offering = false;
     }
   };
 
   const onEnd = () => {
-    world.session?.removeEventListener('end', onEnd);
-    world.session = undefined;
     if (mode === 'always') {
-      // re-offer after session ends
-      offer();
+      // Adoption can end before offer() clears its single-flight guard. Start
+      // the replacement offer in the next task so that path can recover too.
+      setTimeout(() => void offer(), 0);
     }
   };
 

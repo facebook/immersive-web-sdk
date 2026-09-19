@@ -216,9 +216,11 @@ export interface RuntimeOperationDefinition {
 }
 
 export type RuntimePageRole = 'app' | 'editor' | 'preview';
+export type RuntimeDeviceClass = 'managed' | 'physical';
 
 export interface RuntimePageTarget {
   role?: RuntimePageRole;
+  deviceClass?: RuntimeDeviceClass;
   pageId?: string;
   tabGeneration?: number;
   sceneSessionId?: string;
@@ -259,11 +261,21 @@ export type RuntimeBrowserStatus =
   | 'disconnected'
   | 'launch_failed';
 
+export interface RuntimeBrowserClient {
+  pageId: string;
+  role: RuntimePageRole;
+  deviceClass: RuntimeDeviceClass;
+  tabGeneration: number;
+  commandReady: boolean;
+  sceneSessionId?: string;
+}
+
 export interface RuntimeBrowserState {
   status: RuntimeBrowserStatus;
   connected: boolean;
   commandReady: boolean;
   connectedClientCount: number;
+  clients?: RuntimeBrowserClient[];
   lastTransitionAt: string;
   lastBridgeConnectedAt?: string;
   lastCommandReadyAt?: string;

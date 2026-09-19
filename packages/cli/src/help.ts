@@ -293,6 +293,7 @@ export function buildDevCommandHelp(action?: string): string[] {
       '  --headed                      Launch the managed browser headed (default)',
       '  --open                         Open the managed browser on startup (default)',
       '  --no-open                      Do not open the managed browser on startup',
+      '  --native-xr-control            Control native Quest WebXR through ADB-reversed localhost',
       '  --screenshot-width <pixels>    Positive screenshot width; default behavior is 800px',
       '  --screenshot-height <pixels>   Positive screenshot height; default behavior is 800px',
       '  --allow-browser-automation     Enable the local same-session Playwright runner',

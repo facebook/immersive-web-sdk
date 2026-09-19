@@ -249,6 +249,7 @@ describe('common starter project files', () => {
     expect(paths).toContain('.claude/settings.json');
     expect(paths).toContain('.claude/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-dev/SKILL.md');
+    expect(paths).toContain('.claude/skills/iwsdk-native-xr-test/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-build-model/SKILL.md');
     expect(paths).toContain(
       '.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
@@ -259,6 +260,7 @@ describe('common starter project files', () => {
     );
     expect(paths).toContain('.agents/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/SKILL.md');
+    expect(paths).toContain('.agents/skills/iwsdk-native-xr-test/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/planner.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/iterate.md');
     expect(paths).toContain('.agents/skills/iwsdk-build-model/SKILL.md');

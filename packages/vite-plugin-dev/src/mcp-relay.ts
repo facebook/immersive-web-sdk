@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { normalizeDeviceClass } from './browser-client-routing.js';
+
 /**
  * Minimal WebSocket interface used by the relay.
  * Compatible with both the `ws` library and the browser WebSocket API.
@@ -18,9 +20,11 @@ export interface RelayWebSocket {
 const WS_OPEN = 1;
 
 export type RelayPageRole = 'app' | 'editor' | 'preview';
+export type RelayDeviceClass = 'managed' | 'physical';
 
 export interface RelayPageTarget {
   role?: RelayPageRole;
+  deviceClass?: RelayDeviceClass;
   pageId?: string;
   tabGeneration?: number;
   sceneSessionId?: string;
@@ -29,6 +33,7 @@ export interface RelayPageTarget {
 export interface RelayClientMetadata {
   pageId: string;
   role: RelayPageRole;
+  deviceClass?: RelayDeviceClass;
   tabGeneration: number;
   sceneSessionId?: string;
 }
@@ -128,6 +133,10 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
 
       if (isRequest) {
         const targetClients = resolveRequestTargets(senderWs, parsed, clients);
+        if (targetClients === 'ambiguous_physical') {
+          sendAmbiguousTargetError(senderWs, parsed.id, clients, parsed.target);
+          return;
+        }
         if (targetClients.length === 0) {
           const reconnectTarget = reconnectableTarget(parsed.target);
           if (reconnectTarget != null) {
@@ -228,7 +237,10 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     ws: RelayWebSocket,
     metadata: RelayClientMetadata,
   ): void {
-    browserClients.set(ws, metadata);
+    browserClients.set(ws, {
+      ...metadata,
+      deviceClass: normalizeDeviceClass(metadata.deviceClass),
+    });
     latestGenerationByPageId.set(
       metadata.pageId,
       Math.max(
@@ -320,7 +332,7 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       target?: RelayPageTarget;
     },
     clients: Set<RelayWebSocket>,
-  ): RelayWebSocket[] {
+  ): RelayWebSocket[] | 'ambiguous_physical' {
     const candidates = Array.from(clients).filter(
       (client) => client !== senderWs && client.readyState === WS_OPEN,
     );
@@ -330,14 +342,33 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     const target = getRequestTarget(parsed);
 
     if (target != null) {
-      return browserCandidates.filter((client) =>
+      const matchingClients = browserCandidates.filter((client) =>
         matchesTarget(browserClients.get(client), target),
       );
+      const matchingPhysicalApps = matchingClients.filter((client) => {
+        const metadata = browserClients.get(client);
+        return metadata?.role === 'app' && metadata.deviceClass === 'physical';
+      });
+      return matchingPhysicalApps.length > 1
+        ? 'ambiguous_physical'
+        : matchingClients;
     }
 
     const appClients = browserCandidates.filter(
       (client) => browserClients.get(client)?.role === 'app',
     );
+    if (appClients.length === 1) {
+      return appClients;
+    }
+    const physicalAppClients = appClients.filter(
+      (client) => browserClients.get(client)?.deviceClass === 'physical',
+    );
+    if (physicalAppClients.length === 1) {
+      return physicalAppClients;
+    }
+    if (physicalAppClients.length > 1) {
+      return 'ambiguous_physical';
+    }
     if (appClients.length > 0) {
       return appClients;
     }
@@ -366,6 +397,12 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     if (target.role != null && metadata.role !== target.role) {
       return false;
     }
+    if (
+      target.deviceClass != null &&
+      normalizeDeviceClass(metadata.deviceClass) !== target.deviceClass
+    ) {
+      return false;
+    }
     if (target.pageId != null && metadata.pageId !== target.pageId) {
       return false;
     }
@@ -382,6 +419,44 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       return false;
     }
     return true;
+  }
+
+  function sendAmbiguousTargetError(
+    sourceWs: RelayWebSocket,
+    requestId: string,
+    clients: Set<RelayWebSocket>,
+    target?: RelayPageTarget,
+  ): void {
+    if (sourceWs.readyState !== WS_OPEN) {
+      return;
+    }
+    const candidates = [...clients]
+      .filter(
+        (client) =>
+          client !== sourceWs &&
+          client.readyState === WS_OPEN &&
+          isLatestBrowserClient(client),
+      )
+      .map((client) => browserClients.get(client))
+      .filter(
+        (metadata): metadata is RelayClientMetadata =>
+          metadata != null &&
+          metadata.role === 'app' &&
+          metadata.deviceClass === 'physical' &&
+          (target == null || matchesTarget(metadata, target)),
+      )
+      .map(({ pageId, tabGeneration }) => ({ pageId, tabGeneration }));
+    sourceWs.send(
+      JSON.stringify({
+        id: requestId,
+        error: {
+          code: -32005,
+          message:
+            'More than one physical headset page is connected; target a pageId and tabGeneration explicitly.',
+          data: { code: 'ambiguous_target', candidates },
+        },
+      }),
+    );
   }
 
   function sendNoTargetError(
@@ -447,14 +522,18 @@ function reconnectableTarget(
   target: RelayPageTarget | undefined,
 ): RelayPageTarget | undefined {
   if (
-    target?.role == null ||
+    target == null ||
+    (target.role == null && target.deviceClass == null) ||
     target.pageId != null ||
     target.tabGeneration != null ||
     target.sceneSessionId != null
   ) {
     return undefined;
   }
-  return { role: target.role };
+  return {
+    ...(target.role == null ? {} : { role: target.role }),
+    ...(target.deviceClass == null ? {} : { deviceClass: target.deviceClass }),
+  };
 }
 
 function isRelayPageTarget(value: unknown): value is RelayPageTarget {
@@ -467,6 +546,8 @@ function isRelayPageTarget(value: unknown): value is RelayPageTarget {
     target.role === 'app' ||
     target.role === 'editor' ||
     target.role === 'preview' ||
+    target.deviceClass === 'managed' ||
+    target.deviceClass === 'physical' ||
     typeof target.pageId === 'string' ||
     typeof target.tabGeneration === 'number' ||
     typeof target.sceneSessionId === 'string'

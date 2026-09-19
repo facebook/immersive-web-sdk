@@ -102,6 +102,9 @@ function createManagedBrowser() {
       runCommandExclusive: vi.fn(async (operation: () => Promise<unknown>) =>
         operation(),
       ),
+      reloadApplication: vi.fn().mockResolvedValue({
+        url: 'http://localhost:4173/',
+      }),
       snapshotApplication: vi.fn().mockResolvedValue({
         application: {
           generation: 3,
@@ -124,6 +127,7 @@ function createManagedBrowser() {
 
 async function createHarness(
   managedBrowser: ReturnType<typeof createManagedBrowser>['browser'],
+  nativeXRControl = false,
 ) {
   const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
   const httpServer = {
@@ -142,7 +146,10 @@ async function createHarness(
   };
   const close = vi.fn().mockResolvedValue(undefined);
   mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
-  const plugin = iwsdkDev({ workspace: { enabled: true } });
+  const plugin = iwsdkDev({
+    nativeXRControl,
+    workspace: { enabled: true },
+  });
   plugin.configResolved?.({
     command: 'serve',
     root: '/tmp/iwsdk-browser-routing',
@@ -192,6 +199,43 @@ describe('managed browser WebSocket routing', () => {
       result: { snapshotId: 'snapshot-1' },
     });
     expect(managed.browser.snapshotApplication).toHaveBeenCalledOnce();
+  });
+
+  test('relays reload_page to a physical app in native XR control mode', async () => {
+    const managed = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser, true);
+    const physicalSocket = Object.assign(new EventEmitter(), {
+      readyState: 1,
+      send: vi.fn(),
+    });
+    mocks.servers.at(-1).emit('connection', physicalSocket, {
+      socket: { remoteAddress: '127.0.0.1' },
+    });
+    physicalSocket.emit(
+      'message',
+      Buffer.from(
+        JSON.stringify({
+          type: 'iwsdk_browser_hello',
+          commandReady: true,
+          deviceClass: 'physical',
+          pageId: 'quest-page',
+          pageRole: 'app',
+          tabGeneration: 1,
+        }),
+      ),
+    );
+
+    socket.emit(
+      'message',
+      Buffer.from(JSON.stringify({ id: 'reload', method: 'reload_page' })),
+    );
+
+    await vi.waitFor(() => expect(physicalSocket.send).toHaveBeenCalledOnce());
+    expect(JSON.parse(physicalSocket.send.mock.calls[0]![0])).toMatchObject({
+      id: 'reload',
+      method: 'reload_page',
+    });
+    expect(managed.browser.reloadApplication).not.toHaveBeenCalled();
   });
 
   test('does not combine a new application id with a stale generation', async () => {

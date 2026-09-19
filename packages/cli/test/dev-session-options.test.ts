@@ -18,6 +18,7 @@ describe('dev session options', () => {
       allowBrowserAutomation: false,
       headless: false,
       open: true,
+      nativeXRControl: false,
     });
 
     const environment = buildDevRuntimeEnvironment(
@@ -28,6 +29,7 @@ describe('dev session options', () => {
         IWSDK_DEV_AI_MODE: 'agent',
         IWSDK_DEV_HEADLESS: 'true',
         IWSDK_DEV_OPEN: 'false',
+        IWSDK_DEV_NATIVE_XR_CONTROL: 'true',
         IWSDK_DEV_SCREENSHOT_HEIGHT: '10',
         IWSDK_DEV_SCREENSHOT_WIDTH: '10',
       },
@@ -37,6 +39,7 @@ describe('dev session options', () => {
       IWSDK_DEV_ALLOW_BROWSER_AUTOMATION: 'false',
       IWSDK_DEV_HEADLESS: 'false',
       IWSDK_DEV_OPEN: 'true',
+      IWSDK_DEV_NATIVE_XR_CONTROL: 'false',
     });
     expect(environment.IWSDK_DEV_AI_MODE).toBeUndefined();
     expect(environment.IWSDK_DEV_SCREENSHOT_WIDTH).toBeUndefined();
@@ -49,6 +52,7 @@ describe('dev session options', () => {
       allowBrowserAutomation: true,
       headless: true,
       noOpen: true,
+      nativeXrControl: true,
       screenshotHeight: '720',
       screenshotWidth: '1280',
     };
@@ -58,6 +62,7 @@ describe('dev session options', () => {
       aiMode: 'agent',
       headless: true,
       open: false,
+      nativeXRControl: true,
       screenshotHeight: 720,
       screenshotWidth: 1280,
     });
@@ -66,6 +71,7 @@ describe('dev session options', () => {
       IWSDK_DEV_AI_MODE: 'agent',
       IWSDK_DEV_HEADLESS: 'true',
       IWSDK_DEV_OPEN: 'false',
+      IWSDK_DEV_NATIVE_XR_CONTROL: 'true',
       IWSDK_DEV_SCREENSHOT_HEIGHT: '720',
       IWSDK_DEV_SCREENSHOT_WIDTH: '1280',
     });
@@ -76,10 +82,12 @@ describe('dev session options', () => {
       allowBrowserAutomation: false,
       headless: false,
       open: true,
+      nativeXRControl: false,
     });
     expect(resolveDevSessionOptions({ aiMode: 'agent' })).toMatchObject({
       aiMode: 'agent',
       headless: true,
+      nativeXRControl: false,
     });
     expect(resolveDevSessionOptions({ aiMode: 'collaborate' })).toMatchObject({
       aiMode: 'collaborate',

@@ -139,6 +139,7 @@ describe('MCPWebSocketClient', () => {
         hostname: 'localhost',
         pathname: '/',
         port: '5173',
+        reload: vi.fn(),
       },
     };
   });
@@ -304,11 +305,30 @@ describe('MCPWebSocketClient', () => {
       expect(messages[0]).toMatchObject({
         type: 'iwsdk_browser_hello',
         commandReady: false,
+        deviceClass: 'managed',
         pageId: client.tabId,
         pageRole: 'app',
         role: 'app',
         tabId: client.tabId,
         tabGeneration: client.tabGeneration,
+      });
+    });
+
+    test('identifies a physical XR client in the browser hello', async () => {
+      client = new MCPWebSocketClient(mockDevice as any, {
+        deviceClass: 'physical',
+      });
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      expect(getParsedSentMessages(mockWebSocketInstance!)[0]).toMatchObject({
+        type: 'iwsdk_browser_hello',
+        deviceClass: 'physical',
+        pageRole: 'app',
       });
     });
 
@@ -449,6 +469,32 @@ describe('MCPWebSocketClient', () => {
   });
 
   describe('message handling', () => {
+    test('responds before reloading a relayed physical page', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance?.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: 'reload',
+        method: 'reload_page',
+        params: {},
+      });
+
+      await vi.waitFor(() => {
+        expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(1);
+      });
+      expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+        id: 'reload',
+        result: { success: true, message: 'Page reload initiated' },
+      });
+      await vi.waitFor(() => {
+        expect((globalThis as any).window.location.reload).toHaveBeenCalled();
+      });
+      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+    });
+
     test('should dispatch IWER methods to device.remote.dispatch', async () => {
       client = new MCPWebSocketClient(mockDevice as any);
       client.connect();

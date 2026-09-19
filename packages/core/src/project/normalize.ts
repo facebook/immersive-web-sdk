@@ -153,6 +153,9 @@ function normalizeXR(
     ...(source.restoreCameraOnExit == null
       ? {}
       : { restoreCameraOnExit: source.restoreCameraOnExit }),
+    ...(source.launchOnSessionGranted == null
+      ? {}
+      : { launchOnSessionGranted: source.launchOnSessionGranted }),
     ...(source.features == null
       ? {}
       : { features: cloneXRFeatures(source.features) }),

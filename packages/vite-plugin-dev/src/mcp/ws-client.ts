@@ -5,9 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import type { XRDevice } from 'iwer';
-
 type MCPPageRole = 'app' | 'editor' | 'preview';
+type MCPDeviceClass = 'managed' | 'physical';
+
+interface MCPDevice {
+  remote: {
+    dispatch(
+      method: string,
+      params: Record<string, unknown>,
+    ): Promise<unknown> | unknown;
+  };
+}
 
 /**
  * Interface that any framework can implement to provide MCP tools.
@@ -103,7 +111,7 @@ function serializeMCPError(error: unknown): NonNullable<MCPResponse['error']> {
  */
 export class MCPWebSocketClient {
   private ws: WebSocket | null = null;
-  private device: XRDevice | null;
+  private device: MCPDevice | null;
   private reconnectAttempts = 0;
   // Vite may be unavailable for longer than five seconds while a project
   // manifest edit restarts and re-optimizes the server. Keep reconnecting for
@@ -123,12 +131,17 @@ export class MCPWebSocketClient {
   readonly tabId: string;
   readonly tabGeneration: number;
   readonly pageRole: MCPPageRole;
+  readonly deviceClass: MCPDeviceClass;
   readonly sceneSessionId: string | undefined;
 
-  constructor(device: XRDevice | null, options: { verbose?: boolean } = {}) {
+  constructor(
+    device: MCPDevice | null,
+    options: { deviceClass?: MCPDeviceClass; verbose?: boolean } = {},
+  ) {
     this.device = device;
     this.verbose = options.verbose ?? false;
     this.pageRole = this.detectPageRole();
+    this.deviceClass = options.deviceClass ?? 'managed';
     this.sceneSessionId =
       typeof window !== 'undefined'
         ? window.__IWSDK_SCENE_SESSION_ID
@@ -335,6 +348,7 @@ export class MCPWebSocketClient {
         JSON.stringify({
           type: 'iwsdk_browser_hello',
           commandReady: window.FRAMEWORK_MCP_RUNTIME != null,
+          deviceClass: this.deviceClass,
           pageId: this.tabId,
           pageRole: this.pageRole,
           role: this.pageRole,
@@ -474,19 +488,27 @@ export class MCPWebSocketClient {
    * 1. Framework runtime (IWSDK or any framework providing FRAMEWORK_MCP_RUNTIME)
    * 2. IWER device control (device.remote.dispatch)
    *
-   * Managed-browser host commands, including reload_page, are intercepted by
-   * the Vite host and never reach this in-page dispatcher.
+   * Managed-browser host commands are normally intercepted by the Vite host.
+   * Native XR control deliberately relays reload_page to the physical app so
+   * the headset page, rather than an inert managed tab, is refreshed.
    */
   private async dispatch(
     method: string,
     params: Record<string, unknown>,
   ): Promise<unknown> {
-    // 1. Route to framework runtime if available and handles this method
+    // 1. Reload the page locally when native XR routing sends this request to
+    // the physical browser. Defer teardown so the WebSocket response flushes.
+    if (method === 'reload_page') {
+      setTimeout(() => window.location.reload(), 50);
+      return { success: true, message: 'Page reload initiated' };
+    }
+
+    // 2. Route to framework runtime if available and handles this method
     if (window.FRAMEWORK_MCP_RUNTIME?.handles(method)) {
       return window.FRAMEWORK_MCP_RUNTIME.dispatch(method, params);
     }
 
-    // 2. All other methods go to IWER's RemoteControlInterface when this page
+    // 3. All other methods go to IWER's RemoteControlInterface when this page
     // owns an emulated device. Workspace-only editor pages deliberately use a
     // device-less bridge so browser-first apps keep native non-XR behavior.
     if (this.device == null) {
@@ -551,10 +573,17 @@ export class MCPWebSocketClient {
  * Initialize MCP WebSocket client and connect to the server
  */
 export function initMCPClient(
-  device: XRDevice,
-  options: { port?: number; verbose?: boolean } = {},
+  device: MCPDevice,
+  options: {
+    deviceClass?: MCPDeviceClass;
+    port?: number;
+    verbose?: boolean;
+  } = {},
 ): MCPWebSocketClient {
-  const client = new MCPWebSocketClient(device, { verbose: options.verbose });
+  const client = new MCPWebSocketClient(device, {
+    deviceClass: options.deviceClass,
+    verbose: options.verbose,
+  });
   client.connect(options.port);
   return client;
 }

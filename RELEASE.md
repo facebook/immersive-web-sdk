@@ -60,8 +60,9 @@ From the `main` branch after PRs are merged:
 
 3. Run the release preflight before any package is published:
    - `pnpm release:preflight`
-   - This validates the example-asset publication metadata and confirms Create
-     no longer contains the retired local bridge.
+   - This tests and runs the package-manifest guard against local-path
+     dependencies, validates the example-asset publication metadata, and
+     confirms Create no longer contains the retired local bridge.
 
 4. Publish to npm (public):
    - Option A (recommended): `pnpm changeset publish`

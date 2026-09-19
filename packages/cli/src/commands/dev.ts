@@ -64,6 +64,7 @@ export interface ResolvedDevSessionOptions {
   aiMode?: DevAiMode;
   headless: boolean;
   open: boolean;
+  nativeXRControl: boolean;
   screenshotWidth?: number;
   screenshotHeight?: number;
 }
@@ -73,6 +74,7 @@ const DEV_SESSION_ENV_NAMES = {
   aiMode: 'IWSDK_DEV_AI_MODE',
   headless: 'IWSDK_DEV_HEADLESS',
   open: 'IWSDK_DEV_OPEN',
+  nativeXRControl: 'IWSDK_DEV_NATIVE_XR_CONTROL',
   screenshotHeight: 'IWSDK_DEV_SCREENSHOT_HEIGHT',
   screenshotWidth: 'IWSDK_DEV_SCREENSHOT_WIDTH',
 } as const;
@@ -305,6 +307,10 @@ export function resolveDevSessionOptions(
     options.allowBrowserAutomation,
     '--allow-browser-automation',
   );
+  const nativeXRControl = readBooleanFlag(
+    options.nativeXrControl,
+    '--native-xr-control',
+  );
 
   if (headlessRequested && headedRequested) {
     throw new Error('--headless and --headed cannot be used together');
@@ -335,6 +341,7 @@ export function resolveDevSessionOptions(
     ...(aiMode == null ? {} : { aiMode }),
     headless: headlessRequested || aiMode === 'agent',
     open: !noOpenRequested,
+    nativeXRControl,
     ...(screenshotWidth == null ? {} : { screenshotWidth }),
     ...(screenshotHeight == null ? {} : { screenshotHeight }),
   };
@@ -355,6 +362,9 @@ export function buildDevRuntimeEnvironment(
   environment[DEV_SESSION_ENV_NAMES.open] = String(session.open);
   environment[DEV_SESSION_ENV_NAMES.allowBrowserAutomation] = String(
     session.allowBrowserAutomation,
+  );
+  environment[DEV_SESSION_ENV_NAMES.nativeXRControl] = String(
+    session.nativeXRControl,
   );
   if (session.aiMode != null) {
     environment[DEV_SESSION_ENV_NAMES.aiMode] = session.aiMode;
