@@ -156,6 +156,29 @@ function withBrowserStatus(
   };
 }
 
+async function normalizeInteractionFailureScreenshot(
+  result: unknown,
+): Promise<unknown> {
+  if (!isRecord(result) || !isRecord(result.failure)) {
+    return result;
+  }
+  const screenshot = result.failure.screenshot;
+  if (!isScreenshotResult(screenshot)) {
+    return result;
+  }
+  const screenshotPath = await saveScreenshot(screenshot);
+  return {
+    ...result,
+    failure: {
+      ...result.failure,
+      screenshot: {
+        captured: true,
+        mimeType: screenshot.mimeType ?? 'image/png',
+        screenshotPath,
+      },
+    },
+  };
+}
 export async function handleRuntimeOperation(
   domain: string,
   action: string | undefined,
@@ -219,10 +242,13 @@ export async function handleRuntimeOperation(
     throw error;
   }
 
-  const result =
+  let result: unknown =
     operation.mcpName === 'xr_get_session_status'
       ? withBrowserStatus(rawResult.result ?? rawResult, session)
       : (rawResult.result ?? rawResult);
+  if (operation.mcpName === 'browser_interact') {
+    result = await normalizeInteractionFailureScreenshot(result);
+  }
 
   const isScreenshotOperation =
     operation.mcpName === 'browser_screenshot' ||
@@ -237,7 +263,6 @@ export async function handleRuntimeOperation(
 
   // An explicit output path is an instruction to persist the PNG. Honor it
   // even when --raw is also present, instead of silently printing base64 and
-  // ignoring the requested file.
   if (
     isScreenshotOperation &&
     isScreenshotResult(result) &&
@@ -247,21 +272,11 @@ export async function handleRuntimeOperation(
       result,
       typeof options.outputFile === 'string' ? options.outputFile : undefined,
     );
-    if (
-      operation.mcpName === 'scene_render_file' ||
-      operation.mcpName === 'asset_render_preview'
-    ) {
-      const { imageData: _imageData, ...metadata } = result;
-      return createSuccess({
-        workspaceRoot,
-        operation: operation.id,
-        result: metadata,
-        screenshotPath,
-      });
-    }
+    const { imageData: _imageData, ...metadata } = result;
     return createSuccess({
       workspaceRoot,
       operation: operation.id,
+      ...(Object.keys(metadata).length > 0 ? { result: metadata } : {}),
       screenshotPath,
     });
   }

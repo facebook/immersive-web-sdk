@@ -78,4 +78,15 @@ export default [
       inlineDynamicImports: true,
     },
   },
+  {
+    input: 'src/runtime-files.ts',
+    external,
+    plugins,
+    output: {
+      file: 'dist/runtime-files.js',
+      format: 'es',
+      sourcemap: true,
+      inlineDynamicImports: true,
+    },
+  },
 ];

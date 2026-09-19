@@ -160,6 +160,16 @@ Once your AI tool is connected, try these prompts:
 
 The agent will call `browser_screenshot` and show you what the managed browser sees.
 
+**Inspect and click the current app:**
+
+> "Inspect the current app, click the Settings button, and verify the result."
+
+The agent will call `browser_snapshot`, use the returned element ref with
+`browser_interact`, and then capture another snapshot or screenshot. Browser tools
+automatically target the current application, including its runtime frame when the
+managed workspace is visible; there is no target selector or arbitrary common
+navigation tool.
+
 **Accept the XR session:**
 
 > "Accept the XR session so we can see the immersive experience."
@@ -172,6 +182,13 @@ The agent will call `xr_accept_session`, which is equivalent to clicking the "En
 
 The agent will call `xr_set_transform` to move the controller, then `browser_screenshot` to verify.
 
+**Capture a desktop-browser performance diagnostic:**
+
+> "Profile the next interaction and report frame timing, long tasks, and event timing."
+
+The agent will start `browser_profile`, perform the interaction, and stop the profile.
+The result is an uncalibrated host-browser diagnostic, not target-headset performance.
+
 ## Customize the Screenshot Size
 
 By default, screenshots are 800x800 pixels. You can adjust this to control token usage:
@@ -181,8 +198,34 @@ npx iwsdk dev up --ai-mode agent \
   --screenshot-width 500 --screenshot-height 500
 ```
 
+## Opt In to Advanced Browser Automation
+
+The six browser MCP tools cover routine current-app inspection, interaction,
+screenshots, profiling, diagnostics, and reloads. If a development task requires a
+Playwright API or direct CDP operation that those tools do not expose, explicitly
+enable the local runner when starting a new session, or restart an existing session:
+
+```bash
+# New session
+npx iwsdk dev up --allow-browser-automation
+
+# Existing session
+npx iwsdk dev restart --allow-browser-automation
+npx iwsdk browser run scripts/browser-diagnostic.mjs
+```
+
+`browser run` executes trusted local JavaScript from inside the workspace and connects
+it to the same managed session through a loopback-only CDP endpoint. This opt-in grants
+browser-level authority to any local process that can reach that endpoint for the
+duration of the dev session, including access to page contents, storage, cookies, and
+network controls. Review scripts before running them and use the opt-in only in a
+trusted local environment. The runner is disabled unless the dev session was
+explicitly started with `--allow-browser-automation`; see
+[Advanced Playwright Runner](./workflows#advanced-playwright-runner) for its module
+contract and an example.
+
 ## What's Next
 
 - [Modes](./modes) — Learn about collaborate and agent modes
-- [MCP Tools Reference](./mcp-tools) — See all 39 tools available to the agent
+- [MCP Tools Reference](./mcp-tools) — Inspect the canonical runtime tool surface
 - [Workflows](./workflows) — Common agent workflow patterns

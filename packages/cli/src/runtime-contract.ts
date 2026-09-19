@@ -10,6 +10,16 @@ export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex' | 'opencode';
 export const DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS = 30_000;
 export const UI_RENDER_PREVIEW_TIMEOUT_MS = 60_000;
 export const ASSET_RENDER_PREVIEW_TIMEOUT_MS = 120_000;
+export const BROWSER_RUNTIME_COMMAND_TIMEOUT_MS = 60_000;
+
+const BROWSER_RUNTIME_METHODS = new Set([
+  'browser_interact',
+  'browser_profile',
+  'browser_snapshot',
+  'get_console_logs',
+  'reload_page',
+  'screenshot',
+]);
 
 export function getDefaultRuntimeCommandTimeoutMs(method: string): number {
   if (method === 'asset_render_preview') {
@@ -18,7 +28,9 @@ export function getDefaultRuntimeCommandTimeoutMs(method: string): number {
   if (method === 'ui_render_preview') {
     return UI_RENDER_PREVIEW_TIMEOUT_MS;
   }
-  return DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
+  return BROWSER_RUNTIME_METHODS.has(method)
+    ? BROWSER_RUNTIME_COMMAND_TIMEOUT_MS
+    : DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
 }
 
 export type JsonSchema = {
@@ -220,6 +232,8 @@ export const IWSDK_RUNTIME_LAUNCH_PATH = '.iwsdk/runtime/launch.json';
 export const IWSDK_RUNTIME_STATE_SCHEMA_VERSION = 2;
 export const IWSDK_RUNTIME_BROWSER_READY_SCHEMA_VERSION = 2;
 export const INTERNAL_BROWSER_PROBE_METHOD = '__iwsdk_browser_probe';
+export const INTERNAL_RUNTIME_SHUTDOWN_METHOD = '__iwsdk_runtime_shutdown';
+export const INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV = 'IWSDK_DEV_LAUNCH_CLAIM_ID';
 
 export type RuntimeIssueCause =
   | 'browser_not_ready'
@@ -273,14 +287,29 @@ export interface RuntimeSession {
   networkUrls: string[];
   aiMode?: string;
   browser?: RuntimeBrowserState;
+  browserAutomation?: {
+    configured: boolean;
+    enabled: boolean;
+    endpoint?: string;
+    protocol: 'cdp';
+    targetId?: string;
+  };
   registeredAt: string;
   updatedAt: string;
 }
 
 export interface LaunchMetadata {
   schemaVersion: number;
+  /** Unique owner token for compare-and-clear startup coordination. */
+  claimId?: string;
+  /** Distinguishes an interruptible startup claim from a running child. */
+  phase?: 'starting' | 'running';
   workspaceRoot: string;
   pid: number;
+  /** Package-manager shim initially spawned by the CLI. */
+  launcherPid?: number;
+  /** Detached POSIX process group used to stop the complete dev subprocess tree. */
+  processGroupId?: number;
   command: string;
   args: string[];
   logPath: string | null;
@@ -1086,12 +1115,225 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'browser_screenshot',
     description:
-      'Capture the managed application runtime, persist the PNG locally, and return screenshotPath. If the workspace editor is visible, switches to the runtime before capturing.',
+      'Capture the current application in the managed browser, persist the image locally, and return screenshotPath with capture metadata. The application surface is resolved automatically.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        format: {
+          type: 'string',
+          enum: ['png', 'jpeg'],
+          description: 'Image format. Defaults to png.',
+        },
+        quality: {
+          type: 'number',
+          minimum: 20,
+          maximum: 100,
+          description: 'JPEG quality. Ignored for PNG.',
+        },
+        fullPage: {
+          type: 'boolean',
+          description: 'Capture the full application document.',
+        },
+        ref: {
+          type: 'string',
+          description: 'Capture one element ref returned by browser_snapshot.',
+        },
+      },
       required: [],
       additionalProperties: false,
+    },
+  },
+  {
+    name: 'browser_snapshot',
+    description:
+      'Inspect the current application as a compact accessibility-first list of interactive elements and canvas regions. Use returned refs with browser_interact.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        maxNodes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 1000,
+          description: 'Maximum returned elements. Defaults to 200.',
+        },
+        maxTextLength: {
+          type: 'integer',
+          minimum: 16,
+          maximum: 1000,
+          description: 'Maximum text/name length per element. Defaults to 200.',
+        },
+        rootRef: {
+          type: 'string',
+          description: 'Optional existing ref used as the snapshot root.',
+        },
+      },
+    },
+  },
+  {
+    name: 'browser_interact',
+    description:
+      'Perform up to 10 trusted Playwright actions against the current application. Prefer refs from browser_snapshot; use coordinates for canvas input. This tool does not navigate to arbitrary URLs.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        timeoutMs: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 12000,
+          description:
+            'Total timeout budget for the complete batch. Defaults to 10000 and is capped at 12000 so workspace restoration completes before the host command deadline.',
+        },
+        steps: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 10,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              action: {
+                type: 'string',
+                enum: [
+                  'click',
+                  'doubleClick',
+                  'hover',
+                  'pointerMove',
+                  'pointerDown',
+                  'pointerUp',
+                  'wheel',
+                  'fill',
+                  'type',
+                  'clear',
+                  'press',
+                  'check',
+                  'uncheck',
+                  'select',
+                  'scroll',
+                  'drag',
+                  'wait',
+                ],
+              },
+              ref: { type: 'string' },
+              targetRef: { type: 'string' },
+              locator: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  role: { type: 'string' },
+                  name: { type: 'string' },
+                  testId: { type: 'string' },
+                  text: { type: 'string' },
+                },
+              },
+              targetLocator: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  role: { type: 'string' },
+                  name: { type: 'string' },
+                  testId: { type: 'string' },
+                  text: { type: 'string' },
+                },
+              },
+              point: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  canvasRef: { type: 'string' },
+                },
+                required: ['x', 'y'],
+              },
+              targetPoint: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  canvasRef: { type: 'string' },
+                },
+                required: ['x', 'y'],
+              },
+              button: {
+                type: 'string',
+                enum: ['left', 'middle', 'right'],
+              },
+              key: { type: 'string' },
+              value: { type: 'string' },
+              values: { type: 'array', items: { type: 'string' } },
+              text: { type: 'string' },
+              path: {
+                type: 'string',
+                description:
+                  'For wait, the expected application pathname, search, and hash.',
+              },
+              loadState: {
+                type: 'string',
+                enum: ['domcontentloaded', 'load', 'networkidle'],
+                description: 'For wait, the application load state to await.',
+              },
+              state: {
+                type: 'string',
+                enum: [
+                  'attached',
+                  'checked',
+                  'detached',
+                  'disabled',
+                  'editable',
+                  'enabled',
+                  'focused',
+                  'hidden',
+                  'unchecked',
+                  'visible',
+                ],
+              },
+              deltaX: { type: 'number' },
+              deltaY: { type: 'number' },
+              timeoutMs: {
+                type: 'integer',
+                minimum: 100,
+                maximum: 12000,
+              },
+            },
+            required: ['action'],
+          },
+        },
+      },
+      required: ['steps'],
+    },
+  },
+  {
+    name: 'browser_profile',
+    description:
+      'Start, stop, or inspect a bounded uncalibrated desktop-browser performance profile for the current application.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['start', 'status', 'stop'],
+        },
+        mode: {
+          type: 'string',
+          enum: ['interaction', 'rendering', 'trace'],
+          description: 'Profile mode used when action is start.',
+        },
+        maxDurationMs: {
+          type: 'integer',
+          minimum: 1000,
+          maximum: 60000,
+          description: 'Safety auto-stop duration. Defaults to 30000.',
+        },
+        profileId: {
+          type: 'string',
+          description: 'Optional profile ID precondition for stop.',
+        },
+      },
+      required: ['action'],
     },
   },
 
@@ -1218,19 +1460,22 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
       properties: {
         count: {
           type: 'number',
-          description: 'Maximum number of logs to return (most recent N)',
+          minimum: 1,
+          maximum: 200,
+          description:
+            'Maximum number of logs to return (most recent N). Defaults to 100 and is capped at 200.',
         },
         level: {
           oneOf: [
             {
               type: 'string',
-              enum: ['log', 'info', 'warn', 'error', 'debug'],
+              enum: ['log', 'info', 'warn', 'error', 'debug', 'trace'],
             },
             {
               type: 'array',
               items: {
                 type: 'string',
-                enum: ['log', 'info', 'warn', 'error', 'debug'],
+                enum: ['log', 'info', 'warn', 'error', 'debug', 'trace'],
               },
             },
           ],
@@ -2881,6 +3126,9 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_get_device_state: 'get_device_state',
   xr_set_device_state: 'set_device_state',
   browser_screenshot: 'screenshot',
+  browser_snapshot: 'browser_snapshot',
+  browser_interact: 'browser_interact',
+  browser_profile: 'browser_profile',
   browser_get_console_logs: 'get_console_logs',
   browser_reload_page: 'reload_page',
   scene_get_render_stats: 'get_render_stats',
@@ -2904,6 +3152,9 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   xr_get_gamepad_state: ['xr', 'get-gamepad-state'],
   xr_set_gamepad_state: ['xr', 'set-gamepad-state'],
   browser_screenshot: ['browser', 'screenshot'],
+  browser_snapshot: ['browser', 'snapshot'],
+  browser_interact: ['browser', 'interact'],
+  browser_profile: ['browser', 'profile'],
   xr_get_device_state: ['xr', 'get-device-state'],
   xr_set_device_state: ['xr', 'set-device-state'],
   browser_get_console_logs: ['browser', 'logs'],
@@ -3019,7 +3270,14 @@ const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
   ...WORKSPACE_MCP_TOOL_NAMES,
 ]);
 
-const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>(['browser_screenshot']);
+const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
+  'browser_screenshot',
+  'browser_snapshot',
+  'browser_interact',
+  'browser_profile',
+  'browser_get_console_logs',
+  'browser_reload_page',
+]);
 
 export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
   RUNTIME_MCP_TOOLS.map((tool) => {
@@ -3093,15 +3351,6 @@ export function resolveRuntimeOperationRequest(
     );
   }
 
-  if (
-    operation.mcpName === 'browser_screenshot' &&
-    paramsRecord != null &&
-    Object.keys(paramsRecord).some((key) => key !== 'expectedTab')
-  ) {
-    throw new Error(
-      'browser_screenshot does not accept parameters; it always captures the application runtime',
-    );
-  }
   assertSchemaValue(params, operation.inputSchema, operation.mcpName);
   const commandParams =
     paramsRecord == null

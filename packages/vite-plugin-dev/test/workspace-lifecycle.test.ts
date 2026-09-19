@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   registerRuntimeSession: vi.fn().mockResolvedValue(undefined),
   reportSessionEnd: vi.fn(),
   reportSessionStart: vi.fn(),
+  setRuntimeSessionBrowserAutomation: vi.fn().mockResolvedValue(undefined),
   setRuntimeSessionBrowserState: vi.fn().mockResolvedValue(undefined),
   unregisterRuntimeSession: vi.fn().mockResolvedValue(undefined),
+  unregisterRuntimeSessionSync: vi.fn(),
 }));
 
 vi.mock('../src/headless-browser.js', () => ({
@@ -28,8 +30,11 @@ vi.mock('../src/metavr-telemetry.js', () => ({
 
 vi.mock('../src/runtime-session.js', () => ({
   registerRuntimeSession: mocks.registerRuntimeSession,
+  RuntimeSessionOwnershipError: class RuntimeSessionOwnershipError extends Error {},
+  setRuntimeSessionBrowserAutomation: mocks.setRuntimeSessionBrowserAutomation,
   setRuntimeSessionBrowserState: mocks.setRuntimeSessionBrowserState,
   unregisterRuntimeSession: mocks.unregisterRuntimeSession,
+  unregisterRuntimeSessionSync: mocks.unregisterRuntimeSessionSync,
 }));
 
 afterEach(() => {
@@ -38,10 +43,18 @@ afterEach(() => {
 
 describe('managed workspace lifecycle', () => {
   test('awaits a racing browser launch and closes it during shutdown', async () => {
+    const initialSigintListeners = process.listenerCount('SIGINT');
+    const initialSigtermListeners = process.listenerCount('SIGTERM');
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
         const eventHandlers = handlers.get(event) ?? [];
         eventHandlers.push(handler);
         handlers.set(event, eventHandlers);
@@ -55,6 +68,7 @@ describe('managed workspace lifecycle', () => {
             finishBrowserClose = resolve;
           }),
       ),
+      getAutomationEndpoint: vi.fn(() => null),
       onClose: vi.fn(),
     };
     let finishBrowserLaunch!: (browser: typeof managedBrowser) => void;
@@ -82,10 +96,17 @@ describe('managed workspace lifecycle', () => {
 
     await handlers.get('listening')?.[0]?.();
     expect(mocks.launchManagedBrowser).toHaveBeenCalledOnce();
+    const launchSignal = mocks.launchManagedBrowser.mock.calls[0]?.[10] as
+      | AbortSignal
+      | undefined;
+    expect(launchSignal?.aborted).toBe(false);
+    expect(process.listenerCount('SIGINT')).toBe(initialSigintListeners + 1);
+    expect(process.listenerCount('SIGTERM')).toBe(initialSigtermListeners + 1);
 
     for (const handler of handlers.get('close') ?? []) {
       handler();
     }
+    expect(launchSignal?.aborted).toBe(true);
     const closeBundle = plugin.closeBundle as {
       handler: () => Promise<void>;
     };
@@ -106,14 +127,23 @@ describe('managed workspace lifecycle', () => {
     expect(managedBrowser.close).toHaveBeenCalledOnce();
     expect(mocks.unregisterRuntimeSession).toHaveBeenCalledWith(
       '/tmp/iwsdk-browser-shutdown-race',
+      expect.any(String),
     );
+    expect(process.listenerCount('SIGINT')).toBe(initialSigintListeners);
+    expect(process.listenerCount('SIGTERM')).toBe(initialSigtermListeners);
   });
 
   test('defaults AI sessions to the visible collaborate workspace', async () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
         const eventHandlers = handlers.get(event) ?? [];
         eventHandlers.push(handler);
         handlers.set(event, eventHandlers);
@@ -121,6 +151,7 @@ describe('managed workspace lifecycle', () => {
     };
     const managedBrowser = {
       close: vi.fn().mockResolvedValue(undefined),
+      getAutomationEndpoint: vi.fn(() => null),
       onClose: vi.fn(),
     };
     mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
@@ -151,6 +182,9 @@ describe('managed workspace lifecycle', () => {
       false,
       expect.any(Object),
       'iwer',
+      '/tmp/iwsdk-ai-default-collaborate',
+      false,
+      expect.any(AbortSignal),
     );
     expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
       expect.objectContaining({ aiMode: 'collaborate' }),
@@ -163,7 +197,13 @@ describe('managed workspace lifecycle', () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
         const eventHandlers = handlers.get(event) ?? [];
         eventHandlers.push(handler);
         handlers.set(event, eventHandlers);
@@ -171,6 +211,7 @@ describe('managed workspace lifecycle', () => {
     };
     const managedBrowser = {
       close: vi.fn().mockResolvedValue(undefined),
+      getAutomationEndpoint: vi.fn(() => null),
       onClose: vi.fn(),
     };
     mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
@@ -201,6 +242,9 @@ describe('managed workspace lifecycle', () => {
       false,
       expect.any(Object),
       'iwer',
+      '/tmp/iwsdk-ai-agent',
+      false,
+      expect.any(AbortSignal),
     );
     expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
       expect.objectContaining({ aiMode: 'agent' }),
@@ -213,7 +257,13 @@ describe('managed workspace lifecycle', () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
         const eventHandlers = handlers.get(event) ?? [];
         eventHandlers.push(handler);
         handlers.set(event, eventHandlers);
@@ -221,6 +271,7 @@ describe('managed workspace lifecycle', () => {
     };
     const managedBrowser = {
       close: vi.fn().mockResolvedValue(undefined),
+      getAutomationEndpoint: vi.fn(() => null),
       onClose: vi.fn(),
     };
     mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
@@ -253,6 +304,9 @@ describe('managed workspace lifecycle', () => {
         topLevelPathnames: ['/'],
       }),
       'workspace',
+      '/tmp/iwsdk-workspace-clean-root',
+      false,
+      expect.any(AbortSignal),
     );
 
     await Promise.resolve();
@@ -263,7 +317,13 @@ describe('managed workspace lifecycle', () => {
     const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
     const httpServer = {
       address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
         const eventHandlers = handlers.get(event) ?? [];
         eventHandlers.push(handler);
         handlers.set(event, eventHandlers);
@@ -308,6 +368,85 @@ describe('managed workspace lifecycle', () => {
     );
     expect(mocks.launchManagedBrowser).not.toHaveBeenCalled();
 
+    handlers.get('close')?.[0]?.();
+  });
+
+  test('publishes configured browser automation separately from live endpoint availability', async () => {
+    const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
+    const httpServer = {
+      address: vi.fn(() => ({ port: 4173 })),
+      off: vi.fn(),
+      on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+      once: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+        const eventHandlers = handlers.get(event) ?? [];
+        eventHandlers.push(handler);
+        handlers.set(event, eventHandlers);
+      }),
+    };
+    let closeUnexpectedly = () => {};
+    const managedBrowser = {
+      close: vi.fn().mockResolvedValue(undefined),
+      getAutomationTarget: vi.fn(() => ({
+        endpoint: 'http://127.0.0.1:9222',
+        targetId: 'managed-target',
+      })),
+      onClose: vi.fn((callback: () => void) => {
+        closeUnexpectedly = callback;
+      }),
+    };
+    mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
+    const plugin = iwsdkDev({
+      workspace: { browserAutomation: true, enabled: true },
+    });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-browser-automation-state',
+      server: {},
+    } as never);
+    plugin.configureServer?.({
+      config: { server: { port: 4173 } },
+      httpServer,
+      middlewares: { use: vi.fn() },
+      resolvedUrls: {
+        local: ['http://localhost:4173/'],
+        network: [],
+      },
+    } as never);
+
+    await handlers.get('listening')?.[0]?.();
+    await vi.waitFor(() =>
+      expect(mocks.setRuntimeSessionBrowserAutomation).toHaveBeenCalledWith(
+        '/tmp/iwsdk-browser-automation-state',
+        expect.any(String),
+        {
+          configured: true,
+          enabled: true,
+          endpoint: 'http://127.0.0.1:9222',
+          protocol: 'cdp',
+          targetId: 'managed-target',
+        },
+      ),
+    );
+    expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        browserAutomation: {
+          configured: true,
+          enabled: false,
+          protocol: 'cdp',
+        },
+      }),
+    );
+
+    closeUnexpectedly();
+    expect(mocks.setRuntimeSessionBrowserAutomation).toHaveBeenLastCalledWith(
+      '/tmp/iwsdk-browser-automation-state',
+      expect.any(String),
+      { configured: true, enabled: false, protocol: 'cdp' },
+    );
     handlers.get('close')?.[0]?.();
   });
 

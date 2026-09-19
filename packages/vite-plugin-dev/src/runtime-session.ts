@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { existsSync, realpathSync } from 'fs';
-import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import { mkdirSync, readFileSync, rmSync } from 'fs';
 import path from 'path';
 import {
   IWSDK_RUNTIME_SESSION_PATH,
@@ -14,6 +13,16 @@ import {
   type RuntimeBrowserState,
   type RuntimeSession,
 } from '@iwsdk/cli/contract';
+import {
+  getRuntimeFileLockPath,
+  getRuntimeFilePath,
+  isRuntimeProcessAlive,
+  normalizeWorkspaceRoot,
+  readRuntimeJson,
+  removeRuntimeFile,
+  withRuntimeFileLock,
+  writeRuntimeJson,
+} from '@iwsdk/cli/runtime-files';
 
 interface RegisterRuntimeSessionInput {
   sessionId: string;
@@ -24,6 +33,18 @@ interface RegisterRuntimeSessionInput {
   networkUrls?: string[];
   aiMode?: string;
   browser?: RuntimeBrowserState;
+  browserAutomation?: RuntimeSession['browserAutomation'];
+}
+
+export class RuntimeSessionOwnershipError extends Error {
+  readonly code = 'runtime_session_owned';
+
+  constructor(readonly owner: Pick<RuntimeSession, 'pid' | 'sessionId'>) {
+    super(
+      `Another IWSDK dev server already owns this workspace (pid ${owner.pid}, session ${owner.sessionId})`,
+    );
+    this.name = 'RuntimeSessionOwnershipError';
+  }
 }
 
 function isTraceEnabled(): boolean {
@@ -42,53 +63,25 @@ function traceRuntimeSession(
   );
 }
 
-function normalizeWorkspaceRoot(workspaceRoot: string): string {
-  const resolved = path.resolve(workspaceRoot);
-  try {
-    return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
-  } catch {
-    return resolved;
-  }
-}
-
 function getRuntimeSessionFilePath(workspaceRoot: string): string {
-  return path.join(
-    normalizeWorkspaceRoot(workspaceRoot),
-    IWSDK_RUNTIME_SESSION_PATH,
-  );
+  return getRuntimeFilePath(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH);
 }
-
-const sessionMutationQueues = new Map<string, Promise<unknown>>();
 
 async function enqueueSessionMutation<T>(
   workspaceRoot: string,
   mutate: (normalizedWorkspaceRoot: string) => Promise<T>,
 ): Promise<T> {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const previous =
-    sessionMutationQueues.get(normalizedWorkspaceRoot) ?? Promise.resolve();
-  const next = previous
-    .catch(() => {})
-    .then(() => mutate(normalizedWorkspaceRoot));
-  sessionMutationQueues.set(normalizedWorkspaceRoot, next);
-  try {
-    return await next;
-  } finally {
-    if (sessionMutationQueues.get(normalizedWorkspaceRoot) === next) {
-      sessionMutationQueues.delete(normalizedWorkspaceRoot);
-    }
-  }
+  return withRuntimeFileLock(
+    getRuntimeSessionFilePath(normalizedWorkspaceRoot),
+    () => mutate(normalizedWorkspaceRoot),
+  );
 }
 
 async function readRuntimeSession(
   filePath: string,
 ): Promise<RuntimeSession | null> {
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    return JSON.parse(raw) as RuntimeSession;
-  } catch {
-    return null;
-  }
+  return readRuntimeJson<RuntimeSession>(filePath);
 }
 
 async function writeRuntimeSession(
@@ -96,14 +89,7 @@ async function writeRuntimeSession(
   session: RuntimeSession,
 ): Promise<RuntimeSession> {
   const filePath = getRuntimeSessionFilePath(workspaceRoot);
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await writeFile(tempPath, `${JSON.stringify(session, null, 2)}\n`, 'utf8');
-    await rename(tempPath, filePath);
-  } finally {
-    await rm(tempPath, { force: true }).catch(() => {});
-  }
+  await writeRuntimeJson(filePath, session);
   return session;
 }
 
@@ -116,6 +102,14 @@ export async function registerRuntimeSession(
       const existing = await readRuntimeSession(
         getRuntimeSessionFilePath(workspaceRoot),
       );
+      if (
+        existing != null &&
+        existing.sessionId !== input.sessionId &&
+        existing.pid !== input.pid &&
+        isRuntimeProcessAlive(existing.pid)
+      ) {
+        throw new RuntimeSessionOwnershipError(existing);
+      }
       const now = new Date().toISOString();
       const hasBrowserInput = Object.prototype.hasOwnProperty.call(
         input,
@@ -131,7 +125,10 @@ export async function registerRuntimeSession(
         networkUrls: input.networkUrls ?? [],
         aiMode: input.aiMode,
         browser: hasBrowserInput ? input.browser : existing?.browser,
-        registeredAt: existing?.registeredAt ?? now,
+        browserAutomation:
+          input.browserAutomation ?? existing?.browserAutomation,
+        registeredAt:
+          existing?.sessionId === input.sessionId ? existing.registeredAt : now,
         updatedAt: now,
       };
       traceRuntimeSession('register', {
@@ -146,8 +143,32 @@ export async function registerRuntimeSession(
   );
 }
 
+export async function setRuntimeSessionBrowserAutomation(
+  workspaceRoot: string,
+  sessionId: string,
+  browserAutomation: NonNullable<RuntimeSession['browserAutomation']>,
+): Promise<RuntimeSession | null> {
+  return enqueueSessionMutation(
+    workspaceRoot,
+    async (normalizedWorkspaceRoot): Promise<RuntimeSession | null> => {
+      const existing = await readRuntimeSession(
+        getRuntimeSessionFilePath(normalizedWorkspaceRoot),
+      );
+      if (!existing || existing.sessionId !== sessionId) {
+        return null;
+      }
+      return writeRuntimeSession(normalizedWorkspaceRoot, {
+        ...existing,
+        browserAutomation,
+        updatedAt: new Date().toISOString(),
+      });
+    },
+  );
+}
+
 export async function setRuntimeSessionBrowserState(
   workspaceRoot: string,
+  sessionId: string,
   browser: RuntimeBrowserState,
 ): Promise<RuntimeSession | null> {
   return enqueueSessionMutation(
@@ -156,7 +177,7 @@ export async function setRuntimeSessionBrowserState(
       const existing = await readRuntimeSession(
         getRuntimeSessionFilePath(normalizedWorkspaceRoot),
       );
-      if (!existing) {
+      if (!existing || existing.sessionId !== sessionId) {
         return null;
       }
 
@@ -180,16 +201,58 @@ export async function setRuntimeSessionBrowserState(
 
 export async function unregisterRuntimeSession(
   workspaceRoot: string,
+  sessionId: string,
 ): Promise<void> {
   await enqueueSessionMutation(
     workspaceRoot,
     async (normalizedWorkspaceRoot) => {
+      const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
+      const existing = await readRuntimeSession(filePath);
+      if (existing?.sessionId !== sessionId) {
+        return;
+      }
       traceRuntimeSession('unregister', {
+        sessionId,
         workspaceRoot: normalizedWorkspaceRoot,
       });
-      await rm(getRuntimeSessionFilePath(normalizedWorkspaceRoot), {
-        force: true,
-      }).catch(() => {});
+      await removeRuntimeFile(filePath);
     },
   );
+}
+
+/** Best-effort owned cleanup for process.exit, where async work is forbidden. */
+export function unregisterRuntimeSessionSync(
+  workspaceRoot: string,
+  sessionId: string,
+): void {
+  const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
+  const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
+  const lockPath = getRuntimeFileLockPath(filePath);
+  try {
+    mkdirSync(lockPath);
+  } catch {
+    try {
+      const owner = JSON.parse(
+        readFileSync(path.join(lockPath, 'owner.json'), 'utf8'),
+      ) as { pid?: number };
+      if (owner.pid !== process.pid) {
+        return;
+      }
+      rmSync(lockPath, { force: true, recursive: true });
+      mkdirSync(lockPath);
+    } catch {
+      return;
+    }
+  }
+  try {
+    let existing: RuntimeSession | null = null;
+    try {
+      existing = JSON.parse(readFileSync(filePath, 'utf8')) as RuntimeSession;
+    } catch {}
+    if (existing?.sessionId === sessionId) {
+      rmSync(filePath, { force: true });
+    }
+  } finally {
+    rmSync(lockPath, { force: true, recursive: true });
+  }
 }

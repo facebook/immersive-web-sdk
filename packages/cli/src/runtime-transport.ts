@@ -8,6 +8,7 @@
 import WebSocket from 'ws';
 import {
   getDefaultRuntimeCommandTimeoutMs,
+  INTERNAL_RUNTIME_SHUTDOWN_METHOD,
   isRuntimeBrowserCommandReady,
   type RuntimePageTarget,
   type RuntimeBrowserState,
@@ -680,7 +681,10 @@ export async function sendRuntimeCommand({
   timeoutMs = getDefaultRuntimeCommandTimeoutMs(method),
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
-  if (runtimeSession?.browser?.status === 'not_launched') {
+  if (
+    method !== INTERNAL_RUNTIME_SHUTDOWN_METHOD &&
+    runtimeSession?.browser?.status === 'not_launched'
+  ) {
     throw new RuntimeCommandExecutionError(
       runtimeSession.browser.lastError?.message ??
         'No managed browser was launched. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',

@@ -33,3 +33,15 @@ test('uses exclusive unique paths for implicit screenshot output', async () => {
   await expect(readFile(firstPath)).resolves.toEqual(firstData);
   await expect(readFile(secondPath)).resolves.toEqual(secondData);
 });
+
+test('uses the captured image format for implicit screenshot output', async () => {
+  const imageData = Buffer.from('jpeg screenshot');
+  const screenshotPath = await saveScreenshot({
+    imageData: imageData.toString('base64'),
+    mimeType: 'image/jpeg',
+  });
+  generatedPaths.push(screenshotPath);
+
+  expect(screenshotPath).toMatch(/\.jpg$/);
+  await expect(readFile(screenshotPath)).resolves.toEqual(imageData);
+});

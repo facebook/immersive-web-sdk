@@ -10,6 +10,13 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
+  getRuntimeFileLockPath,
+  withRuntimeFileLock,
+  writeRuntimeJson,
+} from '../src/runtime-files.js';
+import {
+  claimLaunchMetadata,
+  clearLaunchMetadata,
   findNearestIwsdkAppRoot,
   getLaunchMetadata,
   getRuntimeLaunchFilePath,
@@ -17,12 +24,14 @@ import {
   getRuntimeSessionFilePath,
   getWorkspaceRuntimeState,
   isIwsdkAppRoot,
-  registerRuntimeSession,
   resolveWorkspaceRoot,
-  setRuntimeSessionBrowserState,
   setLaunchMetadata,
-  unregisterRuntimeSession,
 } from '../src/runtime-state.js';
+import {
+  registerRuntimeSession,
+  setRuntimeSessionBrowserState,
+  unregisterRuntimeSession,
+} from './runtime-session-fixture.js';
 
 let tempDir: string;
 let appA: string;
@@ -172,6 +181,58 @@ describe('project-local runtime state', () => {
     expect(state.launch?.scriptName).toBe('dev:runtime');
     expect(state.launch?.port).toBe(5173);
     expect(state.launch?.openBrowser).toBe(true);
+  });
+
+  test('atomically claims startup and protects the owner from stale writers', async () => {
+    const first = await claimLaunchMetadata({
+      claimId: 'claim-a',
+      workspaceRoot: appA,
+      pid: process.pid,
+      processGroupId: process.pid + 1,
+      command: 'pnpm',
+      args: ['run', 'dev:runtime'],
+    });
+    const duplicate = await claimLaunchMetadata({
+      claimId: 'claim-b',
+      workspaceRoot: appA,
+      pid: process.pid,
+      command: 'pnpm',
+      args: ['run', 'dev:runtime'],
+    });
+
+    expect(first.acquired).toBe(true);
+    expect(first.metadata.phase).toBe('starting');
+    expect(duplicate).toMatchObject({
+      acquired: false,
+      metadata: { claimId: 'claim-a' },
+    });
+    expect(
+      await setLaunchMetadata(
+        {
+          claimId: 'claim-b',
+          phase: 'running',
+          workspaceRoot: appA,
+          pid: process.pid,
+          command: 'npm',
+        },
+        'claim-b',
+      ),
+    ).toBeNull();
+
+    await clearLaunchMetadata(appA, 'claim-b');
+    expect(await getLaunchMetadata(appA)).toMatchObject({
+      claimId: 'claim-a',
+      phase: 'starting',
+      processGroupId: process.pid + 1,
+    });
+    await expect(clearLaunchMetadata(appA, 'claim-a', 'running')).resolves.toBe(
+      false,
+    );
+    expect(await getLaunchMetadata(appA)).toMatchObject({ claimId: 'claim-a' });
+    await expect(
+      clearLaunchMetadata(appA, 'claim-a', 'starting'),
+    ).resolves.toBe(true);
+    expect(await getLaunchMetadata(appA)).toBeNull();
   });
 
   test('reports browser command readiness as false without a runtime session', async () => {
@@ -370,5 +431,95 @@ describe('project-local runtime state', () => {
 
     await expect(readFile(sessionFile, 'utf8')).rejects.toThrow();
     await expect(readFile(launchFile, 'utf8')).rejects.toThrow();
+  });
+
+  test('does not prune a replacement session registered behind the same lock', async () => {
+    const sessionFile = getRuntimeSessionFilePath(appA);
+    const workspaceRoot = await realpath(appA);
+    let releaseWriter!: () => void;
+    let writerHasLock!: () => void;
+    const writerLocked = new Promise<void>((resolve) => {
+      writerHasLock = resolve;
+    });
+    const writerGate = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
+    const writer = withRuntimeFileLock(sessionFile, async () => {
+      await writeRuntimeJson(sessionFile, {
+        schemaVersion: 2,
+        sessionId: 'stale-session',
+        workspaceRoot,
+        pid: 999_999_999,
+        port: 5173,
+        localUrl: 'http://localhost:5173',
+        networkUrls: [],
+        registeredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      writerHasLock();
+      await writerGate;
+      await writeRuntimeJson(sessionFile, {
+        schemaVersion: 2,
+        sessionId: 'replacement-session',
+        workspaceRoot,
+        pid: process.pid,
+        port: 5174,
+        localUrl: 'http://localhost:5174',
+        networkUrls: [],
+        registeredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    });
+
+    await writerLocked;
+    const read = getRuntimeSession(appA);
+    releaseWriter();
+    await writer;
+
+    await expect(read).resolves.toMatchObject({
+      sessionId: 'replacement-session',
+      pid: process.pid,
+      port: 5174,
+    });
+  });
+
+  test('serializes contenders while recovering a stale lock', async () => {
+    const launchFile = getRuntimeLaunchFilePath(appA);
+    const lockPath = getRuntimeFileLockPath(launchFile);
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(
+      path.join(lockPath, 'owner.json'),
+      `${JSON.stringify({
+        acquiredAt: Date.now() - 60_000,
+        lockId: 'orphaned-lock',
+        pid: 999_999_999,
+      })}\n`,
+      'utf8',
+    );
+
+    const claims = await Promise.all(
+      ['claim-a', 'claim-b', 'claim-c'].map((claimId) =>
+        claimLaunchMetadata({
+          claimId,
+          workspaceRoot: appA,
+          pid: process.pid,
+          command: 'pnpm',
+        }),
+      ),
+    );
+
+    expect(claims.filter((claim) => claim.acquired)).toHaveLength(1);
+    expect(claims.filter((claim) => !claim.acquired)).toHaveLength(2);
+  });
+
+  test('prunes interrupted atomic-write files after taking the lock', async () => {
+    const sessionFile = getRuntimeSessionFilePath(appA);
+    const orphanedTempFile = `${sessionFile}.123.456.1.tmp`;
+    await mkdir(path.dirname(sessionFile), { recursive: true });
+    await writeFile(orphanedTempFile, 'partial', 'utf8');
+
+    await getRuntimeSession(appA);
+
+    await expect(readFile(orphanedTempFile, 'utf8')).rejects.toThrow();
   });
 });

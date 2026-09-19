@@ -167,22 +167,116 @@ rendering.
 
 ## Browser
 
+The browser surface contains exactly six MCP tools. They automatically resolve the
+current application, whether it is the top-level page or the runtime frame inside the
+managed workspace. There is no target selector, and the common tools do not navigate
+to arbitrary URLs. Use `browser_reload_page` to reload the current application; use
+the opt-in [advanced Playwright runner](./workflows#advanced-playwright-runner) only
+when the bounded tools cannot express a development task.
+
 ### `browser_screenshot`
 
-Capture the runtime, editor, or complete managed workspace surface. The PNG is
-written to a local temporary file and returned as `screenshotPath`, without inline
-base64 image data. Use the `target` parameter (`runtime`, `editor`, or `workspace`)
-instead of relying on the currently visible tab.
+Capture the current application, automatically resolving the runtime frame when the
+managed workspace is visible. The image is written to a local temporary file and
+returned as `screenshotPath`, without inline base64 data. Optional parameters select
+`png` or `jpeg`, set JPEG
+quality from 20 to 100, capture the full document, or capture one element by a ref
+returned from `browser_snapshot`. Results include application identity and URL,
+whether the application is workspace-framed, image dimensions and MIME type, and
+whether an oversized browser capture was downscaled to the configured screenshot
+bounds.
+
+### `browser_snapshot`
+
+Inspect the current application as a bounded, accessibility-first list of interactive
+elements, useful text, and canvas regions. Each element includes a ref, role, name,
+text, visibility and state, and visible bounds. The result also includes a snapshot ID,
+application identity, and a `truncated` flag.
+
+| Parameter       | Type      | Required | Description                                      |
+| --------------- | --------- | -------- | ------------------------------------------------ |
+| `maxNodes`      | `integer` | No       | 1–1000 elements; defaults to 200                 |
+| `maxTextLength` | `integer` | No       | 16–1000 characters per name or text field        |
+| `rootRef`       | `string`  | No       | Restrict the snapshot to an existing element ref |
+
+Refs are tied to the current application identity and generation. Capture a fresh
+snapshot after a reload or when an interaction reports a stale ref.
+
+### `browser_interact`
+
+Run a bounded batch of one to ten Playwright actions against the current application.
+Prefer snapshot refs. Semantic locators can identify an element by `testId`, `role`
+and optional `name`, or exact `text`. Page coordinates are available for 2D input;
+add `canvasRef` to make coordinates relative to a canvas.
+
+Supported actions are `click`, `doubleClick`, `hover`, `pointerMove`, `pointerDown`,
+`pointerUp`, `wheel`, `fill`, `type`, `clear`, `press`, `check`, `uncheck`, `select`,
+`scroll`, `drag`, and `wait`. Batch and per-step timeouts are capped at 12,000
+milliseconds (the batch defaults to 10,000), leaving time inside the host command
+budget to restore the previous workspace view. A `wait` step can wait for element
+state, load state, or an expected application path; it does not initiate navigation.
+
+The result lists completed steps and their durations. On failure, it identifies the
+failed step, reports whether retrying is appropriate, suggests recovery, and attempts
+to return a fresh snapshot and PNG screenshot. MCP returns that screenshot as an image
+content block; the equivalent CLI command writes it to a temporary file and returns
+the path instead of printing nested base64.
+
+Browser host operations have a 60-second transport budget. They may spend up to 15
+seconds waiting behind another browser command, then receive a fresh 27-second active
+budget. Coordinator failures are retryable:
+
+- `browser_command_busy`: the bounded queue is full;
+- `browser_command_queue_timeout`: this request expired while waiting and the browser
+  was left running;
+- `browser_command_timeout`: the active operation exceeded its budget, so IWSDK closed
+  the managed browser and will relaunch it lazily;
+- `browser_command_aborted`: queued work was cleared after another active operation
+  timed out and should be retried against the relaunched browser.
+
+### `browser_profile`
+
+Start, inspect, or stop a bounded desktop-browser performance profile for the current
+application:
+
+| Parameter       | Type      | Required | Description                                            |
+| --------------- | --------- | -------- | ------------------------------------------------------ |
+| `action`        | `string`  | Yes      | `start`, `status`, or `stop`                           |
+| `mode`          | `string`  | No       | `interaction`, `rendering`, or `trace` when starting   |
+| `maxDurationMs` | `integer` | No       | 1,000–60,000; defaults to 30,000 and auto-stops safely |
+| `profileId`     | `string`  | No       | Require this active profile when stopping              |
+
+Stopped profiles summarize browser metrics, event timing, requestAnimationFrame
+intervals, long tasks, and interaction marks. Trace mode can return a bounded trace
+artifact under `.iwsdk/artifacts/browser/`. These are uncalibrated host-browser
+diagnostics, not measurements for a target headset: results report
+`classification: "host-browser-diagnostic"`, `calibrated: false`, and
+`targetDevice: null`.
+
+`interaction` mode includes event-timing observations alongside frame timing;
+`rendering` mode omits event timing and concentrates on frame/long-task behavior;
+`trace` mode adds a bounded Playwright trace artifact to the interaction-oriented
+measurements. The result's `summary.collection` fields state which collectors ran.
 
 ### `browser_get_console_logs`
 
 Read browser console logs with optional `count`, `level`, `pattern`, and `since`
-filters.
+filters. Returned diagnostics can include console calls, uncaught page errors, failed
+requests, dialogs, downloads, popups, and frame navigation. Entries carry structured
+context where available, including serialized arguments, source and frame URLs,
+line/column, HTTP method, resource type, failure text, and a repeat count for compacted
+duplicates. Results default to the 100 most recent matching entries, cap `count` at
+200, and enforce a bounded serialized response size.
 
 ### `browser_reload_page`
 
-Reload the managed browser page when applying application-code changes or recovering
-from an unrecoverable runtime state.
+Reload only the current application surface when applying code changes or recovering
+from an unrecoverable state. The result identifies the reloaded application URL, page
+ID, and tab generation.
+
+These six host-browser tools operate through IWSDK's Playwright owner and remain
+available for browser-first applications without an IWER runtime bridge. XR, ECS, and
+other runtime-dispatched tools still require their corresponding in-page bridge.
 
 ## WebXR Session
 

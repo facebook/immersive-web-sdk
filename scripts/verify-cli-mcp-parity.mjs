@@ -177,6 +177,10 @@ function normalizeValue(value, toolName) {
       if (key === '_tab') continue;
       if (key === 'sceneSessionId') continue;
       if (key === 'frameTimeSamplesMs') continue;
+      if (key === 'durationMs') continue;
+      if (key === 'profileId') continue;
+      if (key === 'ref') continue;
+      if (key === 'snapshotId') continue;
       if (key.toLowerCase() === 'uuid') continue;
       if (key.toLowerCase().endsWith('uuid')) continue;
       if (toolName === 'browser_get_console_logs' && key === 'timestamp') {
@@ -283,7 +287,7 @@ async function runCliJson(args, cwd = ROOT, options = {}) {
       cwd,
       env: {
         ...(options.trace ? HARNESS_RUNTIME_ENV : {}),
-        ...options.env,
+        ...(options.env ?? {}),
       },
     },
   );
@@ -490,10 +494,11 @@ function parseMcpToolContent(content) {
 
 async function callMcpToolOutcome(client, toolName, args) {
   const response = await client.callTool({ name: toolName, arguments: args });
+  const parsed = parseMcpToolContent(response.content);
 
-  const firstBlock = response.content[0];
-  if (firstBlock?.type === 'image') {
-    const image = Buffer.from(firstBlock.data, 'base64');
+  const imageBlock = response.content.find((entry) => entry.type === 'image');
+  if (toolName === 'browser_screenshot' && imageBlock?.type === 'image') {
+    const image = Buffer.from(imageBlock.data, 'base64');
     return {
       ok: !response.isError,
       result: {
@@ -501,13 +506,12 @@ async function callMcpToolOutcome(client, toolName, args) {
         hash: sha256(image),
         bytes: image.length,
       },
-      warnings: [],
-      tab: null,
+      warnings: parsed.warnings,
+      tab: parsed.tab,
       raw: response,
     };
   }
 
-  const parsed = parseMcpToolContent(response.content);
   const payload = parsed.result ?? {
     message: `No JSON payload returned for ${toolName}`,
   };
@@ -854,6 +858,25 @@ const SMOKE_STEPS = [
   {
     name: 'browser_get_console_logs',
     args: () => ({ count: 10, level: ['warn', 'error'] }),
+    expectTabMetadata: true,
+  },
+  {
+    name: 'browser_snapshot',
+    args: () => ({ maxNodes: 20, maxTextLength: 80 }),
+    expectTabMetadata: true,
+  },
+  {
+    name: 'browser_interact',
+    args: () => ({ steps: [{ action: 'wait', path: '/' }] }),
+    expectTabMetadata: true,
+  },
+  {
+    name: 'browser_profile',
+    args: () => ({
+      action: 'start',
+      maxDurationMs: 30_000,
+      mode: 'interaction',
+    }),
     expectTabMetadata: true,
   },
   {

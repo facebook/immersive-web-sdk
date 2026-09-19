@@ -6,6 +6,7 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import { randomUUID } from 'crypto';
 import { closeSync, existsSync, openSync } from 'fs';
 import { readFile } from 'fs/promises';
 import path from 'path';
@@ -24,6 +25,8 @@ import type {
 import {
   hasRuntimeBrowserCommandReadyContract,
   INTERNAL_BROWSER_PROBE_METHOD,
+  INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV,
+  INTERNAL_RUNTIME_SHUTDOWN_METHOD,
   isRuntimeBrowserCommandReady,
   type RuntimeBrowserState,
   type RuntimeBrowserProbeResult,
@@ -31,13 +34,14 @@ import {
   type RuntimeSession,
 } from '../runtime-contract.js';
 import {
+  claimLaunchMetadata,
   clearLaunchMetadata,
   ensureRuntimeLogsDir,
   formatMissingRuntimeMessage,
   getLaunchMetadata,
   getRuntimeSession,
-  getRuntimeUrls,
   getWorkspaceRuntimeState,
+  isProcessAlive,
   resolveWorkspaceRoot,
   setLaunchMetadata,
 } from '../runtime-state.js';
@@ -56,6 +60,7 @@ interface PackageJsonManifest {
 export type DevAiMode = 'agent' | 'collaborate';
 
 export interface ResolvedDevSessionOptions {
+  allowBrowserAutomation: boolean;
   aiMode?: DevAiMode;
   headless: boolean;
   open: boolean;
@@ -64,6 +69,7 @@ export interface ResolvedDevSessionOptions {
 }
 
 const DEV_SESSION_ENV_NAMES = {
+  allowBrowserAutomation: 'IWSDK_DEV_ALLOW_BROWSER_AUTOMATION',
   aiMode: 'IWSDK_DEV_AI_MODE',
   headless: 'IWSDK_DEV_HEADLESS',
   open: 'IWSDK_DEV_OPEN',
@@ -106,17 +112,6 @@ interface WaitForRuntimeSessionResult {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function writeRuntimeUrls(
-  io: ResolvedCliIo,
-  message: string,
-  session: RuntimeSession,
-): void {
-  io.stdout.write(`[IWSDK] ${message} ${session.localUrl}\n`);
-  for (const networkUrl of session.networkUrls ?? []) {
-    io.stdout.write(`[IWSDK] Network URL: ${networkUrl}\n`);
-  }
 }
 
 async function wasWorkspaceStoppedExternally(
@@ -306,6 +301,10 @@ export function resolveDevSessionOptions(
   const headedRequested = readBooleanFlag(options.headed, '--headed');
   const openRequested = readBooleanFlag(options.open, '--open');
   const noOpenRequested = readBooleanFlag(options.noOpen, '--no-open');
+  const allowBrowserAutomation = readBooleanFlag(
+    options.allowBrowserAutomation,
+    '--allow-browser-automation',
+  );
 
   if (headlessRequested && headedRequested) {
     throw new Error('--headless and --headed cannot be used together');
@@ -332,6 +331,7 @@ export function resolveDevSessionOptions(
   );
 
   return {
+    allowBrowserAutomation,
     ...(aiMode == null ? {} : { aiMode }),
     headless: headlessRequested || aiMode === 'agent',
     open: !noOpenRequested,
@@ -353,6 +353,9 @@ export function buildDevRuntimeEnvironment(
 
   environment[DEV_SESSION_ENV_NAMES.headless] = String(session.headless);
   environment[DEV_SESSION_ENV_NAMES.open] = String(session.open);
+  environment[DEV_SESSION_ENV_NAMES.allowBrowserAutomation] = String(
+    session.allowBrowserAutomation,
+  );
   if (session.aiMode != null) {
     environment[DEV_SESSION_ENV_NAMES.aiMode] = session.aiMode;
   }
@@ -506,6 +509,58 @@ async function waitForRuntimeSession(
   };
 }
 
+async function attachToRuntime(
+  workspaceRoot: string,
+  timeoutMs: number,
+  foreground: boolean,
+  openBrowser: boolean,
+  io: ResolvedCliIo,
+): Promise<CliSuccess<unknown> | CliFailure | null> {
+  const waitResult = await waitForRuntimeSession(workspaceRoot, timeoutMs);
+  const launch = await getLaunchMetadata(workspaceRoot);
+  if (!waitResult.session) {
+    return createFailure(
+      launch == null
+        ? formatMissingRuntimeMessage(workspaceRoot)
+        : `Dev server did not register a runtime session within ${timeoutMs}ms`,
+      launch == null ? 'dev_up_missing_runtime' : 'dev_up_timeout',
+      { workspaceRoot, launch },
+    );
+  }
+  if (!waitResult.browserReady) {
+    return createFailure(
+      waitResult.browserIssue?.message ??
+        `Managed browser did not become ready within ${timeoutMs}ms`,
+      'dev_browser_not_ready',
+      {
+        workspaceRoot,
+        logPath: launch?.logPath ?? null,
+        scriptName: launch?.scriptName,
+        session: waitResult.session,
+        browser: waitResult.session.browser ?? null,
+        cause: waitResult.browserIssue?.cause,
+      },
+    );
+  }
+  if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
+    await openUrl(waitResult.session.localUrl);
+  }
+  const adapters = await readAdapterStatus(workspaceRoot);
+  if (foreground) {
+    io.stdout.write(
+      `[IWSDK] Runtime already running at ${waitResult.session.localUrl}\n`,
+    );
+    return null;
+  }
+  return createSuccess({
+    action: 'attached',
+    workspaceRoot,
+    session: waitResult.session,
+    launch,
+    adapters,
+  });
+}
+
 function waitForChildExit(child: ChildProcess): Promise<ProcessExitResult> {
   return new Promise((resolve) => {
     child.once('error', () => {
@@ -547,19 +602,116 @@ async function openUrl(url: string): Promise<void> {
   });
 }
 
+async function terminateWindowsProcessTree(
+  pid: number,
+  force: boolean,
+): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const child = spawn(
+      'taskkill',
+      ['/pid', String(pid), '/T', ...(force ? ['/F'] : [])],
+      { stdio: 'ignore', windowsHide: true },
+    );
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish();
+    }, 5_000);
+    child.once('error', finish);
+    child.once('close', finish);
+  });
+}
+
+async function requestRuntimeShutdown(
+  session: RuntimeSession | null,
+  claimId: string | undefined,
+): Promise<boolean> {
+  if (session == null || claimId == null) {
+    return false;
+  }
+  try {
+    await sendRuntimeCommand({
+      port: session.port,
+      method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
+      params: { claimId },
+      timeoutMs: 3_000,
+      runtimeSession: session,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function terminateRuntimeWorkspace(
   workspaceRoot: string,
 ): Promise<unknown> {
-  const state = await getWorkspaceRuntimeState(workspaceRoot);
+  let state = await getWorkspaceRuntimeState(workspaceRoot);
+  let launchClaimId = state.launch?.claimId;
+  if (
+    state.session == null &&
+    state.launch?.phase === 'starting' &&
+    launchClaimId != null
+  ) {
+    const cancelled = await clearLaunchMetadata(
+      workspaceRoot,
+      launchClaimId,
+      'starting',
+    );
+    if (cancelled) {
+      return {
+        stopped: true,
+        workspaceRoot,
+        cancelledStartup: true,
+      };
+    }
+    state = await getWorkspaceRuntimeState(workspaceRoot);
+    launchClaimId = state.launch?.claimId;
+  }
+  const launchHasRuntimePid = state.launch?.phase !== 'starting';
   const pids = Array.from(
     new Set(
-      [state.session?.pid, state.launch?.pid].filter(
-        (value): value is number => typeof value === 'number',
-      ),
+      [
+        state.session?.pid,
+        ...(launchHasRuntimePid
+          ? [state.launch?.pid, state.launch?.launcherPid]
+          : []),
+      ].filter((value): value is number => typeof value === 'number'),
     ),
   );
+  const processGroupId =
+    process.platform !== 'win32' &&
+    typeof state.launch?.processGroupId === 'number' &&
+    state.launch.processGroupId > 0 &&
+    state.launch.processGroupId !== process.pid
+      ? state.launch.processGroupId
+      : null;
+  const clearOriginalLaunch = async (): Promise<void> => {
+    if (state.launch == null) {
+      return;
+    }
+    if (launchClaimId != null) {
+      await clearLaunchMetadata(workspaceRoot, launchClaimId);
+      return;
+    }
+    const current = await getLaunchMetadata(workspaceRoot);
+    if (
+      current?.pid === state.launch.pid &&
+      current.createdAt === state.launch.createdAt
+    ) {
+      await clearLaunchMetadata(workspaceRoot);
+    }
+  };
 
-  if (pids.length === 0) {
+  if (pids.length === 0 && processGroupId == null) {
     return {
       stopped: false,
       workspaceRoot,
@@ -568,17 +720,54 @@ async function terminateRuntimeWorkspace(
     };
   }
 
-  for (const pid of pids) {
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {}
+  const signalRuntime = async (signal: NodeJS.Signals): Promise<void> => {
+    if (process.platform === 'win32') {
+      const treeRoot =
+        state.launch?.launcherPid ?? state.launch?.pid ?? state.session?.pid;
+      if (treeRoot != null && isProcessAlive(treeRoot)) {
+        await terminateWindowsProcessTree(treeRoot, true);
+      }
+      return;
+    }
+    if (processGroupId != null && isProcessAlive(processGroupId)) {
+      try {
+        process.kill(-processGroupId, signal);
+      } catch {}
+    }
+    for (const pid of pids) {
+      if (!isProcessAlive(pid)) {
+        continue;
+      }
+      try {
+        process.kill(pid, signal);
+      } catch {}
+    }
+  };
+  const hasLiveRuntimeProcess = (): boolean => {
+    if (processGroupId != null && isProcessAlive(processGroupId)) {
+      try {
+        process.kill(-processGroupId, 0);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EPERM') {
+          return true;
+        }
+      }
+    }
+    return pids.some((pid) => isProcessAlive(pid));
+  };
+
+  if (process.platform === 'win32') {
+    await requestRuntimeShutdown(state.session, launchClaimId);
+  } else {
+    await signalRuntime('SIGTERM');
   }
 
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + (process.platform === 'win32' ? 5_000 : 10_000);
   while (Date.now() < deadline) {
     const freshState = await getWorkspaceRuntimeState(workspaceRoot);
-    if (!freshState.session && !freshState.launch) {
-      await clearLaunchMetadata(workspaceRoot);
+    if (!freshState.session && !freshState.launch && !hasLiveRuntimeProcess()) {
+      await clearOriginalLaunch();
       return {
         stopped: true,
         workspaceRoot,
@@ -587,24 +776,31 @@ async function terminateRuntimeWorkspace(
     await sleep(250);
   }
 
-  for (const pid of pids) {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {}
+  const forced = hasLiveRuntimeProcess();
+  if (forced) {
+    await signalRuntime('SIGKILL');
+  }
+  const killDeadline = Date.now() + 2_000;
+  while (Date.now() < killDeadline && hasLiveRuntimeProcess()) {
+    await sleep(50);
   }
 
-  await clearLaunchMetadata(workspaceRoot);
+  const stopped = !hasLiveRuntimeProcess();
+  if (stopped) {
+    await clearOriginalLaunch();
+  }
   return {
-    stopped: true,
+    stopped,
     workspaceRoot,
-    forced: true,
+    forced,
+    ...(stopped ? {} : { session: state.session, launch: state.launch }),
   };
 }
 
 export async function handleDevUp(
   options: CliOptions,
   io: ResolvedCliIo,
-): Promise<CliSuccess<unknown> | CliFailure | null> {
+): Promise<CliSuccess<unknown> | CliFailure | number | null> {
   const devSessionOptions = resolveDevSessionOptions(options);
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
@@ -616,67 +812,68 @@ export async function handleDevUp(
   const timeoutMs = parseIntegerOption(options.timeout, '--timeout', 60000);
   const foreground = isForegroundLaunch(options);
   const openBrowser = devSessionOptions.open;
-  const existingSession = await getRuntimeSession(workspaceRoot);
-  if (existingSession) {
-    const waitResult = await waitForRuntimeSession(workspaceRoot, timeoutMs);
-    const launch = await getLaunchMetadata(workspaceRoot);
-    if (!waitResult.session) {
-      return createFailure(
-        formatMissingRuntimeMessage(workspaceRoot),
-        'dev_up_missing_runtime',
-        {
-          workspaceRoot,
-          launch,
-        },
-      );
-    }
-    if (!waitResult.browserReady) {
-      return createFailure(
-        waitResult.browserIssue?.message ??
-          `Managed browser did not become ready within ${timeoutMs}ms`,
-        'dev_browser_not_ready',
-        {
-          workspaceRoot,
-          logPath: launch?.logPath ?? null,
-          scriptName: launch?.scriptName,
-          session: waitResult.session,
-          browser: waitResult.session.browser ?? null,
-          cause: waitResult.browserIssue?.cause,
-        },
-      );
-    }
-    if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
-      await openUrl(waitResult.session.localUrl);
-    }
-    const adapters = await readAdapterStatus(workspaceRoot);
-    if (foreground) {
-      writeRuntimeUrls(io, 'Runtime already running at', waitResult.session);
-      return null;
-    }
-    return createSuccess({
-      action: 'attached',
+  const [existingSession, existingLaunch] = await Promise.all([
+    getRuntimeSession(workspaceRoot),
+    getLaunchMetadata(workspaceRoot),
+  ]);
+  if (existingSession || existingLaunch) {
+    return attachToRuntime(
       workspaceRoot,
-      runtimeUrls: getRuntimeUrls(waitResult.session),
-      session: waitResult.session,
-      launch,
-      adapters,
-    });
+      timeoutMs,
+      foreground,
+      openBrowser,
+      io,
+    );
   }
 
   const packageManager = await detectPackageManager(workspaceRoot);
   const scriptName = await resolveDevRuntimeScript(workspaceRoot);
   const logPath = foreground ? null : await ensureLogPath(workspaceRoot);
-  const stdoutFd = logPath ? openSync(logPath, 'a') : -1;
   const spawnArgs = getRunScriptArgs(packageManager, scriptName);
-
-  const child = spawn(packageManager, spawnArgs, {
-    cwd: workspaceRoot,
-    detached: !foreground,
-    stdio: foreground ? 'inherit' : ['ignore', stdoutFd, stdoutFd],
-    env: buildDevRuntimeEnvironment(options),
-    // npm/pnpm/yarn are .cmd shims on Windows; Node cannot spawn them without a shell.
-    shell: process.platform === 'win32',
+  const claimId = randomUUID();
+  const claim = await claimLaunchMetadata({
+    claimId,
+    workspaceRoot,
+    pid: process.pid,
+    command: packageManager,
+    args: spawnArgs,
+    logPath,
+    scriptName,
+    port: null,
+    openBrowser,
   });
+  if (!claim.acquired) {
+    return attachToRuntime(
+      workspaceRoot,
+      timeoutMs,
+      foreground,
+      openBrowser,
+      io,
+    );
+  }
+
+  const stdoutFd = logPath ? openSync(logPath, 'a') : -1;
+  const childEnvironment = buildDevRuntimeEnvironment(options);
+  childEnvironment[INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV] = claimId;
+  let child: ChildProcess;
+  try {
+    child = spawn(packageManager, spawnArgs, {
+      cwd: workspaceRoot,
+      // A separate POSIX process group lets the CLI forward Ctrl-C to the
+      // package manager and every descendant without signaling itself.
+      detached: process.platform !== 'win32' || !foreground,
+      stdio: foreground ? 'inherit' : ['ignore', stdoutFd, stdoutFd],
+      env: childEnvironment,
+      // npm/pnpm/yarn are .cmd shims on Windows; Node cannot spawn them without a shell.
+      shell: process.platform === 'win32',
+    });
+  } catch (error) {
+    if (stdoutFd >= 0) {
+      closeSync(stdoutFd);
+    }
+    await clearLaunchMetadata(workspaceRoot, claimId);
+    throw error;
+  }
   const childExitPromise = waitForChildExit(child);
   let childExit: ProcessExitResult | null = null;
   void childExitPromise.then((result) => {
@@ -689,114 +886,225 @@ export async function handleDevUp(
   }
 
   if (typeof child.pid !== 'number') {
+    await clearLaunchMetadata(workspaceRoot, claimId);
     throw new Error('Failed to start the dev process');
   }
 
-  await setLaunchMetadata({
-    workspaceRoot,
-    pid: child.pid,
-    command: packageManager,
-    args: spawnArgs,
-    logPath,
-    scriptName,
-    port: null,
-    openBrowser,
-  });
-
-  const waitResult = await waitForRuntimeSession(
-    workspaceRoot,
-    timeoutMs,
-    () => childExit,
+  const processGroupId = process.platform !== 'win32' ? child.pid : undefined;
+  const claimedLaunch = await setLaunchMetadata(
+    {
+      claimId,
+      phase: 'running',
+      workspaceRoot,
+      pid: child.pid,
+      launcherPid: child.pid,
+      processGroupId,
+      command: packageManager,
+      args: spawnArgs,
+      logPath,
+      scriptName,
+      port: null,
+      openBrowser,
+    },
+    claimId,
   );
+  if (claimedLaunch == null) {
+    if (process.platform === 'win32') {
+      await terminateWindowsProcessTree(child.pid, true);
+    } else if (processGroupId != null) {
+      try {
+        process.kill(-processGroupId, 'SIGTERM');
+      } catch {}
+    } else {
+      child.kill('SIGTERM');
+    }
+    throw new Error('Lost ownership of the IWSDK dev startup claim');
+  }
 
-  if (!waitResult.session) {
-    if (waitResult.exit) {
-      await clearLaunchMetadata(workspaceRoot);
+  let receivedForegroundSignal: NodeJS.Signals | null = null;
+  let foregroundSignalExitCode: number | null = null;
+  let foregroundSignalCount = 0;
+  const handleForegroundSignal = (signal: NodeJS.Signals): void => {
+    foregroundSignalCount += 1;
+    receivedForegroundSignal = signal;
+    foregroundSignalExitCode =
+      signal === 'SIGINT' ? 130 : signal === 'SIGHUP' ? 129 : 143;
+    if (child.exitCode == null && child.signalCode == null) {
+      if (process.platform === 'win32' && child.pid != null) {
+        if (foregroundSignalCount > 1) {
+          void terminateWindowsProcessTree(child.pid, true);
+        } else {
+          void getRuntimeSession(workspaceRoot)
+            .then((session) => requestRuntimeShutdown(session, claimId))
+            .catch(() => {});
+        }
+      } else {
+        try {
+          process.kill(
+            -child.pid!,
+            foregroundSignalCount > 1 ? 'SIGKILL' : signal,
+          );
+        } catch {}
+      }
+    }
+  };
+  const removeForegroundSignalHandlers = () => {
+    if (!foreground) {
+      return;
+    }
+    process.off('SIGINT', handleForegroundSignal);
+    process.off('SIGHUP', handleForegroundSignal);
+    process.off('SIGTERM', handleForegroundSignal);
+  };
+  if (foreground) {
+    process.on('SIGINT', handleForegroundSignal);
+    process.on('SIGHUP', handleForegroundSignal);
+    process.on('SIGTERM', handleForegroundSignal);
+  }
+
+  try {
+    const waitResult = await waitForRuntimeSession(
+      workspaceRoot,
+      timeoutMs,
+      () => childExit,
+    );
+
+    // Ctrl-C can arrive while browser readiness is still being probed. The
+    // resulting transport disconnect is expected shutdown, not startup
+    // failure, so let the finally block finish bounded process cleanup.
+    if (foreground && receivedForegroundSignal != null) {
+      return foregroundSignalExitCode ?? 1;
+    }
+
+    if (!waitResult.session) {
+      if (waitResult.exit) {
+        await clearLaunchMetadata(workspaceRoot, claimId);
+        return createFailure(
+          'Dev server exited before registering a runtime session',
+          'dev_up_exit',
+          {
+            workspaceRoot,
+            logPath,
+            exitCode: waitResult.exit.exitCode,
+            signal: waitResult.exit.signal,
+            scriptName,
+          },
+        );
+      }
+
       return createFailure(
-        'Dev server exited before registering a runtime session',
-        'dev_up_exit',
+        `Dev server did not register a runtime session within ${timeoutMs}ms`,
+        'dev_up_timeout',
         {
           workspaceRoot,
           logPath,
-          exitCode: waitResult.exit.exitCode,
-          signal: waitResult.exit.signal,
           scriptName,
         },
       );
     }
 
-    return createFailure(
-      `Dev server did not register a runtime session within ${timeoutMs}ms`,
-      'dev_up_timeout',
+    await setLaunchMetadata(
       {
+        claimId,
         workspaceRoot,
+        pid: waitResult.session.pid,
+        launcherPid: child.pid,
+        processGroupId,
+        command: packageManager,
+        args: spawnArgs,
         logPath,
         scriptName,
+        port: waitResult.session.port,
+        openBrowser,
       },
+      claimId,
     );
-  }
 
-  await setLaunchMetadata({
-    workspaceRoot,
-    pid: waitResult.session.pid,
-    command: packageManager,
-    args: spawnArgs,
-    logPath,
-    scriptName,
-    port: waitResult.session.port,
-    openBrowser,
-  });
-
-  if (!waitResult.browserReady) {
-    return createFailure(
-      waitResult.browserIssue?.message ??
-        `Managed browser did not become ready within ${timeoutMs}ms`,
-      'dev_browser_not_ready',
-      {
-        workspaceRoot,
-        logPath,
-        scriptName,
-        session: waitResult.session,
-        browser: waitResult.session?.browser ?? null,
-        cause: waitResult.browserIssue?.cause,
-      },
-    );
-  }
-
-  const launch = await getLaunchMetadata(workspaceRoot);
-  const adapters = await readAdapterStatus(workspaceRoot);
-
-  if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
-    await openUrl(waitResult.session.localUrl);
-  }
-
-  if (foreground) {
-    writeRuntimeUrls(io, 'Runtime ready at', waitResult.session);
-    const exit = await childExitPromise;
-    if (
-      isAbnormalChildExit(exit) &&
-      !(await wasWorkspaceStoppedExternally(workspaceRoot))
-    ) {
-      return createFailure(describeChildExit(exit), 'dev_up_exit', {
-        workspaceRoot,
-        session: waitResult.session,
-        exitCode: exit.exitCode,
-        signal: exit.signal,
-        scriptName,
-      });
+    if (!waitResult.browserReady) {
+      return createFailure(
+        waitResult.browserIssue?.message ??
+          `Managed browser did not become ready within ${timeoutMs}ms`,
+        'dev_browser_not_ready',
+        {
+          workspaceRoot,
+          logPath,
+          scriptName,
+          session: waitResult.session,
+          browser: waitResult.session?.browser ?? null,
+          cause: waitResult.browserIssue?.cause,
+        },
+      );
     }
-    return null;
-  }
 
-  return createSuccess({
-    action: 'started',
-    workspaceRoot,
-    runtimeUrls: getRuntimeUrls(waitResult.session),
-    session: waitResult.session,
-    launch,
-    logPath,
-    adapters,
-  });
+    const launch = await getLaunchMetadata(workspaceRoot);
+    const adapters = await readAdapterStatus(workspaceRoot);
+
+    if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
+      await openUrl(waitResult.session.localUrl);
+    }
+
+    if (foreground) {
+      io.stdout.write(
+        `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
+      );
+      const exit = await childExitPromise;
+      if (receivedForegroundSignal != null) {
+        await clearLaunchMetadata(workspaceRoot, claimId).catch(() => {});
+        return foregroundSignalExitCode ?? 1;
+      }
+      await clearLaunchMetadata(workspaceRoot, claimId);
+      if (
+        isAbnormalChildExit(exit) &&
+        !(await wasWorkspaceStoppedExternally(workspaceRoot))
+      ) {
+        return createFailure(describeChildExit(exit), 'dev_up_exit', {
+          workspaceRoot,
+          session: waitResult.session,
+          exitCode: exit.exitCode,
+          signal: exit.signal,
+          scriptName,
+        });
+      }
+      return null;
+    }
+
+    return createSuccess({
+      action: 'started',
+      workspaceRoot,
+      session: waitResult.session,
+      launch,
+      logPath,
+      adapters,
+    });
+  } finally {
+    removeForegroundSignalHandlers();
+    if (foreground && child.exitCode == null && child.signalCode == null) {
+      if (process.platform === 'win32' && child.pid != null) {
+        const session = await getRuntimeSession(workspaceRoot).catch(
+          () => null,
+        );
+        await requestRuntimeShutdown(session, claimId);
+      } else {
+        try {
+          process.kill(-child.pid!, 'SIGTERM');
+        } catch {}
+      }
+      await Promise.race([childExitPromise, sleep(2_000)]);
+      if (child.exitCode == null && child.signalCode == null) {
+        if (process.platform === 'win32' && child.pid != null) {
+          await terminateWindowsProcessTree(child.pid, true);
+        } else {
+          try {
+            process.kill(-child.pid!, 'SIGKILL');
+          } catch {}
+        }
+        await Promise.race([childExitPromise, sleep(2_000)]);
+      }
+    }
+    if (foreground && (child.exitCode != null || child.signalCode != null)) {
+      await clearLaunchMetadata(workspaceRoot, claimId).catch(() => {});
+    }
+  }
 }
 
 export async function handleDevDown(
@@ -815,7 +1123,7 @@ export async function handleDevDown(
 export async function handleDevRestart(
   options: CliOptions,
   io: ResolvedCliIo,
-): Promise<CliSuccess<unknown> | CliFailure | null> {
+): Promise<CliSuccess<unknown> | CliFailure | number | null> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
     workspace:

@@ -28,6 +28,7 @@ import { isScreenshotResult, saveScreenshot } from './screenshot-output.js';
 
 type JsonObject = Record<string, unknown>;
 type McpTextContent = { type: 'text'; text: string };
+type McpImageContent = { type: 'image'; data: string; mimeType: string };
 
 export interface StartRuntimeMcpStdioServerOptions {
   serverName?: string;
@@ -369,6 +370,50 @@ export async function startRuntimeMcpStdioServer({
           ...normalizedResponse,
           result: { ...responseMetadata, screenshotPath },
         });
+      }
+
+      if (
+        name === 'browser_interact' &&
+        isRecord(result) &&
+        isRecord(result.failure) &&
+        isRecord(result.failure.screenshot) &&
+        typeof result.failure.screenshot.imageData === 'string'
+      ) {
+        const screenshot = result.failure.screenshot as {
+          imageData: string;
+          mimeType?: unknown;
+        };
+        const mimeType =
+          typeof screenshot.mimeType === 'string'
+            ? screenshot.mimeType
+            : 'image/png';
+        const sanitizedResult = {
+          ...result,
+          failure: {
+            ...result.failure,
+            screenshot: {
+              captured: true,
+              mimeType,
+            },
+          },
+        };
+        const content: Array<McpTextContent | McpImageContent> = [
+          { type: 'text', text: JSON.stringify(sanitizedResult, null, 2) },
+          {
+            type: 'image',
+            data: screenshot.imageData,
+            mimeType,
+          },
+        ];
+        if (normalizedResponse._tabId != null) {
+          content.push(
+            createTabMetadataText(
+              normalizedResponse._tabId,
+              normalizedResponse._tabGeneration,
+            ),
+          );
+        }
+        return { content };
       }
 
       return tabTracker.processResponse(normalizedResponse);

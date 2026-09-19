@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/cli",
-  "version": "0.5.3",
+  "version": "0.5.2",
   "description": "Runtime-first CLI for IWSDK dev servers, adapters, and MCP access",
   "private": false,
   "type": "module",
@@ -17,12 +17,19 @@
     "./contract": {
       "types": "./dist/runtime-contract.d.ts",
       "import": "./dist/contract.js"
+    },
+    "./runtime-files": {
+      "types": "./dist/runtime-files.d.ts",
+      "import": "./dist/runtime-files.js"
     }
   },
   "typesVersions": {
     "*": {
       "contract": [
         "dist/runtime-contract.d.ts"
+      ],
+      "runtime-files": [
+        "dist/runtime-files.d.ts"
       ]
     }
   },

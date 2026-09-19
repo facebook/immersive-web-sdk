@@ -19,6 +19,7 @@ import {
   handleAdapterStatus,
   handleAdapterSync,
 } from './commands/adapter.js';
+import { handleBrowserRun } from './commands/browser.js';
 import {
   handleDevDown,
   handleDevLogs,
@@ -37,6 +38,7 @@ import {
 import { handleRuntimeOperation } from './commands/runtime.js';
 import { handleStatus } from './commands/status.js';
 import {
+  buildBrowserRunHelp,
   buildDevCommandHelp,
   buildMcpInspectHelp,
   buildReferenceCommandHelp,
@@ -57,7 +59,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
   const stderr = io.stderr ?? process.stderr;
   const cwd = io.cwd ?? process.cwd();
   const parsed = parseArgv(argv);
-  const [command, subcommand] = parsed.positionals;
+  const [command, subcommand, argument] = parsed.positionals;
   const context: ResolvedCliIo = { stdout, stderr, cwd };
 
   try {
@@ -92,6 +94,10 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         command === 'ui' ||
         command === 'ecs'
       ) {
+        if (command === 'browser' && subcommand === 'run') {
+          stdout.write(`${buildBrowserRunHelp().join('\n')}\n`);
+          return 0;
+        }
         stdout.write(
           `${(subcommand
             ? buildRuntimeCommandHelp(command, subcommand)
@@ -173,6 +179,10 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       case 'scene':
       case 'ui':
       case 'ecs':
+        if (command === 'browser' && subcommand === 'run') {
+          result = await handleBrowserRun(argument, parsed.options, context);
+          break;
+        }
         if (!subcommand) {
           throw new Error(buildRuntimeDomainHelp(command).join('\n'));
         }
@@ -187,6 +197,9 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         throw new Error(`Unknown command: ${command}`);
     }
 
+    if (typeof result === 'number') {
+      return result;
+    }
     if (result) {
       if (isCliRawOutput(result)) {
         writeJson(stdout, result.value);

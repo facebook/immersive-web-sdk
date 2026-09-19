@@ -112,6 +112,8 @@ export class MCPWebSocketClient {
   private reconnectDelay = 1000;
   private maxReconnectDelay = 5000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly connectTimeoutMs = 10_000;
   private intentionalDisconnect = false;
   private verbose: boolean;
   private readonly runtimeReadyListener = () => this.announceCommandReady();
@@ -256,8 +258,26 @@ export class MCPWebSocketClient {
     });
 
     try {
-      this.ws = new WebSocket(wsUrl);
-      this.setupEventHandlers();
+      const socket = new WebSocket(wsUrl);
+      this.ws = socket;
+      this.setupEventHandlers(socket);
+      this.connectTimer = setTimeout(() => {
+        if (this.ws !== socket || socket.readyState !== WebSocket.CONNECTING) {
+          return;
+        }
+        this.trace('client_connect_timeout', {
+          timeoutMs: this.connectTimeoutMs,
+        });
+        this.detachEventHandlers(socket);
+        this.ws = null;
+        try {
+          socket.close();
+        } catch {}
+        this.clearConnectTimer();
+        if (!this.intentionalDisconnect) {
+          this.scheduleReconnect();
+        }
+      }, this.connectTimeoutMs);
     } catch (error) {
       console.error('[IWSDK-MCP] Failed to create WebSocket:', error);
       this.ws = null;
@@ -283,11 +303,15 @@ export class MCPWebSocketClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.clearConnectTimer();
 
     if (this.ws) {
-      this.ws.onclose = null; // Prevent onclose from scheduling reconnect
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      this.detachEventHandlers(socket);
+      try {
+        socket.close();
+      } catch {}
     }
   }
 
@@ -296,18 +320,18 @@ export class MCPWebSocketClient {
     return port || 5173;
   }
 
-  private setupEventHandlers(): void {
-    if (!this.ws) {
-      return;
-    }
-
-    this.ws.onopen = () => {
+  private setupEventHandlers(socket: WebSocket): void {
+    socket.onopen = () => {
+      if (this.ws !== socket) {
+        return;
+      }
+      this.clearConnectTimer();
       if (this.verbose) {
         console.log('[IWSDK-MCP] Connected');
       }
       this.trace('client_open');
       this.reconnectAttempts = 0;
-      this.ws?.send(
+      socket.send(
         JSON.stringify({
           type: 'iwsdk_browser_hello',
           commandReady: window.FRAMEWORK_MCP_RUNTIME != null,
@@ -322,7 +346,11 @@ export class MCPWebSocketClient {
       this.trace('client_hello_sent');
     };
 
-    this.ws.onclose = (event) => {
+    socket.onclose = (event) => {
+      if (this.ws !== socket) {
+        return;
+      }
+      this.clearConnectTimer();
       if (this.verbose) {
         console.log(
           '[IWSDK-MCP] Disconnected:',
@@ -335,12 +363,16 @@ export class MCPWebSocketClient {
         intentional: this.intentionalDisconnect,
       });
       this.ws = null;
+      this.detachEventHandlers(socket);
       if (!this.intentionalDisconnect) {
         this.scheduleReconnect();
       }
     };
 
-    this.ws.onerror = (error) => {
+    socket.onerror = (error) => {
+      if (this.ws !== socket) {
+        return;
+      }
       this.trace('client_error', {
         message:
           error instanceof ErrorEvent && error.message
@@ -350,9 +382,26 @@ export class MCPWebSocketClient {
       console.error('[IWSDK-MCP] WebSocket error:', error);
     };
 
-    this.ws.onmessage = async (event) => {
+    socket.onmessage = async (event) => {
+      if (this.ws !== socket) {
+        return;
+      }
       await this.handleMessage(event.data);
     };
+  }
+
+  private clearConnectTimer(): void {
+    if (this.connectTimer != null) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
+  private detachEventHandlers(socket: WebSocket): void {
+    socket.onopen = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    socket.onmessage = null;
   }
 
   private announceCommandReady(): void {
@@ -422,27 +471,22 @@ export class MCPWebSocketClient {
   /**
    * Dispatch a method call to the appropriate handler.
    * Priority:
-   * 1. Plugin-specific tools (page reload - always local)
-   * 2. Framework runtime (IWSDK or any framework providing FRAMEWORK_MCP_RUNTIME)
-   * 3. IWER device control (device.remote.dispatch)
+   * 1. Framework runtime (IWSDK or any framework providing FRAMEWORK_MCP_RUNTIME)
+   * 2. IWER device control (device.remote.dispatch)
+   *
+   * Managed-browser host commands, including reload_page, are intercepted by
+   * the Vite host and never reach this in-page dispatcher.
    */
   private async dispatch(
     method: string,
     params: Record<string, unknown>,
   ): Promise<unknown> {
-    // 1. Handle plugin-specific tools locally
-    if (method === 'reload_page') {
-      // Defer reload so the WebSocket response can flush before the page tears down
-      setTimeout(() => window.location.reload(), 50);
-      return { success: true, message: 'Page reload initiated' };
-    }
-
-    // 2. Route to framework runtime if available and handles this method
+    // 1. Route to framework runtime if available and handles this method
     if (window.FRAMEWORK_MCP_RUNTIME?.handles(method)) {
       return window.FRAMEWORK_MCP_RUNTIME.dispatch(method, params);
     }
 
-    // 3. All other methods go to IWER's RemoteControlInterface when this page
+    // 2. All other methods go to IWER's RemoteControlInterface when this page
     // owns an emulated device. Workspace-only editor pages deliberately use a
     // device-less bridge so browser-first apps keep native non-XR behavior.
     if (this.device == null) {
@@ -470,6 +514,9 @@ export class MCPWebSocketClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.intentionalDisconnect || this.reconnectTimer != null) {
+      return;
+    }
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       if (this.verbose) {
         console.debug('[IWSDK-MCP] Max reconnect attempts reached');

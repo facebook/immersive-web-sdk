@@ -19,11 +19,15 @@ import {
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { WebSocketServer } from 'ws';
 import type { AiTool } from '../src/runtime-contract.js';
+import { getRuntimeFileLockPath } from '../src/runtime-files.js';
 import {
+  getRuntimeLaunchFilePath,
   getRuntimeSessionFilePath,
+} from '../src/runtime-state.js';
+import {
   registerRuntimeSession,
   unregisterRuntimeSession,
-} from '../src/runtime-state.js';
+} from './runtime-session-fixture.js';
 
 const CLI_PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -323,19 +327,41 @@ async function startRuntimeFixture(
                   status: 'browser_relaunched',
                   message: 'Browser was relaunched; retry the request.',
                 }
-              : request.method === 'screenshot' ||
-                  request.method === 'scene_screenshot' ||
-                  request.method === 'asset_render_preview' ||
-                  request.method === 'ui_render_preview'
+              : request.method === 'browser_interact'
                 ? {
-                    imageData: ONE_BY_ONE_PNG_BASE64,
-                    mimeType: 'image/png',
+                    application: {
+                      generation: 1,
+                      id: 'tab-1',
+                      url: `http://localhost:${port}/`,
+                    },
+                    completed: [],
+                    failure: {
+                      action: 'click',
+                      index: 0,
+                      message: 'element detached',
+                      recovery: 'Capture a fresh browser_snapshot and retry.',
+                      retryable: true,
+                      screenshot: {
+                        imageData: ONE_BY_ONE_PNG_BASE64,
+                        mimeType: 'image/png',
+                      },
+                      snapshot: null,
+                    },
+                    success: false,
                   }
-                : {
-                    ok: true,
-                    method: request.method,
-                    params: request.params ?? {},
-                  },
+                : request.method === 'screenshot' ||
+                    request.method === 'scene_screenshot' ||
+                    request.method === 'asset_render_preview' ||
+                    request.method === 'ui_render_preview'
+                  ? {
+                      imageData: ONE_BY_ONE_PNG_BASE64,
+                      mimeType: 'image/png',
+                    }
+                  : {
+                      ok: true,
+                      method: request.method,
+                      params: request.params ?? {},
+                    },
         _tabId: 'tab-1',
         _tabGeneration: 1,
       };
@@ -395,9 +421,9 @@ function buildManagedRuntimeScript(
     finalBrowserStatus?: RuntimeBrowserState['status'];
     finalBrowserDelayMs?: number;
     finalBrowserError?: RuntimeBrowserState['lastError'];
-    networkUrls?: string[];
     probeReadyDelayMs?: number;
     probeWritesSession?: boolean;
+    startupMarkerPath?: string;
     workspaceOnly?: boolean;
   } = {},
 ): string {
@@ -423,7 +449,7 @@ function buildManagedRuntimeScript(
   const probeReadyDelayMs = options.probeReadyDelayMs ?? 0;
 
   return `import http from 'node:http';
-import { realpathSync } from 'node:fs';
+import { appendFileSync, realpathSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -432,6 +458,10 @@ const require = createRequire(${JSON.stringify(CLI_PACKAGE_JSON_PATH)});
 const { WebSocketServer } = require('ws');
 
 const workspaceRoot = realpathSync.native(process.cwd());
+const startupMarkerPath = ${JSON.stringify(options.startupMarkerPath ?? null)};
+if (startupMarkerPath) {
+  appendFileSync(startupMarkerPath, String(process.pid) + '\\n', 'utf8');
+}
 const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
 if (environmentCapturePath) {
   await writeFile(
@@ -461,7 +491,7 @@ async function writeSession(port, browser) {
     pid: process.pid,
     port,
     localUrl: 'http://localhost:' + port,
-    networkUrls: ${JSON.stringify(options.networkUrls ?? [])},
+    networkUrls: [],
     ${options.workspaceOnly ? '' : "aiMode: 'agent',"}
     aiTools: ['claude', 'cursor'],
     browser,
@@ -700,6 +730,32 @@ describe('runtime commands and project resolution', () => {
     }
   });
 
+  test('writes nested browser interaction failure images instead of printing base64', async () => {
+    const runtime = await startRuntimeFixture(appA);
+    try {
+      const interaction = await runCli(
+        [
+          'browser',
+          'interact',
+          '--input-json',
+          '{"steps":[{"action":"click","ref":"e1"}]}',
+          '--raw',
+        ],
+        appA,
+      );
+      expect(interaction.exitCode).toBe(0);
+      const result = JSON.parse(interaction.stdout);
+      expect(result.failure.screenshot).toMatchObject({
+        captured: true,
+        mimeType: 'image/png',
+      });
+      expect(result.failure.screenshot.imageData).toBeUndefined();
+      expect(existsSync(result.failure.screenshot.screenshotPath)).toBe(true);
+    } finally {
+      await runtime.close();
+    }
+  });
+
   test('fails outside an IWSDK workspace for runtime commands', async () => {
     const result = await runCli(['xr', 'status'], tempDir);
     expect(result.exitCode).toBe(1);
@@ -717,16 +773,6 @@ describe('runtime commands and project resolution', () => {
 });
 
 describe('runtime introspection and raw output', () => {
-  test('reports empty runtime URLs when no session is active', async () => {
-    const status = await runCli(['dev', 'status'], appA);
-    expect(status.exitCode).toBe(0);
-    const parsed = JSON.parse(status.stdout);
-    expect(parsed.data.runtimeUrls).toEqual({
-      local: null,
-      network: [],
-    });
-  });
-
   test('reports browser readiness in dev status', async () => {
     await registerRuntimeSession({
       sessionId: 'session-status',
@@ -734,7 +780,6 @@ describe('runtime introspection and raw output', () => {
       pid: process.pid,
       port: 5190,
       localUrl: 'http://localhost:5190',
-      networkUrls: ['https://192.0.2.10:5190'],
       aiMode: 'agent',
       aiTools: ['claude'],
       browser: createBrowserState('connected'),
@@ -746,10 +791,6 @@ describe('runtime introspection and raw output', () => {
     expect(parsed.data.state.browserConnected).toBe(true);
     expect(parsed.data.state.browserCommandReady).toBe(true);
     expect(parsed.data.state.session.browser.status).toBe('connected');
-    expect(parsed.data.runtimeUrls).toEqual({
-      local: 'http://localhost:5190',
-      network: ['https://192.0.2.10:5190'],
-    });
   });
 
   test('explains an intentional --no-open session in dev status', async () => {
@@ -803,6 +844,19 @@ describe('runtime introspection and raw output', () => {
     expect(uiDomainHelp.exitCode).toBe(0);
     expect(uiDomainHelp.stdout).toContain('Usage: iwsdk ui <action>');
     expect(uiDomainHelp.stdout).toContain('render-preview');
+
+    const browserDomainHelp = await runCli(['browser', '--help'], appA);
+    expect(browserDomainHelp.exitCode).toBe(0);
+    expect(browserDomainHelp.stdout).toContain('snapshot');
+    expect(browserDomainHelp.stdout).toContain('profile');
+    expect(browserDomainHelp.stdout).toContain('run');
+
+    const browserRunHelp = await runCli(['browser', 'run', '--help'], appA);
+    expect(browserRunHelp.exitCode).toBe(0);
+    expect(browserRunHelp.stdout).toContain('--allow-browser-automation');
+    expect(browserRunHelp.stdout).toContain(
+      'browser, context, page, frame, cdp',
+    );
 
     const xrHelp = await runCli(['xr', 'look-at', '--help'], appA);
     expect(xrHelp.exitCode).toBe(0);
@@ -1332,9 +1386,7 @@ process.exit(1);
     const fixtureScript = path.join(appA, 'dev-server.mjs');
     await writeFile(
       fixtureScript,
-      buildManagedRuntimeScript('fixture-dev', {
-        networkUrls: ['https://192.0.2.10:8443'],
-      }),
+      buildManagedRuntimeScript('fixture-dev'),
       'utf8',
     );
 
@@ -1349,11 +1401,12 @@ process.exit(1);
     const parsedUp = JSON.parse(up.stdout);
     expect(parsedUp.data.action).toBe('started');
     expect(parsedUp.data.session.localUrl).toContain('http://localhost:');
-    expect(parsedUp.data.runtimeUrls.network).toEqual([
-      'https://192.0.2.10:8443',
-    ]);
     expect(parsedUp.data.launch.scriptName).toBe('dev:runtime');
     expect(parsedUp.data.launch.port).toBe(parsedUp.data.session.port);
+    expect(parsedUp.data.launch.launcherPid).toEqual(expect.any(Number));
+    if (process.platform !== 'win32') {
+      expect(parsedUp.data.launch.processGroupId).toEqual(expect.any(Number));
+    }
     expect(parsedUp.data.session.browser.status).toBe('connected');
     expect(parsedUp.data.session.browser.commandReady).toBe(true);
 
@@ -1361,23 +1414,68 @@ process.exit(1);
     expect(again.exitCode).toBe(0);
     const parsedAgain = JSON.parse(again.stdout);
     expect(parsedAgain.data.action).toBe('attached');
-    expect(parsedAgain.data.runtimeUrls.network).toEqual([
-      'https://192.0.2.10:8443',
-    ]);
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
     const parsedDown = JSON.parse(down.stdout);
     expect(parsedDown.data.stopped).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(() =>
+        process.kill(-parsedUp.data.launch.processGroupId, 0),
+      ).toThrow();
+    }
+  });
+
+  test('coalesces simultaneous dev up calls into one spawned runtime', async () => {
+    const fixtureScript = path.join(appA, 'dev-concurrent.mjs');
+    const startupMarkerPath = path.join(appA, 'runtime-starts.txt');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-concurrent', { startupMarkerPath }),
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: { 'dev:runtime': 'node dev-concurrent.mjs' },
+    });
+    const staleLockPath = getRuntimeFileLockPath(
+      getRuntimeLaunchFilePath(appA),
+    );
+    await mkdir(staleLockPath, { recursive: true });
+    await writeFile(
+      path.join(staleLockPath, 'owner.json'),
+      `${JSON.stringify({
+        acquiredAt: Date.now() - 60_000,
+        lockId: 'orphaned-lock',
+        pid: 999_999_999,
+      })}\n`,
+      'utf8',
+    );
+
+    const [first, second] = await Promise.all([
+      runCli(['dev', 'up', '--timeout', '15000'], appA),
+      runCli(['dev', 'up', '--timeout', '15000'], appA),
+    ]);
+    expect(first.exitCode, first.stderr).toBe(0);
+    expect(second.exitCode, second.stderr).toBe(0);
+    expect(
+      [
+        JSON.parse(first.stdout).data.action,
+        JSON.parse(second.stdout).data.action,
+      ].sort(),
+    ).toEqual(['attached', 'started']);
+    expect(
+      (await readFile(startupMarkerPath, 'utf8')).trim().split('\n'),
+    ).toHaveLength(1);
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode, down.stderr).toBe(0);
   });
 
   test('treats dev down as a clean stop for a foreground dev process', async () => {
     const fixtureScript = path.join(appA, 'dev-foreground.mjs');
     await writeFile(
       fixtureScript,
-      buildManagedRuntimeScript('fixture-foreground', {
-        networkUrls: ['https://192.0.2.10:8443'],
-      }),
+      buildManagedRuntimeScript('fixture-foreground'),
       'utf8',
     );
     await createAppFixture(appA, {
@@ -1420,8 +1518,58 @@ process.exit(1);
       `foreground stdout:\n${stdout}\nforeground stderr:\n${stderr}`,
     ).toBe(0);
     expect(stdout).toContain('[IWSDK] Runtime ready at');
-    expect(stdout).toContain('[IWSDK] Network URL: https://192.0.2.10:8443');
     expect(stderr).not.toContain('dev_up_exit');
+  });
+
+  test('treats Ctrl-C during browser readiness as a clean cancellation', async () => {
+    const fixtureScript = path.join(appA, 'dev-cancel-readiness.mjs');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-cancel-readiness', {
+        probeReadyDelayMs: 10_000,
+      }),
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: {
+        'dev:runtime': 'node dev-cancel-readiness.mjs',
+      },
+    });
+
+    const foreground = spawn(
+      'node',
+      [CLI_PATH, 'dev', 'up', '--foreground', '--timeout', '15000'],
+      {
+        cwd: appA,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    foreground.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    foreground.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    const foregroundExit = new Promise<{
+      exitCode: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolve, reject) => {
+      foreground.on('error', reject);
+      foreground.on('close', (exitCode, signal) =>
+        resolve({ exitCode, signal }),
+      );
+    });
+
+    await waitForSessionFile(getRuntimeSessionFilePath(appA));
+    foreground.kill('SIGINT');
+    const exit = await foregroundExit;
+
+    expect(exit).toEqual({ exitCode: 130, signal: null });
+    expect(stdout).not.toContain('dev_browser_not_ready');
+    expect(stderr).not.toContain('dev_browser_not_ready');
   });
 
   test('waits for browser command readiness before reporting dev up success', async () => {

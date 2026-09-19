@@ -18,6 +18,7 @@ class MockWebSocket {
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
+  static autoOpen = true;
 
   readyState = MockWebSocket.CONNECTING;
   onopen: ((event: Event) => void) | null = null;
@@ -29,12 +30,14 @@ class MockWebSocket {
 
   constructor(public url: string) {
     // Simulate async connection
-    setTimeout(() => {
-      this.readyState = MockWebSocket.OPEN;
-      if (this.onopen) {
-        this.onopen(new Event('open'));
-      }
-    }, 0);
+    if (MockWebSocket.autoOpen) {
+      setTimeout(() => {
+        this.readyState = MockWebSocket.OPEN;
+        if (this.onopen) {
+          this.onopen(new Event('open'));
+        }
+      }, 0);
+    }
   }
 
   send(data: string): void {
@@ -111,6 +114,7 @@ describe('MCPWebSocketClient', () => {
   beforeEach(() => {
     mockDevice = createMockDevice();
     mockWebSocketInstance = null;
+    MockWebSocket.autoOpen = true;
 
     // Mock WebSocket globally with static properties
     originalWebSocket = globalThis.WebSocket;
@@ -248,6 +252,43 @@ describe('MCPWebSocketClient', () => {
       client.connect();
 
       expect(mockWebSocketInstance).toBe(firstInstance);
+    });
+
+    test('retries when a WebSocket remains stuck connecting', async () => {
+      vi.useFakeTimers();
+      MockWebSocket.autoOpen = false;
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+      const firstInstance = mockWebSocketInstance;
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(firstInstance?.readyState).toBe(MockWebSocket.CLOSED);
+      expect(client.connectionState).toBe('disconnected');
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mockWebSocketInstance).not.toBe(firstInstance);
+      expect(client.connectionState).toBe('connecting');
+    });
+
+    test('ignores close callbacks from an obsolete WebSocket', async () => {
+      vi.useFakeTimers();
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(0);
+      const firstInstance = mockWebSocketInstance!;
+      const staleClose = firstInstance.onclose!;
+
+      firstInstance.simulateClose('restart');
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(1);
+      const replacement = mockWebSocketInstance!;
+      expect(replacement).not.toBe(firstInstance);
+      expect(client.connected).toBe(true);
+
+      staleClose(new CloseEvent('close', { reason: 'stale' }));
+
+      expect(client.connected).toBe(true);
+      expect(mockWebSocketInstance).toBe(replacement);
     });
 
     test('sends a browser hello message after opening', async () => {
@@ -453,33 +494,6 @@ describe('MCPWebSocketClient', () => {
         'get_console_logs',
         { count: 10 },
       );
-    });
-
-    test('should handle reload_page locally without calling device.remote.dispatch', async () => {
-      const mockReload = vi.fn();
-      (globalThis as any).window.location = {
-        ...((globalThis as any).window.location || {}),
-        reload: mockReload,
-      };
-
-      client = new MCPWebSocketClient(mockDevice as any);
-      client.connect();
-
-      await vi.waitFor(() => mockWebSocketInstance !== null);
-      await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
-      });
-
-      mockWebSocketInstance!.simulateMessage({
-        id: 'reload-1',
-        method: 'reload_page',
-        params: {},
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      expect(mockReload).toHaveBeenCalled();
-      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
     });
 
     test('should route to FRAMEWORK_MCP_RUNTIME when available and handles method', async () => {
@@ -983,52 +997,6 @@ describe('MCPWebSocketClient', () => {
       expect(response.result).toEqual(originalResult);
       // Enrichment fields co-exist
       expect(response._tabId).toBeDefined();
-    });
-  });
-
-  describe('reload defer ordering', () => {
-    test('response is sent BEFORE reload fires, and reload fires after 50ms', async () => {
-      vi.useFakeTimers();
-
-      const mockReload = vi.fn();
-      (globalThis as any).window.location = {
-        protocol: 'http:',
-        hostname: 'localhost',
-        port: '5173',
-        reload: mockReload,
-      };
-
-      client = new MCPWebSocketClient(mockDevice as any);
-      client.connect();
-
-      await vi.waitFor(() => mockWebSocketInstance !== null);
-      await vi.advanceTimersByTimeAsync(0);
-
-      mockWebSocketInstance!.simulateMessage({
-        id: 'reload-test',
-        method: 'reload_page',
-        params: {},
-      });
-
-      // Let the async handler run (microtask)
-      await vi.advanceTimersByTimeAsync(0);
-
-      // Response should have been sent already
-      const sent = getRuntimeResponses(mockWebSocketInstance!);
-      expect(sent.length).toBe(1);
-      const response = sent[0];
-      expect(response.id).toBe('reload-test');
-      expect(response.result).toEqual({
-        success: true,
-        message: 'Page reload initiated',
-      });
-
-      // reload should NOT have fired yet (only 0ms elapsed)
-      expect(mockReload).not.toHaveBeenCalled();
-
-      // Advance to 50ms — reload should fire
-      await vi.advanceTimersByTimeAsync(50);
-      expect(mockReload).toHaveBeenCalledTimes(1);
     });
   });
 

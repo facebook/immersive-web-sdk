@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createUnavailableBrowserRpcError } from '../src/browser-rpc-errors.js';
 import {
   registerRuntimeSession,
+  RuntimeSessionOwnershipError,
   setRuntimeSessionBrowserState,
   unregisterRuntimeSession,
 } from '../src/runtime-session.js';
@@ -52,7 +53,7 @@ describe('runtime session writer', () => {
     expect(written.port).toBe(5174);
     expect(written.localUrl).toBe('https://localhost:5174');
 
-    await unregisterRuntimeSession(workspaceRoot);
+    await unregisterRuntimeSession(workspaceRoot, 'session-1');
     await expect(readFile(sessionFile, 'utf8')).rejects.toThrow();
   });
 
@@ -73,15 +74,19 @@ describe('runtime session writer', () => {
       },
     });
 
-    const updated = await setRuntimeSessionBrowserState(workspaceRoot, {
-      status: 'connected',
-      connected: true,
-      commandReady: true,
-      connectedClientCount: 1,
-      lastTransitionAt: new Date().toISOString(),
-      lastBridgeConnectedAt: new Date().toISOString(),
-      lastCommandReadyAt: new Date().toISOString(),
-    });
+    const updated = await setRuntimeSessionBrowserState(
+      workspaceRoot,
+      'session-2',
+      {
+        status: 'connected',
+        connected: true,
+        commandReady: true,
+        connectedClientCount: 1,
+        lastTransitionAt: new Date().toISOString(),
+        lastBridgeConnectedAt: new Date().toISOString(),
+        lastCommandReadyAt: new Date().toISOString(),
+      },
+    );
 
     const sessionFile = path.join(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH);
     const written = JSON.parse(await readFile(sessionFile, 'utf8'));
@@ -95,7 +100,7 @@ describe('runtime session writer', () => {
     await registerRuntimeSession({
       sessionId: 'previous-session',
       workspaceRoot,
-      pid: process.pid,
+      pid: 2_147_483_647,
       port: 5175,
       localUrl: 'https://localhost:5175',
       browser: {
@@ -139,29 +144,37 @@ describe('runtime session writer', () => {
       },
     });
 
-    const staleUpdate = setRuntimeSessionBrowserState(workspaceRoot, {
-      status: 'connected',
-      connected: true,
-      commandReady: false,
-      connectedClientCount: 1,
-      lastTransitionAt: new Date().toISOString(),
-      lastBridgeConnectedAt: new Date().toISOString(),
-      lastError: {
-        cause: 'browser_not_ready',
-        message: 'warming'.repeat(256 * 1024),
-        at: new Date().toISOString(),
+    const staleUpdate = setRuntimeSessionBrowserState(
+      workspaceRoot,
+      'session-3',
+      {
+        status: 'connected',
+        connected: true,
+        commandReady: false,
+        connectedClientCount: 1,
+        lastTransitionAt: new Date().toISOString(),
+        lastBridgeConnectedAt: new Date().toISOString(),
+        lastError: {
+          cause: 'browser_not_ready',
+          message: 'warming'.repeat(256 * 1024),
+          at: new Date().toISOString(),
+        },
       },
-    });
+    );
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const readyUpdate = setRuntimeSessionBrowserState(workspaceRoot, {
-      status: 'connected',
-      connected: true,
-      commandReady: true,
-      connectedClientCount: 1,
-      lastTransitionAt: new Date().toISOString(),
-      lastBridgeConnectedAt: new Date().toISOString(),
-      lastCommandReadyAt: new Date().toISOString(),
-    });
+    const readyUpdate = setRuntimeSessionBrowserState(
+      workspaceRoot,
+      'session-3',
+      {
+        status: 'connected',
+        connected: true,
+        commandReady: true,
+        connectedClientCount: 1,
+        lastTransitionAt: new Date().toISOString(),
+        lastBridgeConnectedAt: new Date().toISOString(),
+        lastCommandReadyAt: new Date().toISOString(),
+      },
+    );
 
     await Promise.all([staleUpdate, readyUpdate]);
 
@@ -170,6 +183,85 @@ describe('runtime session writer', () => {
     expect(written.browser.connected).toBe(true);
     expect(written.browser.commandReady).toBe(true);
     expect(written.browser.lastError).toBeUndefined();
+  });
+
+  test('rejects a second live owner for the same workspace', async () => {
+    await registerRuntimeSession({
+      sessionId: 'owner-session',
+      workspaceRoot,
+      pid: process.ppid,
+      port: 5176,
+      localUrl: 'https://localhost:5176',
+    });
+
+    await expect(
+      registerRuntimeSession({
+        sessionId: 'duplicate-session',
+        workspaceRoot,
+        pid: process.pid,
+        port: 5177,
+        localUrl: 'https://localhost:5177',
+      }),
+    ).rejects.toBeInstanceOf(RuntimeSessionOwnershipError);
+  });
+
+  test('allows an in-process plugin restart to replace its stale session id', async () => {
+    await registerRuntimeSession({
+      sessionId: 'before-restart',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5176,
+      localUrl: 'https://localhost:5176',
+    });
+
+    const restarted = await registerRuntimeSession({
+      sessionId: 'after-restart',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5177,
+      localUrl: 'https://localhost:5177',
+    });
+
+    expect(restarted.sessionId).toBe('after-restart');
+    expect(restarted.port).toBe(5177);
+  });
+
+  test('prevents an old session from updating or deleting its replacement', async () => {
+    await registerRuntimeSession({
+      sessionId: 'old-session',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5176,
+      localUrl: 'https://localhost:5176',
+    });
+    await unregisterRuntimeSession(workspaceRoot, 'old-session');
+    await registerRuntimeSession({
+      sessionId: 'new-session',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5177,
+      localUrl: 'https://localhost:5177',
+    });
+
+    expect(
+      await setRuntimeSessionBrowserState(workspaceRoot, 'old-session', {
+        status: 'launch_failed',
+        connected: false,
+        commandReady: false,
+        connectedClientCount: 0,
+        lastTransitionAt: new Date().toISOString(),
+      }),
+    ).toBeNull();
+    await unregisterRuntimeSession(workspaceRoot, 'old-session');
+
+    const written = JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH),
+        'utf8',
+      ),
+    );
+    expect(written.sessionId).toBe('new-session');
+    expect(written.browser).toBeUndefined();
   });
 });
 

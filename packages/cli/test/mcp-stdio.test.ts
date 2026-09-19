@@ -17,7 +17,7 @@ import { WebSocketServer } from 'ws';
 import {
   registerRuntimeSession,
   unregisterRuntimeSession,
-} from '../src/runtime-state.js';
+} from './runtime-session-fixture.js';
 
 const CLI_PATH = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
@@ -314,6 +314,71 @@ describe('mcp stdio interface shaping', () => {
         ONE_BY_ONE_PNG_BASE64,
       );
       await rm(payload.screenshotPath, { force: true });
+      expect(observedTarget).toEqual({ role: 'app' });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
+  test('returns browser interaction failures with structured recovery evidence', async () => {
+    let observedTarget: unknown;
+    const runtime = await startRuntimeFixture(appRoot, ({ method, target }) => {
+      if (method === 'browser_interact') {
+        observedTarget = target;
+        return {
+          result: {
+            application: {
+              generation: 1,
+              id: 'tab-1',
+              url: 'https://localhost:5173/',
+            },
+            completed: [],
+            failure: {
+              action: 'click',
+              index: 0,
+              message: 'element detached',
+              retryable: true,
+              screenshot: {
+                imageData: ONE_BY_ONE_PNG_BASE64,
+              },
+              snapshot: null,
+            },
+            success: false,
+          },
+          _tabId: 'tab-1',
+          _tabGeneration: 1,
+        };
+      }
+      return { result: { ok: true } };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'browser_interact',
+        arguments: { steps: [{ action: 'click', ref: 'e1' }] },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(3);
+      expect(JSON.parse(result.content[0]?.text ?? '')).toMatchObject({
+        failure: {
+          action: 'click',
+          index: 0,
+          retryable: true,
+          screenshot: { captured: true, mimeType: 'image/png' },
+        },
+        success: false,
+      });
+      expect(result.content[1]).toMatchObject({
+        type: 'image',
+        data: ONE_BY_ONE_PNG_BASE64,
+        mimeType: 'image/png',
+      });
+      expect(JSON.parse(result.content[2]?.text ?? '')).toEqual({
+        _tab: { id: 'tab-1', generation: 1 },
+      });
       expect(observedTarget).toEqual({ role: 'app' });
     } finally {
       await mcp.close();

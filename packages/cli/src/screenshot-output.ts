@@ -28,9 +28,10 @@ export async function saveScreenshot(
   result: ScreenshotResult,
   requestedPath?: string,
 ): Promise<string> {
+  const extension = result.mimeType === 'image/jpeg' ? 'jpg' : 'png';
   const outputPath =
     requestedPath ??
-    path.join(os.tmpdir(), `iwsdk-screenshot-${randomUUID()}.png`);
+    path.join(os.tmpdir(), `iwsdk-screenshot-${randomUUID()}.${extension}`);
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(
     outputPath,

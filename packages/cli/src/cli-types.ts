@@ -23,6 +23,7 @@ export type CliCommandResult =
   | CliSuccess<unknown>
   | CliFailure
   | CliRawOutput
+  | number
   | null
   | undefined;
 

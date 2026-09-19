@@ -76,6 +76,13 @@ export interface WorkspaceOptions {
    * @default { width: 800, height: 800 }
    */
   screenshotSize?: { width?: number; height?: number };
+
+  /**
+   * Expose an opt-in loopback CDP connection for `iwsdk browser run`.
+   * This is an operator-session capability and is disabled by default.
+   * @default false
+   */
+  browserAutomation?: boolean;
 }
 
 /**
@@ -268,6 +275,7 @@ export interface ProcessedDevOptions {
     open: boolean;
     headless: boolean;
     devUI: boolean;
+    browserAutomation: boolean;
     viewport: { width: number; height: number } | null;
     screenshotSize: { width: number; height: number };
   };

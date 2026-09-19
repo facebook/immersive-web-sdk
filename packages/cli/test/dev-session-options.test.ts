@@ -15,6 +15,7 @@ import { buildDevCommandHelp } from '../src/help.js';
 describe('dev session options', () => {
   test('preserves headed/open defaults and clears stale session overrides', () => {
     expect(resolveDevSessionOptions({})).toEqual({
+      allowBrowserAutomation: false,
       headless: false,
       open: true,
     });
@@ -23,6 +24,7 @@ describe('dev session options', () => {
       {},
       {
         KEEP_ME: 'yes',
+        IWSDK_DEV_ALLOW_BROWSER_AUTOMATION: 'true',
         IWSDK_DEV_AI_MODE: 'agent',
         IWSDK_DEV_HEADLESS: 'true',
         IWSDK_DEV_OPEN: 'false',
@@ -32,6 +34,7 @@ describe('dev session options', () => {
     );
     expect(environment).toMatchObject({
       KEEP_ME: 'yes',
+      IWSDK_DEV_ALLOW_BROWSER_AUTOMATION: 'false',
       IWSDK_DEV_HEADLESS: 'false',
       IWSDK_DEV_OPEN: 'true',
     });
@@ -43,6 +46,7 @@ describe('dev session options', () => {
   test('maps explicit AI, launch, and screenshot settings to child env', () => {
     const options = {
       aiMode: 'agent',
+      allowBrowserAutomation: true,
       headless: true,
       noOpen: true,
       screenshotHeight: '720',
@@ -50,6 +54,7 @@ describe('dev session options', () => {
     };
 
     expect(resolveDevSessionOptions(options)).toEqual({
+      allowBrowserAutomation: true,
       aiMode: 'agent',
       headless: true,
       open: false,
@@ -57,6 +62,7 @@ describe('dev session options', () => {
       screenshotWidth: 1280,
     });
     expect(buildDevRuntimeEnvironment(options, {})).toEqual({
+      IWSDK_DEV_ALLOW_BROWSER_AUTOMATION: 'true',
       IWSDK_DEV_AI_MODE: 'agent',
       IWSDK_DEV_HEADLESS: 'true',
       IWSDK_DEV_OPEN: 'false',
@@ -67,6 +73,7 @@ describe('dev session options', () => {
 
   test('supports explicit headed/open choices and AI-derived launch mode', () => {
     expect(resolveDevSessionOptions({ headed: true, open: true })).toEqual({
+      allowBrowserAutomation: false,
       headless: false,
       open: true,
     });
@@ -116,6 +123,7 @@ describe('dev command help', () => {
     expect(help).toContain('--no-open');
     expect(help).toContain('--screenshot-width <pixels>');
     expect(help).toContain('--screenshot-height <pixels>');
+    expect(help).toContain('--allow-browser-automation');
     expect(help).toContain('headed (default)');
     expect(help).toContain('Open the managed browser on startup (default)');
   });

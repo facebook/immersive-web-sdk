@@ -23,6 +23,11 @@ Common equivalents:
 xr_get_session_status  <-> iwsdk xr status
 xr_accept_session      <-> iwsdk xr enter
 browser_screenshot     <-> iwsdk browser screenshot
+browser_snapshot       <-> iwsdk browser snapshot
+browser_interact       <-> iwsdk browser interact
+browser_profile        <-> iwsdk browser profile
+browser_get_console_logs <-> iwsdk browser logs
+browser_reload_page    <-> iwsdk browser reload
 scene_render_file      <-> iwsdk scene render-file
 scene_get_state        <-> iwsdk scene state
 ecs_diff               <-> iwsdk ecs diff
@@ -73,13 +78,79 @@ For application code:
 2. Modify code
 3. browser_reload_page
 4. browser_get_console_logs
-5. browser_screenshot (always captures the application runtime)
-6. Compare the visible result against the requirement
+5. browser_snapshot
+6. browser_interact with snapshot refs or canvas-relative coordinates
+7. browser_screenshot
+8. Compare the visible and semantic result against the requirement
 ```
+
+The six browser MCP tools always target the current application automatically. They
+do not accept a runtime/editor/workspace selector and do not provide arbitrary common
+navigation. Snapshot refs make DOM interactions compact and rerender-aware; capture a
+new snapshot when a ref becomes stale after an application reload. For 2D canvas
+input, use a snapshot canvas ref with coordinates relative to that canvas.
+
+When performance is part of the requirement, bracket the interaction with
+`browser_profile(action="start")` and `browser_profile(action="stop")`. Use
+`interaction` or `rendering` for summarized host-browser diagnostics, and `trace` when
+you need a Playwright trace artifact. These profiles are explicitly uncalibrated and
+must not be presented as target-device measurements.
 
 For authored scenes use `scene_screenshot`, which includes exact camera, active file,
 hashes, validation diagnostics, and render statistics. Use `captureMode: "render"`
 for scene evidence and `captureMode: "editor"` for UI diagnostics.
+
+## Advanced Playwright Runner
+
+Use the runner only when the bounded browser tools cannot express the task, such as a
+specialized Playwright API or direct CDP query. Automation is disabled by default.
+Enable it when starting a new session, or restart an existing session with explicit
+permission:
+
+```bash
+# New session
+npx iwsdk dev up --allow-browser-automation
+
+# Existing session
+npx iwsdk dev restart --allow-browser-automation
+```
+
+Create a module inside the IWSDK workspace, for example
+`scripts/browser-diagnostic.mjs`:
+
+```javascript
+export default async function ({ frame, cdp }) {
+  await cdp.send('Performance.enable');
+  const { metrics } = await cdp.send('Performance.getMetrics');
+
+  return {
+    title: await frame.title(),
+    metricCount: metrics.length,
+  };
+}
+```
+
+Run it against the same managed application session:
+
+```bash
+npx iwsdk browser run scripts/browser-diagnostic.mjs
+```
+
+The module may export a default function or named `run` function. It receives the
+connected Playwright `browser`, `context`, `page`, and resolved application `frame`,
+plus a page CDP session, `workspaceRoot`, and an abort `signal`. Its return value must
+be JSON-serializable and no larger than 1 MiB. `--timeout` covers module loading and
+execution; scripts should observe the signal to stop their own asynchronous work after
+a timeout. The runner rejects scripts outside the workspace and blocks common attempts
+to close IWSDK-owned browser resources.
+
+This is a trusted-code escape hatch, not another constrained MCP action. Enabling it
+grants browser-level authority to any local process that can reach the loopback CDP
+endpoint for that dev session, including page contents, storage, cookies, network
+controls, and arbitrary script execution in the managed page. Review the script before
+running it, enable the endpoint only in a trusted local environment, disable the opt-in
+for ordinary sessions, and prefer the six bounded browser tools for routine
+inspection, interaction, screenshots, diagnostics, reloads, and profiling.
 
 ## Selected-Object Collaboration
 

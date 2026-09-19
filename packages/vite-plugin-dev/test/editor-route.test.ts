@@ -756,7 +756,7 @@ describe('native editor route middleware', () => {
     expect(headlessConfig.server?.open).toBe(false);
   });
 
-  test('keeps the TTF generator worker out of Vite dependency optimization', () => {
+  test('keeps packaged workers out of Vite dependency optimization', () => {
     const plugin = iwsdkDev();
     const userConfig: {
       optimizeDeps?: { exclude?: string[]; include?: string[] };
@@ -800,6 +800,42 @@ describe('native editor route middleware', () => {
       'existing-dependency',
       'three',
     ]);
+  });
+
+  test('ignores runtime coordination files without replacing watch exclusions', () => {
+    const plugin = iwsdkDev();
+    const existingIgnore = /existing-cache/u;
+    const userConfig: {
+      server?: { watch?: { ignored?: RegExp | Array<RegExp> } };
+    } = {
+      server: { watch: { ignored: existingIgnore } },
+    };
+
+    plugin.config?.(userConfig as never, {} as never);
+    plugin.config?.(userConfig as never, {} as never);
+
+    const ignored = userConfig.server?.watch?.ignored;
+    expect(ignored).toEqual(expect.arrayContaining([existingIgnore]));
+    expect(
+      Array.isArray(ignored)
+        ? ignored.filter(
+            (matcher) =>
+              matcher instanceof RegExp &&
+              matcher.test('/project/.iwsdk/runtime/session.json'),
+          )
+        : [],
+    ).toHaveLength(1);
+  });
+
+  test('preserves an explicitly disabled file watcher', () => {
+    const plugin = iwsdkDev();
+    const userConfig: { server?: { watch?: null } } = {
+      server: { watch: null },
+    };
+
+    plugin.config?.(userConfig as never, {} as never);
+
+    expect(userConfig.server?.watch).toBeNull();
   });
 
   test('does not launch a workspace for AI disabled with IWER', () => {

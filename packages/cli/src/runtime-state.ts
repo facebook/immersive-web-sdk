@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { existsSync, readFileSync, realpathSync } from 'fs';
-import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { existsSync, readFileSync } from 'fs';
+import { mkdir } from 'fs/promises';
 import path from 'path';
 import {
   isRuntimeBrowserCommandReady,
@@ -15,10 +15,20 @@ import {
   IWSDK_RUNTIME_SESSION_PATH,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
   type LaunchMetadata,
-  type RuntimeBrowserState,
   type RuntimeSession,
   type WorkspaceRuntimeState,
 } from './runtime-contract.js';
+import {
+  getRuntimeFilePath,
+  isRuntimeProcessAlive,
+  normalizeWorkspaceRoot,
+  readRuntimeJson,
+  removeRuntimeFile,
+  withRuntimeFileLock,
+  writeRuntimeJson,
+} from './runtime-files.js';
+
+export { normalizeWorkspaceRoot } from './runtime-files.js';
 
 const VITE_CONFIG_NAMES = [
   'vite.config.ts',
@@ -42,20 +52,13 @@ interface PackageJsonManifest {
   peerDependencies?: Record<string, unknown>;
 }
 
-export interface RegisterRuntimeSessionInput {
-  sessionId: string;
-  workspaceRoot: string;
-  pid: number;
-  port: number;
-  localUrl: string;
-  networkUrls?: string[];
-  aiMode?: string;
-  browser?: RuntimeBrowserState;
-}
-
 export interface SetLaunchMetadataInput {
+  claimId?: string;
+  phase?: LaunchMetadata['phase'];
   workspaceRoot: string;
   pid: number;
+  launcherPid?: number;
+  processGroupId?: number;
   command: string;
   args?: string[];
   logPath?: string | null;
@@ -97,53 +100,12 @@ function hasIwsdkDependency(manifest: PackageJsonManifest | null): boolean {
   );
 }
 
-async function readJsonFile<T>(filePath: string): Promise<T | null> {
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-}
-
-async function writeRuntimeSession(
-  workspaceRoot: string,
-  session: RuntimeSession,
-): Promise<RuntimeSession> {
-  await writeJsonFile(getRuntimeSessionFilePath(workspaceRoot), session);
-  return session;
-}
-
-async function removeIfExists(filePath: string): Promise<void> {
-  await rm(filePath, { force: true }).catch(() => {});
-}
-
-export function normalizeWorkspaceRoot(workspaceRoot: string): string {
-  const resolved = path.resolve(workspaceRoot);
-  try {
-    return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
-  } catch {
-    return resolved;
-  }
-}
-
 export function getRuntimeSessionFilePath(workspaceRoot: string): string {
-  return path.join(
-    normalizeWorkspaceRoot(workspaceRoot),
-    IWSDK_RUNTIME_SESSION_PATH,
-  );
+  return getRuntimeFilePath(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH);
 }
 
 export function getRuntimeLaunchFilePath(workspaceRoot: string): string {
-  return path.join(
-    normalizeWorkspaceRoot(workspaceRoot),
-    IWSDK_RUNTIME_LAUNCH_PATH,
-  );
+  return getRuntimeFilePath(workspaceRoot, IWSDK_RUNTIME_LAUNCH_PATH);
 }
 
 export function getRuntimeLogsDir(workspaceRoot: string): string {
@@ -161,18 +123,7 @@ export async function ensureRuntimeLogsDir(
   return logsDir;
 }
 
-export function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const isProcessAlive = isRuntimeProcessAlive;
 
 export function isIwsdkAppRoot(dirPath: string): boolean {
   const normalizedDir = normalizeWorkspaceRoot(dirPath);
@@ -211,118 +162,126 @@ export function findNearestIwsdkAppRoot(
   }
 }
 
-export async function registerRuntimeSession(
-  input: RegisterRuntimeSessionInput,
-): Promise<RuntimeSession> {
-  const workspaceRoot = normalizeWorkspaceRoot(input.workspaceRoot);
-  const existing = await readJsonFile<RuntimeSession>(
-    getRuntimeSessionFilePath(workspaceRoot),
-  );
-  const now = new Date().toISOString();
-  const session: RuntimeSession = {
-    schemaVersion: IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
-    sessionId: input.sessionId,
-    workspaceRoot,
-    pid: input.pid,
-    port: input.port,
-    localUrl: input.localUrl,
-    networkUrls: input.networkUrls ?? [],
-    aiMode: input.aiMode,
-    browser: input.browser ?? existing?.browser,
-    registeredAt: existing?.registeredAt ?? now,
-    updatedAt: now,
-  };
-  return writeRuntimeSession(workspaceRoot, session);
-}
-
-export async function setRuntimeSessionBrowserState(
-  workspaceRoot: string,
-  browser: RuntimeBrowserState,
-): Promise<RuntimeSession | null> {
-  const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const existing = await readJsonFile<RuntimeSession>(
-    getRuntimeSessionFilePath(normalizedWorkspaceRoot),
-  );
-  if (!existing) {
-    return null;
-  }
-
-  const session: RuntimeSession = {
-    ...existing,
-    browser,
-    updatedAt: new Date().toISOString(),
-  };
-  return writeRuntimeSession(normalizedWorkspaceRoot, session);
-}
-
-export async function unregisterRuntimeSession(
-  workspaceRoot: string,
-): Promise<void> {
-  await removeIfExists(getRuntimeSessionFilePath(workspaceRoot));
-}
-
 export async function getRuntimeSession(
   workspaceRoot: string,
 ): Promise<RuntimeSession | null> {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const session = await readJsonFile<RuntimeSession>(
-    getRuntimeSessionFilePath(normalizedWorkspaceRoot),
-  );
-  if (!session) {
-    return null;
-  }
-
-  if (!isProcessAlive(session.pid)) {
-    await unregisterRuntimeSession(normalizedWorkspaceRoot);
-    return null;
-  }
-
-  return session;
+  const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
+  return withRuntimeFileLock(filePath, async () => {
+    const session = await readRuntimeJson<RuntimeSession>(filePath);
+    if (!session) {
+      return null;
+    }
+    if (!isProcessAlive(session.pid)) {
+      await removeRuntimeFile(filePath);
+      return null;
+    }
+    return session;
+  });
 }
 
-export async function setLaunchMetadata(
+function createLaunchMetadata(
   input: SetLaunchMetadataInput,
-): Promise<LaunchMetadata> {
+  createdAt = new Date().toISOString(),
+): LaunchMetadata {
   const workspaceRoot = normalizeWorkspaceRoot(input.workspaceRoot);
-  const metadata: LaunchMetadata = {
+  return {
     schemaVersion: IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
+    ...(input.claimId == null ? {} : { claimId: input.claimId }),
+    ...(input.phase == null ? {} : { phase: input.phase }),
     workspaceRoot,
     pid: input.pid,
+    ...(input.launcherPid == null ? {} : { launcherPid: input.launcherPid }),
+    ...(input.processGroupId == null
+      ? {}
+      : { processGroupId: input.processGroupId }),
     command: input.command,
     args: input.args ?? [],
     logPath: input.logPath ?? null,
     scriptName: input.scriptName ?? 'dev:runtime',
     port: input.port ?? null,
     openBrowser: input.openBrowser ?? false,
-    createdAt: new Date().toISOString(),
+    createdAt,
   };
-  await writeJsonFile(getRuntimeLaunchFilePath(workspaceRoot), metadata);
-  return metadata;
+}
+
+export async function claimLaunchMetadata(
+  input: SetLaunchMetadataInput & { claimId: string },
+): Promise<{ acquired: boolean; metadata: LaunchMetadata }> {
+  const workspaceRoot = normalizeWorkspaceRoot(input.workspaceRoot);
+  const filePath = getRuntimeLaunchFilePath(workspaceRoot);
+  const metadata = createLaunchMetadata({
+    ...input,
+    phase: 'starting',
+    workspaceRoot,
+  });
+  return withRuntimeFileLock(filePath, async () => {
+    const existing = await readRuntimeJson<LaunchMetadata>(filePath);
+    if (existing != null && isProcessAlive(existing.pid)) {
+      return { acquired: false, metadata: existing };
+    }
+    await writeRuntimeJson(filePath, metadata);
+    return { acquired: true, metadata };
+  });
+}
+
+export async function setLaunchMetadata(
+  input: SetLaunchMetadataInput,
+  expectedClaimId?: string,
+): Promise<LaunchMetadata | null> {
+  const workspaceRoot = normalizeWorkspaceRoot(input.workspaceRoot);
+  const filePath = getRuntimeLaunchFilePath(workspaceRoot);
+  return withRuntimeFileLock(filePath, async () => {
+    const existing = await readRuntimeJson<LaunchMetadata>(filePath);
+    if (expectedClaimId != null && existing?.claimId !== expectedClaimId) {
+      return null;
+    }
+    const metadata = createLaunchMetadata(
+      { ...input, workspaceRoot },
+      existing != null && existing.claimId === input.claimId
+        ? existing.createdAt
+        : new Date().toISOString(),
+    );
+    await writeRuntimeJson(filePath, metadata);
+    return metadata;
+  });
 }
 
 export async function clearLaunchMetadata(
   workspaceRoot: string,
-): Promise<void> {
-  await removeIfExists(getRuntimeLaunchFilePath(workspaceRoot));
+  expectedClaimId?: string,
+  expectedPhase?: LaunchMetadata['phase'],
+): Promise<boolean> {
+  const filePath = getRuntimeLaunchFilePath(workspaceRoot);
+  return withRuntimeFileLock(filePath, async () => {
+    const existing = await readRuntimeJson<LaunchMetadata>(filePath);
+    if (
+      (expectedClaimId == null || existing?.claimId === expectedClaimId) &&
+      (expectedPhase == null || existing?.phase === expectedPhase)
+    ) {
+      await removeRuntimeFile(filePath);
+      return true;
+    }
+    return false;
+  });
 }
 
 export async function getLaunchMetadata(
   workspaceRoot: string,
 ): Promise<LaunchMetadata | null> {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const metadata = await readJsonFile<LaunchMetadata>(
-    getRuntimeLaunchFilePath(normalizedWorkspaceRoot),
-  );
-  if (!metadata) {
-    return null;
-  }
-
-  if (!isProcessAlive(metadata.pid)) {
-    await clearLaunchMetadata(normalizedWorkspaceRoot);
-    return null;
-  }
-
-  return metadata;
+  const filePath = getRuntimeLaunchFilePath(normalizedWorkspaceRoot);
+  return withRuntimeFileLock(filePath, async () => {
+    const metadata = await readRuntimeJson<LaunchMetadata>(filePath);
+    if (!metadata) {
+      return null;
+    }
+    if (!isProcessAlive(metadata.pid)) {
+      await removeRuntimeFile(filePath);
+      return null;
+    }
+    return metadata;
+  });
 }
 
 export async function getWorkspaceRuntimeState(

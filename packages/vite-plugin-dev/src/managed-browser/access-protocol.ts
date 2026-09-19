@@ -5,6 +5,5 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// Compatibility entry point. Managed-browser implementation lives with its
-// domain owners under managed-browser/.
-export * from './managed-browser/session.js';
+/** Query parameter used only while authorizing the managed workspace page. */
+export const MANAGED_WORKSPACE_QUERY = '__iwsdkManagedWorkspace';

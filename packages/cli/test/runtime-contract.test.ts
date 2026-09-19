@@ -23,6 +23,19 @@ test('allows isolated UI rendering extra time for editor resource settling', () 
   expect(getDefaultRuntimeCommandTimeoutMs('ecs_find_entities')).toBe(30_000);
 });
 
+test('allows managed browser host operations time to queue and execute', () => {
+  for (const method of [
+    'browser_interact',
+    'browser_profile',
+    'browser_snapshot',
+    'get_console_logs',
+    'reload_page',
+    'screenshot',
+  ]) {
+    expect(getDefaultRuntimeCommandTimeoutMs(method)).toBe(60_000);
+  }
+});
+
 describe('runtime contract scene tools', () => {
   test('exposes the file-first and app-runtime inspection surfaces', () => {
     const sceneTools = RUNTIME_MCP_TOOLS.map((tool) => tool.name).filter(
@@ -164,26 +177,47 @@ describe('runtime contract scene tools', () => {
     });
   });
 
-  test('routes browser screenshots exclusively to the app runtime', () => {
-    const operation = getRuntimeOperationByToolName('browser_screenshot');
-    expect(operation).toMatchObject({
-      target: { role: 'app' },
-    });
-    expect(operation?.inputSchema).toMatchObject({
-      additionalProperties: false,
-      properties: {
-        expectedTab: expect.objectContaining({ type: 'object' }),
-      },
-    });
-    expect(resolveRuntimeOperationRequest(operation!, {})).toEqual({
-      params: {},
+  test('exposes exactly the application-focused browser surface', () => {
+    const browserTools = RUNTIME_MCP_TOOLS.map((tool) => tool.name).filter(
+      (name) => name.startsWith('browser_'),
+    );
+    expect(browserTools).toEqual([
+      'browser_screenshot',
+      'browser_snapshot',
+      'browser_interact',
+      'browser_profile',
+      'browser_get_console_logs',
+      'browser_reload_page',
+    ]);
+    for (const toolName of browserTools) {
+      expect(getRuntimeOperationByToolName(toolName)).toMatchObject({
+        target: { role: 'app' },
+      });
+    }
+
+    const screenshot = getRuntimeOperationByToolName('browser_screenshot')!;
+    expect(
+      resolveRuntimeOperationRequest(screenshot, { format: 'jpeg' }),
+    ).toEqual({
+      params: { format: 'jpeg' },
       target: { role: 'app' },
     });
     expect(() =>
-      resolveRuntimeOperationRequest(operation!, { target: 'editor' }),
-    ).toThrow(
-      'browser_screenshot does not accept parameters; it always captures the application runtime',
-    );
+      resolveRuntimeOperationRequest(screenshot, { target: 'editor' }),
+    ).toThrow(/unknown parameter "target"/);
+
+    const interact = getRuntimeOperationByToolName('browser_interact')!;
+    expect(() =>
+      resolveRuntimeOperationRequest(interact, { steps: [] }),
+    ).toThrow(/requires at least 1 items/);
+    expect(
+      resolveRuntimeOperationRequest(interact, {
+        steps: [{ action: 'click', ref: 'e1' }],
+      }),
+    ).toEqual({
+      params: { steps: [{ action: 'click', ref: 'e1' }] },
+      target: { role: 'app' },
+    });
   });
 
   test('turns result._tab into a strict routing precondition', () => {

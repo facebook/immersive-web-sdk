@@ -4,14 +4,14 @@ outline: [2, 4]
 
 # AI-Native Development
 
-IWSDK is built from the ground up for AI-assisted immersive web development. AI agents can see, interact with, compose, and debug your WebXR experience through 52 [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) tools — screenshots, controller input, native scene composition, scene inspection, ECS (Entity-Component-System) debugging, and more.
+IWSDK is built from the ground up for AI-assisted immersive web development. AI agents can see, interact with, compose, and debug your WebXR experience through [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) tools for browser inspection and input, controller input, native scene composition, scene inspection, ECS (Entity-Component-System) debugging, and more.
 
 ## How It Works
 
 When you enable AI in your Vite config and start the app through the `iwsdk` CLI, the stack sets up three things automatically:
 
-1. **[Playwright](https://playwright.dev/) Browser** — A managed Chromium instance that loads your app and provides screenshots and console capture for the AI agent.
-2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 39 tools for controlling the emulated XR runtime, composing native scenes, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
+1. **[Playwright](https://playwright.dev/) Browser** — A managed Chromium instance that loads your app and provides semantic snapshots, bounded interaction, screenshots, performance diagnostics, and browser event capture for the AI agent.
+2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes the installed runtime contract for controlling the current application, emulated XR runtime, native scenes, and ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
 3. **MCP Config Files** — `iwsdk adapter sync` writes workspace-based config files (for example `.mcp.json` for Claude) so your AI tool discovers that server on startup.
 
 ```text
@@ -35,7 +35,15 @@ When you enable AI in your Vite config and start the app through the `iwsdk` CLI
 └──────────────────────┘
 ```
 
-The AI agent communicates with `iwsdk mcp stdio` over stdio. `iwsdk dev up` records the active workspace runtime, and `iwsdk mcp stdio` resolves that runtime before relaying commands to the Playwright browser via WebSocket, where the IWER runtime processes them (move controllers, trigger inputs, query state). Screenshots and console logs are captured server-side through Playwright's CDP integration — no browser round-trip needed.
+The AI agent communicates with `iwsdk mcp stdio` over stdio. `iwsdk dev up` records the active workspace runtime, and `iwsdk mcp stdio` resolves that runtime before relaying commands to the Playwright browser via WebSocket, where the IWER runtime processes them (move controllers, trigger inputs, query state). Browser commands automatically resolve the current application, including the runtime frame inside the managed workspace, rather than asking the agent to select a target.
+
+The common browser surface is deliberately small: exactly six MCP tools provide
+screenshots, semantic snapshots, bounded Playwright interaction, uncalibrated
+host-browser profiling, structured browser diagnostics, and current-app reload. These
+tools do not provide arbitrary URL navigation. For advanced development tasks, an
+operator can explicitly enable `iwsdk dev up --allow-browser-automation` and run a
+trusted workspace script with `iwsdk browser run <script>`. That escape hatch exposes
+the same managed session through loopback CDP and is disabled by default.
 
 Your normal browser runs independently with its own XR session, so you can develop and test manually while the agent works in the background.
 
@@ -70,7 +78,7 @@ The `iwsdk-runtime` MCP server exposes tools across several categories:
 - **Session** — Accept, monitor, and end XR sessions
 - **Transforms** — Position and orient the headset, controllers, and hands
 - **Input** — Trigger selects, manipulate gamepad buttons and axes, switch input modes
-- **Browser** — Take screenshots, read console logs, reload the page
+- **Browser** — Snapshot and interact with the current app, take screenshots, profile host-browser behavior, read structured diagnostics, and reload the app
 - **Scene** — Inspect the Three.js scene hierarchy and object transforms
 - **ECS** — Pause/step the simulation, query entities, diff state snapshots
 
@@ -80,5 +88,5 @@ See [MCP Tools Reference](./mcp-tools) for the complete list.
 
 - [Getting Started](./getting-started) — Set up AI in 5 minutes
 - [Modes](./modes) — Understand collaborate and agent modes
-- [MCP Tools Reference](./mcp-tools) — All 39 tools documented
+- [MCP Tools Reference](./mcp-tools) — The canonical runtime tool surface
 - [Workflows](./workflows) — Practical agent workflow patterns

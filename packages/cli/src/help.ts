@@ -176,14 +176,19 @@ export function buildRuntimeDomainHelp(domain: string): string[] {
   if (operations.length === 0) {
     return [`Unknown command group "${domain}".`];
   }
+  const actions = operations.map(
+    (operation) => `  ${operation.action.padEnd(24)} ${operation.description}`,
+  );
+  if (domain === 'browser') {
+    actions.push(
+      `  ${'run'.padEnd(24)} Run trusted workspace Playwright code against the existing managed browser (requires explicit dev-server opt-in).`,
+    );
+  }
   return [
     `Usage: iwsdk ${domain} <action>`,
     '',
     'Actions:',
-    ...operations.map(
-      (operation) =>
-        `  ${operation.action.padEnd(24)} ${operation.description}`,
-    ),
+    ...actions,
     '',
     `Run "iwsdk ${domain} <action> --help" for parameters.`,
   ];
@@ -195,6 +200,22 @@ export function buildMcpInspectHelp(): string[] {
     '',
     'Options:',
     '  --tool <mcpName>   Show description and input schema for one runtime tool',
+  ];
+}
+
+export function buildBrowserRunHelp(): string[] {
+  return [
+    'Usage: iwsdk browser run <workspace-script.mjs> [--timeout <ms>] [--workspace <path>]',
+    '',
+    'Run trusted local Playwright code against the existing managed Chromium session.',
+    'Start the dev server with --allow-browser-automation first.',
+    'The script must stay inside the workspace and export a default function or named run function.',
+    'It receives { browser, context, page, frame, cdp, workspaceRoot }.',
+    'IWSDK owns the managed browser, context, and page; destructive close operations are blocked.',
+    '',
+    'Options:',
+    '  --timeout <ms>       Script timeout. Defaults to 60000.',
+    '  --workspace <path>   Resolve a running IWSDK workspace explicitly.',
   ];
 }
 
@@ -274,6 +295,7 @@ export function buildDevCommandHelp(action?: string): string[] {
       '  --no-open                      Do not open the managed browser on startup',
       '  --screenshot-width <pixels>    Positive screenshot width; default behavior is 800px',
       '  --screenshot-height <pixels>   Positive screenshot height; default behavior is 800px',
+      '  --allow-browser-automation     Enable the local same-session Playwright runner',
       '  --foreground                   Keep the package-manager process attached',
       '  --timeout <milliseconds>       Runtime readiness timeout (default: 60000)',
       '  --workspace <path>             Select an IWSDK application explicitly',
@@ -305,7 +327,7 @@ export function usageLines(): string[] {
     '  reference status|warmup|inspect|search|relationship|api|file|components|systems|dependents|examples',
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',
-    '  browser <action>',
+    '  browser <action>|run <script>',
     '  asset <action>',
     '  scene <action>',
     '  ui <action>',

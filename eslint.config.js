@@ -74,6 +74,21 @@ export default [
     },
   },
 
+  // Playwright serializes these probes into the browser page. Value imports
+  // would create closure dependencies that do not exist in that page world.
+  {
+    files: ['packages/vite-plugin-dev/src/managed-browser/page-probes.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportDeclaration:not([importKind='type'])",
+          message: 'Page probes may only use type imports.',
+        },
+      ],
+    },
+  },
+
   // Global ignores
   {
     ignores: [
