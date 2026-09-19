@@ -7,6 +7,7 @@
  */
 
 import { spawn } from 'child_process';
+import { readFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { createServer } from 'http';
 import path from 'path';
@@ -115,8 +116,21 @@ const SMOKE_TARGETS = [
       'RayInteractable',
     ],
     id: 'physics',
-    names: ['Environment', 'Plant', 'One Hand Physics Robot'],
-    physicsStep: true,
+    names: ['Dynamic Sphere', 'Environment', 'Plant', 'One Hand Physics Robot'],
+    physicsExpectation: {
+      entityName: 'Dynamic Sphere',
+      expectedRestingY: 0.95,
+      initialPosition: [0.2, 1.6, -1.8],
+      maximumAngularSpeed: 0.05,
+      maximumLinearSpeed: 0.05,
+      minimumFallDistance: 0.5,
+      positionTolerance: 0.005,
+      restingHeightTolerance: 0.1,
+      rotationTolerance: 0.01,
+      sceneNodeId: 'dynamic-sphere',
+      settleChunkCount: 20,
+      settleChunkSize: 6,
+    },
     root: 'examples/physics',
   },
   {
@@ -175,6 +189,9 @@ async function main() {
 
 async function smokeTarget(browser, target, packedAssetFixture) {
   const root = path.join(REPO_ROOT, target.root);
+  if (target.physicsExpectation != null) {
+    await assertAuthoredPhysicsNode(root, target.physicsExpectation);
+  }
   const port = await getFreePort();
   const server = startDevServer(root, port, packedAssetFixture.baseUrl);
   const page = await browser.newPage({
@@ -284,8 +301,8 @@ async function smokeTarget(browser, target, packedAssetFixture) {
       }
     }
 
-    if (target.physicsStep) {
-      await assertPhysicsStepMoves(page);
+    if (target.physicsExpectation != null) {
+      await assertPhysicsFallAndCollision(page, target.physicsExpectation);
     }
 
     const screenshotStats = await getScreenshotStats(page);
@@ -325,23 +342,63 @@ async function smokeTarget(browser, target, packedAssetFixture) {
   }
 }
 
-async function assertPhysicsStepMoves(page) {
+async function assertPhysicsFallAndCollision(page, expectation) {
+  const {
+    entityName,
+    expectedRestingY,
+    initialPosition,
+    maximumAngularSpeed,
+    maximumLinearSpeed,
+    minimumFallDistance,
+    positionTolerance,
+    restingHeightTolerance,
+    rotationTolerance,
+    settleChunkCount,
+    settleChunkSize,
+  } = expectation;
   const candidates = await dispatch(page, 'ecs_find_entities', {
     limit: 20,
-    withComponents: ['PhysicsBody'],
+    namePattern: entityName,
+    withComponents: ['PhysicsBody', 'PhysicsShape', 'Visibility'],
   });
   if (!isPositiveEntityResult(candidates)) {
-    throw new Error('no physics entity with PhysicsBody found');
+    throw new Error(
+      `no visible physics entity named "${entityName}" with PhysicsBody and PhysicsShape found`,
+    );
   }
 
-  const targetEntity =
-    candidates.entities.find((entity) => entity.name === 'Plant') ??
-    candidates.entities.find(
-      (entity) => entity.name === 'One Hand Physics Robot',
-    ) ??
-    candidates.entities.find((entity) => entity.name !== 'Environment') ??
-    candidates.entities[0];
+  const targetEntity = candidates.entities.find(
+    (entity) => entity.name === entityName,
+  );
+  if (targetEntity == null) {
+    throw new Error(`could not find exact physics entity "${entityName}"`);
+  }
   const entityIndex = targetEntity.entityIndex;
+  const entityDetails = await dispatch(page, 'ecs_query_entity', {
+    components: ['PhysicsBody', 'PhysicsShape'],
+    entityIndex,
+  });
+  const physicsBody = entityDetails.components.find(
+    (component) => component.componentId === 'PhysicsBody',
+  );
+  const physicsShape = entityDetails.components.find(
+    (component) => component.componentId === 'PhysicsShape',
+  );
+  if (physicsBody?.values.state !== 'DYNAMIC') {
+    throw new Error(
+      `physics entity "${entityName}" is not dynamic; state=${physicsBody?.values.state}`,
+    );
+  }
+  if (!(physicsBody.values._engineBody > 0)) {
+    throw new Error(
+      `physics entity "${entityName}" does not have an initialized Havok body`,
+    );
+  }
+  if (physicsShape?.values.shape !== 'Sphere') {
+    throw new Error(
+      `physics entity "${entityName}" does not use a sphere collider; shape=${physicsShape?.values.shape}`,
+    );
+  }
   const hierarchy = await dispatch(page, 'get_scene_hierarchy', {
     maxChildren: 100,
     maxDepth: 10,
@@ -354,23 +411,221 @@ async function assertPhysicsStepMoves(page) {
   }
 
   await dispatch(page, 'ecs_pause', {});
-  const before = await dispatch(page, 'get_object_transform', {
-    uuid: hierarchyNode.uuid,
-  });
-  await dispatch(page, 'ecs_step', { count: 8, delta: 1 / 30 });
-  const after = await dispatch(page, 'get_object_transform', {
-    uuid: hierarchyNode.uuid,
-  });
-  await dispatch(page, 'ecs_resume', {});
+  let current;
+  let settledBody;
+  let stableChunks = 0;
+  let observedNegativeStep = false;
+  let viewportState;
+  try {
+    await resetPhysicsBody(page, entityIndex, initialPosition);
+    current = await dispatch(page, 'get_object_transform', {
+      uuid: hierarchyNode.uuid,
+    });
+    for (let index = 0; index < settleChunkCount; index += 1) {
+      await dispatch(page, 'ecs_step', {
+        count: settleChunkSize,
+        delta: 1 / 30,
+      });
+      const previous = current;
+      current = await dispatch(page, 'get_object_transform', {
+        uuid: hierarchyNode.uuid,
+      });
+      observedNegativeStep ||=
+        current.globalPosition[1] - previous.globalPosition[1] < -0.0001;
+      const positionDistance = distanceBetween(
+        current.globalPosition,
+        previous.globalPosition,
+      );
+      const rotationDistance = quaternionDistance(
+        current.globalQuaternion,
+        previous.globalQuaternion,
+      );
+      stableChunks =
+        positionDistance <= positionTolerance &&
+        rotationDistance <= rotationTolerance
+          ? stableChunks + 1
+          : 0;
+      const fallDistance = initialPosition[1] - current.globalPosition[1];
+      if (
+        observedNegativeStep &&
+        fallDistance >= minimumFallDistance &&
+        stableChunks >= 2
+      ) {
+        break;
+      }
+    }
+    const settledDetails = await dispatch(page, 'ecs_query_entity', {
+      components: ['PhysicsBody'],
+      entityIndex,
+    });
+    settledBody = settledDetails.components.find(
+      (component) => component.componentId === 'PhysicsBody',
+    );
+    viewportState = await getObjectViewportState(page, hierarchyNode.uuid);
+  } finally {
+    await dispatch(page, 'ecs_resume', {});
+  }
 
-  const distance = distanceBetween(before.globalPosition, after.globalPosition);
-  if (distance < 0.0001) {
+  if (!observedNegativeStep) {
     throw new Error(
-      `physics step did not move entity ${entityIndex}; before=${before.globalPosition.join(
-        ',',
-      )} after=${after.globalPosition.join(',')}`,
+      `physics entity "${entityName}" never moved downward during deterministic stepping`,
     );
   }
+  const fallDistance = initialPosition[1] - current.globalPosition[1];
+  if (fallDistance < minimumFallDistance) {
+    throw new Error(
+      `physics entity "${entityName}" did not fall from its authored height; initialY=${initialPosition[1]} final=${current.globalPosition.join(',')}`,
+    );
+  }
+  if (stableChunks < 2) {
+    throw new Error(
+      `physics entity "${entityName}" did not settle after ${settleChunkCount * settleChunkSize} steps; final=${current.globalPosition.join(',')}`,
+    );
+  }
+  if (
+    Math.abs(current.globalPosition[1] - expectedRestingY) >
+    restingHeightTolerance
+  ) {
+    throw new Error(
+      `physics entity "${entityName}" missed the expected collision surface; expectedY=${expectedRestingY} final=${current.globalPosition.join(',')}`,
+    );
+  }
+
+  const linearVelocity = settledBody?.values._linearVelocity;
+  const angularVelocity = settledBody?.values._angularVelocity;
+  const linearSpeed = vectorLength(linearVelocity);
+  const angularSpeed = vectorLength(angularVelocity);
+  if (linearSpeed == null || linearSpeed > maximumLinearSpeed) {
+    throw new Error(
+      `physics entity "${entityName}" retained linear velocity after settling; velocity=${JSON.stringify(linearVelocity)}`,
+    );
+  }
+  if (angularSpeed == null || angularSpeed > maximumAngularSpeed) {
+    throw new Error(
+      `physics entity "${entityName}" retained angular velocity after settling; velocity=${JSON.stringify(angularVelocity)}`,
+    );
+  }
+
+  if (
+    viewportState == null ||
+    !viewportState.visible ||
+    viewportState.ndc.some(
+      (coordinate) => !Number.isFinite(coordinate) || Math.abs(coordinate) > 1,
+    )
+  ) {
+    throw new Error(
+      `physics entity "${entityName}" is outside the default desktop view; state=${JSON.stringify(viewportState)}`,
+    );
+  }
+}
+
+async function assertAuthoredPhysicsNode(root, expectation) {
+  const scenePath = path.join(root, 'public/scenes/physics.iwsdk.scene.json');
+  const scene = JSON.parse(await readFile(scenePath, 'utf8'));
+  const node = findSceneNodeById(scene.nodes ?? [], expectation.sceneNodeId);
+  if (node == null) {
+    throw new Error(
+      `native scene missing physics node "${expectation.sceneNodeId}"`,
+    );
+  }
+  if (node.name !== expectation.entityName) {
+    throw new Error(
+      `physics node "${expectation.sceneNodeId}" must be named "${expectation.entityName}"; found "${node.name}"`,
+    );
+  }
+  if (!vectorsEqual(node.transform?.position, expectation.initialPosition)) {
+    throw new Error(
+      `physics node "${expectation.sceneNodeId}" has unexpected spawn position; expected=${expectation.initialPosition.join(',')} found=${node.transform?.position?.join(',')}`,
+    );
+  }
+}
+
+async function resetPhysicsBody(page, entityIndex, position) {
+  await page.evaluate(
+    ({ targetEntityIndex, targetPosition }) => {
+      const runtime = window.FRAMEWORK_MCP_RUNTIME;
+      const world = runtime?.world;
+      const entity = world?.entityManager?.getEntityByIndex(targetEntityIndex);
+      const physicsSystem = world
+        ?.getSystems()
+        .find(
+          (system) =>
+            system.constructor.name === 'PhysicsSystem' &&
+            typeof system.setBodyTransform === 'function',
+        );
+      if (entity?.object3D == null || physicsSystem == null) {
+        throw new Error(
+          `could not reset physics body for entity ${targetEntityIndex}`,
+        );
+      }
+      physicsSystem.setBodyTransform(entity, {
+        position: targetPosition,
+        quaternion: entity.object3D.quaternion.toArray(),
+      });
+    },
+    { targetEntityIndex: entityIndex, targetPosition: position },
+  );
+}
+
+function findSceneNodeById(nodes, id) {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node;
+    }
+    const child = findSceneNodeById(node.children ?? [], id);
+    if (child != null) {
+      return child;
+    }
+  }
+  return undefined;
+}
+
+function vectorsEqual(first, second) {
+  return (
+    Array.isArray(first) &&
+    first.length === second.length &&
+    first.every((value, index) => value === second[index])
+  );
+}
+
+function distanceBetween(first, second) {
+  return Math.hypot(...first.map((value, index) => value - second[index]));
+}
+
+function quaternionDistance(first, second) {
+  const dot = Math.abs(
+    first.reduce((sum, value, index) => sum + value * second[index], 0),
+  );
+  return 2 * Math.acos(Math.min(1, dot));
+}
+
+function vectorLength(value) {
+  if (!Array.isArray(value) || value.length !== 3) {
+    return null;
+  }
+  return Math.hypot(...value);
+}
+
+async function getObjectViewportState(page, uuid) {
+  return page.evaluate((targetUuid) => {
+    const runtime = window.FRAMEWORK_MCP_RUNTIME;
+    const world = runtime?.world;
+    const object = world?.scene?.getObjectByProperty('uuid', targetUuid);
+    const camera = world?.camera;
+    if (object == null || camera == null) {
+      return null;
+    }
+
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    const projected = object.getWorldPosition(camera.position.clone());
+    projected.project(camera);
+    let visible = true;
+    for (let ancestor = object; ancestor != null; ancestor = ancestor.parent) {
+      visible &&= ancestor.visible;
+    }
+    return { ndc: projected.toArray(), visible };
+  }, uuid);
 }
 
 function isPositiveEntityResult(result) {
@@ -426,14 +681,6 @@ function findHierarchyByEntityIndex(node, entityIndex) {
     }
   }
   return undefined;
-}
-
-function distanceBetween(first, second) {
-  return Math.hypot(
-    first[0] - second[0],
-    first[1] - second[1],
-    first[2] - second[2],
-  );
 }
 
 async function dispatch(page, method, params) {

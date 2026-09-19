@@ -157,13 +157,15 @@
     {
       "components": {
         "PhysicsBody": {
+          "angularDamping": 2,
+          "linearDamping": 2,
           "state": "DYNAMIC"
         },
         "PhysicsManipulation": {
           "force": [
-            0.1,
-            0.1,
-            -0.1
+            0,
+            -0.1,
+            0
           ]
         },
         "PhysicsShape": {
@@ -183,9 +185,9 @@
       "name": "Dynamic Sphere",
       "transform": {
         "position": [
-          -1,
-          0.9497,
-          -1.75
+          0.2,
+          1.6,
+          -1.8
         ],
         "rotationDeg": [
           0,
