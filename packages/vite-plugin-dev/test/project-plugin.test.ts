@@ -98,6 +98,103 @@ describe('manifest-first Vite integration', () => {
     ).rejects.toThrow(/panel\.uikitml.*Invalid value for property "padding"/s);
   });
 
+  it('gates production Havok and bundled-font modules from project features', async () => {
+    const plugin = iwsdkDev({ https: false });
+    const userConfig: {
+      root: string;
+      resolve?: { alias?: Record<string, string> };
+    } = { root: projectRoot };
+    await callHook(plugin.config, plugin, userConfig, {
+      command: 'build',
+      mode: 'production',
+    });
+
+    expect(userConfig.resolve?.alias).toMatchObject({
+      '@babylonjs/havok': 'virtual:iwsdk-disabled-havok',
+      '@pmndrs/msdfonts/roboto': 'virtual:iwsdk-disabled-bundled-fonts',
+    });
+
+    expect(callHook(plugin.resolveId, plugin, '@babylonjs/havok')).toBe(
+      '\0virtual:iwsdk-disabled-havok',
+    );
+    expect(callHook(plugin.resolveId, plugin, '@pmndrs/msdfonts/roboto')).toBe(
+      '\0virtual:iwsdk-disabled-bundled-fonts',
+    );
+    expect(
+      await callHook(
+        plugin.load,
+        { resolve: vi.fn() },
+        '\0virtual:iwsdk-disabled-havok',
+      ),
+    ).toContain('world.features.physics is false');
+
+    const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.world.features = { physics: true };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await mkdir(path.join(projectRoot, 'public', 'ui'), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, 'public', 'ui', 'copy.uikitml'),
+      '<div style="font-family: roboto">Copy</div>',
+    );
+    const enabledPlugin = iwsdkDev({
+      https: false,
+      bundle: { fonts: ['inter'] },
+    });
+    await callHook(
+      enabledPlugin.config,
+      enabledPlugin,
+      { root: projectRoot },
+      { command: 'build', mode: 'production' },
+    );
+
+    expect(
+      callHook(enabledPlugin.resolveId, enabledPlugin, '@babylonjs/havok'),
+    ).toBeUndefined();
+    expect(
+      callHook(
+        enabledPlugin.resolveId,
+        enabledPlugin,
+        '@pmndrs/msdfonts/roboto',
+      ),
+    ).toBeUndefined();
+    expect(
+      callHook(
+        enabledPlugin.resolveId,
+        enabledPlugin,
+        '@pmndrs/msdfonts/inter',
+      ),
+    ).toBeUndefined();
+    expect(
+      callHook(enabledPlugin.resolveId, enabledPlugin, '@pmndrs/msdfonts/lato'),
+    ).toBe('\0virtual:iwsdk-disabled-bundled-fonts');
+  });
+
+  it.each([{ useWorker: false }, { useWorker: true }])(
+    'retains Havok for physics options with useWorker: $useWorker',
+    async (physics) => {
+      const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      manifest.world.features = { physics };
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+      const plugin = iwsdkDev({ https: false });
+      const userConfig: {
+        root: string;
+        resolve?: { alias?: Record<string, string> };
+      } = { root: projectRoot };
+      await callHook(plugin.config, plugin, userConfig, {
+        command: 'build',
+        mode: 'production',
+      });
+
+      expect(userConfig.resolve?.alias).not.toHaveProperty('@babylonjs/havok');
+      expect(
+        callHook(plugin.resolveId, plugin, '@babylonjs/havok'),
+      ).toBeUndefined();
+    },
+  );
+
   it('rejects retired metadata options even when no project manifest exists', async () => {
     await rm(path.join(projectRoot, 'iwsdk.config.json'));
     const plugin = iwsdkDev({

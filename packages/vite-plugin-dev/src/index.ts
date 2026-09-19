@@ -61,6 +61,11 @@ import type {
 import { WebSocket, WebSocketServer } from 'ws';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
 import {
+  BUNDLED_FONT_MODULES,
+  createDisabledBundledFontsModule,
+  resolveBundledFontNames,
+} from './bundle-feature-gates.js';
+import {
   createEditorRuntimeModuleSource,
   createEditorShellHtml,
   getCoreModuleImport,
@@ -119,6 +124,8 @@ export type {
   AiMode,
   EmulatorOptions,
   DevelopmentHttpsOptions,
+  ProductionBundleOptions,
+  UIKitMLBundledFontName,
   WorkspaceOptions,
   ProcessedDevOptions,
   IWERPluginOptions,
@@ -150,6 +157,38 @@ const PROJECT_MODULE_ID = 'virtual:iwsdk-project';
 const RESOLVED_PROJECT_MODULE_ID = '\0' + PROJECT_MODULE_ID;
 const HOT_CLIENT_ROLE_EVENT = 'iwsdk:hot-client-role';
 const RUNTIME_SOURCE_CHANGE_EVENT = 'iwsdk:runtime-source-change';
+const DISABLED_HAVOK_ID = 'virtual:iwsdk-disabled-havok';
+const RESOLVED_DISABLED_HAVOK_ID = `\0${DISABLED_HAVOK_ID}`;
+const DISABLED_BUNDLED_FONTS_ID = 'virtual:iwsdk-disabled-bundled-fonts';
+const RESOLVED_DISABLED_BUNDLED_FONTS_ID = `\0${DISABLED_BUNDLED_FONTS_ID}`;
+
+function createDisabledHavokModule(): string {
+  return `export default async function disabledHavok() {
+  throw new Error('[IWSDK] Physics was excluded from this production build because world.features.physics is false.');
+}`;
+}
+
+function createProductionPayloadWorkerPlugin(): Plugin {
+  return {
+    name: 'iwsdk-production-payload-worker',
+    resolveId(id) {
+      if (id === DISABLED_HAVOK_ID) {
+        return RESOLVED_DISABLED_HAVOK_ID;
+      }
+      if (id === DISABLED_BUNDLED_FONTS_ID) {
+        return RESOLVED_DISABLED_BUNDLED_FONTS_ID;
+      }
+    },
+    load(id) {
+      if (id === RESOLVED_DISABLED_HAVOK_ID) {
+        return createDisabledHavokModule();
+      }
+      if (id === RESOLVED_DISABLED_BUNDLED_FONTS_ID) {
+        return createDisabledBundledFontsModule();
+      }
+    },
+  };
+}
 const EDITOR_ROUTE = '/__iwsdk/editor';
 const WORKSPACE_ROUTE = '/__iwsdk/workspace';
 const WORKSPACE_SCENES_ROUTE = `${WORKSPACE_ROUTE}/scenes`;
@@ -532,6 +571,8 @@ function pathsReferToSameFile(left: string, right: string): boolean {
 export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let pluginOptions = processOptions(options);
   let loadedProject: LoadedIwsdkProject | null = null;
+  let bundlePhysics = true;
+  let bundledFonts: ReadonlySet<string> | null = null;
   let injectionBundle: InjectionBundleResult | null = null;
   let config: ResolvedConfig;
   let mcpWss: WebSocketServer | null = null;
@@ -567,6 +608,24 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             environment.command,
           ),
         );
+        if (environment.command === 'build') {
+          const physics = loadedProject.manifest.world.features?.physics;
+          bundlePhysics =
+            physics === true ||
+            (typeof physics === 'object' && physics !== null);
+          const configuredPublicDirectory = userConfig.publicDir;
+          const publicDirectory =
+            configuredPublicDirectory === false
+              ? undefined
+              : path.resolve(
+                  projectRoot,
+                  configuredPublicDirectory ?? 'public',
+                );
+          bundledFonts = await resolveBundledFontNames(
+            publicDirectory,
+            options.bundle?.fonts,
+          );
+        }
       }
 
       // WebXR requires a secure context on network hosts. Generate an
@@ -630,6 +689,35 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // browser-side import through the app's IWSDK-compatible Three.js entry
       // so the runtime and emulator share constructors and global state.
       userConfig.resolve ??= {};
+      const productionAliases: Record<string, string> = {};
+      if (!bundlePhysics) {
+        productionAliases['@babylonjs/havok'] = DISABLED_HAVOK_ID;
+      }
+      if (bundledFonts) {
+        for (const [font, definition] of Object.entries(BUNDLED_FONT_MODULES)) {
+          if (!bundledFonts.has(font)) {
+            productionAliases[definition.module] = DISABLED_BUNDLED_FONTS_ID;
+          }
+        }
+      }
+      if (Object.keys(productionAliases).length > 0) {
+        const existingWorkerPlugins = userConfig.worker?.plugins;
+        userConfig.worker ??= {};
+        userConfig.worker.plugins = () => [
+          createProductionPayloadWorkerPlugin(),
+          ...(existingWorkerPlugins?.() ?? []),
+        ];
+
+        const existingAliases = userConfig.resolve.alias;
+        userConfig.resolve.alias = Array.isArray(existingAliases)
+          ? [
+              ...Object.entries(productionAliases).map(
+                ([find, replacement]) => ({ find, replacement }),
+              ),
+              ...existingAliases,
+            ]
+          : { ...(existingAliases ?? {}), ...productionAliases };
+      }
       userConfig.resolve.dedupe = [
         ...(userConfig.resolve.dedupe ?? []),
         ...(!userConfig.resolve.dedupe?.includes('three') ? ['three'] : []),
@@ -2009,6 +2097,21 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     resolveId(id) {
+      if (
+        id === DISABLED_HAVOK_ID ||
+        (!bundlePhysics && id === '@babylonjs/havok')
+      ) {
+        return RESOLVED_DISABLED_HAVOK_ID;
+      }
+      if (id === DISABLED_BUNDLED_FONTS_ID) {
+        return RESOLVED_DISABLED_BUNDLED_FONTS_ID;
+      }
+      const bundledFont = Object.entries(BUNDLED_FONT_MODULES).find(
+        ([, definition]) => definition.module === id,
+      )?.[0];
+      if (bundledFont && bundledFonts && !bundledFonts.has(bundledFont)) {
+        return RESOLVED_DISABLED_BUNDLED_FONTS_ID;
+      }
       if (id === VIRTUAL_ID) {
         return RESOLVED_VIRTUAL_ID;
       }
@@ -2030,6 +2133,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     async load(id) {
+      if (id === RESOLVED_DISABLED_HAVOK_ID) {
+        return createDisabledHavokModule();
+      }
+      if (id === RESOLVED_DISABLED_BUNDLED_FONTS_ID) {
+        return createDisabledBundledFontsModule();
+      }
       if (id === RESOLVED_VIRTUAL_ID) {
         if (!injectionBundle) {
           return 'console.warn("[IWSDK Dev] Runtime not available - injection bundle not loaded");';

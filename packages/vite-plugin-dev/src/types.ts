@@ -161,6 +161,34 @@ export interface DevelopmentHttpsOptions {
   ttlDays?: number;
 }
 
+export type UIKitMLBundledFontName =
+  | 'crimson-text'
+  | 'fira-code'
+  | 'inconsolata'
+  | 'inter'
+  | 'lato'
+  | 'libre-baskerville'
+  | 'merriweather'
+  | 'montserrat'
+  | 'nunito'
+  | 'open-sans'
+  | 'playfair-display'
+  | 'poppins'
+  | 'raleway'
+  | 'roboto'
+  | 'source-code-pro'
+  | 'space-mono'
+  | 'work-sans';
+
+export interface ProductionBundleOptions {
+  /**
+   * Additional bundled UIKitML fonts to retain for UI loaded outside the
+   * static public directory. Use `'all'` for fully dynamic font selection.
+   * Static public UIKitML font usage is detected automatically.
+   */
+  fonts?: 'all' | UIKitMLBundledFontName[];
+}
+
 /**
  * Main plugin options interface
  */
@@ -184,6 +212,9 @@ export interface DevPluginOptions {
    * mode.
    */
   workspace?: WorkspaceOptions;
+
+  /** Production feature-gating and dynamic-asset escape hatches. */
+  bundle?: ProductionBundleOptions;
 
   /**
    * Time to wait for the managed browser command bridge after launch or

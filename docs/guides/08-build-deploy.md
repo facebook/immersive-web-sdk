@@ -25,6 +25,37 @@ This creates a `dist/` folder with your application. The build automatically:
 
 - Bundles and minifies JavaScript
 - Copies public assets
+- Excludes Havok when `world.features.physics` is `false`
+- Retains only bundled fonts referenced by static UIKitML under `public/`
+
+### Inspecting the Production Bundle
+
+Vite prints each emitted file and its compressed size. For a repeatable local
+inventory, build and sort the asset files by size:
+
+```bash
+npm run build
+find dist/assets -maxdepth 1 -type f -exec du -h {} + | sort -h
+```
+
+Set `world.features.physics` in `iwsdk.config.json` to match the application;
+`false` removes the Havok JavaScript and WASM payload. IWSDK also scans static
+UIKitML and removes unreferenced packaged font modules. Custom `@font-face`
+TTFs remain ordinary public assets and are not treated as bundled families.
+
+If the application loads UIKitML from a remote endpoint or constructs the
+bundled family name dynamically, retain those families explicitly in
+`vite.config.ts` because build-time scanning cannot see that content:
+
+```typescript
+iwsdkDev({
+  bundle: { fonts: ['roboto', 'inter'] },
+});
+```
+
+Use `fonts: 'all'` only when font selection is fully dynamic. A production
+attempt to load an excluded family fails with a message naming this escape
+hatch instead of silently downloading every packaged atlas.
 
 ## Asset Optimization
 

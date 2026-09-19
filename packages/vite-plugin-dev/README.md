@@ -78,6 +78,10 @@ iwsdkDev({
   // Wait for the managed browser command bridge after launch or recovery.
   bridgeReadyTimeoutMs: 5000, // default
 
+  // Public UIKitML is scanned automatically. Retain bundled families needed
+  // only by remote or otherwise dynamic UIKitML (or use 'all').
+  bundle: { fonts: ['roboto'] },
+
   // Enable verbose logging
   verbose: false, // default
 });
