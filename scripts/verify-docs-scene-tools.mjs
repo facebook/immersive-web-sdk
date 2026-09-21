@@ -29,11 +29,17 @@ const EDITOR_RUNTIME_SOURCE_PATH = path.join(
   'editor',
   'editor-runtime-source.ts',
 );
-const DOC_TARGETS = ['docs/public/skill.md', 'docs/public/go.md'];
 const MCP_TOOLS_DOC_PATH = 'docs/ai/mcp-tools.md';
+const REQUIRED_FLATTEN_DOC_PATHS = [MCP_TOOLS_DOC_PATH, 'docs/ai/workflows.md'];
+const DOC_TARGETS = [
+  'docs/public/skill.md',
+  'docs/public/go.md',
+  ...REQUIRED_FLATTEN_DOC_PATHS,
+];
 const REQUIRED_AGENT_GUIDE_TOOLS = [
   'scene_open',
   'scene_render_file',
+  'scene_flatten_file',
   'scene_get_state',
   'scene_get_capabilities',
   'scene_select',
@@ -225,6 +231,16 @@ function main() {
     if (!skillTools.has(requiredTool)) {
       failures.push(
         `docs/public/skill.md does not document required native scene tool ${requiredTool}`,
+      );
+    }
+  }
+  for (const relativePath of REQUIRED_FLATTEN_DOC_PATHS) {
+    const tools = new Set(
+      (docs.get(relativePath) ?? []).map((tool) => tool.name),
+    );
+    if (!tools.has('scene_flatten_file')) {
+      failures.push(
+        relativePath + ' does not document required scene_flatten_file',
       );
     }
   }

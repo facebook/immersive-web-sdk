@@ -218,13 +218,13 @@ Common lifecycle hooks:
 Queries are declarative filters defined once; the ECS keeps their membership up‑to‑date as entities gain/lose components.
 
 ```ts
-export class HUDSystem extends createSystem({
-  panels: { required: [PanelUI], excluded: [ScreenSpace] },
+export class DamageMonitor extends createSystem({
+  takingDamage: { required: [Health, DamageOverTime] },
 }) {
   init() {
     // Called whenever an entity first satisfies the query
-    this.queries.panels.subscribe('qualify', (e) =>
-      console.log('panel ready', e.index),
+    this.queries.takingDamage.subscribe('qualify', (e) =>
+      console.log('damage active', e.index),
     );
   }
 }

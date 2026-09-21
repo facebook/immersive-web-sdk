@@ -111,21 +111,29 @@ Here's what your WebXR experience looks like when running on a Meta Quest 3 devi
 
 ### Option 2: Testing with IWER (Browser Emulation)
 
-IWER (Immersive Web Emulator Runtime) is a WebXR emulator that runs entirely in your browser, allowing you to develop and test WebXR applications without a headset. IWER automatically activates when no real WebXR device is detected and provides mouse/keyboard controls to simulate VR interactions.
+IWER (Immersive Web Emulator Runtime) is a WebXR emulator that runs entirely in your browser, allowing you to develop and test WebXR applications without a headset. By default, it activates on localhost and skips the Quest browser, and it provides mouse/keyboard controls to simulate VR interactions.
 
 Learn more about IWER at [meta-quest.github.io/immersive-web-emulation-runtime/](https://meta-quest.github.io/immersive-web-emulation-runtime/).
 
 ### How IWER Integration Works
 
-IWER is automatically injected into your project through the `iwsdkDev` Vite plugin in your `vite.config.ts`:
+IWER is injected by the `iwsdkDev` Vite plugin, but its project settings live in
+`iwsdk.config.json`:
+
+```json
+{
+  "dev": {
+    "emulator": {
+      "device": "metaQuest3"
+    }
+  }
+}
+```
+
+Keep the plugin call in `vite.config.ts` bare so it reads the project manifest:
 
 ```typescript
-iwsdkDev({
-  emulator: {
-    device: 'metaQuest3',
-  },
-  verbose: true,
-});
+iwsdkDev();
 ```
 
 **Configuration options:**
@@ -133,7 +141,7 @@ iwsdkDev({
 - **`device`**: Which headset to emulate (`metaQuest2`, `metaQuest3`, `metaQuestPro`, or `oculusQuest1`). More headset presets and custom headset configuration support coming soon.
 - **`activation`**: Controls when IWER activates. The default `'localhost'` is smart - it activates IWER when you access the site from localhost (typically your computer, which needs emulation), but not when accessing via IP address (typically from a headset with native WebXR support).
 - **`userAgentException`**: Adds an extra layer of protection by skipping IWER activation if the browser's user agent matches a pattern (like `OculusBrowser`). This ensures IWER won't activate on headsets even when using ADB port forwarding with localhost.
-- **`sem`**: Synthetic Environment Module for AR scene understanding (AR projects only)
+- **`environment`**: Synthetic room data for AR scene-understanding testing, such as `living_room`
 
 To test with IWER, open the Local URL reported by Vite or `npx @iwsdk/cli dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
 

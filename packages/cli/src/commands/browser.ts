@@ -220,7 +220,17 @@ export async function handleBrowserRun(
       typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: true,
   });
-  const scriptPath = path.resolve(io.cwd, scriptArgument);
+  const requestedScriptPath = path.resolve(io.cwd, scriptArgument);
+  const requestedDirectory = path.dirname(requestedScriptPath);
+  // Workspace discovery canonicalizes directory aliases (for example macOS
+  // /var -> /private/var). Compare paths in the same namespace, while leaving
+  // a symlink on the script itself for the separate containment check below.
+  const scriptPath = path.join(
+    existsSync(requestedDirectory)
+      ? realpathSync.native(requestedDirectory)
+      : requestedDirectory,
+    path.basename(requestedScriptPath),
+  );
   const relativeScriptPath = path.relative(workspaceRoot, scriptPath);
   if (
     relativeScriptPath === '..' ||

@@ -72,13 +72,21 @@ This must return JSON with a list of systems. If it fails:
 
 Run these commands in order:
 
-1. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
+1. Record the test start time immediately before reloading:
+
+   ```bash
+   node -p 'Date.now()'
+   ```
+
+   Save the output as `<test-start-ms>`.
+
+2. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
    Then: `sleep 3`
 
-2. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
+3. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
    Then: `sleep 2`
 
-3. `npx @iwsdk/cli browser logs --input-json '{"count":20,"level":["error","warn"]}' 2>/dev/null`
+4. `npx @iwsdk/cli browser logs --input-json '{"since":<test-start-ms>,"count":20,"level":["error","warn"]}' 2>/dev/null`
    Assert: No error-level logs.
 
 ---
@@ -203,7 +211,7 @@ Assert: ECS value updates.
 ### Suite 6: Stability
 
 ```bash
-npx @iwsdk/cli browser logs --input-json '{"count":30,"level":["error","warn"]}' 2>/dev/null
+npx @iwsdk/cli browser logs --input-json '{"since":<test-start-ms>,"count":30,"level":["error","warn"]}' 2>/dev/null
 ```
 
 Assert: No application-level errors or warnings. Pre-existing 404 resource errors from page load are acceptable.

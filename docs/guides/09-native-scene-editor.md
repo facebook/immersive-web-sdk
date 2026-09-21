@@ -37,9 +37,9 @@ const world = await World.create(
 );
 ```
 
-Runtime code still owns systems, interaction, networking, and procedural behavior.
-Use scene JSON for declarative resources, hierarchy, transforms, materials, lights,
-environment, and typed components.
+Runtime code still owns systems, interaction, networking, procedural geometry, and
+materials. Use scene JSON for prefab resources, asset-backed hierarchy, transforms,
+lights, environment, and typed components.
 
 ## Scene Format
 
@@ -49,24 +49,15 @@ Use `iwsdk.scene.v1` only:
 {
   "version": "iwsdk.scene.v1",
   "units": "meters",
-  "resources": {
-    "materials": [
-      {
-        "id": "paint",
-        "model": "standard",
-        "baseColor": "#5f7f62",
-        "roughness": 0.72,
-        "metalness": 0
-      }
-    ]
-  },
+  "resources": {},
   "nodes": [
     {
       "id": "table",
       "content": {
-        "type": "primitive",
-        "geometry": { "type": "box", "size": [1.2, 0.08, 0.7] },
-        "material": "paint"
+        "type": "asset",
+        "asset": "table",
+        "castShadow": true,
+        "receiveShadow": true
       },
       "transform": { "position": [0, 0.76, 0] }
     }
@@ -74,9 +65,12 @@ Use `iwsdk.scene.v1` only:
 }
 ```
 
-Resources are separate from nodes so models, materials, and prefabs can be reused.
-Renderable infrastructure may set `framingRole: "support"`; it remains visible but
-does not expand content-only automatic framing.
+Here `table` is an application-global ID registered by the `defineAssets()` module
+selected in `iwsdk.config.json`. Scene JSON does not declare asset URLs, procedural
+geometry, or materials; create those in the asset module and reference their IDs with
+`content.type: "asset"`. The v1 `resources` object contains only reusable scene
+prefabs. Renderable infrastructure may set `framingRole: "support"`; it remains
+visible but does not expand content-only automatic framing.
 
 ## Modular Composition
 
@@ -99,9 +93,10 @@ Roots can compose standalone module files:
 ```
 
 Each module is a valid standalone v1 document. Resolution is recursive and ordered.
-Imported nodes and resources receive `<import-id>/<local-id>` namespaces. The import
-entry becomes a transform wrapper, and relative asset URIs resolve from the module
-file. The root owns environment, metadata, and authoring globals.
+Imported node and prefab IDs receive `<import-id>/<local-id>` namespaces. Asset IDs
+remain application-global and resolve through the project's asset manifest. The
+import entry becomes a transform wrapper, and the root owns environment, metadata,
+and authoring globals.
 
 This layout lets independent agents author distinct module files in parallel. Render
 each module before importing it, then validate and render the root to catch scale,
@@ -113,7 +108,7 @@ The managed Playwright browser opens at the clean origin root and defaults to Ru
 Switch between Runtime and Editor with the two visible controls. External browsers
 receive the application only; the managed browser owns the editor wrapper.
 
-The editor watches the active root and every resolved module:
+The editor watches the active import-free document:
 
 - valid file changes replace the preview atomically;
 - invalid changes keep the previous valid render and show diagnostics;
@@ -121,12 +116,14 @@ The editor watches the active root and every resolved module:
 - runtime reload is deferred while Editor is visible and applied when Runtime is
   selected.
 
-Create and edit scene files with normal filesystem tools. `scene_open` never invents
-or creates a missing document.
+Validate import-bearing roots and modules with `scene_render_file`, then use
+`scene_flatten_file` once and continue editing the flat output. Re-flatten only when
+intentionally regenerating it because overwrite replaces later flat-file edits.
+`scene_open` never invents or creates a missing document.
 
 ## Agent Tools
 
-The complete public scene MCP surface is:
+The public editor and file-authoring scene MCP surface is:
 
 ```text
 scene_open
@@ -142,9 +139,10 @@ scene_measure_image_regions
 ```
 
 `scene_render_file` validates, resolves imports, materializes, and renders a file
-without changing the active editor. Invalid input returns diagnostics and no PNG.
-Valid input returns dependency information, source/composed/runtime hashes, render
-statistics, camera metadata, and PNG bytes.
+without changing the active editor. Valid input returns dependency information,
+source/composed/runtime hashes, camera and render metadata, `screenshotSha256`, and
+a local `screenshotPath`; image bytes are not embedded in the response. Invalid input
+returns diagnostics and no screenshot.
 
 Imports are an authoring-only scratch mechanism. The application runtime rejects
 them, and the editable editor requires an import-free document. After an imported

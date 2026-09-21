@@ -69,9 +69,10 @@ npx @iwsdk/cli ecs diff --from before --to after
 ```
 
 For declarative scene composition, create and edit scene JSON files directly. Use
-`scene_render_file` to validate, compose imports, and render them. Open an existing
-root with `scene_open`, inspect consolidated live state with `scene_get_state`, and
-use `scene_select`, `scene_set_camera`, `scene_screenshot`,
+`scene_render_file` to validate, compose imports, and render them. When a composition
+uses imports, create its import-free runtime file with `scene_flatten_file` before
+opening that file with `scene_open`. Inspect consolidated live state with
+`scene_get_state`, and use `scene_select`, `scene_set_camera`, `scene_screenshot`,
 `scene_set_preview_visibility`, and `scene_measure_image_regions` for live editor
 observation. Use current/top/front/side or quarter screenshots when alignment or
 on-surface placement matters; use `scene_screenshot` with

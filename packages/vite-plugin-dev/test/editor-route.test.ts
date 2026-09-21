@@ -58,6 +58,38 @@ function sceneDocument(...nodeIds: string[]) {
   };
 }
 
+async function writeFlattenableScene(
+  workspaceRoot: string,
+  sourceRelativePath = 'public/scenes/room.composition.iwsdk.scene.json',
+): Promise<string> {
+  const sourcePath = path.join(workspaceRoot, sourceRelativePath);
+  const modulePath = path.join(
+    path.dirname(sourcePath),
+    'modules',
+    'chair.iwsdk.scene.json',
+  );
+  await mkdir(path.dirname(modulePath), { recursive: true });
+  await writeFile(modulePath, JSON.stringify(sceneDocument('chair')), 'utf8');
+  await writeFile(
+    sourcePath,
+    JSON.stringify({
+      version: 'iwsdk.scene.v1',
+      units: 'meters',
+      imports: [
+        {
+          id: 'reading-nook',
+          src: './modules/chair.iwsdk.scene.json',
+          transform: { position: [2, 0, 0] },
+        },
+      ],
+      resources: {},
+      nodes: [],
+    }),
+    'utf8',
+  );
+  return sourcePath;
+}
+
 function reviewWorkflowScene(): SceneDocument {
   const prompt = 'A blue box';
   return {
@@ -1215,6 +1247,182 @@ describe('native editor route middleware', () => {
         children: [expect.objectContaining({ id: 'reading-nook/chair' })],
       }),
     ]);
+  });
+
+  test('uses the default flat output path when none is provided', async () => {
+    const sourceRelativePath =
+      'public/scenes/default.composition.iwsdk.scene.json';
+    const outputRelativePath =
+      'public/scenes/default.composition.flat.iwsdk.scene.json';
+    await writeFlattenableScene(tempRoot, sourceRelativePath);
+    const middleware = createEditorMiddleware(tempRoot);
+
+    const response = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        path: sourceRelativePath,
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      outputPath: outputRelativePath,
+      sourcePath: sourceRelativePath,
+      written: true,
+    });
+    const flattened = JSON.parse(
+      await readFile(path.join(tempRoot, outputRelativePath), 'utf8'),
+    );
+    expect(flattened.imports).toBeUndefined();
+  });
+
+  test('refuses to replace an existing flatten destination', async () => {
+    const sourceRelativePath =
+      'public/scenes/refusal.composition.iwsdk.scene.json';
+    const outputRelativePath = 'public/scenes/existing.iwsdk.scene.json';
+    await writeFlattenableScene(tempRoot, sourceRelativePath);
+    const destinationPath = path.join(tempRoot, outputRelativePath);
+    const destinationContents =
+      JSON.stringify(sceneDocument('preserved'), null, 2) + '\n';
+    await writeFile(destinationPath, destinationContents, 'utf8');
+    const middleware = createEditorMiddleware(tempRoot);
+
+    const response = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        outputPath: outputRelativePath,
+        path: sourceRelativePath,
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body)).toMatchObject({
+      code: 'scene_flatten_destination_exists',
+      outputPath: outputRelativePath,
+    });
+    expect(await readFile(destinationPath, 'utf8')).toBe(destinationContents);
+  });
+
+  test('replaces an existing flatten destination when overwrite is true', async () => {
+    const sourceRelativePath =
+      'public/scenes/overwrite.composition.iwsdk.scene.json';
+    const outputRelativePath =
+      'public/scenes/existing-overwrite.iwsdk.scene.json';
+    await writeFlattenableScene(tempRoot, sourceRelativePath);
+    const destinationPath = path.join(tempRoot, outputRelativePath);
+    await writeFile(
+      destinationPath,
+      JSON.stringify(sceneDocument('stale')),
+      'utf8',
+    );
+    const middleware = createEditorMiddleware(tempRoot);
+
+    const response = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        outputPath: outputRelativePath,
+        overwrite: true,
+        path: sourceRelativePath,
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+
+    expect(response.statusCode).toBe(200);
+    const flattened = JSON.parse(await readFile(destinationPath, 'utf8'));
+    expect(flattened.imports).toBeUndefined();
+    expect(flattened.nodes).toEqual([
+      expect.objectContaining({
+        id: 'reading-nook',
+        children: [expect.objectContaining({ id: 'reading-nook/chair' })],
+      }),
+    ]);
+  });
+
+  test('supports flattening a composition in place with overwrite enabled', async () => {
+    const sourceRelativePath =
+      'public/scenes/in-place.composition.iwsdk.scene.json';
+    const sourcePath = await writeFlattenableScene(
+      tempRoot,
+      sourceRelativePath,
+    );
+    const middleware = createEditorMiddleware(tempRoot);
+
+    const response = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        outputPath: sourceRelativePath,
+        overwrite: true,
+        path: sourceRelativePath,
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      outputPath: sourceRelativePath,
+      sourcePath: sourceRelativePath,
+      written: true,
+    });
+    const flattened = JSON.parse(await readFile(sourcePath, 'utf8'));
+    expect(flattened.imports).toBeUndefined();
+    expect(flattened.nodes).toEqual([
+      expect.objectContaining({ id: 'reading-nook' }),
+    ]);
+  });
+
+  test('does not write when flattening changes the runtime hash', async () => {
+    const sourceRelativePath =
+      'public/scenes/mismatch.composition.iwsdk.scene.json';
+    const outputRelativePath = 'public/scenes/mismatch.iwsdk.scene.json';
+    await writeFlattenableScene(tempRoot, sourceRelativePath);
+    const middleware = createEditorMiddleware(tempRoot);
+    const sourceRuntimeHash = 'sha256:' + 'a'.repeat(64);
+    const outputRuntimeHash = 'sha256:' + 'b'.repeat(64);
+    const sceneComposition = await import('@iwsdk/scene-composition');
+    const runtimeHashSpy = vi
+      .spyOn(sceneComposition, 'hashRuntimeSceneDocument')
+      .mockReturnValueOnce(sourceRuntimeHash)
+      .mockReturnValueOnce(outputRuntimeHash);
+
+    try {
+      const response = await runMiddleware(
+        middleware,
+        'POST',
+        '/__iwsdk/workspace/scenes',
+        JSON.stringify({
+          action: 'flatten',
+          outputPath: outputRelativePath,
+          path: sourceRelativePath,
+        }),
+        MANAGED_WORKSPACE_HEADERS,
+      );
+
+      expect(response.statusCode).toBe(409);
+      expect(JSON.parse(response.body)).toMatchObject({
+        code: 'scene_flatten_runtime_hash_mismatch',
+        outputRuntimeHash,
+        sourceRuntimeHash,
+      });
+      await expect(
+        readFile(path.join(tempRoot, outputRelativePath), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      runtimeHashSpy.mockRestore();
+    }
   });
 
   test('lists public project files within the requested schema constraints', async () => {

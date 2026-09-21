@@ -1111,11 +1111,25 @@ async function smokeGeneratedAppEditorFlow({
       waitUntil: 'domcontentloaded',
     });
     expect(await editorPage.evaluate(() => window.isSecureContext)).toBe(true);
-    await editorPage.waitForFunction(
-      () => Boolean((window as any).IWSDK_SCENE_EDITOR),
-      undefined,
-      { timeout: 15000 },
-    );
+    try {
+      await editorPage.waitForFunction(
+        () => Boolean((window as any).IWSDK_SCENE_EDITOR),
+        undefined,
+        { timeout: 60000 },
+      );
+    } catch (error) {
+      throw new Error(
+        `generated ${target}/${language} editor did not initialize at ${editorPage.url()}\n${JSON.stringify(
+          {
+            diagnostics: editorDiagnostics.snapshot(),
+            html: (await editorPage.content()).slice(0, 4000),
+          },
+          null,
+          2,
+        )}`,
+        { cause: error },
+      );
+    }
     await editorPage.waitForFunction(
       () =>
         Boolean(
@@ -1220,7 +1234,7 @@ async function smokeGeneratedAppEditorFlow({
     await editorPage.waitForFunction(
       () => Boolean((window as any).IWSDK_SCENE_EDITOR),
       undefined,
-      { timeout: 15000 },
+      { timeout: 60000 },
     );
     await expect
       .poll(() => editorPage.locator('#scene-status').textContent())

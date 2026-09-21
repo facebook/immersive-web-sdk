@@ -81,15 +81,28 @@ Create `public/ui/main-menu.uikitml` and insert the following content, which use
 
 ### Loading UI in Your Application
 
-We can add our `panelWithButton` uikitml user interface to our IWSDK scene using the `PanelUI` and `PanelDocument` components:
+Register the UIKitML source in the project's asset module:
 
 ```typescript
-export class PanelSystem extends createSystem({
+import { AssetType, defineAssets } from '@iwsdk/core';
+
+export default defineAssets({
   panelWithButton: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', '/ui/main-menu.uikitml')],
+    type: AssetType.UIKitML,
+    url: `${import.meta.env.BASE_URL}ui/main-menu.uikitml`,
+    name: 'Main Menu',
   },
-}) {}
+});
+```
+
+Then reference that asset from a stable scene node:
+
+```json
+{
+  "id": "main-menu",
+  "content": { "type": "asset", "asset": "panelWithButton" },
+  "transform": { "position": [0, 1.4, -1.5], "scale": 0.25 }
+}
 ```
 
 ### Loading a TTF Font
@@ -416,23 +429,18 @@ Style specific elements using ID selectors:
 UIKitML provides an event system for handling user interactions:
 
 ```typescript
-export class PanelSystem extends createSystem({
-  welcomePanel: {
-    required: [PanelUI, PanelDocument],
-    where: [eq(PanelUI, 'config', '/ui/main-menu.uikitml')],
-  },
-}) {
-  init() {
-    this.queries.welcomePanel.subscribe('qualify', (entity) => {
-      const document = PanelDocument.data.document[
-        entity.index
-      ] as UIKitDocument;
-      if (!document) return;
+import { createSystem, UIKitMLAsset } from '@iwsdk/core';
 
-      const xrButton = document.getElementById('xr-button') as UIKit.Text;
-      xrButton.addEventListener('click', () => {
-        // TODO: add your interactivity here
-      });
+export class PanelSystem extends createSystem({}) {
+  init() {
+    const panel = this.world.requireSceneObject<UIKitMLAsset>('main-menu');
+    const xrButton = panel.requireElementById('xr-button');
+    const onClick = () => {
+      // TODO: add your interactivity here
+    };
+    xrButton.addEventListener('click', onClick);
+    this.cleanupFuncs.push(() => {
+      xrButton.removeEventListener('click', onClick);
     });
   }
 }
@@ -445,9 +453,11 @@ export class PanelSystem extends createSystem({
 **UI document loads but nothing shows?**
 
 - Check that the position is in front of the player
-- Verify the scale is appropriate (try 0.001 for pixel-based layouts)
-- Ensure UISystem is registered with the world
-- Ensure your elements have a color different then their background
+- Verify the entity transform scale; UIKit dimensions use centimeters, so 100 units
+  equal one meter at scale 1
+- Ensure `features.spatialUI` is enabled and the scene asset ID is registered in
+  `defineAssets()`
+- Ensure your elements have a color different from their background
 
 ### Interaction Issues
 

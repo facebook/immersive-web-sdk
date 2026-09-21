@@ -97,7 +97,9 @@ npx @iwsdk/cli ecs query --input-json '{"entityIndex":<N>,"components":["Physics
 
 Check `state` field: `"DYNAMIC"` or `"STATIC"`.
 
-Save the dynamic entity as `<sphere>` and any static entity as `<floor>`.
+Save the entity named `Dynamic Sphere` as `<sphere>` and any static entity as
+`<floor>`. The example contains multiple dynamic bodies with intentionally
+different damping and gravity settings, so do not select an arbitrary one.
 
 Verify PhysicsSystem:
 
@@ -195,8 +197,8 @@ npx @iwsdk/cli ecs query --input-json '{"entityIndex":<sphere>,"components":["Ph
 Assert:
 
 - `state`: `"DYNAMIC"`
-- `linearDamping`: 0
-- `angularDamping`: 0
+- `linearDamping`: 2
+- `angularDamping`: 2
 - `gravityFactor`: 1
 - `_engineBody`: > 0 (non-zero Havok handle)
 

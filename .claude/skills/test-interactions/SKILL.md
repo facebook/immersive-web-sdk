@@ -70,13 +70,21 @@ This must return JSON with a list of systems. If it fails:
 
 Run these commands in order:
 
-1. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
+1. Record the test start time immediately before reloading:
+
+   ```bash
+   node -p 'Date.now()'
+   ```
+
+   Save the output as `<test-start-ms>`.
+
+2. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
    Then: `sleep 3`
 
-2. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
+3. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
    Then: `sleep 2`
 
-3. `npx @iwsdk/cli browser logs --input-json '{"count":20,"level":["error"]}' 2>/dev/null`
+4. `npx @iwsdk/cli browser logs --input-json '{"since":<test-start-ms>,"count":20,"level":["error"]}' 2>/dev/null`
    Assert: No error-level logs. Warnings about audio autoplay are acceptable.
 
 ---
@@ -123,7 +131,7 @@ Same approach — find panel's UUID from hierarchy, query transform.
 npx @iwsdk/cli scene transform --input-json '{"uuid":"<panel-uuid>"}' 2>/dev/null
 ```
 
-Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4)`.
+Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.2057)`.
 
 ---
 
@@ -526,7 +534,7 @@ Assert: returns a `screenshotPath` (PNG file saved to /tmp).
 ### Suite 12: Stability Check
 
 ```bash
-npx @iwsdk/cli browser logs --input-json '{"count":50,"level":["error","warn"]}' 2>/dev/null
+npx @iwsdk/cli browser logs --input-json '{"since":<test-start-ms>,"count":50,"level":["error","warn"]}' 2>/dev/null
 ```
 
 Assert: No error-level logs. Warnings about `AudioContext` autoplay policy are acceptable. Pre-existing 404 resource errors from page load are acceptable.

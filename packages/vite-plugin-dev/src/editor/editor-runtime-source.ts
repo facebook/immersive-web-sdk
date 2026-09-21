@@ -1239,7 +1239,7 @@ async function renderSceneFile(session, params = {}) {
   }
 }
 
-async function setWorkspaceView(
+function setWorkspaceView(
   view,
   { replaceRoute = false, syncRoute = true } = {},
 ) {
@@ -1260,7 +1260,6 @@ async function setWorkspaceView(
     const reload = window.__IWSDK_WORKSPACE_RUNTIME_STALE === true;
     loadWorkspaceRuntimeFrame({ reload });
     window.__IWSDK_WORKSPACE_RUNTIME_STALE = false;
-    await waitForWorkspaceRuntimeFrame();
   }
   if (view !== 'runtime') {
     scheduleEditorViewportRender();
@@ -1392,13 +1391,13 @@ function reloadWorkspaceRuntimeFrame() {
   if (!(runtimeFrame instanceof HTMLIFrameElement)) {
     return false;
   }
-  if (!runtimeFrame.getAttribute('src')) {
-    return false;
-  }
   if ((window.__IWSDK_WORKSPACE_VIEW || 'editor') === 'editor') {
     window.__IWSDK_WORKSPACE_RUNTIME_STALE = true;
     window.__IWSDK_WORKSPACE_RUNTIME_READY = false;
     return true;
+  }
+  if (!runtimeFrame.getAttribute('src')) {
+    return false;
   }
   return loadWorkspaceRuntimeFrame({ reload: true });
 }
@@ -2186,7 +2185,10 @@ async function dispatchWorkspaceCommand(session, method, params = {}) {
     case 'workspace_get_state':
       return workspaceState(session);
     case 'workspace_set_view':
-      await setWorkspaceView(params.view);
+      setWorkspaceView(params.view);
+      if (params.view === 'runtime') {
+        await waitForWorkspaceRuntimeFrame();
+      }
       return workspaceState(session);
     case 'scene_set_preview_visibility':
       if (!session) {

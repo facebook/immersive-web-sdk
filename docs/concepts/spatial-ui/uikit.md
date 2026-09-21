@@ -93,8 +93,10 @@ See also: [Flow](/concepts/spatial-ui/flow)
 - Components expose a `classList`. Toggle classes to switch visual states or themes at runtime.
 
 ```ts
-const doc = entity.getValue(PanelDocument, 'document');
-const card = doc?.querySelector('.card');
+import { UIKitMLAsset } from '@iwsdk/core';
+
+const panel = world.requireSceneObject<UIKitMLAsset>('settings-panel');
+const card = panel.document.querySelector('.card');
 card?.classList.add('selected');
 ```
 

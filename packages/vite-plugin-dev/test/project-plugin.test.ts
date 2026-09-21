@@ -11,6 +11,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -70,7 +71,6 @@ describe('manifest-first Vite integration', () => {
     );
     expect(() => iwsdkDev({ bridgeReadyTimeoutMs: 15000 })).not.toThrow();
   });
-
   it('fails a production build before bundling invalid public UIKitML', async () => {
     const publicDirectory = path.join(projectRoot, 'public');
     await mkdir(path.join(publicDirectory, 'ui'), { recursive: true });
@@ -559,6 +559,76 @@ describe('manifest-first Vite integration', () => {
       type: 'full-reload',
     });
     expect(unknownClient.send).not.toHaveBeenCalled();
+  });
+
+  it('recognizes project HMR through an aliased workspace root', async () => {
+    const aliasDirectory = await mkdtemp(
+      path.join(os.tmpdir(), 'iwsdk-project-plugin-alias-'),
+    );
+    const aliasRoot = path.join(aliasDirectory, 'workspace');
+    await symlink(projectRoot, aliasRoot, 'junction');
+
+    try {
+      const plugin = iwsdkDev({ https: false });
+      await callHook(
+        plugin.config,
+        plugin,
+        { root: aliasRoot },
+        { command: 'serve', mode: 'development' },
+      );
+      callHook(plugin.configResolved, plugin, {
+        command: 'serve',
+        root: aliasRoot,
+        publicDir: path.join(aliasRoot, 'public'),
+        server: {},
+      });
+
+      let registerHotClient:
+        | ((data: { role: string }, client: unknown) => void)
+        | undefined;
+      const editorClient = { send: vi.fn() };
+      const ws = {
+        clients: new Set([editorClient]),
+        on: vi.fn((event: string, handler: typeof registerHotClient) => {
+          if (event === 'iwsdk:hot-client-role') {
+            registerHotClient = handler;
+          }
+        }),
+        send: vi.fn(),
+      };
+      callHook(plugin.configureServer, plugin, {
+        watcher: {
+          add: vi.fn(),
+          on: vi.fn(),
+          off: vi.fn(),
+        },
+        middlewares: { use: vi.fn() },
+        ws,
+      });
+      registerHotClient?.({ role: 'editor' }, editorClient);
+
+      const aliasedSourcePath = path.join(aliasRoot, 'src', 'assets.ts');
+      const realSourcePath = await realpath(aliasedSourcePath);
+      await expect(
+        callHook(plugin.handleHotUpdate, plugin, {
+          file: aliasedSourcePath,
+          modules: [
+            {
+              file: realSourcePath,
+              isSelfAccepting: false,
+              importers: new Set(),
+            },
+          ],
+          server: { ws },
+        }),
+      ).resolves.toEqual([]);
+      expect(editorClient.send).toHaveBeenCalledWith(
+        'iwsdk:runtime-source-change',
+        { path: 'src/assets.ts' },
+      );
+    } finally {
+      await rm(aliasDirectory, { recursive: true, force: true });
+    }
   });
 
   it('does not inject the development workspace into production builds', async () => {

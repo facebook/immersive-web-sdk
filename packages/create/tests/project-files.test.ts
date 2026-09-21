@@ -351,8 +351,8 @@ describe('common starter project files', () => {
       'data.runtimeUrls.network',
     ]) {
       expect(textFile(files, 'AGENTS.md')).toContain(sharedGuidance);
-      expect(textFile(files, 'CLAUDE.md')).toContain(sharedGuidance);
     }
+    expect(textFile(files, 'CLAUDE.md')).toContain('@AGENTS.md');
     expect(files.some((file) => file.path.startsWith('.claude/rules/'))).toBe(
       true,
     );

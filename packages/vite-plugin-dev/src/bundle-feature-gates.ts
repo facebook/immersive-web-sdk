@@ -78,15 +78,9 @@ const FONT_NAMES = new Set<UIKitMLBundledFontName>(
   Object.keys(BUNDLED_FONT_MODULES) as UIKitMLBundledFontName[],
 );
 
-function collectFontValue(
-  value: unknown,
-  result: Set<UIKitMLBundledFontName>,
-): void {
-  if (
-    typeof value === 'string' &&
-    FONT_NAMES.has(value as UIKitMLBundledFontName)
-  ) {
-    result.add(value as UIKitMLBundledFontName);
+function collectFontValue(value: unknown, result: Set<string>): void {
+  if (typeof value === 'string') {
+    result.add(value);
   }
 }
 
@@ -96,7 +90,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function collectRecordFonts(
   record: Record<string, unknown>,
-  result: Set<UIKitMLBundledFontName>,
+  result: Set<string>,
 ): void {
   collectFontValue(record.fontFamily, result);
   for (const value of Object.values(record)) {
@@ -106,10 +100,7 @@ function collectRecordFonts(
   }
 }
 
-function collectNodeFonts(
-  node: UIKitMLNode,
-  result: Set<UIKitMLBundledFontName>,
-): void {
+function collectNodeFonts(node: UIKitMLNode, result: Set<string>): void {
   if (node.kind === 'text') {
     return;
   }
@@ -122,15 +113,28 @@ function collectNodeFonts(
 }
 
 function collectAstFonts(ast: UIKitMLAst): ReadonlySet<UIKitMLBundledFontName> {
-  const result = new Set<UIKitMLBundledFontName>();
+  const result = new Set<string>();
   collectNodeFonts(ast.root, result);
   for (const declarations of Object.values(ast.stylesheet)) {
     collectRecordFonts(declarations, result);
   }
+  // UIKitML supplies a font-family map when any family is referenced in the
+  // document. Without one, UIKit falls back to its lazily loaded Inter family.
+  // Unused @font-face declarations do not supply a runtime family map.
+  // Compute this before removing custom faces: their map replaces UIKit's
+  // built-in Inter fallback when the custom family is used.
+  const usesUIKitBuiltInDefault = result.size === 0;
   for (const face of ast.fontFaces ?? []) {
-    result.delete(face.fontFamily as UIKitMLBundledFontName);
+    result.delete(face.fontFamily);
   }
-  return result;
+  if (usesUIKitBuiltInDefault) {
+    result.add('inter');
+  }
+  return new Set(
+    [...result].filter((font): font is UIKitMLBundledFontName =>
+      FONT_NAMES.has(font as UIKitMLBundledFontName),
+    ),
+  );
 }
 
 async function collectUIKitMLFiles(directory: string): Promise<string[]> {

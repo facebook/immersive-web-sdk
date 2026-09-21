@@ -109,6 +109,61 @@ describe('browser run command', () => {
     ).rejects.toThrow('configured, but the managed browser is not running');
   });
 
+  test('accepts relative and absolute script paths through a workspace directory alias', async () => {
+    const workspaceRoot = await createWorkspace({
+      enabled: false,
+      protocol: 'cdp',
+    });
+    const aliasRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-run-alias-'));
+    temporaryPaths.push(aliasRoot);
+    const alias = path.join(aliasRoot, 'workspace');
+    await symlink(workspaceRoot, alias, 'junction');
+    for (const script of ['run.mjs', path.join(alias, 'run.mjs')]) {
+      await expect(
+        handleBrowserRun(
+          script,
+          {},
+          {
+            cwd: alias,
+            stderr: process.stderr,
+            stdout: process.stdout,
+          },
+        ),
+      ).rejects.toThrow('Managed browser automation is disabled');
+    }
+  });
+
+  test('rejects an outside script symlink reached through a workspace directory alias', async () => {
+    const workspaceRoot = await createWorkspace({
+      enabled: false,
+      protocol: 'cdp',
+    });
+    const aliasRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-run-alias-'));
+    temporaryPaths.push(aliasRoot);
+    const alias = path.join(aliasRoot, 'workspace');
+    await symlink(workspaceRoot, alias, 'junction');
+
+    const outsideRoot = await mkdtemp(
+      path.join(os.tmpdir(), 'iwsdk-browser-run-outside-'),
+    );
+    temporaryPaths.push(outsideRoot);
+    const outsideScript = path.join(outsideRoot, 'outside.mjs');
+    await writeFile(outsideScript, 'export default () => null;');
+    await symlink(outsideScript, path.join(workspaceRoot, 'linked.mjs'));
+
+    await expect(
+      handleBrowserRun(
+        path.join(alias, 'linked.mjs'),
+        {},
+        {
+          cwd: alias,
+          stderr: process.stderr,
+          stdout: process.stdout,
+        },
+      ),
+    ).rejects.toThrow('symlinks must stay inside the IWSDK workspace');
+  });
+
   test('rejects scripts and symlinks outside the workspace', async () => {
     const workspaceRoot = await createWorkspace({
       enabled: true,

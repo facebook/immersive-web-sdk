@@ -50,14 +50,20 @@ const FILE_TYPES = {
 const EXCLUDE_PATHS = [
   'node_modules',
   'dist',
+  'coverage',
   '.next',
   '.vitepress/cache',
   'public',
   '.pnpm-store',
+  // Generated reference corpus, already excluded from source control.
+  path.join('packages', 'reference-assets', 'data'),
 ];
 
 // Files to exclude
 const EXCLUDE_FILES = [
+  // Generated at build time and excluded from source control.
+  'generated-profiles.ts',
+  'version.ts',
   'rollup.config.js',
   'vite.config.js',
   'vitest.config.js',

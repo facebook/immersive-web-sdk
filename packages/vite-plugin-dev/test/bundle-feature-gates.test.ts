@@ -33,6 +33,22 @@ afterEach(async () => {
 });
 
 describe('production bundle feature gates', () => {
+  it.each([
+    '<div><h1>Score</h1><button>Putt</button></div>',
+    '<style>@font-face { font-family: inter; src: url("./custom.ttf"); font-weight: 400; }</style><div>Default</div>',
+  ])(
+    'retains UIKit default Inter when no family is referenced: %s',
+    async (source) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-default-font-'));
+      tempDirectories.push(root);
+      await writeFile(path.join(root, 'panel.uikitml'), source);
+
+      await expect(resolveBundledFontNames(root, undefined)).resolves.toEqual(
+        new Set(['inter']),
+      );
+    },
+  );
+
   it('retains static and explicitly configured bundled fonts', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-font-bundle-'));
     tempDirectories.push(root);
@@ -112,10 +128,24 @@ describe('production bundle feature gates', () => {
     expect(source).toContain('iwsdkDev({ bundle: { fonts: [...] } })');
   });
 
-  it(
-    'omits Havok from the Vite worker build and omits packaged font atlases',
+  it.each([
+    {
+      name: 'custom font only',
+      source: `<style>
+  @font-face { font-family: "Brand"; src: url("./brand.ttf"); font-weight: 400; }
+  .copy { font-family: "Brand"; }
+</style><div><div class="copy">Copy</div><div>Unstyled custom default</div></div>`,
+      retainsInter: false,
+    },
+    {
+      name: 'implicit UIKit default font',
+      source: '<div><h1>Score</h1><button>Putt</button></div>',
+      retainsInter: true,
+    },
+  ])(
+    'omits Havok and retains only needed font atlases: $name',
     { timeout: 20000 },
-    async () => {
+    async ({ source, retainsInter }) => {
       const root = await mkdtemp(path.join(PACKAGE_ROOT, '.bundle-gate-'));
       tempDirectories.push(root);
       await mkdir(path.join(root, 'src'), { recursive: true });
@@ -134,13 +164,7 @@ console.log(PhysicsSystem, loadUIKitMLComponent);`,
         path.join(root, 'public', 'scenes', 'main.iwsdk.scene.json'),
         '{}\n',
       );
-      await writeFile(
-        path.join(root, 'public', 'ui', 'panel.uikitml'),
-        `<style>
-  @font-face { font-family: "Brand"; src: url("./brand.ttf"); font-weight: 400; }
-  .copy { font-family: "Brand"; }
-</style><div class="copy">Copy</div>`,
-      );
+      await writeFile(path.join(root, 'public', 'ui', 'panel.uikitml'), source);
       await writeFile(
         path.join(root, 'iwsdk.config.json'),
         `${JSON.stringify({
@@ -185,7 +209,10 @@ console.log(PhysicsSystem, loadUIKitMLComponent);`,
             name.toLowerCase().includes(exportName.toLowerCase()),
           ),
         ),
-      ).toBe(false);
+      ).toBe(retainsInter);
+      expect(fileNames.some((name) => /(?:^|\/)inter-/.test(name))).toBe(
+        retainsInter,
+      );
     },
   );
 });

@@ -69,9 +69,12 @@ For guides, concepts, and API reference, visit: **[https://iwsdk.dev](https://iw
 ## Development
 
 ```bash
-# Use the pinned Node major, install dependencies, and build workspace packages
+# Use the pinned Node major, install dependencies, and build runtime/tooling packages
 nvm use
 corepack pnpm@10.18.3 run bootstrap
+
+# Build every workspace package, including the generated reference corpus
+corepack pnpm@10.18.3 run build:all
 
 # Build all packages as tgz files (for examples to consume)
 npm run build:tgz
@@ -91,9 +94,12 @@ corepack pnpm@10.18.3 --filter @iwsdk/core build
 ```
 
 `bootstrap` is also the repair command for a partial or stale source build. It
-uses the lockfile, builds packages in dependency order, and generates WebXR
-input profiles from the pinned npm asset package instead of making a separate
-CDN request. Run `corepack pnpm@10.18.3 run doctor` for environment, proxy, and
+uses the lockfile, builds runtime and tooling packages in dependency order, and
+generates WebXR input profiles from the pinned npm asset package instead of
+making a separate CDN request. It deliberately leaves out the producer-only
+`@iwsdk/reference-assets` package. `build:all` includes that package by running
+its full ingest pipeline, which downloads the pinned embedding model on a fresh
+machine. Run `corepack pnpm@10.18.3 run doctor` for environment, proxy, and
 generated-output checks.
 
 For a network-restricted checkout whose pnpm store is already warm, use

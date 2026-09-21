@@ -29,6 +29,7 @@ browser_profile        <-> iwsdk browser profile
 browser_get_console_logs <-> iwsdk browser logs
 browser_reload_page    <-> iwsdk browser reload
 scene_render_file      <-> iwsdk scene render-file
+scene_flatten_file     <-> iwsdk scene flatten
 scene_get_state        <-> iwsdk scene state
 ecs_diff               <-> iwsdk ecs diff
 ```
@@ -40,18 +41,22 @@ ecs_diff               <-> iwsdk ecs diff
 2. Create or edit public/scenes/*.iwsdk.scene.json directly
 3. scene_render_file on every changed module
 4. scene_render_file on the composed root
-5. scene_open for live collaboration
-6. scene_get_state
-7. scene_set_camera + scene_screenshot for exact review views
-8. Verify the application runtime and console
+5. scene_flatten_file once when the root uses imports
+6. Treat the flattened output as the canonical editable scene
+7. scene_open on that import-free scene for live collaboration
+8. scene_get_state
+9. scene_set_camera + scene_screenshot for exact review views
+10. Verify the application runtime and console
 ```
 
 `scene_render_file` validates, resolves imports, materializes, and renders. Invalid
 files return diagnostics and no PNG. Opening is not required for validation.
 
-The editor watches the active root and its transitive imports. Valid changes replace
-the preview atomically; invalid changes preserve the last valid render; unsaved human
-changes produce a conflict.
+The editor watches the opened import-free scene. Valid changes replace the preview
+atomically; invalid changes preserve the last valid render; unsaved human changes
+produce a conflict. After flattening, continue authoring that file; the import-bearing
+root and modules are scratch inputs. Re-flatten only when intentionally regenerating
+the output because overwrite replaces subsequent flat-file edits.
 
 ## Parallel Modules
 

@@ -460,7 +460,7 @@ function animatePlatform(time) {
 - Verify both objects have `PhysicsShape` components
 - Check that shapes have appropriate dimensions
 - Ensure objects are not starting inside each other
-- Make sure floor has a `PhysicsBody` component with `PhysicsState.Dynamic`
+- Make sure the floor has a `PhysicsBody` component with `PhysicsState.Static`
 
 **Poor performance:**
 
@@ -489,24 +489,13 @@ through `World.create({ level })`:
 {
   "version": "iwsdk.scene.v1",
   "units": "meters",
-  "resources": {
-    "materials": [
-      {
-        "id": "dynamic-box-material",
-        "model": "standard",
-        "baseColor": "#4f7fc8",
-        "roughness": 0.65,
-        "metalness": 0
-      }
-    ]
-  },
+  "resources": {},
   "nodes": [
     {
       "id": "dynamic-box",
       "content": {
-        "type": "primitive",
-        "geometry": { "type": "box", "size": [1, 1, 1] },
-        "material": "dynamic-box-material"
+        "type": "asset",
+        "asset": "dynamic-box"
       },
       "transform": { "position": [0, 1, -1] },
       "components": {
@@ -528,6 +517,10 @@ through `World.create({ level })`:
   ]
 }
 ```
+
+Register `dynamic-box` as a mesh in the project's `defineAssets()` module. Scene
+JSON v1 references application assets; it does not declare geometry or materials
+inline.
 
 Use the native scene editor for placement and validation, especially when a
 physics object needs a precise surface relationship with the floor or another

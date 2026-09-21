@@ -56,7 +56,10 @@ From the `main` branch after PRs are merged:
      `@iwsdk/example-assets` unless that package has its own changeset.
 
 2. Build all packages:
-   - `pnpm -r build`
+   - `pnpm build:all`
+   - This includes the producer-only `@iwsdk/reference-assets` package and runs
+     its ingest pipeline. A fresh machine needs access to the pinned embedding
+     model URLs.
 
 3. Type-check every example against fresh local package tarballs:
    - `pnpm typecheck:examples`
@@ -79,7 +82,7 @@ From the `main` branch after PRs are merged:
 Consider a GitHub Action that:
 
 - Runs on `push` to `main`.
-- Executes `pnpm install`, `pnpm -r build`, `pnpm typecheck:examples`, then
+- Executes `pnpm install`, `pnpm build:all`, `pnpm typecheck:examples`, then
   `pnpm changeset publish` (with `NPM_TOKEN`).
 
 ## Local Testing Tarballs

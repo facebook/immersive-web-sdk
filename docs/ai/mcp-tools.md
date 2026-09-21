@@ -12,15 +12,17 @@ npx @iwsdk/cli scene render-file --help
 ## Scene Authoring Model
 
 Scene JSON files are the authoring API. Agents create and edit
-`public/scenes/*.iwsdk.scene.json` with normal filesystem tools. The managed editor
-watches the open root and imported module files, validates changes, and swaps valid
-documents atomically. Invalid files keep the previous valid render and expose
-diagnostics. Unsaved human changes cause an explicit conflict instead of being
-overwritten.
+`public/scenes/*.iwsdk.scene.json` with normal filesystem tools. Use
+`scene_render_file` to validate imported roots and `scene_flatten_file` to
+materialize them. The managed editor watches the single opened import-free
+document, validates changes, and swaps valid documents atomically. Invalid files
+keep the previous valid render and expose diagnostics. Unsaved human changes
+cause an explicit conflict instead of being overwritten.
 
 The public authoring surface keeps scene observation separate from isolated asset
-inspection. Document mutation, creation, composition, validation-only, review, proof,
-and publish tools are intentionally not part of MCP.
+inspection. `scene_flatten_file` is the single bounded composition write; arbitrary
+document mutation, creation, validation-only, review, proof, and publish tools are
+intentionally not part of MCP.
 
 ### `scene_open`
 
@@ -49,14 +51,31 @@ one call.
 | `height`  | `number` | No       | Output height in pixels                          |
 
 A valid result includes source/composed/runtime hashes, resolved dependencies,
-camera, render statistics, PNG image data, and its SHA-256. An invalid result includes
-structured diagnostics and no PNG.
+camera and render metadata, `screenshotSha256`, and a local `screenshotPath`. Image
+bytes are not embedded in the response. An invalid result includes structured
+diagnostics and no screenshot.
+
+### `scene_flatten_file`
+
+Validate and recursively compose an import-bearing authoring scene into one
+import-free runtime document. The operation refuses output outside
+`public/scenes/`, semantic drift, and replacement of an existing destination unless
+`overwrite` is true.
+
+| Parameter    | Type      | Required | Description                                                       |
+| ------------ | --------- | -------- | ----------------------------------------------------------------- |
+| `path`       | `string`  | Yes      | Import-bearing source scene under `public/scenes/`                |
+| `outputPath` | `string`  | No       | Destination; defaults to `<source>.flat.iwsdk.scene.json`         |
+| `overwrite`  | `boolean` | No       | Permit replacing an existing destination, including in-place mode |
+
+Use the flattened output with `scene_open` and as the runtime scene configured by
+`iwsdk.config.json`.
 
 ### `scene_get_state`
 
 Get the current editor observation in one response:
 
-- active root and imported dependency paths;
+- active import-free scene path;
 - selection;
 - source, composed, and runtime hashes;
 - validation status and file-reload diagnostics;
@@ -69,9 +88,10 @@ through MCP.
 
 ### `scene_get_capabilities`
 
-Get the active scene schema, supported resources/content/materials/geometries,
-component schemas, safety limits, and canonical capability hash. The default response
-is compact; pass `full: true` only when the complete schema payload is required.
+Get the active scene schema, supported node-content, prefab, pattern, and shadow-map
+kinds, component schemas, safety limits, and canonical capability hash. The default
+response is compact; pass `full: true` only when the complete schema payload is
+required.
 
 ### `scene_select`
 
@@ -160,10 +180,10 @@ Scene roots may declare top-level imports:
 ```
 
 Modules are valid standalone v1 documents. Resolution is recursive and deterministic.
-Nodes/resources are namespaced as `<import-id>/<local-id>`, import transforms live on
-wrapper groups, and relative asset URIs rebase from the module. The root owns global
-metadata, environment, and authoring fields. Cycles and invalid modules fail before
-rendering.
+Node and prefab IDs are namespaced as `<import-id>/<local-id>`, while manifest asset
+and component IDs remain application-global. Import transforms live on wrapper groups,
+and the root owns global metadata, environment, and authoring fields. Cycles and
+invalid modules fail before rendering.
 
 ## Browser
 
@@ -308,7 +328,7 @@ Inspect each installed schema for device names, axes, timing, and optional field
 - `ecs_toggle_system`, `ecs_set_component`
 - `ecs_snapshot`, `ecs_diff`
 
-ECS tools observe or control the live application runtime. Scene hierarchy and scene
+ECS tools observe or control the live application runtime. Scene hierarchy and prefab
 resources remain authored in JSON files; ECS tools are for runtime behavior and state,
 not scene composition.
 

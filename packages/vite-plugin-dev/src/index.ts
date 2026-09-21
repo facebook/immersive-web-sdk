@@ -630,12 +630,16 @@ function shouldInjectRuntime(
   return options.iwer !== false && options.injectOnBuild;
 }
 
-function pathsReferToSameFile(left: string, right: string): boolean {
+function canonicalFilePath(value: string): string {
   try {
-    return realpathSync(left) === realpathSync(right);
+    return realpathSync.native(value);
   } catch {
-    return path.resolve(left) === path.resolve(right);
+    return path.resolve(value);
   }
+}
+
+function pathsReferToSameFile(left: string, right: string): boolean {
+  return canonicalFilePath(left) === canonicalFilePath(right);
 }
 
 /**
@@ -2781,15 +2785,19 @@ if (import.meta.hot) {
         return [];
       }
 
+      // Vite resolves module files through symlinks, while its root and watcher
+      // may retain an alias (for example /var vs /private/var on macOS).
+      const sourceRoot = canonicalFilePath(config.root);
+      const sourceFile = canonicalFilePath(context.file);
       const isProjectSource =
-        isPathInside(config.root, context.file) &&
+        isPathInside(sourceRoot, sourceFile) &&
         changedModules.some(
           (module) =>
             module.file != null &&
-            isPathInside(config.root, module.file) &&
+            isPathInside(sourceRoot, canonicalFilePath(module.file)) &&
             pathsReferToSameFile(module.file, context.file),
         );
-      const relativePath = path.relative(config.root, context.file);
+      const relativePath = path.relative(sourceRoot, sourceFile);
       const clients = [...(context.server.ws?.clients ?? [])];
       if (
         !isProjectSource ||

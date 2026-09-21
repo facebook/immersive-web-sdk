@@ -1,6 +1,6 @@
 # @iwsdk/scene-composition
 
-IWSDK-native scene document primitives for declarative scene authoring.
+IWSDK-native scene document utilities for declarative scene authoring.
 
 This package owns the browser-independent scene JSON contract used by the native
 scene editor and agentic scene composition tools. It intentionally does not
@@ -45,13 +45,12 @@ canonical importer when known, and the full namespace. It may return parsed JSON
 or JSON text and may use `fetch`, filesystem APIs, an in-memory map, or another
 application-specific transport.
 
-Composition preserves declaration order. Imported node, resource, prefab, and
-component-schema IDs and their references use slash namespaces such as
-`furniture/chair`; nested imports use `room/furniture/chair`. Each import creates
-a group wrapper named for its namespace segment, and its optional transform is
-applied to that wrapper. Module asset URIs are rebased against the resolver's
-canonical module source. Only the root document contributes `environment`,
-`authoring`, and document metadata.
+Composition preserves declaration order. Imported node and prefab IDs and their
+references use slash namespaces such as `furniture/chair`; nested imports use
+`room/furniture/chair`. Manifest asset and component IDs remain
+application-global. Each import creates a group wrapper named for its namespace
+segment, and its optional transform is applied to that wrapper. Only the root
+document contributes `environment`, `authoring`, and document metadata.
 
 The result contains `{ document, dependencies }`. The composed document has no
 remaining imports and is validated before return. Dependencies are a stable,
@@ -59,14 +58,13 @@ declaration-order preorder traversal with each import's `id`, full `namespace`,
 declared `src`, resolved canonical `source`, and canonical `importer` when known.
 Canonical resolved sources are also the cycle-detection identity.
 
-The material contract supports `standard`, `physical`, and `basic` models.
-Nodes may mark rendered infrastructure with `framingRole: "support"`; the default
-`content` role keeps ordinary nodes in content-only camera framing bounds.
-Standard and physical materials may declare independently seeded procedural albedo,
-emissive, roughness, metalness, ambient-occlusion, alpha, normal, or bump maps using
-the bounded `periodic-fbm-v1` algorithm. Capability snapshots advertise the supported
-channels, algorithms, per-dimension limit, total texel budget, and total sample
-budget; validation enforces those limits before runtime lowering.
+Scene documents support `group`, `asset`, `instance`, and `pattern` content.
+Renderable assets, URLs, geometry, and materials live in the application's
+`defineAssets()` module; scene `resources` contain prefabs only. The package also
+exports geometry-bound and procedural-texture helpers for asset tooling, but those
+descriptors are not scene-document content. Nodes may mark rendered infrastructure
+with `framingRole: "support"`; the default `content` role keeps ordinary nodes in
+content-only camera framing bounds.
 
 Scene review rounds are zero-based: round `0` is the initial review and the
 configured `maxCorrectionRounds` is the inclusive correction ceiling. Configured

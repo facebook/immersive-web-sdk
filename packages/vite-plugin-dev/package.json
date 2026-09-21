@@ -28,12 +28,12 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
-    "prebuild:plugin": "corepack pnpm@10.18.3 --filter @iwsdk/cli build",
+    "prebuild": "npm --prefix ../cli run build",
+    "prebuild:plugin": "npm --prefix ../cli run build",
     "build": "rollup -c rollup.injection.config.js && rollup -c rollup.config.js",
     "build:plugin": "rollup -c rollup.config.js",
     "build:injection": "rollup -c rollup.injection.config.js",
-    "test": "corepack pnpm@10.18.3 --filter @iwsdk/scene-composition build && corepack pnpm@10.18.3 --filter @iwsdk/core build && corepack pnpm@10.18.3 --filter @iwsdk/cli build && corepack pnpm@10.18.3 run build:injection && rollup -c rollup.config.js && vitest run",
+    "test": "npm --prefix ../scene-composition run build && npm --prefix ../core run build && npm --prefix ../cli run build && npm run build:injection && rollup -c rollup.config.js && vitest run",
     "test:watch": "vitest",
     "dev": "rollup -c --watch",
     "clean": "rm -rf dist"

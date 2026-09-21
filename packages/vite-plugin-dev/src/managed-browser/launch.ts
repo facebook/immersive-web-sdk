@@ -7,6 +7,7 @@
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
+import { createRequire } from 'module';
 import * as os from 'os';
 import * as path from 'path';
 import {
@@ -26,6 +27,13 @@ import { errorMessage, parseUrl } from './internals.js';
 const MANAGED_BROWSER_STARTUP_TIMEOUT_MS = 45_000;
 
 const AUTOMATION_ENDPOINT_TIMEOUT_MS = 10_000;
+
+const requireFromPlugin = createRequire(import.meta.url);
+
+function resolvePlaywrightCliPath(): string {
+  const packageJsonPath = requireFromPlugin.resolve('playwright/package.json');
+  return path.join(path.dirname(packageJsonPath), 'cli.js');
+}
 
 const PROFILE_CLEANUP_SCRIPT = String.raw`
 const fs = require('node:fs');
@@ -209,11 +217,16 @@ async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
   );
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('npx', ['playwright', 'install', 'chromium'], {
-      signal,
-      stdio: 'inherit',
-      shell: true,
-    });
+    const child = spawn(
+      process.execPath,
+      [resolvePlaywrightCliPath(), 'install', 'chromium'],
+      {
+        signal,
+        stdio: 'inherit',
+        shell: false,
+        windowsHide: true,
+      },
+    );
 
     child.on('close', (code) => {
       if (code === 0) {
@@ -224,7 +237,7 @@ async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
         reject(
           new Error(
             `Chromium installation failed (exit code ${code}). ` +
-              'Try running manually: npx playwright install chromium',
+              'Reinstall project dependencies, then restart the IWSDK dev server.',
           ),
         );
       }
@@ -234,7 +247,7 @@ async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
       reject(
         new Error(
           `Failed to start Chromium installer: ${err.message}. ` +
-            'Try running manually: npx playwright install chromium',
+            'Reinstall project dependencies, then restart the IWSDK dev server.',
         ),
       );
     });

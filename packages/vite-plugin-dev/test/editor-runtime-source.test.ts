@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
 import {
   Box3,
   BoxGeometry,
@@ -139,7 +140,7 @@ describe('editor runtime source', () => {
     );
     const viewSetter = section(
       source,
-      'async function setWorkspaceView',
+      'function setWorkspaceView',
       'function forceEditorViewportRender',
     );
     const frame = section(
@@ -158,6 +159,10 @@ describe('editor runtime source', () => {
     expect(viewSetter).toContain(
       'workspace_set_view.view must be runtime or editor',
     );
+    expect(viewSetter).not.toContain('waitForWorkspaceRuntimeFrame');
+    expect(source).toContain(
+      "case 'workspace_set_view':\n      setWorkspaceView(params.view);\n      if (params.view === 'runtime') {\n        await waitForWorkspaceRuntimeFrame();",
+    );
     expect(frame).toContain('mountEditorWorkspace(root');
     expect(workspaceSource).toContain('data-workspace-view-button={view}');
     expect(workspaceSource).toContain("(['runtime', 'editor'] as const)");
@@ -170,6 +175,43 @@ describe('editor runtime source', () => {
     expect(controller).toContain("fetch('/__iwsdk/workspace/open-runtime', {");
     expect(controller).toContain("method: 'POST'");
     expect(workspaceSource).not.toContain("'split'");
+  });
+
+  test('does not turn a slow initial runtime frame into an unhandled view transition', () => {
+    const source = createRuntimeSource();
+    const viewSetter = section(
+      source,
+      'function setWorkspaceView',
+      'function sceneEditorDocumentTitle',
+    );
+    const workspaceWindow = {
+      __IWSDK_WORKSPACE_RUNTIME_STALE: false,
+      __IWSDK_WORKSPACE_VIEW: 'editor',
+    };
+    let loadCalls = 0;
+
+    const result = runInNewContext(
+      `${viewSetter}\nsetWorkspaceView('runtime', { syncRoute: false });`,
+      {
+        document: {
+          documentElement: { dataset: {} },
+          querySelectorAll: () => [],
+        },
+        loadWorkspaceRuntimeFrame: () => {
+          loadCalls += 1;
+          return true;
+        },
+        scheduleEditorViewportRender: () => {},
+        syncWorkspaceLocation: () => {},
+        updateWorkspaceDocumentTitle: () => {},
+        window: workspaceWindow,
+        workspaceUi: null,
+      },
+    );
+
+    expect(result).toBeUndefined();
+    expect(loadCalls).toBe(1);
+    expect(workspaceWindow.__IWSDK_WORKSPACE_VIEW).toBe('runtime');
   });
 
   test('fails fast when editor commands require an open scene', () => {
@@ -252,6 +294,45 @@ describe('editor runtime source', () => {
     );
   });
 
+  test('marks an unloaded runtime frame stale while the editor is visible', () => {
+    const source = createRuntimeSource();
+    const reloadRuntimeFrame = section(
+      source,
+      'function reloadWorkspaceRuntimeFrame',
+      'function documentUrlForScene',
+    );
+    class TestIFrame {
+      getAttribute(_name: string): null {
+        return null;
+      }
+    }
+    const runtimeFrame = new TestIFrame();
+    const workspaceWindow = {
+      __IWSDK_WORKSPACE_RUNTIME_READY: true,
+      __IWSDK_WORKSPACE_RUNTIME_STALE: false,
+      __IWSDK_WORKSPACE_VIEW: 'editor',
+    };
+    let loadCalls = 0;
+
+    const result = runInNewContext(
+      `${reloadRuntimeFrame}\nreloadWorkspaceRuntimeFrame();`,
+      {
+        document: { getElementById: () => runtimeFrame },
+        HTMLIFrameElement: TestIFrame,
+        loadWorkspaceRuntimeFrame: () => {
+          loadCalls += 1;
+          return true;
+        },
+        window: workspaceWindow,
+      },
+    );
+
+    expect(result).toBe(true);
+    expect(workspaceWindow.__IWSDK_WORKSPACE_RUNTIME_STALE).toBe(true);
+    expect(workspaceWindow.__IWSDK_WORKSPACE_RUNTIME_READY).toBe(false);
+    expect(loadCalls).toBe(0);
+  });
+
   test('shares one canonical UIKitML asset render across editor consumers', () => {
     const source = createRuntimeSource();
     const panelDocument = section(
@@ -286,7 +367,7 @@ describe('editor runtime source', () => {
     const detachedRender = section(
       source,
       'async function renderSceneFile',
-      'async function setWorkspaceView',
+      'function setWorkspaceView',
     );
     expect(detachedRender).toContain(
       'scheduleEditorSceneLowering(temporarySession, { force: true })',

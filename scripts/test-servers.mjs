@@ -166,30 +166,69 @@ function killGroup(pgid, expectedCwd) {
   return true;
 }
 
-/**
- * Read the IWSDK runtime session for a given example dir and extract the port.
- * Returns the port number when the runtime is connected and command-ready, else null.
- */
-function readPort(dir) {
+function readSession(dir) {
   const sessionPath = join(EXAMPLES, dir, '.iwsdk', 'runtime', 'session.json');
   if (!existsSync(sessionPath)) return null;
   try {
-    const data = JSON.parse(readFileSync(sessionPath, 'utf8'));
-    if (!data?.port) return null;
-    if (data.browser && data.browser.commandReady !== true) return null;
-    return parseInt(data.port, 10);
+    return JSON.parse(readFileSync(sessionPath, 'utf8'));
   } catch {
     return null;
   }
 }
 
+function readSessionPort(dir) {
+  const port = parseInt(readSession(dir)?.port, 10);
+  return Number.isFinite(port) && port > 0 ? port : null;
+}
+
+function hasReadyManagedClient(session, role) {
+  return (
+    session?.browser?.connected === true &&
+    Array.isArray(session.browser.clients) &&
+    session.browser.clients.some(
+      (client) =>
+        client?.commandReady === true &&
+        client.deviceClass === 'managed' &&
+        client.role === role,
+    )
+  );
+}
+
+/**
+ * Return the runtime port once the managed editor can accept semantic browser
+ * commands. The workspace initially loads only the editor; its application
+ * iframe is created when a browser command asks for the runtime surface.
+ */
+function readEditorReadyPort(dir) {
+  const session = readSession(dir);
+  const port = parseInt(session?.port, 10);
+  if (!Number.isFinite(port) || port <= 0) return null;
+  return hasReadyManagedClient(session, 'editor') ? port : null;
+}
+
+/**
+ * Return the runtime port only after both managed pages form a command path.
+ * Checking the app client explicitly prevents a stale aggregate readiness bit
+ * from making the test orchestrator race the application iframe startup.
+ */
+function readPort(dir) {
+  const session = readSession(dir);
+  const port = parseInt(session?.port, 10);
+  if (!Number.isFinite(port) || port <= 0) return null;
+  if (session.browser?.commandReady !== true) return null;
+  return hasReadyManagedClient(session, 'editor') &&
+    hasReadyManagedClient(session, 'app')
+    ? port
+    : null;
+}
+
 /**
  * Read ports from all dirs, return { dir: port } map.
  */
-function readAllPorts() {
+function readAllPorts(readPortForDir = readPort) {
   const ports = {};
   for (const dir of ALL_DIRS) {
-    const port = readPort(dir);
+    const port = readPortForDir(dir);
     if (port) ports[dir] = port;
   }
   return ports;
@@ -302,29 +341,62 @@ if (command === 'start') {
     const logPath = `/tmp/iwsdk-dev-${dir}.log`;
     const logFd = openSync(logPath, 'w');
 
-    const child = spawn('npm', ['run', 'dev', '--', '--ai-mode', 'agent'], {
-      cwd,
-      detached: true,
-      env: process.env,
-      stdio: ['ignore', logFd, logFd],
-    });
+    const child = spawn(
+      'npm',
+      ['run', 'dev', '--', '--ai-mode', 'agent', '--timeout', '180000'],
+      {
+        cwd,
+        detached: true,
+        env: process.env,
+        stdio: ['ignore', logFd, logFd],
+      },
+    );
     child.unref();
     writePgid(dir, child.pid);
     children.push({ dir, pid: child.pid });
     console.error(`  ${dir}: started (pid ${child.pid})`);
   }
 
-  // Poll for .mcp.json files
-  console.error('Waiting for servers to be ready...');
+  // The managed workspace starts on its editor surface. Wait only for that
+  // command path first, then use a semantic browser operation to initialize
+  // the application iframe before requiring aggregate command readiness.
+  console.error('Waiting for server ports and managed editors...');
   const startTime = Date.now();
   const TIMEOUT = 60_000;
   const POLL_INTERVAL = 1_000;
+  let editorsReady = false;
 
   while (Date.now() - startTime < TIMEOUT) {
+    const ports = readAllPorts(readEditorReadyPort);
+    const ready = Object.keys(ports).length;
+    if (ready === ALL_DIRS.length) {
+      editorsReady = true;
+      console.error(`All ${ready} managed editors ready.`);
+      break;
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+  }
+
+  if (!editorsReady) {
+    const ports = readAllPorts(readEditorReadyPort);
+    const missing = ALL_DIRS.filter((d) => !ports[d]);
+    console.error(
+      `TIMEOUT: ${missing.length} managed editor(s) not ready: ${missing.join(', ')}`,
+    );
+    console.error('Check logs: /tmp/iwsdk-dev-<name>.log');
+    console.log(JSON.stringify(ports, null, 2));
+    process.exit(1);
+  }
+
+  const bootstrapSucceeded = await activateRuntimeViews();
+
+  console.error('Waiting for managed application runtimes...');
+  const runtimeStartTime = Date.now();
+  while (Date.now() - runtimeStartTime < TIMEOUT) {
     const ports = readAllPorts();
     const ready = Object.keys(ports).length;
     if (ready === ALL_DIRS.length) {
-      if (!(await activateRuntimeViews())) {
+      if (!bootstrapSucceeded && !(await activateRuntimeViews())) {
         process.exit(1);
       }
       console.error(`All ${ready} servers ready.`);
@@ -335,14 +407,12 @@ if (command === 'start') {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL));
   }
 
-  // Timeout — report what's missing
   const ports = readAllPorts();
   const missing = ALL_DIRS.filter((d) => !ports[d]);
   console.error(
-    `TIMEOUT: ${missing.length} server(s) not ready: ${missing.join(', ')}`,
+    `TIMEOUT: ${missing.length} application runtime(s) not ready: ${missing.join(', ')}`,
   );
   console.error('Check logs: /tmp/iwsdk-dev-<name>.log');
-  // Still output whatever ports we have
   console.log(JSON.stringify(ports, null, 2));
   process.exit(1);
 }
@@ -359,7 +429,11 @@ if (command === 'stop') {
     unlinkPgid(dir);
   }
 
-  const ports = readAllPorts();
+  const ports = Object.fromEntries(
+    ALL_DIRS.map((dir) => [dir, readSessionPort(dir)]).filter(
+      ([, port]) => port != null,
+    ),
+  );
   for (const [dir, port] of Object.entries(ports)) {
     try {
       const pids = execSync(`lsof -t -i :${port} 2>/dev/null`, {

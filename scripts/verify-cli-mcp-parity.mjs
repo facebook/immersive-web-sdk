@@ -26,7 +26,6 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
@@ -35,6 +34,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { runBrowserWarmup } from './browser-warmup-utils.mjs';
+import {
+  assertPngScreenshotParity,
+  summarizePngScreenshot,
+} from './screenshot-parity-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -123,10 +126,6 @@ Options:
   };
 }
 
-function sha256(buffer) {
-  return createHash('sha256').update(buffer).digest('hex');
-}
-
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -160,6 +159,7 @@ function sanitizeString(value) {
       /(?:https?|wss?):\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+\/?/g,
       '<network-url>',
     )
+    .replace(/\[\.WebGL-0x[0-9a-f]+\]/gi, '[.WebGL-<context>]')
     .replace(/\?v=[a-z0-9]+/gi, '?v=<hash>')
     .replace(/tab-[a-z0-9-]+/gi, '<tab-id>');
 }
@@ -370,11 +370,11 @@ async function callCliToolOutcome(
     const image = Buffer.from(parsed.imageData, 'base64');
     return {
       ok: true,
-      result: {
-        kind: 'image',
-        hash: sha256(image),
-        bytes: image.length,
-      },
+      result: summarizePngScreenshot(
+        image,
+        parsed.mimeType,
+        'CLI browser_screenshot',
+      ),
       raw: parsed,
     };
   }
@@ -501,11 +501,11 @@ async function callMcpToolOutcome(client, toolName, args) {
     const image = Buffer.from(imageBlock.data, 'base64');
     return {
       ok: !response.isError,
-      result: {
-        kind: 'image',
-        hash: sha256(image),
-        bytes: image.length,
-      },
+      result: summarizePngScreenshot(
+        image,
+        imageBlock.mimeType,
+        'MCP browser_screenshot',
+      ),
       warnings: parsed.warnings,
       tab: parsed.tab,
       raw: response,
@@ -535,11 +535,11 @@ async function callMcpToolOutcome(client, toolName, args) {
     await rm(payload.screenshotPath, { force: true });
     return {
       ok: true,
-      result: {
-        kind: 'image',
-        hash: sha256(image),
-        bytes: image.length,
-      },
+      result: summarizePngScreenshot(
+        image,
+        payload.mimeType,
+        'MCP browser_screenshot',
+      ),
       warnings: parsed.warnings,
       tab: parsed.tab,
       raw: response,
@@ -579,28 +579,7 @@ const RECOVERABLE_BROWSER_CAUSES = new Set([
 ]);
 
 function assertImageSmoke(label, cliValue, mcpValue) {
-  assert(
-    cliValue?.kind === 'image',
-    `${label}: CLI did not return an image payload`,
-  );
-  assert(
-    mcpValue?.kind === 'image',
-    `${label}: MCP did not return an image payload`,
-  );
-  assert(
-    typeof cliValue.bytes === 'number' && cliValue.bytes > 0,
-    `${label}: CLI image payload was empty`,
-  );
-  assert(
-    typeof mcpValue.bytes === 'number' && mcpValue.bytes > 0,
-    `${label}: MCP image payload was empty`,
-  );
-
-  const byteDelta = Math.abs(cliValue.bytes - mcpValue.bytes);
-  assert(
-    byteDelta <= 4096,
-    `${label}: CLI and MCP screenshots diverged too much in size (${cliValue.bytes} vs ${mcpValue.bytes})`,
-  );
+  assertPngScreenshotParity(label, cliValue, mcpValue);
 }
 
 function assertEquivalent(label, toolName, cliValue, mcpValue) {
@@ -889,6 +868,11 @@ const SMOKE_STEPS = [
 ];
 
 function assertSmokeCoverage() {
+  assert.equal(
+    sanitizeString('[.WebGL-0x1140043f000] GPU stall'),
+    '[.WebGL-<context>] GPU stall',
+    'GPU context ids must not make parity results nondeterministic',
+  );
   const { RUNTIME_MCP_TOOLS, getRuntimeOperationByToolName } =
     getRuntimeContract();
   const expectedNames = new Set(RUNTIME_MCP_TOOLS.map((tool) => tool.name));

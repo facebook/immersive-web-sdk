@@ -129,10 +129,12 @@ Choose by the shape of the call, not by availability:
   filtering before it reaches context. A render of a scene containing an
   instanced pattern returns an id for every expanded instance.
 
-CLI `--output-file` returns a **different payload shape** from the plain call:
-the result nests under `data.result` instead of `data`, and `renderStats` and the
-hashes are dropped. If you need a hash or triangle count, omit `--output-file`
-and filter the JSON instead.
+For screenshot-producing CLI commands, the default response writes the image to a
+temporary file and returns a normal envelope with metadata under `data.result` and
+the path at `data.screenshotPath`. `--output-file <path>` selects the destination and
+keeps that same metadata, including hashes and render statistics. `--raw` instead
+prints the raw runtime result, including base64 `imageData`; when both flags are
+present, `--output-file` takes precedence and image bytes are omitted.
 
 ## Skills
 

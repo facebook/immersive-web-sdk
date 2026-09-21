@@ -73,9 +73,9 @@ export class MySystem extends createSystem(
     specialQuery: { required: [ComponentA], excluded: [ComponentC] },
 
     // Query with value predicate - matches specific component values
-    configQuery: {
-      required: [PanelUI, PanelDocument],
-      where: [eq(PanelUI, 'config', '/ui/welcome.uikitml')],
+    regenerating: {
+      required: [Robot, Health],
+      where: [eq(Health, 'regenerating', true)],
     },
   },
   {
@@ -99,11 +99,11 @@ this.queries.myQuery.entities.forEach((entity) => {
 });
 
 // React to entities entering/leaving queries
-this.queries.welcomePanel.subscribe('qualify', (entity) => {
+this.queries.regenerating.subscribe('qualify', (entity) => {
   // Called when entity newly matches query
 });
 
-this.queries.welcomePanel.subscribe('disqualify', (entity) => {
+this.queries.regenerating.subscribe('disqualify', (entity) => {
   // Called when entity stops matching query
 });
 ```

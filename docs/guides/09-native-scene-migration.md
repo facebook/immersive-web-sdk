@@ -20,12 +20,13 @@ bootstrap. Do not create a second World or renderer for authored content.
 
 ## 2. Inventory Declarative Content
 
-Move static models, primitives, materials, lights, hierarchy, transforms, environment,
-and typed components into scene JSON. Keep runtime behavior, animation, networking,
-and systems in code.
+Move asset references, prefab composition, lights, hierarchy, transforms, environment,
+and typed component data into scene JSON. Keep runtime behavior, animation,
+networking, and systems in code.
 
-Use exact project-public asset URIs. Supply meter-space bounds for models when the
-asset cannot provide them reliably.
+Keep model URLs, procedural geometry, and materials in the `defineAssets()` module
+selected by `iwsdk.config.json`. Scene nodes reference those application-global asset
+IDs with `content.type: "asset"`; scene `resources` contain prefabs only.
 
 ## 3. Split Independent Modules
 
@@ -50,12 +51,16 @@ Create and edit files directly. Use:
 1. `scene_get_capabilities`
 2. `scene_render_file` for each module
 3. `scene_render_file` for the root
-4. `scene_open` for live collaboration
-5. `scene_get_state` for hashes, validation, conflict, and runtime readiness
-6. exact `scene_set_camera` and `scene_screenshot` views
+4. `scene_flatten_file` to create an import-free runtime document
+5. `scene_open` on the flattened file for live collaboration
+6. `scene_get_state` for hashes, validation, conflict, and runtime readiness
+7. exact `scene_set_camera` and `scene_screenshot` views
 
-The editor automatically reloads valid root/module changes. Invalid files retain the
-last valid viewport and expose diagnostics.
+The editor automatically reloads valid changes to the opened import-free document.
+After flattening, edit that output as the canonical scene; the authoring root and
+modules are scratch inputs. Re-flatten only when intentionally regenerating the output,
+because overwrite replaces later flat-file edits. Invalid opened files retain the last
+valid viewport and expose diagnostics.
 
 ## 6. Verify Runtime Parity
 

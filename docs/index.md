@@ -21,7 +21,7 @@ features:
     link: /concepts/ecs/
     linkText: Learn more
   - title: 🎨 First-Class Spatial UI
-    details: Author 3D interfaces in HTML-like syntax with UIKitML. High-performance layout and text rendering, compiled at build time by a Vite plugin.
+    details: Author 3D interfaces in HTML-like syntax with UIKitML. Source files are loaded and parsed directly at runtime into high-performance 3D layout and text.
     link: /concepts/spatial-ui/
     linkText: Learn more
   - title: ⚡ Production-Ready XR Systems
@@ -37,7 +37,7 @@ features:
     link: /ai/modes
     linkText: Learn more
   - title: 🛠️ Powerful AI Tooling
-    details: Full XR emulation control, native scene composition, scene graph inspection, and ECS-level debugging. 39 tools covering everything from input simulation to scene-file validation and runtime inspection.
+    details: Full XR emulation control, native scene composition, scene graph inspection, and ECS-level debugging. A broad toolset covers everything from input simulation to scene-file validation and runtime inspection.
     link: /ai/mcp-tools
     linkText: Learn more
 ---

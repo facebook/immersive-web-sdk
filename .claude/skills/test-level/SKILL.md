@@ -127,9 +127,11 @@ Pick any tagged entity from the results above:
 npx @iwsdk/cli ecs query --input-json '{"entityIndex":<any-tagged>,"components":["LevelTag"]}' 2>/dev/null
 ```
 
-Assert: `id` = `"level:default"`
+Assert: `id` = `"/scenes/poke.iwsdk.scene.json"`
 
-All tagged entities should have the same `id` value (`"level:default"` for the initial level).
+All tagged entities should have the same URL-derived `id` value. This fixture
+loads `./public/scenes/poke.iwsdk.scene.json`, which is served at
+`/scenes/poke.iwsdk.scene.json`.
 
 **Test 2.3: Persistent Entities Excluded**
 
@@ -229,7 +231,11 @@ Only give up after one retry attempt per suite. If the same suite fails twice, m
 
 ### LevelTag id for default level
 
-When no GLXF level URL is provided, the level id is `"level:default"`. All entities created via `world.createTransformEntity()` (without `persistent: true`) automatically receive `LevelTag` with this id.
+When no scene level URL is provided, the level id falls back to
+`"level:default"`. When a scene URL is configured, as in this fixture, the URL
+is used as the level id. All entities created via `world.createTransformEntity()`
+(without `persistent: true`) automatically receive `LevelTag` with the active
+level id.
 
 ### Level root identity enforcement
 

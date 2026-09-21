@@ -98,7 +98,7 @@ the camera outside XR:
 ```ts
 entity.addComponent(ScreenSpace, {
   width: '40vw',
-  height: 'auto',
+  height: '25vh',
   bottom: '24px',
   right: '24px',
   zOffset: 0.25,

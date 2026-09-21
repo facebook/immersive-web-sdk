@@ -442,7 +442,7 @@ Runtime command groups (`xr`, `browser`, `scene`, `ecs`) require a running IWSDK
 runtime. `dev up` starts one; `status`, `dev`, `adapter`, `reference`, and
 `mcp inspect` commands can run without an active runtime unless noted.
 
-### Full CLI Tree
+### Common CLI Commands
 
 ```
 iwsdk status
@@ -457,7 +457,7 @@ iwsdk xr       status | enter | exit | get-transform | set-transform |
                get-gamepad-state | set-gamepad-state |
                get-device-state | set-device-state
 iwsdk browser  screenshot | logs | reload
-iwsdk scene    open | render-file | state | capabilities | select |
+iwsdk scene    open | render-file | flatten | state | capabilities | select |
                set-camera | screenshot | set-preview-visibility |
                measure-image-regions
 iwsdk ecs      pause | resume | step | query | find | systems |
@@ -466,30 +466,36 @@ iwsdk ecs      pause | resume | step | query | find | systems |
 
 ### Native Scene Composition Tools
 
-Scene files are now the authoring API. Create and edit existing
-`public/scenes/*.iwsdk.scene.json` files directly; the managed editor watches the
-active root and every imported module. Valid changes replace the preview atomically.
-Invalid files keep the last valid preview and report diagnostics. Unsaved human edits
-produce a conflict instead of being overwritten.
+Scene files are now the authoring API. Create and edit import-bearing roots and
+modules directly, validate them with `scene_render_file`, then use
+`scene_flatten_file` once. Treat the flattened output as the canonical editable scene.
+The managed editor watches that single opened import-free document; valid changes
+replace the preview atomically. Invalid files keep the last valid preview and report
+diagnostics. Unsaved human edits produce a conflict instead of being overwritten.
 
-The public scene tool surface is exactly:
+The public editor and file-authoring scene tool surface is:
 
-`scene_open`, `scene_render_file`, `scene_get_state`,
+`scene_open`, `scene_render_file`, `scene_flatten_file`, `scene_get_state`,
 `scene_get_capabilities`, `scene_screenshot`, `scene_select`,
 `scene_set_camera`, `scene_set_preview_visibility`, and
 `scene_measure_image_regions`.
 
 `scene_render_file` is the detached validate-and-render operation. It resolves module
-imports, validates the composed document, and returns hashes, render metadata, and a
-PNG. If validation or materialization fails it returns diagnostics and no PNG.
+imports, validates the composed document, and returns source/composed/runtime hashes,
+resolved dependencies, camera and render metadata, `screenshotSha256`, and a local
+`screenshotPath`; image bytes are not embedded in the response. If validation or
+materialization fails it returns diagnostics and no screenshot.
 `scene_open` opens an existing file only; create new files with normal filesystem
 tools.
 
 Use top-level `imports` to compose standalone v1 module files. Imported nodes and
-resources receive deterministic `<import-id>/<local-id>` namespaces, the import
-wrapper carries its transform, relative asset URIs rebase from the module, and the
-root retains global environment/authoring ownership. This lets independent agents
-author and render distinct module files in parallel before the root composes them.
+prefabs receive deterministic `<import-id>/<local-id>` namespaces, the import wrapper
+carries its transform, and the root retains global environment/authoring ownership.
+This lets independent agents author and render distinct module files in parallel
+before the root composes them. Imports are authoring-only; after validation, use
+`scene_flatten_file` (CLI: `iwsdk scene flatten`) once to produce the import-free
+scene loaded by the runtime and editable in the managed editor. Continue authoring
+the flat output; re-flatten with overwrite only when intentionally replacing its edits.
 
 `scene_get_state` reports the active file, selection, source/composed/runtime hashes,
 validation diagnostics, dirty/conflict state, runtime readiness, and render stats.
@@ -507,19 +513,21 @@ deterministic 45-degree increments around the scene. Use multiple angles before
 saving when checking symmetry, alignment, and whether objects are actually
 resting on a surface.
 
-Renderable scene nodes use discriminated `content`. Model content references
-an entry in `resources.assets`; primitive content contains box, sphere,
-cylinder, cone, plane, capsule, extrude, tube, lathe, torus, or rounded-box
-geometry and references an entry in `resources.materials`. Materials support
-standard PBR or basic shading, `#RRGGBB` colors, roughness, metalness, opacity,
-emissive color, face side, and flat shading. A node may set
+Renderable scene nodes use discriminated `content`: `group`, `asset`, `instance`,
+or `pattern`. Asset content references an application-global ID from the
+`defineAssets()` module selected by `iwsdk.config.json`; scene JSON never declares
+asset URLs, procedural geometry, or materials. `resources` contains reusable scene
+prefabs only. Create procedural shapes and custom materials in TypeScript, register
+the resulting parentless `Object3D` in `defineAssets()`, and reference its asset ID
+from the scene. A node may set
 `framingRole: "support"` so rendered infrastructure remains in raw `worldBounds`
 but is excluded from content-only `framingBounds` and automatic scene framing;
-omission means `content`. Add or edit nodes, materials, and resources directly in the
-owning root or module file, then call `scene_render_file` before opening the root.
+omission means `content`. Before flattening, add or edit nodes and prefabs in
+the owning root or module, update renderable assets in the asset module, and call
+`scene_render_file`. Then flatten once, open the import-free output, and continue
+authoring there.
 
 ### ECS Inspection
-
 ```bash
 npx @iwsdk/cli ecs find --input-json '{"withComponents":["DistanceGrabbable"]}'
 npx @iwsdk/cli ecs query --input-json '{"entityIndex":3}'
@@ -541,7 +549,8 @@ npx @iwsdk/cli ecs snapshot --input-json '{"label":"after"}'
 npx @iwsdk/cli ecs diff --input-json '{"from":"before","to":"after"}'  # Compare
 ```
 
-Only the two most recent distinct snapshot labels are retained.
+Snapshots retain two distinct labels by default. Pass `capacity` from 2 through 20
+to configure the rolling window for the current runtime.
 
 ### Browser Tools
 

@@ -10,7 +10,7 @@ The goal is not to prescribe one browser camera style. First-person, orbit, prod
 | -------------------------------------------------- | --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transform, level, visibility, environment lighting | Ready                                                     | Ready    | Core ECS and Three.js integration do not depend on XR.                                                                                       |
 | Pointer input                                      | Ready                                                     | Ready    | `input.canvasPointerEvents` forwards browser canvas pointer events; XR rays use `input.xr.multiPointers`. Both feed `Hovered` and `Pressed`. |
-| Spatial UI                                         | Ready                                                     | Ready    | `PanelUI` works in world space, and `ScreenSpace` panels are parented to `world.camera` outside XR.                                          |
+| Spatial UI                                         | Ready                                                     | Ready    | Manifest-backed `UIKitMLAsset` works in world space, and `ScreenSpace` panels are parented to `world.camera` outside XR.                     |
 | Audio                                              | Ready                                                     | Ready    | Audio sources and spatial audio are scene features, not XR-only features.                                                                    |
 | Physics                                            | Ready                                                     | Ready    | Havok simulation is browser-safe. Physics colliders are separate from locomotion BVH collision.                                              |
 | Locomotion                                         | Opt-in browser bindings                                   | Ready    | The locomotor engine is shared. Browser apps can opt into keyboard/browser-gamepad action bindings while keeping camera behavior app-owned.  |
@@ -52,7 +52,7 @@ const world = await World.create(container, {
 
 With `browserControls: true`, IWSDK binds WASD/arrow keys and standard browser gamepads to locomotion actions. The app still owns the camera style. For first-person browser movement, drive `world.camera` orientation and let locomotion move `world.player`. For orbit, follow, editor, or third-person cameras, keep the camera logic in app systems and use locomotion only if the app wants a player origin that moves through the environment.
 
-The `examples/browser-first` app uses `xr: false`, `features.locomotion.browserControls`, `input.canvasPointerEvents`, `LocomotionEnvironment`, browser-ready grab handles, ray interactables, physics, audio, and screen-space `PanelUI` together in one browser-first scene.
+The `examples/browser-first` app uses `xr: false`, `features.locomotion.browserControls`, `input.canvasPointerEvents`, `LocomotionEnvironment`, browser-ready grab handles, ray interactables, physics, audio, and a world-space manifest-backed UIKitML asset together in one browser-first scene.
 
 ## Locomotion
 

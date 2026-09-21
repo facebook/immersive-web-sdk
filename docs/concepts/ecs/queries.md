@@ -15,8 +15,13 @@ Membership updates automatically as entities gain/lose components and when relev
 ## Defining Queries (required/excluded)
 
 ```ts
-export class RenderUISystem extends createSystem({
-  panels: { required: [PanelUI], excluded: [ScreenSpace] },
+import { createComponent, createSystem } from '@iwsdk/core';
+
+const Moving = createComponent('Moving', {});
+const Paused = createComponent('Paused', {});
+
+export class MovementSystem extends createSystem({
+  moving: { required: [Moving], excluded: [Paused] },
 }) {
   /*…*/
 }
@@ -95,10 +100,10 @@ entity.setValue(C,'hp',20) → QueryManager.updateEntityValue(entity,C)
 ## Reacting to membership changes
 
 ```ts
-this.queries.panels.subscribe('qualify', (e) => {
+this.queries.moving.subscribe('qualify', (e) => {
   // attach resources exactly once when an entity starts matching
 });
-this.queries.panels.subscribe('disqualify', (e) => {
+this.queries.moving.subscribe('disqualify', (e) => {
   // cleanup when it stops matching
 });
 ```
@@ -106,7 +111,7 @@ this.queries.panels.subscribe('disqualify', (e) => {
 ## Iterating entities efficiently
 
 ```ts
-for (const e of this.queries.panels.entities) {
+for (const e of this.queries.moving.entities) {
   // per-frame work
 }
 ```

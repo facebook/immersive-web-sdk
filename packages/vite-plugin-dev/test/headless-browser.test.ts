@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { createRequire } from 'module';
+import path from 'path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -15,7 +17,17 @@ const mocks = vi.hoisted(() => ({
   launch: vi.fn(),
   launchPersistentContext: vi.fn(),
   platform: vi.fn(() => 'linux'),
+  spawn: vi.fn(),
 }));
+
+vi.mock('child_process', async () => {
+  const actual =
+    await vi.importActual<typeof import('child_process')>('child_process');
+  return {
+    ...actual,
+    spawn: mocks.spawn,
+  };
+});
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
@@ -84,6 +96,7 @@ describe('launchManagedBrowser', () => {
     mocks.launchPersistentContext.mockReset();
     mocks.platform.mockReset();
     mocks.platform.mockReturnValue('linux');
+    mocks.spawn.mockReset();
     delete process.env.IWSDK_CHROME_EXECUTABLE;
     delete process.env.IWSDK_GPU;
   });
@@ -123,6 +136,45 @@ describe('launchManagedBrowser', () => {
       '--ignore-certificate-errors',
     );
     expect(mocks.launch.mock.calls[0]?.[0]?.args).not.toContain('--no-sandbox');
+  });
+
+  test('installs Chromium with the plugin-local Playwright CLI without npx', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    mocks.existsSync.mockReturnValue(false);
+    const child: any = { on: vi.fn() };
+    child.on.mockImplementation(
+      (event: string, callback: (...args: any[]) => void) => {
+        if (event === 'close') {
+          queueMicrotask(() => callback(0));
+        }
+        return child;
+      },
+    );
+    mocks.spawn.mockReturnValueOnce(child);
+    const page = createMockPage();
+    const { browser } = createMockBrowser(page);
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+    await launchManagedBrowser('http://127.0.0.1:5173', true, false);
+
+    const requireFromTest = createRequire(import.meta.url);
+    const playwrightCliPath = path.join(
+      path.dirname(requireFromTest.resolve('playwright/package.json')),
+      'cli.js',
+    );
+    expect(mocks.spawn).toHaveBeenCalledOnce();
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [playwrightCliPath, 'install', 'chromium'],
+      {
+        signal: undefined,
+        stdio: 'inherit',
+        shell: false,
+        windowsHide: true,
+      },
+    );
   });
 
   test('does not retry with system Chrome when Playwright launch fails', async () => {
