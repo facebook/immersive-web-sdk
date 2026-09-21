@@ -49,7 +49,7 @@ You should see output similar to:
 Or, if you prefer a CLI summary after startup:
 
 ```bash
-npx iwsdk dev status
+npx @iwsdk/cli dev status
 ```
 
 ::: warning HTTPS Required
@@ -83,7 +83,7 @@ On most home networks, you can access the local server directly. **Your headset 
 1. **Put on your headset** and navigate to the browser app
 2. **Find your computer's IP address** in the Vite dev server output (look for the "Network" URL)
    - Example output: `➜  Network: https://192.168.1.100:5173/`
-   - `npx iwsdk dev status` also reports the current runtime URL
+   - `npx @iwsdk/cli dev status` also reports the current runtime URL
 3. **Enter the development URL** in your headset's browser using the reported network host and port, for example `https://192.168.1.100:5173`
 4. **Accept the certificate warning** (this is normal for local development with self-signed certificates)
 5. **Click "Enter XR"** when the page loads
@@ -135,7 +135,7 @@ iwsdkDev({
 - **`userAgentException`**: Adds an extra layer of protection by skipping IWER activation if the browser's user agent matches a pattern (like `OculusBrowser`). This ensures IWER won't activate on headsets even when using ADB port forwarding with localhost.
 - **`sem`**: Synthetic Environment Module for AR scene understanding (AR projects only)
 
-To test with IWER, open the Local URL reported by Vite or `npx iwsdk dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
+To test with IWER, open the Local URL reported by Vite or `npx @iwsdk/cli dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
 
 <video autoplay loop muted playsinline poster="/testing-experience/starter-iwer-poster.jpg">
   <source src="/testing-experience/starter-iwer.mp4" type="video/mp4">

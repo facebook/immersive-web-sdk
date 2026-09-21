@@ -7,7 +7,7 @@
  */
 
 /**
- * Static lint that scans the test-* SKILL.md files for `npx iwsdk <subcommand>`
+ * Static lint that scans the test-* SKILL.md files for `npx @iwsdk/cli <subcommand>`
  * invocations and asserts each cliPath is exposed by `iwsdk mcp inspect`.
  * Catches typos in SKILL docs without needing a full /test-all run.
  *
@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS_DIR = path.join(ROOT, '.claude', 'skills');
 const INSPECT_CWD = path.join(ROOT, 'examples', 'poke');
+const CLI_ENTRYPOINT = path.join(ROOT, 'packages', 'cli', 'bin', 'iwsdk.js');
 
 const RUNTIME_DOMAINS = new Set(['xr', 'browser', 'scene', 'ecs']);
 const NON_TOOL_SUBCOMMANDS = new Set([
@@ -51,10 +52,14 @@ const NON_TOOL_SUBCOMMANDS = new Set([
 ]);
 
 function loadCliPaths() {
-  const result = spawnSync('npx', ['iwsdk', 'mcp', 'inspect'], {
-    cwd: INSPECT_CWD,
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [CLI_ENTRYPOINT, 'mcp', 'inspect'],
+    {
+      cwd: INSPECT_CWD,
+      encoding: 'utf8',
+    },
+  );
   if (result.status !== 0) {
     if (result.stderr) process.stderr.write(result.stderr);
     throw new Error(`\`iwsdk mcp inspect\` failed (exit ${result.status})`);
@@ -75,7 +80,7 @@ function listSkillFiles() {
 
 function extractInvocations(text) {
   const invocations = [];
-  const pattern = /npx\s+iwsdk\s+([a-z][\w-]*(?:\s+[a-z][\w-]*)?)/g;
+  const pattern = /npx\s+@iwsdk\/cli\s+([a-z][\w-]*(?:\s+[a-z][\w-]*)?)/g;
   for (const match of text.matchAll(pattern)) {
     invocations.push({
       raw: match[0],
@@ -141,7 +146,7 @@ function main() {
 
   if (failures.length === 0) {
     console.log(
-      'OK: every `npx iwsdk` invocation resolves to a known CLI path.',
+      'OK: every `npx @iwsdk/cli` invocation resolves to a known CLI path.',
     );
     process.exit(0);
   }
@@ -151,7 +156,7 @@ function main() {
   );
   for (const failure of failures) {
     console.error(
-      `  ${failure.file}:${failure.line}  \`npx iwsdk ${failure.subcommand}\`  (${failure.reason})`,
+      `  ${failure.file}:${failure.line}  \`npx @iwsdk/cli ${failure.subcommand}\`  (${failure.reason})`,
     );
   }
   process.exit(1);

@@ -163,14 +163,14 @@ editor controls.
 Equivalent CLI examples:
 
 ```bash
-npx iwsdk scene render-file \
+npx @iwsdk/cli scene render-file \
   --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' \
   --output-file artifacts/main.png
-npx iwsdk scene flatten \
+npx @iwsdk/cli scene flatten \
   --input-json '{"path":"public/scenes/main.composition.iwsdk.scene.json","outputPath":"public/scenes/main.iwsdk.scene.json"}' --raw
-npx iwsdk scene open \
+npx @iwsdk/cli scene open \
   --input-json '{"path":"public/scenes/main.iwsdk.scene.json"}' --raw
-npx iwsdk scene state --raw
+npx @iwsdk/cli scene state --raw
 ```
 
 ## Visual Review

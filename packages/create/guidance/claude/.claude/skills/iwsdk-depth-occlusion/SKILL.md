@@ -71,16 +71,16 @@ Use the CLI action names below; do not substitute MCP method names or probe
 `--help` first:
 
 ```bash
-npx iwsdk xr enter
-npx iwsdk xr status
-npx iwsdk ecs find --input-json '{"namePattern":"<requested node regex>"}'
-npx iwsdk ecs query --input-json '{"entityIndex":<index from find>}'
-npx iwsdk ecs systems
-npx iwsdk browser logs --count 80
-npx iwsdk browser screenshot --output-file artifacts/<name>.png
+npx @iwsdk/cli xr enter
+npx @iwsdk/cli xr status
+npx @iwsdk/cli ecs find --input-json '{"namePattern":"<requested node regex>"}'
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<index from find>}'
+npx @iwsdk/cli ecs systems
+npx @iwsdk/cli browser logs --count 80
+npx @iwsdk/cli browser screenshot --output-file artifacts/<name>.png
 ```
 
-Use `npx iwsdk browser screenshot --output-file <path>` for file evidence. Do
+Use `npx @iwsdk/cli browser screenshot --output-file <path>` for file evidence. Do
 not alter the project camera or render extra authored angles to manufacture an
 occlusion view; stage the requested nodes once, then judge the live AR capture.
 Do not inspect framework source when the build, registered-system query, entity

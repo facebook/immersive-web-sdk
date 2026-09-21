@@ -177,7 +177,7 @@ describe('@iwsdk/create packed contract', () => {
     );
     expect(Buffer.byteLength(agents)).toBeLessThan(32 * 1024);
     expect(agents).toContain('browser_not_launched');
-    expect(agents).toContain('npx iwsdk scene flatten');
+    expect(agents).toContain('npx @iwsdk/cli scene flatten');
 
     const cursorRule = await readFile(
       path.join(

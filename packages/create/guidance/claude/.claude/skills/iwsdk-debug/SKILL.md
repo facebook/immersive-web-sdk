@@ -62,7 +62,7 @@ is visually relevant.
 
 The build is the production-build proof; do not launch a second Vite preview
 server. Replay with the same managed IWSDK dev runtime. Save file evidence with
-`npx iwsdk browser screenshot --output-file <path>` rather than discovering the
+`npx @iwsdk/cli browser screenshot --output-file <path>` rather than discovering the
 screenshot CLI after the debug loop. When ECS evidence already proves the fix,
 do not open or read the PNG back into model context; leave it for evaluator or
 human review. Inspect one compact image only when the spatial result cannot be

@@ -40,7 +40,7 @@ UIKit element IDs alone do not satisfy a runtime-name requirement.
 ## 2. Inspect once, then ground only uncertainty
 
 Read the existing entry point, project config, asset/component registries,
-scene, and relevant scoped rules. Use precise `npx iwsdk reference` queries
+scene, and relevant scoped rules. Use precise `npx @iwsdk/cli reference` queries
 only for APIs or file formats that are genuinely uncertain.
 
 Convert FBX, OBJ, and other source model formats before registering them: in
@@ -151,8 +151,8 @@ export class ExampleSystem extends createSystem({
   and `world.requireSceneObject(nodeId)`.
 - Import ECS, UIKit, grab helpers, and Three.js runtime classes from
   `@iwsdk/core`; IWSDK re-exports the supported runtime surface.
-- For a live UIKit ray click, aim with `npx iwsdk xr look-at`, then use
-  `npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}'`.
+- For a live UIKit ray click, aim with `npx @iwsdk/cli xr look-at`, then use
+  `npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}'`.
   Do not rederive pointer internals or manually pulse select unless diagnosing
   a concrete helper failure.
 
@@ -209,7 +209,7 @@ and keep it alive while iterating. The developer owns headed versus headless
 mode: announce a proposed mode change before restarting rather than silently
 replacing their visible collaboration window. Do not start an untouched or
 knowingly non-typechecking app. Exercise the real paths rather than inferring
-behavior from code. Confirm `npx iwsdk xr status` is active before making pose,
+behavior from code. Confirm `npx @iwsdk/cli xr status` is active before making pose,
 controller/hand alignment, or immersive-interaction claims; a flat screenshot
 outside XR cannot prove them.
 

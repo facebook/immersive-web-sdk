@@ -1,0 +1,28 @@
+name: CLI Command Safety
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  command-safety:
+    name: CLI command safety
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Test and scan CLI commands
+        run: |
+          node --test scripts/check-cli-command-safety.test.mjs
+          node scripts/check-cli-command-safety.mjs

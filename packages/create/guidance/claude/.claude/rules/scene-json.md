@@ -21,7 +21,7 @@ closed — an unknown field fails validation.
 Authoring tools can validate and render a root with `imports`, so modular scratch
 scenes remain useful for composition. The editable scene session and application
 runtime deliberately reject imports. Run `scene_flatten_file` or
-`npx iwsdk scene flatten` once, verify the source and output runtime hashes match,
+`npx @iwsdk/cli scene flatten` once, verify the source and output runtime hashes match,
 then make the flat output the sole editable source of truth. Never re-flatten over
 later human editor changes.
 

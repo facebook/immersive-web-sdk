@@ -8,7 +8,10 @@ Use this file as a compact start-here index. The full skill is authoritative whe
 
 ## Default Operating Model
 
-- Prefer `npx iwsdk ...` CLI commands in cloud-based harnesses.
+- Prefer `npx @iwsdk/cli ...` CLI commands in cloud-based harnesses.
+  The scoped package name ensures that an absent local binary can resolve only
+  to the official IWSDK CLI package, rather than an unrelated unscoped npm
+  package.
 - Use MCP tools only when the harness exposes them and they are already working.
 - Build from the official scaffold instead of hand-rolling project setup.
 - Verify visually with managed-browser screenshots and runtime inspection.
@@ -44,25 +47,25 @@ npm install
 npm run dev
 ```
 
-The starter `npm run dev` uses the IWSDK CLI-managed runtime. Treat the reported runtime URL and `npx iwsdk dev status` as the source of truth.
+The starter `npm run dev` uses the IWSDK CLI-managed runtime. Treat the reported runtime URL and `npx @iwsdk/cli dev status` as the source of truth.
 
 ```bash
-npx iwsdk dev status
-npx iwsdk browser screenshot
-npx iwsdk xr status
+npx @iwsdk/cli dev status
+npx @iwsdk/cli browser screenshot
+npx @iwsdk/cli xr status
 ```
 
 ## Inspect And Debug
 
 ```bash
-npx iwsdk scene state --raw
-npx iwsdk scene render-file --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' --output-file artifacts/main.png
-npx iwsdk ecs components
-npx iwsdk ecs systems
-npx iwsdk ecs snapshot --label before
-npx iwsdk ecs step --count 1
-npx iwsdk ecs snapshot --label after
-npx iwsdk ecs diff --from before --to after
+npx @iwsdk/cli scene state --raw
+npx @iwsdk/cli scene render-file --input-json '{"path":"public/scenes/main.iwsdk.scene.json","view":"quarter"}' --output-file artifacts/main.png
+npx @iwsdk/cli ecs components
+npx @iwsdk/cli ecs systems
+npx @iwsdk/cli ecs snapshot --label before
+npx @iwsdk/cli ecs step --count 1
+npx @iwsdk/cli ecs snapshot --label after
+npx @iwsdk/cli ecs diff --from before --to after
 ```
 
 For declarative scene composition, create and edit scene JSON files directly. Use
@@ -77,10 +80,10 @@ on-surface placement matters; use `scene_screenshot` with
 For XR interactions:
 
 ```bash
-npx iwsdk xr enter
-npx iwsdk xr get-transform --device controller-right
-npx iwsdk xr set-transform --device controller-right --position '{"x":0.3,"y":1.2,"z":-0.5}'
-npx iwsdk xr select --device controller-right
+npx @iwsdk/cli xr enter
+npx @iwsdk/cli xr get-transform --device controller-right
+npx @iwsdk/cli xr set-transform --device controller-right --position '{"x":0.3,"y":1.2,"z":-0.5}'
+npx @iwsdk/cli xr select --device controller-right
 ```
 
 ## Key Docs

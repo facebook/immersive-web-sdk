@@ -184,7 +184,7 @@ describe('editor runtime source', () => {
     expect(routing).toContain("value.startsWith('scene_')");
     expect(routing).toContain("value.startsWith('ui_')");
     expect(routing).toContain('No scene is open in the IWSDK editor.');
-    expect(routing).toContain('npx iwsdk scene open --input-json');
+    expect(routing).toContain('npx @iwsdk/cli scene open --input-json');
     expect(source).toContain(
       'runtimeHandles = (method) => handlesEditorMethodWithoutSession(method)',
     );

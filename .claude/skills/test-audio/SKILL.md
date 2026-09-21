@@ -12,7 +12,7 @@ Run 6 test suites covering audio loading, playback trigger, stop, system registr
 
 - EXAMPLE_DIR: `$IWSDK_REPO_ROOT/examples/audio`
 
-**Tool calls**: every tool call is `npx iwsdk <subcommand> [--input-json '<JSON>'] [--timeout <ms>]`, run from inside the example workspace (cwd `$EXAMPLE_DIR`). The CLI auto-discovers the IWSDK app root from cwd, so no path tricks are required. Run `npx iwsdk mcp inspect` from the example to discover available tools and their CLI subcommands.
+**Tool calls**: every tool call is `npx @iwsdk/cli <subcommand> [--input-json '<JSON>'] [--timeout <ms>]`, run from inside the example workspace (cwd `$EXAMPLE_DIR`). The CLI auto-discovers the IWSDK app root from cwd, so no path tricks are required. Run `npx @iwsdk/cli mcp inspect` from the example to discover available tools and their CLI subcommands.
 
 - `<JSON>` is a JSON object string. Omit `--input-json` if no arguments are needed.
 - Output is JSON on stdout: `{ok, workspaceRoot, operation, result}`. Parse it to check assertions.
@@ -46,7 +46,7 @@ cd $IWSDK_REPO_ROOT/examples/audio && npm run dev
 
 **IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
 
-Once the background task is launched, poll the output for Vite's ready message (up to 60s). You can also run `npx iwsdk dev status` from the example directory until `state.running` becomes `true`. You do not need to extract or manage the port yourself; subsequent commands resolve the active runtime through the CLI automatically.
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). You can also run `npx @iwsdk/cli dev status` from the example directory until `state.running` becomes `true`. You do not need to extract or manage the port yourself; subsequent commands resolve the active runtime through the CLI automatically.
 
 If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
 
@@ -55,7 +55,7 @@ If the server fails to start within 60 seconds, report FAIL for all suites and s
 ## Step 3: Verify Connectivity
 
 ```bash
-npx iwsdk ecs systems 2>/dev/null
+npx @iwsdk/cli ecs systems 2>/dev/null
 ```
 
 This must return JSON with a list of systems. If it fails:
@@ -72,13 +72,13 @@ This must return JSON with a list of systems. If it fails:
 
 Run these commands in order:
 
-1. `npx iwsdk browser reload --timeout 20000 2>/dev/null`
+1. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
    Then: `sleep 3`
 
-2. `npx iwsdk xr enter --timeout 20000 2>/dev/null`
+2. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
    Then: `sleep 2`
 
-3. `npx iwsdk browser logs --input-json '{"count":20,"level":["error"]}' 2>/dev/null`
+3. `npx @iwsdk/cli browser logs --input-json '{"count":20,"level":["error"]}' 2>/dev/null`
    Assert: No error-level logs. Audio autoplay warnings are acceptable.
 
 ---
@@ -88,7 +88,7 @@ Run these commands in order:
 **Test 1.1: Find Audio Entity**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert: At least 1 entity. Save the first as `<audio>`.
@@ -98,7 +98,7 @@ The audio example uses a native scene level that creates entities via compositio
 **Test 1.2: Verify Loaded State**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert:
@@ -120,7 +120,7 @@ Assert: `_pool` exists with `available` array matching `maxInstances`.
 **Test 2.1: Request Play**
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
 ```
 
 The set response may briefly show `newValue: true`. Wait one frame, then query the
@@ -132,7 +132,7 @@ sleep 1
 ```
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
 ```
 
 **Test 2.2: Play with Loop for Observable State**
@@ -140,17 +140,17 @@ npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSou
 Set `loop: true` first, then request play:
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"loop","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"loop","value":true}' 2>/dev/null
 ```
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
 ```
 
 Then query:
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert: `_isPlaying` = `true` (looping sound keeps playing).
@@ -162,7 +162,7 @@ Assert: `_isPlaying` = `true` (looping sound keeps playing).
 **Test 3.1: Request Stop**
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_stopRequested","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_stopRequested","value":true}' 2>/dev/null
 ```
 
 Assert: `_stopRequested` consumed, `_isPlaying` becomes `false`.
@@ -172,7 +172,7 @@ Assert: `_stopRequested` consumed, `_isPlaying` becomes `false`.
 ### Suite 4: System Registration
 
 ```bash
-npx iwsdk ecs systems 2>/dev/null
+npx @iwsdk/cli ecs systems 2>/dev/null
 ```
 
 Assert:
@@ -186,7 +186,7 @@ Assert:
 ### Suite 5: Component Schema
 
 ```bash
-npx iwsdk ecs components 2>/dev/null
+npx @iwsdk/cli ecs components 2>/dev/null
 ```
 
 Assert AudioSource fields:
@@ -202,7 +202,7 @@ Assert AudioSource fields:
 ### Suite 6: Stability
 
 ```bash
-npx iwsdk browser logs --input-json '{"count":30,"level":["error","warn"]}' 2>/dev/null
+npx @iwsdk/cli browser logs --input-json '{"count":30,"level":["error","warn"]}' 2>/dev/null
 ```
 
 Assert: No application-level errors. Audio autoplay warnings and pre-existing 404 resource errors from page load are acceptable.
@@ -214,7 +214,7 @@ Assert: No application-level errors. Audio autoplay warnings and pre-existing 40
 Kill the dev server:
 
 ```bash
-cd $IWSDK_REPO_ROOT/examples/audio && npx iwsdk dev down
+cd $IWSDK_REPO_ROOT/examples/audio && npx @iwsdk/cli dev down
 ```
 
 Output a summary table:
@@ -238,7 +238,7 @@ If any suite fails, include which assertion failed and actual vs expected values
 
 If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
 
-1. Stop the dev server: `cd $IWSDK_REPO_ROOT/examples/audio && npx iwsdk dev down`
+1. Stop the dev server: `cd $IWSDK_REPO_ROOT/examples/audio && npx @iwsdk/cli dev down`
 2. Restart: re-run Step 2 to start a fresh dev server
 3. Re-run the Pre-test Setup (reload, accept session)
 4. Retry the failed suite
@@ -251,7 +251,7 @@ Only give up after one retry attempt per suite. If the same suite fails twice, m
 
 ### Request flags are one-shot
 
-`_playRequested`, `_pauseRequested`, and `_stopRequested` are consumed by the AudioSystem within one frame. The `npx iwsdk ecs set-component` response may already show `newValue: false`.
+`_playRequested`, `_pauseRequested`, and `_stopRequested` are consumed by the AudioSystem within one frame. The `npx @iwsdk/cli ecs set-component` response may already show `newValue: false`.
 
 ### Short sounds finish before query
 
@@ -267,12 +267,12 @@ IWER runs in a browser context where the AudioContext may be suspended until a u
 
 ### Audio example uses native scene JSON
 
-The audio example loads entities from `./scenes/audio.iwsdk.scene.json`. Most entities are not created in index.js; they come from the scene document. Use `npx iwsdk ecs find` to discover them dynamically.
+The audio example loads entities from `./scenes/audio.iwsdk.scene.json`. Most entities are not created in index.js; they come from the scene document. Use `npx @iwsdk/cli ecs find` to discover them dynamically.
 
 ### Boolean values must be JSON booleans
 
-When setting boolean fields (like `_playRequested`, `loop`, `_stopRequested`) via `npx iwsdk ecs set-component`, the `value` must be a JSON boolean (`true`), not a string (`"true"`). Strings silently fail.
+When setting boolean fields (like `_playRequested`, `loop`, `_stopRequested`) via `npx @iwsdk/cli ecs set-component`, the `value` must be a JSON boolean (`true`), not a string (`"true"`). Strings silently fail.
 
 ### Entity indices change on reload
 
-Never cache entity indices across page reloads. Always re-discover via `npx iwsdk ecs find`.
+Never cache entity indices across page reloads. Always re-discover via `npx @iwsdk/cli ecs find`.

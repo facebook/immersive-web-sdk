@@ -26,7 +26,7 @@ distance grabs share aiming but not input duration or movement behavior.
 For `RayInteractable`, `Pressed`, or a UIKit control, use one normal select:
 
 ```bash
-npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}'
+npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}'
 ```
 
 Use an explicit select-value press/release only when the task needs to inspect
@@ -61,7 +61,7 @@ CLI family, inspect pointer internals, or guess panel offsets from screenshots.
 
 Capture one runtime image only when visual placement is part of the request.
 When the request names an artifact path, save it directly with
-`npx iwsdk browser screenshot --output-file <path>`; do not capture into model
+`npx @iwsdk/cli browser screenshot --output-file <path>`; do not capture into model
 context and then add a copy step.
 Stop when the real input and resulting named state are proven, leaving all
 buttons released.

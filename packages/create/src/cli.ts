@@ -534,7 +534,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
           console.warn(
             chalk.yellow(
               `Project created, but coding-tool adapter sync failed: ${error instanceof Error ? error.message : String(error)}. ` +
-                'Run "npx iwsdk adapter sync" from the project directory.',
+                'Run "npx @iwsdk/cli adapter sync" from the project directory.',
             ),
           );
         }

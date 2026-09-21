@@ -63,12 +63,12 @@ physics state. Capture one final runtime image when spatial layout matters.
 Use the documented CLI shape directly; do not call help to rediscover it:
 
 ```bash
-npx iwsdk ecs pause --input-json '{}'
-npx iwsdk ecs snapshot --input-json '{"label":"before"}'
-npx iwsdk ecs step --input-json '{"count":8,"delta":0.016}'
-npx iwsdk ecs snapshot --input-json '{"label":"after"}'
-npx iwsdk ecs diff --input-json '{"from":"before","to":"after"}'
-npx iwsdk ecs resume --input-json '{}'
+npx @iwsdk/cli ecs pause --input-json '{}'
+npx @iwsdk/cli ecs snapshot --input-json '{"label":"before"}'
+npx @iwsdk/cli ecs step --input-json '{"count":8,"delta":0.016}'
+npx @iwsdk/cli ecs snapshot --input-json '{"label":"after"}'
+npx @iwsdk/cli ecs diff --input-json '{"from":"before","to":"after"}'
+npx @iwsdk/cli ecs resume --input-json '{}'
 ```
 
 If a gravity body has already settled by the time the bridge is ready, its
@@ -97,7 +97,7 @@ Pure rigid-body verification does not require entering XR. The authored `hero`
 view is composition evidence, while the live browser camera can differ. Do not
 temporarily edit `iwsdk.config.json`, restart the runtime, or render extra camera
 angles solely to make a screenshot match the hero view. Save the live capture
-directly with `npx iwsdk browser screenshot --output-file <path>` and let the
+directly with `npx @iwsdk/cli browser screenshot --output-file <path>` and let the
 authored render cover deliberate framing.
 
 Make at most one focused correction, then replay the same observation. Stop

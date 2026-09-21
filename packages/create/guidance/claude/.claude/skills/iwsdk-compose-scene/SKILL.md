@@ -106,17 +106,17 @@ create/add/update/remove/patch/save/compose/review/publish tools.
 When MCP is unavailable, use the CLI equivalents:
 
 ```bash
-npx iwsdk dev status
-npx iwsdk dev up
-npx iwsdk scene capabilities --raw
-npx iwsdk scene render-file \
+npx @iwsdk/cli dev status
+npx @iwsdk/cli dev up
+npx @iwsdk/cli scene capabilities --raw
+npx @iwsdk/cli scene render-file \
   --input-json '{"path":"public/scenes/room.iwsdk.scene.json","viewId":"hero"}' \
   --output-file artifacts/room.png
-npx iwsdk scene flatten \
+npx @iwsdk/cli scene flatten \
   --input-json '{"path":"public/scenes/room.composition.iwsdk.scene.json","outputPath":"public/scenes/room.iwsdk.scene.json"}' --raw
-npx iwsdk scene open \
+npx @iwsdk/cli scene open \
   --input-json '{"path":"public/scenes/room.iwsdk.scene.json"}' --raw
-npx iwsdk scene state --raw
+npx @iwsdk/cli scene state --raw
 ```
 
 `iwsdk dev up` starts the server in the background, launches the configured

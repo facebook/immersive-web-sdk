@@ -829,7 +829,7 @@ describe('create-iwsdk scene flow E2E', () => {
                 if (language === 'ts') {
                   const workspaceStatus = await runCommand(
                     'npx',
-                    ['iwsdk', 'dev', 'status'],
+                    ['@iwsdk/cli', 'dev', 'status'],
                     appRoot,
                     { timeoutMs: 60000 },
                   );

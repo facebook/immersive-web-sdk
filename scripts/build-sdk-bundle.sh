@@ -173,7 +173,7 @@ Notes:
 - The generated starter apps will install dependencies from the tarballs in ./packages via local `file:` paths.
 - `@iwsdk/reference` still needs a separately hosted corpus payload.
 - Host `packages/reference-assets/dist/` yourself unless you are relying on the published corpus package.
-- The reference model file URLs are baked into the SDK; `npx iwsdk reference warmup` will fetch them automatically and still requires access to those public URLs unless the shared cache is pre-warmed.
+- The reference model file URLs are baked into the SDK; `npx @iwsdk/cli reference warmup` will fetch them automatically and still requires access to those public URLs unless the shared cache is pre-warmed.
 README
 
 echo "🎁 Bundle ready at: $BUNDLE_ROOT"

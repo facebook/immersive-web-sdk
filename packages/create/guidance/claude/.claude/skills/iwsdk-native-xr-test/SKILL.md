@@ -57,10 +57,10 @@ xr: {
 From the application root, run:
 
 ```bash
-npx iwsdk dev up --native-xr-control --no-open
+npx @iwsdk/cli dev up --native-xr-control --no-open
 ```
 
-Inspect `npx iwsdk dev status` and record the numeric port from the
+Inspect `npx @iwsdk/cli dev status` and record the numeric port from the
 active runtime. Native-control sessions default to HTTP when the application
 does not explicitly configure Vite HTTPS. The app is loaded from
 headset-localhost through ADB reverse, so the default remains a trustworthy
@@ -77,7 +77,7 @@ adb -s <serial> reverse tcp:<port> tcp:<port>
 Open `http://127.0.0.1:<port>/` in Quest Browser once and verify the app loads.
 Do not continue if it redirects to a network hostname or if the page is not the
 expected local app. Record the physical app clients from
-`npx iwsdk dev status`; this lets you distinguish the immersive tab
+`npx @iwsdk/cli dev status`; this lets you distinguish the immersive tab
 created next from any retained verification tab.
 
 ## 4. Enter the real immersive session
@@ -104,7 +104,7 @@ are connected.
 Use the active tab as `expectedTab` on each command:
 
 ```bash
-npx iwsdk xr status --input-json \
+npx @iwsdk/cli xr status --input-json \
   '{"expectedTab":{"id":"<pageId>","generation":<tabGeneration>}}' --raw
 ```
 
@@ -121,9 +121,9 @@ offer, while this workflow must preserve the browser's native session.
 Discover the available command shapes before improvising:
 
 ```bash
-npx iwsdk xr --help
-npx iwsdk ecs --help
-npx iwsdk scene --help
+npx @iwsdk/cli xr --help
+npx @iwsdk/cli ecs --help
+npx @iwsdk/cli scene --help
 ```
 
 Include the recorded `expectedTab` object in each command's `--input-json`.
@@ -149,10 +149,10 @@ pose/input sequence, and show the corresponding state change afterward.
 Run these cleanup actions individually even if an earlier assertion failed:
 
 ```bash
-npx iwsdk xr exit --input-json \
+npx @iwsdk/cli xr exit --input-json \
   '{"expectedTab":{"id":"<pageId>","generation":<tabGeneration>}}' --raw
 adb -s <serial> reverse --remove tcp:<port>
-npx iwsdk dev down
+npx @iwsdk/cli dev down
 ```
 
 Report:

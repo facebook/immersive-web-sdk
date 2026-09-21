@@ -9,9 +9,9 @@ Practical agent workflows for the canonical IWSDK CLI/MCP surface.
 ## Runtime First
 
 ```bash
-npx iwsdk dev status
-npx iwsdk dev up
-npx iwsdk mcp inspect --tool scene_render_file
+npx @iwsdk/cli dev status
+npx @iwsdk/cli dev up
+npx @iwsdk/cli mcp inspect --tool scene_render_file
 ```
 
 The workspace-local CLI is the stable front door. MCP adapters point to
@@ -74,7 +74,7 @@ root or owning module.
 For application code:
 
 ```text
-1. npx iwsdk dev status
+1. npx @iwsdk/cli dev status
 2. Modify code
 3. browser_reload_page
 4. browser_get_console_logs
@@ -109,10 +109,10 @@ permission:
 
 ```bash
 # New session
-npx iwsdk dev up --allow-browser-automation
+npx @iwsdk/cli dev up --allow-browser-automation
 
 # Existing session
-npx iwsdk dev restart --allow-browser-automation
+npx @iwsdk/cli dev restart --allow-browser-automation
 ```
 
 Create a module inside the IWSDK workspace, for example
@@ -133,7 +133,7 @@ export default async function ({ frame, cdp }) {
 Run it against the same managed application session:
 
 ```bash
-npx iwsdk browser run scripts/browser-diagnostic.mjs
+npx @iwsdk/cli browser run scripts/browser-diagnostic.mjs
 ```
 
 The module may export a default function or named `run` function. It receives the

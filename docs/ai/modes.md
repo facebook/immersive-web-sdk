@@ -14,7 +14,7 @@ replace a visible collaboration window with a headless session, or vice versa.
 
 ## Collaborate Mode
 
-**Command:** `npx iwsdk dev up --ai-mode collaborate`
+**Command:** `npx @iwsdk/cli dev up --ai-mode collaborate`
 
 You and the AI share one visible Playwright-managed workspace. It opens at the
 clean application URL in runtime view; use the Runtime and Editor controls to
@@ -35,7 +35,7 @@ environments. The banner does not indicate that a second browser was opened.
 | Screenshots    | Downscaled to fit `screenshotSize` |
 
 ```bash
-npx iwsdk dev up --ai-mode collaborate
+npx @iwsdk/cli dev up --ai-mode collaborate
 ```
 
 This is the normal development mode. Manual edits and agent actions operate on
@@ -43,7 +43,7 @@ the same page and scene document.
 
 ## Agent Mode
 
-**Command:** `npx iwsdk dev up --ai-mode agent`
+**Command:** `npx @iwsdk/cli dev up --ai-mode agent`
 
 The AI works autonomously in the same managed workspace architecture, but the
 Playwright browser is headless and has a fixed viewport. No second browser is
@@ -59,7 +59,7 @@ separate manual runtime view.
 | Screenshots    | Exact viewport size                         |
 
 ```bash
-npx iwsdk dev up --ai-mode agent \
+npx @iwsdk/cli dev up --ai-mode agent \
   --screenshot-width 500 --screenshot-height 500
 ```
 
@@ -70,7 +70,7 @@ Use this mode for unattended automation or deterministic screenshot dimensions.
 Launch the managed runtime/editor without declaring an AI mode:
 
 ```bash
-npx iwsdk dev up
+npx @iwsdk/cli dev up
 ```
 
 This is useful for manual native scene editing, including browser-only projects

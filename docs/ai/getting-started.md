@@ -34,7 +34,7 @@ Starter projects already ship the `iwsdk` CLI through `@iwsdk/cli`.
 npm run dev
 ```
 
-Use `npx iwsdk dev up --ai-mode agent` for a headless agent session, or
+Use `npx @iwsdk/cli dev up --ai-mode agent` for a headless agent session, or
 `--ai-mode collaborate` to select the visible collaboration behavior
 explicitly.
 
@@ -48,10 +48,10 @@ When the server starts, several things happen automatically:
 2. Runtime and editor views share that one managed browser session
 3. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
 
-If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx iwsdk dev status`. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
+If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx @iwsdk/cli dev status`. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
 
 ::: tip Optional reference warmup
-If your project installs `@iwsdk/reference`, run `npx iwsdk reference warmup` once after install. That step prepares the pinned reference corpus under your project's `.iwsdk/reference` state, populates the shared corpus store, and eagerly downloads the pinned model into the shared model cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of relying on the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host it separately before warmup. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.
+If your project installs `@iwsdk/reference`, run `npx @iwsdk/cli reference warmup` once after install. That step prepares the pinned reference corpus under your project's `.iwsdk/reference` state, populates the shared corpus store, and eagerly downloads the pinned model into the shared model cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of relying on the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host it separately before warmup. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.
 :::
 
 ## Connect Your AI Tool
@@ -63,12 +63,12 @@ OpenCode read it natively. Claude Code uses a small `CLAUDE.md` shim that import
 After dependencies are installed, configure the selected harness:
 
 ```bash
-npx iwsdk adapter sync --tools claude
+npx @iwsdk/cli adapter sync --tools claude
 ```
 
 Create runs this command automatically for tools selected during an installed
 scaffold. The command merges project-local MCP and permission settings without
-removing unrelated user configuration. Run `npx iwsdk adapter status` to inspect
+removing unrelated user configuration. Run `npx @iwsdk/cli adapter status` to inspect
 the instruction, MCP, and permission layers separately.
 
 ### Claude Code
@@ -81,14 +81,14 @@ In environments that lazily load MCP tool schemas, discovery is not the same as 
 
 1. Load the `mcp__iwsdk-runtime__*` tool schemas with your editor's tool-search/discovery step if needed.
 2. Call `xr_get_session_status` as the first runtime check once the tool is available.
-3. If MCP tools are still deferred, fall back to the CLI (`npx iwsdk xr status`, `npx iwsdk browser screenshot`, etc.) until the schemas are hydrated.
+3. If MCP tools are still deferred, fall back to the CLI (`npx @iwsdk/cli xr status`, `npx @iwsdk/cli browser screenshot`, etc.) until the schemas are hydrated.
 
 ### Cursor
 
 Cursor reads from `.cursor/mcp.json`.
 
 ```bash
-npx iwsdk adapter sync --tools cursor
+npx @iwsdk/cli adapter sync --tools cursor
 ```
 
 The generated `.cursor/permissions.json` supplies the repository-level
@@ -100,7 +100,7 @@ active Run Mode in its UI.
 Copilot reads from `.vscode/mcp.json`:
 
 ```bash
-npx iwsdk adapter sync --tools copilot
+npx @iwsdk/cli adapter sync --tools copilot
 ```
 
 VS Code stores MCP tool approval through its interactive **Chat: Manage Tool
@@ -112,7 +112,7 @@ use to force that approval, so `adapter status` reports this step as manual.
 Codex reads from `.codex/config.toml`:
 
 ```bash
-npx iwsdk adapter sync --tools codex
+npx @iwsdk/cli adapter sync --tools codex
 ```
 
 Each managed Codex MCP server uses
@@ -124,17 +124,17 @@ normal approval policy.
 OpenCode reads MCP servers and narrow tool permissions from `opencode.json`:
 
 ```bash
-npx iwsdk adapter sync --tools opencode
+npx @iwsdk/cli adapter sync --tools opencode
 ```
 
 You can select multiple adapters if you use more than one tool:
 
 ```bash
-npx iwsdk adapter sync --tools claude,cursor
+npx @iwsdk/cli adapter sync --tools claude,cursor
 ```
 
 ::: tip Adapter default
-`npx iwsdk adapter sync` writes every supported adapter. Use `--tools` only when you want to limit the generated configs. Managed config entries are refreshed, not deleted; `adapter prune` removes only IWSDK-managed MCP and permission entries.
+`npx @iwsdk/cli adapter sync` writes every supported adapter. Use `--tools` only when you want to limit the generated configs. Managed config entries are refreshed, not deleted; `adapter prune` removes only IWSDK-managed MCP and permission entries.
 :::
 
 ### Other Agent Harnesses
@@ -142,7 +142,7 @@ npx iwsdk adapter sync --tools claude,cursor
 For a harness that IWSDK does not recognize, print a self-contained setup prompt:
 
 ```bash
-npx iwsdk adapter prompt
+npx @iwsdk/cli adapter prompt
 ```
 
 Paste the output into that harness. It includes the exact local MCP commands,
@@ -194,7 +194,7 @@ The result is an uncalibrated host-browser diagnostic, not target-headset perfor
 By default, screenshots are 800x800 pixels. You can adjust this to control token usage:
 
 ```bash
-npx iwsdk dev up --ai-mode agent \
+npx @iwsdk/cli dev up --ai-mode agent \
   --screenshot-width 500 --screenshot-height 500
 ```
 
@@ -207,11 +207,11 @@ enable the local runner when starting a new session, or restart an existing sess
 
 ```bash
 # New session
-npx iwsdk dev up --allow-browser-automation
+npx @iwsdk/cli dev up --allow-browser-automation
 
 # Existing session
-npx iwsdk dev restart --allow-browser-automation
-npx iwsdk browser run scripts/browser-diagnostic.mjs
+npx @iwsdk/cli dev restart --allow-browser-automation
+npx @iwsdk/cli browser run scripts/browser-diagnostic.mjs
 ```
 
 `browser run` executes trusted local JavaScript from inside the workspace and connects

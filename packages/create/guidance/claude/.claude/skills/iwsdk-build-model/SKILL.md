@@ -231,10 +231,10 @@ asset_render_preview
 ```
 
 ```bash
-npx iwsdk asset render-preview \
+npx @iwsdk/cli asset render-preview \
   --input-json '{"assetId":"ship","mode":"material"}' \
   --output-file artifacts/ship-material.png
-npx iwsdk asset render-preview \
+npx @iwsdk/cli asset render-preview \
   --input-json '{"assetId":"ship","mode":"clay"}' \
   --output-file artifacts/ship-clay.png
 ```
@@ -261,7 +261,7 @@ wall, or floor piece.
 If any part looks implausible, frame it directly:
 
 ```bash
-npx iwsdk asset render-preview \
+npx @iwsdk/cli asset render-preview \
   --input-json '{"assetId":"ship","mode":"clay","focus":"Ship/Hull/VentRow"}' \
   --output-file artifacts/ship-vent-row.png
 ```

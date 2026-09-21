@@ -742,7 +742,7 @@ function dispatchEditorMethodWithoutSession(
   method,
   params = {},
   unavailableMessage =
-    'No scene is open in the IWSDK editor. Open the Editor view and select a scene, or run npx iwsdk scene open --input-json with the scene path.',
+    'No scene is open in the IWSDK editor. Open the Editor view and select a scene, or run npx @iwsdk/cli scene open --input-json with the scene path.',
 ) {
   if (handlesWorkspaceMethod(method)) {
     return dispatchWorkspaceCommand(null, method, params);
@@ -1500,7 +1500,7 @@ function importBearingSceneError(scenePath, sourceDocument) {
       })),
       path: scenePath,
       suggestedCommand:
-        'npx iwsdk scene flatten --input-json ' +
+        'npx @iwsdk/cli scene flatten --input-json ' +
         JSON.stringify(JSON.stringify({ path: scenePath })),
     },
     recoverable: true,

@@ -284,7 +284,7 @@ not override them. Once the composition passes, flatten and make the generated
 import-free document the sole source of truth. Never re-flatten over later editor
 changes.
 
-Use `scene_flatten_file` or `npx iwsdk scene flatten` to materialize the final
+Use `scene_flatten_file` or `npx @iwsdk/cli scene flatten` to materialize the final
 document. The command resolves the import graph, preserves wrapper transforms,
 validates the flat output, writes atomically, and refuses the write if flattening
 changes runtime semantics.

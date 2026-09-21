@@ -12,7 +12,7 @@ Test 12 suites covering XR interaction behaviors: entity discovery, ECS registra
 
 - EXAMPLE_DIR: `$IWSDK_REPO_ROOT/examples/poke`
 
-**Tool calls**: every tool call is `npx iwsdk <subcommand> [--input-json '<JSON>'] [--timeout <ms>]`, run from inside the example workspace (cwd `$EXAMPLE_DIR`). The CLI auto-discovers the IWSDK app root from cwd, so no path tricks are required. Run `npx iwsdk mcp inspect` from the example to discover available tools and their CLI subcommands.
+**Tool calls**: every tool call is `npx @iwsdk/cli <subcommand> [--input-json '<JSON>'] [--timeout <ms>]`, run from inside the example workspace (cwd `$EXAMPLE_DIR`). The CLI auto-discovers the IWSDK app root from cwd, so no path tricks are required. Run `npx @iwsdk/cli mcp inspect` from the example to discover available tools and their CLI subcommands.
 
 - `<JSON>` is a JSON object string. Omit `--input-json` if no arguments are needed.
 - Output is JSON on stdout: `{ok, workspaceRoot, operation, result}`. Parse it to check assertions.
@@ -44,7 +44,7 @@ cd $IWSDK_REPO_ROOT/examples/poke && npm run dev
 
 **IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
 
-Once the background task is launched, poll the output for Vite's ready message (up to 60s). You can also run `npx iwsdk dev status` from the example directory until `state.running` becomes `true`. You do not need to extract or manage the port yourself; subsequent commands resolve the active runtime through the CLI automatically.
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). You can also run `npx @iwsdk/cli dev status` from the example directory until `state.running` becomes `true`. You do not need to extract or manage the port yourself; subsequent commands resolve the active runtime through the CLI automatically.
 
 If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
 
@@ -53,7 +53,7 @@ If the server fails to start within 60 seconds, report FAIL for all suites and s
 ## Step 3: Verify Connectivity
 
 ```bash
-npx iwsdk ecs systems 2>/dev/null
+npx @iwsdk/cli ecs systems 2>/dev/null
 ```
 
 This must return JSON with a list of systems. If it fails:
@@ -70,13 +70,13 @@ This must return JSON with a list of systems. If it fails:
 
 Run these commands in order:
 
-1. `npx iwsdk browser reload --timeout 20000 2>/dev/null`
+1. `npx @iwsdk/cli browser reload --timeout 20000 2>/dev/null`
    Then: `sleep 3`
 
-2. `npx iwsdk xr enter --timeout 20000 2>/dev/null`
+2. `npx @iwsdk/cli xr enter --timeout 20000 2>/dev/null`
    Then: `sleep 2`
 
-3. `npx iwsdk browser logs --input-json '{"count":20,"level":["error"]}' 2>/dev/null`
+3. `npx @iwsdk/cli browser logs --input-json '{"count":20,"level":["error"]}' 2>/dev/null`
    Assert: No error-level logs. Warnings about audio autoplay are acceptable.
 
 ---
@@ -88,7 +88,7 @@ Discover all testable entities dynamically. These entity indices are used by all
 **Test 1.1: Find Robot Entity**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["Robot"]}' 2>/dev/null
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["Robot"]}' 2>/dev/null
 ```
 
 Assert: Exactly 1 entity. Save its `entityIndex` as `<robot>`.
@@ -96,7 +96,7 @@ Assert: Exactly 1 entity. Save its `entityIndex` as `<robot>`.
 **Test 1.2: Find Panel Entity**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["ScreenSpace"]}' 2>/dev/null
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["ScreenSpace"]}' 2>/dev/null
 ```
 
 Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
@@ -104,14 +104,14 @@ Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
 **Test 1.3: Get Robot World Position**
 
 ```bash
-npx iwsdk scene runtime-hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
+npx @iwsdk/cli scene runtime-hierarchy --input-json '{"maxDepth":3}' 2>/dev/null
 ```
 
 Find the robot's Object3D UUID (match `entityIndex` = `<robot>`).
 Then:
 
 ```bash
-npx iwsdk scene transform --input-json '{"uuid":"<robot-uuid>"}' 2>/dev/null
+npx @iwsdk/cli scene transform --input-json '{"uuid":"<robot-uuid>"}' 2>/dev/null
 ```
 
 Save `positionRelativeToXROrigin` as `<robot-pos>`. Expected near `(0, 0.95, -1.5)`.
@@ -120,7 +120,7 @@ Save `positionRelativeToXROrigin` as `<robot-pos>`. Expected near `(0, 0.95, -1.
 Same approach — find panel's UUID from hierarchy, query transform.
 
 ```bash
-npx iwsdk scene transform --input-json '{"uuid":"<panel-uuid>"}' 2>/dev/null
+npx @iwsdk/cli scene transform --input-json '{"uuid":"<panel-uuid>"}' 2>/dev/null
 ```
 
 Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4)`.
@@ -132,7 +132,7 @@ Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4
 **Test 2.1: List Systems**
 
 ```bash
-npx iwsdk ecs systems 2>/dev/null
+npx @iwsdk/cli ecs systems 2>/dev/null
 ```
 
 Assert these systems are present: `RobotSystem`, `InputSystem`, `AudioSystem`, `PanelUISystem`, `ScreenSpaceUISystem`.
@@ -140,7 +140,7 @@ Assert these systems are present: `RobotSystem`, `InputSystem`, `AudioSystem`, `
 **Test 2.2: List Components**
 
 ```bash
-npx iwsdk ecs components 2>/dev/null
+npx @iwsdk/cli ecs components 2>/dev/null
 ```
 
 Assert these components are registered:
@@ -159,13 +159,13 @@ Assert these components are registered:
 **Test 3.1: Ray Hover**
 
 ```bash
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<robot-pos.z>},"moveToDistance":1.0}' 2>/dev/null
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<robot-pos.z>},"moveToDistance":1.0}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present, `Pressed` absent.
@@ -173,13 +173,13 @@ Assert: `Hovered` present, `Pressed` absent.
 **Test 3.2: Ray Select**
 
 ```bash
-npx iwsdk xr set-select-value --input-json '{"device":"controller-right","value":1}' 2>/dev/null
+npx @iwsdk/cli xr set-select-value --input-json '{"device":"controller-right","value":1}' 2>/dev/null
 ```
 
 Then: `sleep 0.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: Both `Hovered` and `Pressed` present.
@@ -187,13 +187,13 @@ Assert: Both `Hovered` and `Pressed` present.
 **Test 3.3: Ray Release**
 
 ```bash
-npx iwsdk xr set-select-value --input-json '{"device":"controller-right","value":0}' 2>/dev/null
+npx @iwsdk/cli xr set-select-value --input-json '{"device":"controller-right","value":0}' 2>/dev/null
 ```
 
 Then: `sleep 0.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present, `Pressed` absent.
@@ -201,13 +201,13 @@ Assert: `Hovered` present, `Pressed` absent.
 **Test 3.4: Ray Unhover**
 
 ```bash
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` absent.
@@ -224,7 +224,7 @@ The touch pointer uses a `SphereIntersector` with two thresholds:
 **Test 4.1: Position Near Robot**
 
 ```bash
-npx iwsdk xr set-transform --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z+0.3>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z+0.3>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
 ```
 
 (where `<z+0.3>` = `<robot-pos.z> + 0.3`)
@@ -232,14 +232,14 @@ npx iwsdk xr set-transform --input-json '{"device":"controller-right","position"
 **Test 4.2: Slow Animate Through Robot**
 
 ```bash
-npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z-0.3>},"duration":2.5}' --timeout 20000 2>/dev/null
+npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z-0.3>},"duration":2.5}' --timeout 20000 2>/dev/null
 ```
 
 (where `<z-0.3>` = `<robot-pos.z> - 0.3`)
 Then: `sleep 1.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: At least `Hovered` present. `Pressed` may also be present.
@@ -247,13 +247,13 @@ Assert: At least `Hovered` present. `Pressed` may also be present.
 **Test 4.3: Pull Back**
 
 ```bash
-npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
+npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
 ```
 
 Then: `sleep 0.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: Neither `Hovered` nor `Pressed` present.
@@ -265,13 +265,13 @@ Assert: Neither `Hovered` nor `Pressed` present.
 **Test 5.1: Ray Hover**
 
 ```bash
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present.
@@ -279,13 +279,13 @@ Assert: `Hovered` present.
 **Test 5.2: Click**
 
 ```bash
-npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}' 2>/dev/null
+npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}' 2>/dev/null
 ```
 
 Then: `sleep 0.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` still present.
@@ -293,13 +293,13 @@ Assert: `Hovered` still present.
 **Test 5.3: Unhover**
 
 ```bash
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` absent.
@@ -311,13 +311,13 @@ Assert: `Hovered` absent.
 **Test 6.1: Ray Hover from Distance**
 
 ```bash
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present.
@@ -325,19 +325,19 @@ Assert: `Hovered` present.
 **Test 6.2: Poke on Panel**
 
 ```bash
-npx iwsdk xr set-transform --input-json '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz+0.2>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz+0.2>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
 
 (where `<pz+0.2>` = `<panel-pos.z> + 0.2`)
 
 ```bash
-npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz-0.01>},"duration":3}' --timeout 20000 2>/dev/null
+npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz-0.01>},"duration":3}' --timeout 20000 2>/dev/null
 ```
 
 (where `<pz-0.01>` = `<panel-pos.z> - 0.01` — stop just past the panel surface, NOT far behind it)
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: Both `Hovered` and `Pressed` present.
@@ -345,13 +345,13 @@ Assert: Both `Hovered` and `Pressed` present.
 **Test 6.3: Poke Release**
 
 ```bash
-npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
+npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
 ```
 
 Then: `sleep 0.5`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: Neither present.
@@ -363,7 +363,7 @@ Assert: Neither present.
 **Test 7.1: Only Target Entity Gets Hovered**
 
 ```bash
-npx iwsdk xr set-transform --input-json '{"device":"controller-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>},"orientation":{"pitch":0,"roll":0,"yaw":180}}' 2>/dev/null
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>},"orientation":{"pitch":0,"roll":0,"yaw":180}}' 2>/dev/null
 ```
 
 (where `<rx+0.1>` = `<robot-pos.x> + 0.1`, `<rz+0.3>` = `<robot-pos.z> + 0.3`)
@@ -372,7 +372,7 @@ Then: `sleep 1`
 Check robot:
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present on robot.
@@ -380,7 +380,7 @@ Assert: `Hovered` present on robot.
 Check panel:
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
 
 Assert: No interaction components on panel.
@@ -392,17 +392,17 @@ Assert: No interaction components on panel.
 **Test 8.1: Hand Hover**
 
 ```bash
-npx iwsdk xr set-input-mode --input-json '{"mode":"hand"}' 2>/dev/null
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}' 2>/dev/null
 ```
 
 ```bash
-npx iwsdk xr set-transform --input-json '{"device":"hand-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>}}' 2>/dev/null
+npx @iwsdk/cli xr set-transform --input-json '{"device":"hand-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>}}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` present.
@@ -410,17 +410,17 @@ Assert: `Hovered` present.
 **Test 8.2: Switch Back to Controllers**
 
 ```bash
-npx iwsdk xr set-input-mode --input-json '{"mode":"controller"}' 2>/dev/null
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"controller"}' 2>/dev/null
 ```
 
 ```bash
-npx iwsdk xr set-transform --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
 
 Then: `sleep 1`
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
 
 Assert: `Hovered` absent (clean transition).
@@ -435,16 +435,16 @@ For each of 3 cycles:
 
 1. Position at `{x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> + 0.4}` with yaw 180:
    ```bash
-   npx iwsdk xr set-transform --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.4>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
+   npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.4>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
    ```
 2. Animate through:
    ```bash
-   npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz-0.3>},"duration":1.5}' --timeout 20000 2>/dev/null
+   npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz-0.3>},"duration":1.5}' --timeout 20000 2>/dev/null
    ```
 3. `sleep 1.5`, then query `<robot>` for `["Hovered","Pressed"]`. Assert: at least `Hovered` or `Pressed` present.
 4. Animate back:
    ```bash
-   npx iwsdk xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.5>},"duration":0.3}' --timeout 20000 2>/dev/null
+   npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.5>},"duration":0.3}' --timeout 20000 2>/dev/null
    ```
 5. `sleep 0.5`, then query `<robot>` for `["Hovered","Pressed"]`. Assert: neither present.
 
@@ -457,7 +457,7 @@ All 3 cycles must pass.
 **Test 10.1: Find Audio Entities**
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert: At least 1 entity found. Use the first as `<audio>`.
@@ -465,7 +465,7 @@ Assert: At least 1 entity found. Use the first as `<audio>`.
 **Test 10.2: Verify Audio Loaded**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert: `_loaded` = `true`, `src` contains `chime.mp3`.
@@ -473,11 +473,11 @@ Assert: `_loaded` = `true`, `src` contains `chime.mp3`.
 **Test 10.3: Trigger Playback**
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"loop","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"loop","value":true}' 2>/dev/null
 ```
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
 ```
 
 Note: `_playRequested` is consumed within one frame.
@@ -485,7 +485,7 @@ Note: `_playRequested` is consumed within one frame.
 **Test 10.4: Verify Playback State**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
 ```
 
 Assert: `_isPlaying` = `true` (loop is on).
@@ -493,7 +493,7 @@ Assert: `_isPlaying` = `true` (loop is on).
 **Test 10.5: Stop Playback**
 
 ```bash
-npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_stopRequested","value":true}' 2>/dev/null
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_stopRequested","value":true}' 2>/dev/null
 ```
 
 ---
@@ -503,7 +503,7 @@ npx iwsdk ecs set-component --input-json '{"entityIndex":<audio>,"componentId":"
 **Test 11.1: Panel Loading**
 
 ```bash
-npx iwsdk ecs query --input-json '{"entityIndex":<panel>,"components":["ScreenSpace","RayInteractable","PokeInteractable"]}' 2>/dev/null
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["ScreenSpace","RayInteractable","PokeInteractable"]}' 2>/dev/null
 ```
 
 Assert:
@@ -516,7 +516,7 @@ Assert:
 **Test 11.2: Visual Confirmation**
 
 ```bash
-npx iwsdk browser screenshot --timeout 20000 2>/dev/null
+npx @iwsdk/cli browser screenshot --timeout 20000 2>/dev/null
 ```
 
 Assert: returns a `screenshotPath` (PNG file saved to /tmp).
@@ -526,7 +526,7 @@ Assert: returns a `screenshotPath` (PNG file saved to /tmp).
 ### Suite 12: Stability Check
 
 ```bash
-npx iwsdk browser logs --input-json '{"count":50,"level":["error","warn"]}' 2>/dev/null
+npx @iwsdk/cli browser logs --input-json '{"count":50,"level":["error","warn"]}' 2>/dev/null
 ```
 
 Assert: No error-level logs. Warnings about `AudioContext` autoplay policy are acceptable. Pre-existing 404 resource errors from page load are acceptable.
@@ -538,7 +538,7 @@ Assert: No error-level logs. Warnings about `AudioContext` autoplay policy are a
 Kill the dev server:
 
 ```bash
-cd $IWSDK_REPO_ROOT/examples/poke && npx iwsdk dev down
+cd $IWSDK_REPO_ROOT/examples/poke && npx @iwsdk/cli dev down
 ```
 
 Output a summary table:
@@ -568,7 +568,7 @@ If any suite fails, include which assertion failed and actual vs expected values
 
 If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
 
-1. Stop the dev server: `cd $IWSDK_REPO_ROOT/examples/poke && npx iwsdk dev down`
+1. Stop the dev server: `cd $IWSDK_REPO_ROOT/examples/poke && npx @iwsdk/cli dev down`
 2. Restart: re-run Step 2 to start a fresh dev server
 3. Re-run the Pre-test Setup (reload, accept session)
 4. Retry the failed suite
@@ -593,7 +593,7 @@ Browsers block audio autoplay until user gesture. The `_playRequested` flag may 
 
 ### Entity indices change on reload
 
-Never cache entity indices across page reloads. Always re-discover via `npx iwsdk ecs find`.
+Never cache entity indices across page reloads. Always re-discover via `npx @iwsdk/cli ecs find`.
 
 ### Touch pointer not enabled
 

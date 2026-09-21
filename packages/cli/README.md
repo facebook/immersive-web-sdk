@@ -14,7 +14,7 @@ It owns:
 
 ## Running without a local install
 
-Starter apps install this package and should run `npx iwsdk ...` from the app
+Starter apps install this package and should run `npx @iwsdk/cli ...` from the app
 directory. Elsewhere, use the scoped package explicitly so npm does not resolve
 the unrelated `iwsdk` placeholder package:
 

@@ -20,14 +20,14 @@ applicable IWSDK guide or concept page.
 the active scene, the asset module, the component module, and all XR/world
 features. `vite.config.ts` only wires the plugin. Editing `iwsdk.config.json`
 restarts Vite in place; the managed window remains open and its command bridges
-reconnect automatically. Wait for `npx iwsdk dev status` to report
+reconnect automatically. Wait for `npx @iwsdk/cli dev status` to report
 `browserCommandReady: true` before issuing browser-backed commands.
 
 **`virtual:iwsdk-project` is a virtual module**, not a file. `src/index.ts` or
 `src/index.js` imports it and passes it whole to `World.create()`. Do not
 hand-build that options object.
 
-**The dev server is CLI-managed.** Use `npx iwsdk dev up` (or `npm run dev`), not
+**The dev server is CLI-managed.** Use `npx @iwsdk/cli dev up` (or `npm run dev`), not
 `vite`. It launches a managed browser that hosts the MCP command bridge.
 `--no-open` intentionally starts only the server: status reports
 `browser.status: "not_launched"`, and browser-backed commands fail with
@@ -61,17 +61,17 @@ and subtle breakage. Exception: `import type { GLTF } from 'three/addons/...'`.
 
 ## Traps that produce silent failures
 
-| Trap                                                          | Symptom                                                                  | Fix                                                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `locomotion: true` with no `LocomotionEnvironment` on a floor | player falls through the world                                           | add the component to a walkable surface                                             |
-| Scene origin left occupied                                    | player spawns inside your geometry                                       | the player origin is `0,0,0` unless the scene authors `player.transform`            |
-| Scene JSON with `imports`                                     | authoring preview works, but editable open and runtime load are rejected | run `npx iwsdk scene flatten` once, then edit the flat output                       |
-| `entity.destroy()`                                            | GPU memory leaked                                                        | use `entity.dispose()`                                                              |
-| `setValue` on a Vec2/Vec3/Vec4/Color field                    | throws in elics 3.4.x                                                    | use `entity.getVectorView(...)`                                                     |
-| Environment component on a non-root entity                    | silently ignored                                                         | `DomeGradient`/`IBLGradient` go on the level root only                              |
-| Environment prop changed without `_needsUpdate`               | change ignored                                                           | set `_needsUpdate` after writing                                                    |
-| `ScreenSpace` given numbers                                   | clamped with a console warning                                           | it takes CSS strings: `'400px'`, `'25vw'`                                           |
-| `@iwsdk/reference` MCP tools in an old or `--no-install` app  | queries report warmup required                                           | run `npx iwsdk reference warmup`; fresh installed scaffolds do this during creation |
+| Trap                                                          | Symptom                                                                  | Fix                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `locomotion: true` with no `LocomotionEnvironment` on a floor | player falls through the world                                           | add the component to a walkable surface                                                  |
+| Scene origin left occupied                                    | player spawns inside your geometry                                       | the player origin is `0,0,0` unless the scene authors `player.transform`                 |
+| Scene JSON with `imports`                                     | authoring preview works, but editable open and runtime load are rejected | run `npx @iwsdk/cli scene flatten` once, then edit the flat output                       |
+| `entity.destroy()`                                            | GPU memory leaked                                                        | use `entity.dispose()`                                                                   |
+| `setValue` on a Vec2/Vec3/Vec4/Color field                    | throws in elics 3.4.x                                                    | use `entity.getVectorView(...)`                                                          |
+| Environment component on a non-root entity                    | silently ignored                                                         | `DomeGradient`/`IBLGradient` go on the level root only                                   |
+| Environment prop changed without `_needsUpdate`               | change ignored                                                           | set `_needsUpdate` after writing                                                         |
+| `ScreenSpace` given numbers                                   | clamped with a console warning                                           | it takes CSS strings: `'400px'`, `'25vw'`                                                |
+| `@iwsdk/reference` MCP tools in an old or `--no-install` app  | queries report warmup required                                           | run `npx @iwsdk/cli reference warmup`; fresh installed scaffolds do this during creation |
 
 ## Verify before you claim it works
 
@@ -79,14 +79,14 @@ and subtle breakage. Exception: `import type { GLTF } from 'three/addons/...'`.
 initialising without necessarily logging anything in the browser.
 
 For a new multi-file procedural model, finish the initial asset module and manifest
-registration before `npx iwsdk dev up`; do not keep the browser live while its import
+registration before `npx @iwsdk/cli dev up`; do not keep the browser live while its import
 graph is half-written. Typecheck first, then launch the managed editor for inspection.
 
 Then check the right status for the task — these are not interchangeable:
 
 - scene/editor work → `scene_get_state`
 - XR device or session actions → `xr_get_session_status`
-- server readiness → `npx iwsdk dev status` (XR availability is not a server signal)
+- server readiness → `npx @iwsdk/cli dev status` (XR availability is not a server signal)
 
 When something is missing but the console is clean: call
 `browser_get_console_logs` with only `count` (a `level` filter hides errors), then
@@ -98,11 +98,11 @@ not run application systems, so anything driven by a system must be verified wit
 `browser_screenshot` (runtime), not `scene_screenshot` (editor).
 
 Pose, controller/hand alignment, and immersive interaction claims require an
-active XR session (`npx iwsdk xr status`). A flat runtime screenshot taken
+active XR session (`npx @iwsdk/cli xr status`). A flat runtime screenshot taken
 outside XR can prove that the app renders, but it cannot prove immersive pose or
 interaction correctness.
 
-For a physical headset smoke test, run `npx iwsdk dev status`, open a URL from
+For a physical headset smoke test, run `npx @iwsdk/cli dev status`, open a URL from
 `data.runtimeUrls.network` on a headset connected to the same Wi-Fi network,
 and accept the expected local certificate warning. See
 [Testing Your Experience](https://iwsdk.dev/guides/02-testing-experience.html)
@@ -111,9 +111,9 @@ for the complete workflow.
 ## MCP and CLI are one surface, not two
 
 Nearly every capability exists both ways — `scene_render_file` and
-`npx iwsdk scene render-file`, `ecs_find_entities` and `npx iwsdk ecs find`.
-Discover CLI actions with the bare domain or domain help (`npx iwsdk scene` or
-`npx iwsdk scene --help`); both list that domain's actions.
+`npx @iwsdk/cli scene render-file`, `ecs_find_entities` and `npx @iwsdk/cli ecs find`.
+Discover CLI actions with the bare domain or domain help (`npx @iwsdk/cli scene` or
+`npx @iwsdk/cli scene --help`); both list that domain's actions.
 
 **The CLI is not a fallback for a dead bridge.** Both routes drive the same
 managed browser, so when `dev status` reports `browserConnected: false`,

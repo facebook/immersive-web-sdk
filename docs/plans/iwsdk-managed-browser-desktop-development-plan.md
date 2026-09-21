@@ -445,10 +445,10 @@ Long-tail Playwright capability is provided through an explicit CLI workflow,
 not an MCP tool:
 
 ```bash
-npx iwsdk dev up --allow-browser-automation
+npx @iwsdk/cli dev up --allow-browser-automation
 # Or, for an already-running session:
-npx iwsdk dev restart --allow-browser-automation
-npx iwsdk browser run ./scripts/diagnose.mjs
+npx @iwsdk/cli dev restart --allow-browser-automation
+npx @iwsdk/cli browser run ./scripts/diagnose.mjs
 ```
 
 The proposed runner attaches to the existing managed Chromium instance and

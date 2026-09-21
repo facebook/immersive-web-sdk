@@ -44,7 +44,7 @@ queries and avoid repeating session, hierarchy, or transform discovery after a
 successful read.
 
 When the request names an artifact path, save it directly with
-`npx iwsdk browser screenshot --output-file <path>`. A screenshot returned only
+`npx @iwsdk/cli browser screenshot --output-file <path>`. A screenshot returned only
 to model context does not satisfy a requested file deliverable.
 
 Stop once the requested grab/move/release path and final state are proven. Leave

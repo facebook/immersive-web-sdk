@@ -88,7 +88,7 @@ the output bounded. The existing scaffold rules are already in context:
    and recovery when the request needs them.
 4. Run one batched typecheck and fix errors together.
 5. Start the managed runtime directly with
-   `npx iwsdk dev up --headless --timeout 45000`.
+   `npx @iwsdk/cli dev up --headless --timeout 45000`.
 6. Exercise the changed path with real user input and query only the named state
    needed to prove it. Direct ECS mutation may prepare/reset a scenario but is
    not interaction proof.
@@ -102,13 +102,13 @@ shapes are authoritative; substitute the requested target, entity index, and
 artifact name instead of running family-level or subcommand `--help`:
 
 ```bash
-npx iwsdk xr enter --input-json '{}'
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":0,"y":1.5,"z":-2}}'
-npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}'
-npx iwsdk ecs find --input-json '{"namePattern":"Requested Name","limit":10}'
-npx iwsdk ecs query --input-json '{"entityIndex":1,"components":["RequestedState"]}'
-npx iwsdk browser screenshot --input-json '{}' --output-file artifacts/final.png
-npx iwsdk scene render-file --input-json '{"path":"public/scenes/main.iwsdk.scene.json","viewId":"hero","width":800,"height":800}' --output-file artifacts/hero.png
+npx @iwsdk/cli xr enter --input-json '{}'
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":0,"y":1.5,"z":-2}}'
+npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}'
+npx @iwsdk/cli ecs find --input-json '{"namePattern":"Requested Name","limit":10}'
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":1,"components":["RequestedState"]}'
+npx @iwsdk/cli browser screenshot --input-json '{}' --output-file artifacts/final.png
+npx @iwsdk/cli scene render-file --input-json '{"path":"public/scenes/main.iwsdk.scene.json","viewId":"hero","width":800,"height":800}' --output-file artifacts/hero.png
 ```
 
 After `dev up`, target at most 32 Bash calls for all interaction and visual
@@ -133,13 +133,13 @@ For
 `OneHandGrabbable`/`TwoHandsGrabbable`, use squeeze button index `1`.
 The focused distance-grab smoke is not another `xr select`: aim at the preserved
 object, run
-`npx iwsdk xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'`,
+`npx @iwsdk/cli xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'`,
 observe `Grabbed` or movement, then repeat with `value:0` to release.
 
 If a scene/source/UI edit happens after the managed runtime started and live
 state becomes stale, do not call `scene open`, repeatedly poll `dev status`, or
 loop on browser reload. Run one
-`npx iwsdk dev restart --headless --timeout 60000`, then resume the named-state
+`npx @iwsdk/cli dev restart --headless --timeout 60000`, then resume the named-state
 check. One failed restart may be diagnosed once; do not enter a recovery loop.
 
 Do not perform a full product replay when the edit affects one bounded path.

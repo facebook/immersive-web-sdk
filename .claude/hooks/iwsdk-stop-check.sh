@@ -57,10 +57,10 @@ Before finishing, please go through this checklist:
 Did you verify your changes work at runtime? If you modified any packages or examples,
 use the direct `iwsdk` CLI against a running dev server:
 
-  npx iwsdk browser screenshot
-  npx iwsdk browser logs
-  npx iwsdk ecs systems
-  npx iwsdk ecs components
+  npx @iwsdk/cli browser screenshot
+  npx @iwsdk/cli browser logs
+  npx @iwsdk/cli ecs systems
+  npx @iwsdk/cli ecs components
 
 If a dev server is running, take a screenshot and check console logs at minimum.
 If no dev server is running and your changes are code-only (not runtime), that's OK — just confirm.

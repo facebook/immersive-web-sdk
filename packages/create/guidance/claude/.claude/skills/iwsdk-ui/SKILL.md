@@ -177,15 +177,15 @@ views independently when both modes matter.
 ## Verify with a bounded loop
 
 Typecheck after the complete first slice, then start or reuse one managed
-session. If no command-ready session exists, run `npx iwsdk dev up --open`
+session. If no command-ready session exists, run `npx @iwsdk/cli dev up --open`
 once. Do not call `dev --help`, separately call `dev open`, restart a healthy
 session, start a second browser, or build a custom UIKit renderer.
 
-1. Run `npx iwsdk ui assets --raw` once to confirm registration.
+1. Run `npx @iwsdk/cli ui assets --raw` once to confirm registration.
 2. Render one isolated preview after the first complete layout:
 
    ```bash
-   npx iwsdk ui render-preview \
+   npx @iwsdk/cli ui render-preview \
      --input-json '{"assetId":"panel-id","width":800,"height":600}' \
      --output-file artifacts/panel-preview.png
    ```
@@ -197,7 +197,7 @@ session, start a second browser, or build a custom UIKit renderer.
    `view` only for built-in presets:
 
    ```bash
-   npx iwsdk scene render-file \
+   npx @iwsdk/cli scene render-file \
      --input-json '{"path":"public/scenes/main.iwsdk.scene.json","viewId":"hero"}' \
      --output-file artifacts/scene-hero.png
    ```
@@ -214,23 +214,23 @@ session, start a second browser, or build a custom UIKit renderer.
 For common CLI verification, use these forms directly rather than discovery:
 
 ```bash
-npx iwsdk xr status
-npx iwsdk xr enter --input-json '{}'
-npx iwsdk xr look-at --input-json '{"device":"controller-right","target":{"x":0,"y":1.5,"z":-2}}'
-npx iwsdk xr select --input-json '{"device":"controller-right","duration":0.2}'
-npx iwsdk ecs find --input-json '{"withComponents":["ComponentName"]}'
-npx iwsdk ecs query --input-json '{"entityIndex":12}'
-npx iwsdk browser logs --input-json '{"count":30}'
-npx iwsdk browser reload --input-json '{}'
+npx @iwsdk/cli xr status
+npx @iwsdk/cli xr enter --input-json '{}'
+npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"x":0,"y":1.5,"z":-2}}'
+npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}'
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["ComponentName"]}'
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":12}'
+npx @iwsdk/cli browser logs --input-json '{"count":30}'
+npx @iwsdk/cli browser reload --input-json '{}'
 ```
 
-For a file capture, use `npx iwsdk browser screenshot --output-file <path>`;
+For a file capture, use `npx @iwsdk/cli browser screenshot --output-file <path>`;
 `browser_screenshot` does not accept an `outputPath` input field.
 
 When a UI change requires a regression smoke for an existing
 `DistanceGrabbable`, do not substitute a long `xr select` click. Aim at the
 object, hold select with
-`npx iwsdk xr set-select-value --input-json '{"device":"controller-right","value":1}'`,
+`npx @iwsdk/cli xr set-select-value --input-json '{"device":"controller-right","value":1}'`,
 query the entity while held to observe `Grabbed`, then release with the same
 command and `"value":0`. Movement is unnecessary unless the request asks for
 it.

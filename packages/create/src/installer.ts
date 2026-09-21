@@ -203,7 +203,7 @@ export async function warmupReference(
     });
     console.warn(
       stderrColor.yellow(
-        `Project creation will continue without the optional reference cache: ${error instanceof Error ? error.message : String(error)}. Run "npx iwsdk reference warmup" from the project directory to retry.`,
+        `Project creation will continue without the optional reference cache: ${error instanceof Error ? error.message : String(error)}. Run "npx @iwsdk/cli reference warmup" from the project directory to retry.`,
       ),
     );
     return false;
@@ -226,7 +226,9 @@ function printReferenceWarmupGuidance() {
       '  # warmup still needs access to the baked public model file URLs unless the shared cache is already pre-warmed',
     ),
   );
-  console.log(stdoutColor.gray('  # then run: npx iwsdk reference warmup'));
+  console.log(
+    stdoutColor.gray('  # then run: npx @iwsdk/cli reference warmup'),
+  );
 }
 
 export function printNextSteps(

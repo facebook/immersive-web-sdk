@@ -5,8 +5,8 @@ runtime. Tool schemas are canonical; inspect the installed contract rather than
 guessing arguments:
 
 ```bash
-npx iwsdk mcp inspect --tool scene_render_file
-npx iwsdk scene render-file --help
+npx @iwsdk/cli mcp inspect --tool scene_render_file
+npx @iwsdk/cli scene render-file --help
 ```
 
 ## Scene Authoring Model

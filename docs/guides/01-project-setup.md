@@ -244,8 +244,8 @@ Fresh starters ship the `iwsdk` CLI through `@iwsdk/cli`, so the default command
 
 - `npm run dev` starts the CLI-managed dev session, opens the app, and keeps the terminal attached
 - `npm run dev:runtime` is the internal runtime script the CLI launches
-- `npx iwsdk dev status` shows the current runtime URL/port and adapter state
-- `npx iwsdk dev down` stops the managed runtime if you started it in the background
+- `npx @iwsdk/cli dev status` shows the current runtime URL/port and adapter state
+- `npx @iwsdk/cli dev down` stops the managed runtime if you started it in the background
 
 Vite chooses the actual dev-server port, so treat the reported runtime URL as the source of truth instead of hardcoding a port.
 

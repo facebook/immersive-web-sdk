@@ -122,8 +122,8 @@ Headed/headless launch, open behavior, AI mode, and screenshot dimensions are
 operator-session choices:
 
 ```bash
-npx iwsdk dev up --ai-mode collaborate --headed --open
-npx iwsdk dev up --ai-mode agent --screenshot-width 500 --screenshot-height 500
+npx @iwsdk/cli dev up --ai-mode collaborate --headed --open
+npx @iwsdk/cli dev up --ai-mode agent --screenshot-width 500 --screenshot-height 500
 ```
 
 Keep Vite configuration small:

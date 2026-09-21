@@ -8,7 +8,7 @@ argument-hint: '[--skip <test-name>] [--only <test-name>]'
 
 Runs all 9 IWSDK test suites simultaneously. The orchestrator handles the full lifecycle: build, example prep, dev servers, sub-agent launch, polling, retries, cleanup, and aggregate reporting.
 
-Each test gets its own example directory and dev server. Sub-agents read the skill files and execute tests through the direct `npx iwsdk` flow described in each skill.
+Each test gets its own example directory and dev server. Sub-agents read the skill files and execute tests through the direct `npx @iwsdk/cli` flow described in each skill.
 
 ---
 
@@ -26,7 +26,7 @@ Each test gets its own example directory and dev server. Sub-agents read the ski
 | test-locomotion   | examples/locomotion       | 6      | test-locomotion/SKILL.md   |
 | test-physics      | examples/physics          | 5      | test-physics/SKILL.md      |
 
-Ports are **not** pre-assigned. Each dev server picks its own port dynamically. The orchestrator can discover each active URL from the server logs or `npx iwsdk dev status`, but the sub-agent skills no longer need the port explicitly.
+Ports are **not** pre-assigned. Each dev server picks its own port dynamically. The orchestrator can discover each active URL from the server logs or `npx @iwsdk/cli dev status`, but the sub-agent skills no longer need the port explicitly.
 
 ---
 
@@ -208,7 +208,7 @@ Sub-agents (Task tool) cannot run background processes. The orchestrator starts 
 
 ### Runtime-first server discovery for diagnostics
 
-Ports are NOT pre-assigned. Each dev server is started with `npm run dev` and Vite picks an available port automatically. The orchestrator may still collect the resulting port map for diagnostics, but that data is only for the parent agent's visibility. Sub-agents should treat the running example directory as the source of truth and use the direct `npx iwsdk` flow from inside that directory.
+Ports are NOT pre-assigned. Each dev server is started with `npm run dev` and Vite picks an available port automatically. The orchestrator may still collect the resulting port map for diagnostics, but that data is only for the parent agent's visibility. Sub-agents should treat the running example directory as the source of truth and use the direct `npx @iwsdk/cli` flow from inside that directory.
 
 ### Sub-agents read skill files directly
 

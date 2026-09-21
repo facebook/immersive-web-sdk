@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const EXAMPLES = join(ROOT, 'examples');
+const CLI_ENTRYPOINT = join(ROOT, 'packages', 'cli', 'bin', 'iwsdk.js');
 
 const ALL_DIRS = [
   'poke',
@@ -196,7 +197,7 @@ function readAllPorts() {
 
 function runIwsdk(dir, args) {
   return new Promise((resolve) => {
-    const child = spawn('npx', ['iwsdk', ...args], {
+    const child = spawn(process.execPath, [CLI_ENTRYPOINT, ...args], {
       cwd: join(EXAMPLES, dir),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

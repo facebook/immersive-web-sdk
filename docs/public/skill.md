@@ -27,8 +27,11 @@ applicable IWSDK guide or concept page.
 ### CLI-First Operating Model
 
 This guide is intentionally **CLI-first** for cloud-based harnesses. Treat
-`npx iwsdk ...` commands as the primary control surface for setup, runtime
+`npx @iwsdk/cli ...` commands as the primary control surface for setup, runtime
 inspection, screenshots, ECS debugging, XR emulation, and reference queries.
+The scoped package name is a security boundary: do not shorten it to the
+unscoped package name, because npx can download that unrelated package when a
+local binary is missing.
 
 Reason: MCP adapter support in cloud harnesses is often missing, stale, or
 partially wired. Relying on MCP tool availability can degrade generation quality
@@ -140,7 +143,7 @@ auto-detects GPU availability first:
 3. Logs the selected backend every launch.
 
 **No manual patching required** in 0.4.x. Use the normal generated app workflow:
-`npm run dev` or `npx iwsdk dev up --open --foreground`.
+`npm run dev` or `npx @iwsdk/cli dev up --open --foreground`.
 
 ### Environment Variable Override
 
@@ -327,13 +330,13 @@ const { scene } = AssetManager.getGLTF('myModel', { shared: true })!;
 
 ```bash
 npm run dev                    # Generated apps: dev up --open --foreground
-npx iwsdk dev up               # Start dev:runtime through the CLI, usually backgrounded
-npx iwsdk dev up --foreground  # Stay attached to terminal
-npx iwsdk dev down           # Stop
-npx iwsdk dev restart        # Restart
-npx iwsdk dev status         # Check running state
-npx iwsdk dev logs           # View recorded background server logs
-npx iwsdk dev open           # Open in browser
+npx @iwsdk/cli dev up               # Start dev:runtime through the CLI, usually backgrounded
+npx @iwsdk/cli dev up --foreground  # Stay attached to terminal
+npx @iwsdk/cli dev down           # Stop
+npx @iwsdk/cli dev restart        # Restart
+npx @iwsdk/cli dev status         # Check running state
+npx @iwsdk/cli dev logs           # View recorded background server logs
+npx @iwsdk/cli dev open           # Open in browser
 ```
 
 Generated apps use bare `iwsdkDev()` and the CLI launches the managed Playwright
@@ -341,14 +344,14 @@ runtime/editor workspace, registers the MCP WebSocket endpoint, and records
 runtime state. AI, headed/headless, open, and screenshot behavior are
 launch-time `iwsdk dev up` flags. The developer owns the headed/headless choice;
 announce any change before restarting rather than silently changing their
-workspace. Use `npx iwsdk dev status` for the resolved `runtimeUrls.local` and
+workspace. Use `npx @iwsdk/cli dev status` for the resolved `runtimeUrls.local` and
 `runtimeUrls.network` fields in the JSON result; the generated starter template
 defaults to `https://localhost:8081/`, but examples or existing apps may use
 another Vite port.
 
 ### Physical Headset Smoke Test
 
-Run `npx iwsdk dev status`, then open one of the URLs in
+Run `npx @iwsdk/cli dev status`, then open one of the URLs in
 `data.runtimeUrls.network` on a headset connected to the same Wi-Fi network as
 the development computer. Accept the expected warning for IWSDK's untrusted
 local certificate. For alternate connection methods and complete instructions, see
@@ -374,9 +377,9 @@ Project creation syncs MCP adapter configs after dependency installation for the
 selected AI tools. Sync or manage them explicitly with:
 
 ```bash
-npx iwsdk adapter sync      # Write configs for all supported or selected AI tools
-npx iwsdk adapter status     # Check adapter state
-npx iwsdk adapter prune      # Remove IWSDK-managed MCP entries
+npx @iwsdk/cli adapter sync      # Write configs for all supported or selected AI tools
+npx @iwsdk/cli adapter status     # Check adapter state
+npx @iwsdk/cli adapter prune      # Remove IWSDK-managed MCP entries
 ```
 
 Supported adapters: Claude Code, Cursor, OpenAI Codex, GitHub Copilot.
@@ -391,36 +394,36 @@ IWSDK search, backed by warmed corpus/model assets.
 ### Setup
 
 ```bash
-npx iwsdk reference warmup   # Download corpus archive + pinned model files into cache
-npx iwsdk reference status    # Check readiness
+npx @iwsdk/cli reference warmup   # Download corpus archive + pinned model files into cache
+npx @iwsdk/cli reference status    # Check readiness
 ```
 
 ### Query Tools
 
 ```bash
 # Semantic search
-npx iwsdk reference search --input-json '{"query":"how to create a grabbable object","limit":5}'
+npx @iwsdk/cli reference search --input-json '{"query":"how to create a grabbable object","limit":5}'
 
 # API reference
-npx iwsdk reference api --input-json '{"name":"World.create"}'
+npx @iwsdk/cli reference api --input-json '{"name":"World.create"}'
 
 # Relationship search
-npx iwsdk reference relationship --input-json '{"type":"extends","target":"System"}'
+npx @iwsdk/cli reference relationship --input-json '{"type":"extends","target":"System"}'
 
 # File content
-npx iwsdk reference file --input-json '{"file_path":"packages/core/src/ecs/world.ts","source":"iwsdk"}'
+npx @iwsdk/cli reference file --input-json '{"file_path":"packages/core/src/ecs/world.ts","source":"iwsdk"}'
 
 # List all ECS components / systems
-npx iwsdk reference components --input-json '{}'
-npx iwsdk reference systems --input-json '{}'
+npx @iwsdk/cli reference components --input-json '{}'
+npx @iwsdk/cli reference systems --input-json '{}'
 
 # Dependents and examples
-npx iwsdk reference dependents --input-json '{"api_name":"DistanceGrabbable"}'
-npx iwsdk reference examples --input-json '{"api_name":"DistanceGrabbable"}'
+npx @iwsdk/cli reference dependents --input-json '{"api_name":"DistanceGrabbable"}'
+npx @iwsdk/cli reference examples --input-json '{"api_name":"DistanceGrabbable"}'
 
 # Inspect tool catalog
-npx iwsdk reference inspect
-npx iwsdk reference inspect --tool search
+npx @iwsdk/cli reference inspect
+npx @iwsdk/cli reference inspect --tool search
 ```
 
 ### Install Failure Handling
@@ -518,9 +521,9 @@ owning root or module file, then call `scene_render_file` before opening the roo
 ### ECS Inspection
 
 ```bash
-npx iwsdk ecs find --input-json '{"withComponents":["DistanceGrabbable"]}'
-npx iwsdk ecs query --input-json '{"entityIndex":3}'
-npx iwsdk ecs set-component --input-json '{"entityIndex":3,"componentId":"Transform","field":"position","value":[2,1,-1.8]}'
+npx @iwsdk/cli ecs find --input-json '{"withComponents":["DistanceGrabbable"]}'
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":3}'
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":3,"componentId":"Transform","field":"position","value":[2,1,-1.8]}'
 ```
 
 ### ECS Frame Stepping & Snapshot Diffs
@@ -528,14 +531,14 @@ npx iwsdk ecs set-component --input-json '{"entityIndex":3,"componentId":"Transf
 Use these to verify game logic, physics behavior, or movement direction:
 
 ```bash
-npx iwsdk ecs pause                                         # Freeze ECS (render continues)
-npx iwsdk ecs step --input-json '{"count":1}'               # Advance one frame
-npx iwsdk ecs resume                                         # Resume; first resumed delta is capped
+npx @iwsdk/cli ecs pause                                         # Freeze ECS (render continues)
+npx @iwsdk/cli ecs step --input-json '{"count":1}'               # Advance one frame
+npx @iwsdk/cli ecs resume                                         # Resume; first resumed delta is capped
 
-npx iwsdk ecs snapshot --input-json '{"label":"before"}'     # Save state
+npx @iwsdk/cli ecs snapshot --input-json '{"label":"before"}'     # Save state
 # ... make a change or advance frames ...
-npx iwsdk ecs snapshot --input-json '{"label":"after"}'
-npx iwsdk ecs diff --input-json '{"from":"before","to":"after"}'  # Compare
+npx @iwsdk/cli ecs snapshot --input-json '{"label":"after"}'
+npx @iwsdk/cli ecs diff --input-json '{"from":"before","to":"after"}'  # Compare
 ```
 
 Only the two most recent distinct snapshot labels are retained.
@@ -543,10 +546,10 @@ Only the two most recent distinct snapshot labels are retained.
 ### Browser Tools
 
 ```bash
-npx iwsdk browser screenshot --output-file artifacts/runtime.png
-npx iwsdk scene screenshot --input-json '{"view":"quarter"}' --output-file artifacts/scene.png
-npx iwsdk browser logs           # App console logs
-npx iwsdk browser reload         # Reload page
+npx @iwsdk/cli browser screenshot --output-file artifacts/runtime.png
+npx @iwsdk/cli scene screenshot --input-json '{"view":"quarter"}' --output-file artifacts/scene.png
+npx @iwsdk/cli browser logs           # App console logs
+npx @iwsdk/cli browser reload         # Reload page
 ```
 
 Both screenshot commands write a PNG and return `screenshotPath`. An explicit
@@ -575,31 +578,31 @@ Allowed devices vary by command: transforms support headset/controllers/hands;
 select supports controllers/hands; gamepad commands support controllers only.
 
 Before claiming that a pose, hand/controller alignment, or immersive
-interaction is correct, enter XR and confirm `npx iwsdk xr status` reports an
+interaction is correct, enter XR and confirm `npx @iwsdk/cli xr status` reports an
 active session. A flat screenshot outside XR can prove that the app renders,
 but not that immersive transforms or interactions are correct.
 
 ### Common Commands
 
 ```bash
-npx iwsdk xr enter
-npx iwsdk xr exit
-npx iwsdk xr status
+npx @iwsdk/cli xr enter
+npx @iwsdk/cli xr exit
+npx @iwsdk/cli xr status
 
 # Position devices
-npx iwsdk xr get-transform --input-json '{"device":"headset"}'
-npx iwsdk xr set-transform --input-json '{"device":"headset","position":{"x":0,"y":1.6,"z":-2}}'
-npx iwsdk xr look-at --input-json '{"device":"headset","target":{"x":0,"y":0.9,"z":0}}'
-npx iwsdk xr animate-to --input-json '{"device":"headset","position":{"x":0,"y":1.5,"z":0},"duration":0.5}'
-npx iwsdk xr set-input-mode --input-json '{"mode":"controller"}'
-npx iwsdk xr set-connected --input-json '{"device":"controller-right","connected":true}'
+npx @iwsdk/cli xr get-transform --input-json '{"device":"headset"}'
+npx @iwsdk/cli xr set-transform --input-json '{"device":"headset","position":{"x":0,"y":1.6,"z":-2}}'
+npx @iwsdk/cli xr look-at --input-json '{"device":"headset","target":{"x":0,"y":0.9,"z":0}}'
+npx @iwsdk/cli xr animate-to --input-json '{"device":"headset","position":{"x":0,"y":1.5,"z":0},"duration":0.5}'
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"controller"}'
+npx @iwsdk/cli xr set-connected --input-json '{"device":"controller-right","connected":true}'
 
 # Controller input
-npx iwsdk xr select --input-json '{"device":"controller-right"}'
-npx iwsdk xr get-select-value --input-json '{"device":"controller-right"}'
-npx iwsdk xr set-select-value --input-json '{"device":"controller-right","value":1}'
-npx iwsdk xr get-gamepad-state --input-json '{"device":"controller-right"}'
-npx iwsdk xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'
+npx @iwsdk/cli xr select --input-json '{"device":"controller-right"}'
+npx @iwsdk/cli xr get-select-value --input-json '{"device":"controller-right"}'
+npx @iwsdk/cli xr set-select-value --input-json '{"device":"controller-right","value":1}'
+npx @iwsdk/cli xr get-gamepad-state --input-json '{"device":"controller-right"}'
+npx @iwsdk/cli xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'
 ```
 
 ### `set-device-state` (Different Naming Convention)
@@ -608,7 +611,7 @@ This command takes a top-level `state` object, not the flat `"device"` string
 used by transform/input commands. Omitting `state` resets device defaults.
 
 ```bash
-npx iwsdk xr set-device-state --input-json '{
+npx @iwsdk/cli xr set-device-state --input-json '{
   "state": {
     "controllers": {
       "right": {
@@ -627,11 +630,11 @@ state, console logs, and whether the render loop is running:
 
 **To recover:**
 
-1. `npx iwsdk xr status`
-2. `npx iwsdk browser logs`
-3. `npx iwsdk browser reload`
-4. If transport/server state is bad: `npx iwsdk dev restart`
-5. Re-enter XR if needed: `npx iwsdk xr enter`
+1. `npx @iwsdk/cli xr status`
+2. `npx @iwsdk/cli browser logs`
+3. `npx @iwsdk/cli browser reload`
+4. If transport/server state is bad: `npx @iwsdk/cli dev restart`
+5. Re-enter XR if needed: `npx @iwsdk/cli xr enter`
 
 Read-only XR methods are immediate and cannot create a queued action loop, but
 runtime validation is uneven. Still pass explicit `"device"` values.
@@ -646,8 +649,8 @@ Do not assume a code change is correct just because it compiles.
 ### Verification checklist:
 
 1. **Start the dev server** — from an app/example workspace that defines
-   `dev:runtime`, run `npx iwsdk dev up`
-2. **Take a screenshot** — `npx iwsdk browser screenshot` — to confirm the
+   `dev:runtime`, run `npx @iwsdk/cli dev up`
+2. **Take a screenshot** — `npx @iwsdk/cli browser screenshot` — to confirm the
    scene renders correctly.
 3. **Use ECS pause/step/snapshot** to inspect state frame-by-frame when
    debugging movement, physics, or timing logic. ECS tools require IWSDK's

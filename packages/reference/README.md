@@ -10,8 +10,8 @@ Create-generated projects install this package as a development dependency.
 Warm the pinned corpus and embedding model once before using reference queries:
 
 ```bash
-npx iwsdk reference warmup
-npx iwsdk reference status
+npx @iwsdk/cli reference warmup
+npx @iwsdk/cli reference status
 ```
 
 The package intentionally does not embed the large reference corpus or model.
@@ -23,14 +23,14 @@ also be reachable or already present in the shared cache.
 ## Queries
 
 ```bash
-npx iwsdk reference search --input-json \
+npx @iwsdk/cli reference search --input-json \
   '{"query":"create a grabbable object","limit":5}'
-npx iwsdk reference api --input-json '{"name":"World.create"}'
-npx iwsdk reference components
-npx iwsdk reference systems
+npx @iwsdk/cli reference api --input-json '{"name":"World.create"}'
+npx @iwsdk/cli reference components
+npx @iwsdk/cli reference systems
 ```
 
-Run `npx iwsdk reference --help` for the complete command surface. When this
+Run `npx @iwsdk/cli reference --help` for the complete command surface. When this
 package is installed, `@iwsdk/cli` also registers its MCP adapter automatically.
 
 ## Sharp security override

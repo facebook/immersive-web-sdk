@@ -371,7 +371,7 @@ Audit these cases even when TypeScript compiles:
 Run the project's normal formatter, typecheck, tests, and production build.
 Then verify the actual app:
 
-1. Start the 0.5 dev server and wait for `npx iwsdk dev status --json` to report
+1. Start the 0.5 dev server and wait for `npx @iwsdk/cli dev status --json` to report
    `browserConnected: true` and `browserCommandReady: true`.
 2. Validate and open every native scene. Fix missing manifest assets,
    components, entity references, and file paths.

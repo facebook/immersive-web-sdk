@@ -39,7 +39,7 @@ pnpm install
 pnpm dev
 ```
 
-Use the HTTPS URL reported by Vite or `npx iwsdk dev status`.
+Use the HTTPS URL reported by Vite or `npx @iwsdk/cli dev status`.
 
 ## Customization
 

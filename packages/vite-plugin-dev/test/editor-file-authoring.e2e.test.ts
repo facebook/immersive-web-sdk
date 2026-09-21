@@ -65,7 +65,7 @@ describe('file-first scene authoring', () => {
 
     expect(result.handled).toBe(true);
     expect(result.message).toContain('No scene is open in the IWSDK editor.');
-    expect(result.message).toContain('npx iwsdk scene open --input-json');
+    expect(result.message).toContain('npx @iwsdk/cli scene open --input-json');
     await context.close();
   }, 60000);
 
