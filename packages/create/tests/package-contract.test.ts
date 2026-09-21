@@ -40,8 +40,13 @@ describe('@iwsdk/create packed contract', () => {
   it('accepts publication after the immutable asset CDN migration', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'),
-    ) as { files?: string[]; scripts?: Record<string, string> };
+    ) as {
+      files?: string[];
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+    };
 
+    expect(packageJson.dependencies?.yaml).toBe('2.8.3');
     expect(packageJson.files).toContain('scripts/verify-release-ready.mjs');
     expect(packageJson.scripts?.prepublishOnly).toContain(
       'verify:release-ready',
@@ -52,6 +57,26 @@ describe('@iwsdk/create packed contract', () => {
       }),
     ).resolves.toMatchObject({
       stdout: expect.stringContaining('@iwsdk/create release contract passed.'),
+    });
+  });
+
+  it('keeps the documented npm package manifest parseable', async () => {
+    const readme = await readFile(path.join(REPO_ROOT, 'README.md'), 'utf8');
+    const fence = String.fromCharCode(96).repeat(3);
+    const sectionStart = readme.indexOf('npm reads the override from');
+    const blockStart = readme.indexOf(fence + 'json\n', sectionStart);
+    const jsonStart = blockStart + fence.length + 'json\n'.length;
+    const jsonEnd = readme.indexOf('\n' + fence, jsonStart);
+
+    expect(sectionStart).toBeGreaterThanOrEqual(0);
+    expect(blockStart).toBeGreaterThanOrEqual(0);
+    expect(jsonEnd).toBeGreaterThan(jsonStart);
+    expect(JSON.parse(readme.slice(jsonStart, jsonEnd))).toMatchObject({
+      dependencies: {
+        '@iwsdk/core': '^0.5.3',
+        three: 'npm:super-three@0.181.0',
+      },
+      overrides: { three: 'npm:super-three@0.181.0' },
     });
   });
 

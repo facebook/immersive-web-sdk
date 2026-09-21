@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSceneDocument } from '@iwsdk/scene-composition';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 import { getRecommendedConfiguration } from '../src/catalog.js';
 import { buildStarterProjectFiles } from '../src/project-files.js';
 
@@ -136,6 +137,8 @@ describe('common starter project files', () => {
       templateRoot: TEMPLATE_ROOT,
     });
     const packageJson = JSON.parse(textFile(files, 'package.json'));
+    const pnpmWorkspaceYaml = textFile(files, 'pnpm-workspace.yaml');
+    const pnpmWorkspace = parse(pnpmWorkspaceYaml);
 
     expect(files.some((file) => file.path === '.gitignore')).toBe(true);
     expect(files.some((file) => file.path === '.nvmrc')).toBe(true);
@@ -151,12 +154,23 @@ describe('common starter project files', () => {
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
     expect(packageJson.devDependencies['@types/three']).toBe('^0.181.0');
     expect(packageJson.overrides).toEqual({
-      sharp: '0.35.3',
+      sharp: '0.35.4',
       three: 'npm:super-three@0.181.0',
     });
-    expect(packageJson.pnpm).toEqual({
+    expect(pnpmWorkspace).toEqual({
+      packages: ['.'],
       overrides: {
+        sharp: '0.35.4',
         three: 'npm:super-three@0.181.0',
+      },
+      onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],
+      ignoredBuiltDependencies: ['@meta-quest/metavr', 'onnxruntime-node'],
+      allowBuilds: {
+        esbuild: true,
+        protobufjs: true,
+        sharp: true,
+        '@meta-quest/metavr': false,
+        'onnxruntime-node': false,
       },
     });
     expect(packageJson.scripts.typecheck).toBe('tsc --noEmit');

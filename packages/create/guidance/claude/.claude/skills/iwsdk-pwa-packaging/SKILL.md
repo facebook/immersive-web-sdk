@@ -80,7 +80,7 @@ it on the headset after sideloading (step 4).
 `index.html` ships `<link rel="icon" href="data:," />` and no manifest link, so
 the app is not installable until step 3 adds them.
 
-Then confirm the app itself is sound before wrapping it — `npx tsc --noEmit`,
+Then confirm the app itself is sound before wrapping it — `npm run --if-present typecheck`,
 and `npm run build` producing a `dist/` you have actually loaded. Packaging a
 broken build wastes a full round trip through hosting, signing, and upload.
 

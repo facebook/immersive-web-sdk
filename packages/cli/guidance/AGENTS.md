@@ -75,7 +75,7 @@ and subtle breakage. Exception: `import type { GLTF } from 'three/addons/...'`.
 
 ## Verify before you claim it works
 
-**Always `npx tsc --noEmit` before testing.** Type errors stop systems
+**Always `npm run --if-present typecheck` before testing.** Type errors stop systems
 initialising without necessarily logging anything in the browser.
 
 For a new multi-file procedural model, finish the initial asset module and manifest

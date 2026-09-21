@@ -26,7 +26,7 @@ Upload. On macOS, Gatekeeper may quarantine the binary on first run — the
 developer clears it in System Settings → Privacy & Security, or with
 `xattr -d com.apple.quarantine ./ovr-platform-util`.
 
-`hzdb` and `metavr` manage devices; neither can upload to the Store.
+Use the upload utility described here for this Store submission workflow.
 
 ## Authentication
 

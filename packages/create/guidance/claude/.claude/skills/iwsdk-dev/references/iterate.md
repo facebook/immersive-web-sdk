@@ -58,7 +58,7 @@ lookup between the bounded inspection and the first edit.
   `node_modules`. Import IWSDK ECS, UIKit, interaction, material, and Three.js
   re-exports from `@iwsdk/core`; use
   `createComponent('Name', {field: {type: Types.Int8, default: 0}})` directly.
-  Let `npx tsc --noEmit` produce the exact remaining API question.
+  Let `npm run --if-present typecheck` produce the exact remaining API question.
 
 Use this opening command shape directly, tolerating missing paths and keeping
 the output bounded. The existing scaffold rules are already in context:

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,6 +46,30 @@ try {
   const packageJson = JSON.parse(
     await readFile(path.join(appRoot, 'package.json'), 'utf8'),
   );
+  const pnpmWorkspace = parse(
+    await readFile(path.join(appRoot, 'pnpm-workspace.yaml'), 'utf8'),
+  );
+  if (
+    packageJson.overrides?.sharp !== '0.35.4' ||
+    packageJson.overrides?.three !== 'npm:super-three@0.181.0'
+  ) {
+    blockers.push(
+      'generated package.json is missing the npm Sharp/Three overrides',
+    );
+  }
+  if (
+    pnpmWorkspace.packages?.length !== 1 ||
+    pnpmWorkspace.packages[0] !== '.' ||
+    pnpmWorkspace.overrides?.sharp !== '0.35.4' ||
+    pnpmWorkspace.overrides?.three !== 'npm:super-three@0.181.0' ||
+    pnpmWorkspace.allowBuilds?.sharp !== true ||
+    pnpmWorkspace.allowBuilds?.['@meta-quest/metavr'] !== false ||
+    pnpmWorkspace.allowBuilds?.['onnxruntime-node'] !== false
+  ) {
+    blockers.push(
+      'generated pnpm-workspace.yaml is missing the pnpm 10/11 override and build policy',
+    );
+  }
   if (
     packageJson.dependencies?.['@iwsdk/example-assets'] != null ||
     packageJson.devDependencies?.['@iwsdk/example-assets'] != null

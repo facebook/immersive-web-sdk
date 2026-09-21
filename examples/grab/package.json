@@ -8,6 +8,7 @@
     "dev:runtime": "vite",
     "dev:down": "iwsdk dev down",
     "dev:status": "iwsdk dev status",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
     "fresh:install": "npx rimraf package-lock.json node_modules && npm install",

@@ -28,7 +28,8 @@ npm install @iwsdk/core three@npm:super-three@0.181.0
 ```
 
 Keep the exact `three` alias at the application root and override transitive
-resolutions so the app and IWSDK share one runtime:
+resolutions so the app and IWSDK share one runtime. npm reads the override from
+`package.json`:
 
 ```json
 {
@@ -38,13 +39,17 @@ resolutions so the app and IWSDK share one runtime:
   },
   "overrides": {
     "three": "npm:super-three@0.181.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "three": "npm:super-three@0.181.0"
-    }
   }
 }
+```
+
+pnpm 10 and 11 read root overrides from `pnpm-workspace.yaml`:
+
+```yaml
+packages:
+  - '.'
+overrides:
+  three: npm:super-three@0.181.0
 ```
 
 ## Documentation
@@ -70,6 +75,9 @@ corepack pnpm@10.18.3 run bootstrap
 
 # Build all packages as tgz files (for examples to consume)
 npm run build:tgz
+
+# Type-check every example as a fresh consumer of locally built tgz packages
+corepack pnpm@10.18.3 run typecheck:examples
 
 # Run an example (fresh install from local tgz packages)
 cd examples/locomotion && npm run fresh:dev
@@ -103,6 +111,9 @@ The examples use `file:` dependencies pointing to `.tgz` files built from local 
 2. **`npm run fresh:dev`** (in example) - Cleans `node_modules`, reinstalls from tgz files, and starts dev server
 
 This ensures examples always test against the latest local build.
+`typecheck:examples` applies the same boundary to every TypeScript example: it
+rebuilds development tarballs, removes each example's ignored install state,
+installs from those tarballs, and invokes that example's local TypeScript binary.
 
 ## License
 

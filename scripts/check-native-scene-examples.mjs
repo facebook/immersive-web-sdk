@@ -251,7 +251,7 @@ const LEGACY_DUPLICATE_ASSET_DIRS = [
   'plantSansevieria',
   'robot',
 ];
-const REFERENCE_SHARP_OVERRIDE = '0.35.3';
+const REFERENCE_SHARP_OVERRIDE = '0.35.4';
 
 function readRelative(relativePath) {
   return readFileSync(path.join(REPO_ROOT, relativePath), 'utf8');
@@ -432,12 +432,16 @@ function assertExample({
   }
 
   const packageManifest = JSON.parse(readRelative(packageFile));
+  const hasReferenceDependency =
+    packageManifest.dependencies?.['@iwsdk/reference'] != null ||
+    packageManifest.devDependencies?.['@iwsdk/reference'] != null;
   if (
-    packageManifest.devDependencies?.['@iwsdk/reference'] != null &&
-    packageManifest.overrides?.sharp !== REFERENCE_SHARP_OVERRIDE
+    hasReferenceDependency &&
+    (packageManifest.overrides?.sharp !== REFERENCE_SHARP_OVERRIDE ||
+      packageManifest.overrides?.three !== 'npm:super-three@0.181.0')
   ) {
     failures.push(
-      `${packageFile} installs @iwsdk/reference without the required sharp ${REFERENCE_SHARP_OVERRIDE} security override`,
+      `${packageFile} installs @iwsdk/reference without the required npm sharp ${REFERENCE_SHARP_OVERRIDE} security override`,
     );
   }
   if (

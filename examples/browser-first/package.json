@@ -8,6 +8,7 @@
     "dev:runtime": "vite",
     "dev:down": "iwsdk dev down",
     "dev:status": "iwsdk dev status",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
     "fresh:install": "npx rimraf package-lock.json node_modules && npm install",
@@ -28,7 +29,8 @@
     "vite": "^7.1.4"
   },
   "overrides": {
-    "sharp": "0.35.3"
+    "sharp": "0.35.4",
+    "three": "npm:super-three@0.181.0"
   },
   "engines": {
     "node": ">=20.19.0"

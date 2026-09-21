@@ -25,6 +25,7 @@ import {
   validateFeatureOptionsForTarget,
 } from './cli-options.js';
 import {
+  configureDependenciesFromBundle,
   installDependencies,
   installDependenciesFromBundle,
   printNextSteps,
@@ -491,6 +492,9 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         }).start();
         try {
           await source.downloadPackages(join(outDir, SDK_PACKAGES_DIR));
+          if (!res.installNow) {
+            configureDependenciesFromBundle(outDir, source);
+          }
 
           dlSpinner.stopAndPersist({
             symbol: chalk.green('✔'),

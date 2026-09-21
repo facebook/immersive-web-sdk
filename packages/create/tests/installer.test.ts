@@ -8,9 +8,11 @@
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import crossSpawn, { spawn as mockedSpawn } from 'cross-spawn';
+import { spawn as mockedSpawn } from 'cross-spawn';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { parse, stringify } from 'yaml';
 import {
+  configureDependenciesFromBundle,
   installDependenciesFromBundle,
   printNextSteps,
   warmupReference,
@@ -52,6 +54,11 @@ function makeFakeSource(packageMap: Record<string, string>): ResolvedSource {
   };
 }
 
+async function readPnpmWorkspace(tmpDir: string) {
+  return parse(
+    await fsp.readFile(path.join(tmpDir, 'pnpm-workspace.yaml'), 'utf-8'),
+  );
+}
 describe('installDependenciesFromBundle', () => {
   let tmpDir: string;
   let pkgPath: string;
@@ -79,7 +86,7 @@ describe('installDependenciesFromBundle', () => {
     // Reset exit code to success
     const mock = await import('cross-spawn');
     (mock as any).__setExitCode(0);
-    vi.mocked(crossSpawn).mockClear();
+    vi.mocked(mockedSpawn).mockClear();
   });
 
   afterEach(async () => {
@@ -110,6 +117,91 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe(
       'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
     );
+  });
+
+  it('can persist bundle paths without starting an install', async () => {
+    const source = makeFakeSource({
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+    });
+
+    configureDependenciesFromBundle(tmpDir, source);
+
+    const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf-8'));
+    expect(pkg.dependencies['@iwsdk/core']).toBe(
+      'file:.sdk-packages/core/iwsdk-core.tgz',
+    );
+    expect((await readPnpmWorkspace(tmpDir)).overrides).toMatchObject({
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+    });
+    expect(mockedSpawn).not.toHaveBeenCalled();
+  });
+
+  it('adds pnpm overrides when every bundled package is a direct dependency', async () => {
+    const directPackageSpecs = {
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/locomotor': 'file:.sdk-packages/locomotor/iwsdk-locomotor.tgz',
+      '@iwsdk/vite-plugin-dev':
+        'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
+    };
+    configureDependenciesFromBundle(tmpDir, makeFakeSource(directPackageSpecs));
+
+    expect((await readPnpmWorkspace(tmpDir)).overrides).toMatchObject(
+      directPackageSpecs,
+    );
+  });
+
+  it('preserves existing workspace configuration and deterministically merges quoted bundle overrides', async () => {
+    const existingPnpmWorkspace = {
+      packages: ['legacy/*'],
+      overrides: { custom: '1.0.0', sharp: '0.1.0' },
+      supportedArchitectures: { os: ['current'] },
+    };
+    await fsp.writeFile(
+      path.join(tmpDir, 'pnpm-workspace.yaml'),
+      stringify(existingPnpmWorkspace),
+    );
+    const bundlePackageSpecs = {
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+    };
+    configureDependenciesFromBundle(tmpDir, makeFakeSource(bundlePackageSpecs));
+    const firstBytes = await fsp.readFile(
+      path.join(tmpDir, 'pnpm-workspace.yaml'),
+      'utf-8',
+    );
+    const pnpmWorkspace = parse(firstBytes);
+    expect(pnpmWorkspace).toMatchObject({
+      packages: ['.'],
+      overrides: {
+        custom: '1.0.0',
+        sharp: '0.35.4',
+        three: 'npm:super-three@0.181.0',
+        ...bundlePackageSpecs,
+      },
+      onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],
+      ignoredBuiltDependencies: ['@meta-quest/metavr', 'onnxruntime-node'],
+      allowBuilds: {
+        esbuild: true,
+        protobufjs: true,
+        sharp: true,
+        '@meta-quest/metavr': false,
+        'onnxruntime-node': false,
+      },
+      supportedArchitectures: { os: ['current'] },
+    });
+    expect(firstBytes).toContain('"@iwsdk/core":');
+    configureDependenciesFromBundle(tmpDir, makeFakeSource(bundlePackageSpecs));
+    expect(
+      await fsp.readFile(path.join(tmpDir, 'pnpm-workspace.yaml'), 'utf-8'),
+    ).toBe(firstBytes);
   });
 
   it('leaves non-@iwsdk/* deps untouched', async () => {
@@ -166,8 +258,16 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/scene-composition':
         'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
     });
+    expect((await readPnpmWorkspace(tmpDir)).overrides).toMatchObject({
+      '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+      '@iwsdk/scene-composition':
+        'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+    });
     expect(pkg.overrides).not.toHaveProperty('@iwsdk/cli');
     expect(pkg.overrides).not.toHaveProperty('@iwsdk/core');
+    expect((await readPnpmWorkspace(tmpDir)).overrides['@iwsdk/cli']).toBe(
+      'file:.sdk-packages/cli/iwsdk-cli.tgz',
+    );
   });
 
   it('does NOT restore package.json after install failure', async () => {

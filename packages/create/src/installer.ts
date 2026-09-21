@@ -10,6 +10,7 @@ import path from 'path';
 import { Chalk } from 'chalk';
 import { spawn } from 'cross-spawn';
 import ora, { Ora } from 'ora';
+import { mergePnpmWorkspaceYaml } from './pnpm-workspace.js';
 import type { ResolvedSource } from './source.js';
 import type { ActionItem } from './types.js';
 const stdoutColor = new Chalk({ level: process.stdout.isTTY ? 3 : 0 });
@@ -49,6 +50,60 @@ export async function installDependencies(outDir: string) {
   }
 }
 
+/** Persist bundle-backed direct dependencies and transitive overrides. */
+export function configureDependenciesFromBundle(
+  outDir: string,
+  source: ResolvedSource,
+): void {
+  const pkgPath = path.join(outDir, 'package.json');
+  const pnpmWorkspacePath = path.join(outDir, 'pnpm-workspace.yaml');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  const directDependencyNames = new Set<string>();
+  for (const depsKey of ['dependencies', 'devDependencies'] as const) {
+    const deps = pkg[depsKey];
+    if (!deps) {
+      continue;
+    }
+    for (const name of Object.keys(deps)) {
+      if (name.startsWith('@iwsdk/')) {
+        directDependencyNames.add(name);
+        const spec = source.getPackageInstallSpec(name);
+        if (spec) {
+          deps[name] = spec;
+        }
+      }
+    }
+  }
+  const allPackageSpecs = source.getPackageInstallSpecs();
+  const bundleOverrides: Record<string, string> = {};
+  for (const [name, spec] of Object.entries(allPackageSpecs)) {
+    if (!directDependencyNames.has(name)) {
+      bundleOverrides[name] = spec;
+    }
+  }
+  if (Object.keys(bundleOverrides).length > 0) {
+    const existingOverrides =
+      pkg.overrides != null &&
+      typeof pkg.overrides === 'object' &&
+      !Array.isArray(pkg.overrides)
+        ? pkg.overrides
+        : {};
+    pkg.overrides = {
+      ...existingOverrides,
+      ...bundleOverrides,
+    };
+  }
+  const existingPnpmWorkspace = fs.existsSync(pnpmWorkspacePath)
+    ? fs.readFileSync(pnpmWorkspacePath, 'utf-8')
+    : '';
+  const mergedPnpmWorkspace = mergePnpmWorkspaceYaml(
+    existingPnpmWorkspace,
+    allPackageSpecs,
+  );
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  fs.writeFileSync(pnpmWorkspacePath, mergedPnpmWorkspace);
+}
+
 /**
  * Install dependencies in bundle mode.
  * Rewrites @iwsdk/* entries in both dependencies and devDependencies
@@ -60,8 +115,6 @@ export async function installDependenciesFromBundle(
   outDir: string,
   source: ResolvedSource,
 ) {
-  const pkgPath = path.join(outDir, 'package.json');
-
   const installSpinner: Ora = ora({
     text: 'Installing dependencies from bundle ...',
     stream: process.stderr,
@@ -71,44 +124,7 @@ export async function installDependenciesFromBundle(
   }).start();
 
   try {
-    // Rewrite @iwsdk/* deps to file: paths in both dependencies and devDependencies
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    const directDependencyNames = new Set<string>();
-    for (const depsKey of ['dependencies', 'devDependencies'] as const) {
-      const deps = pkg[depsKey];
-      if (!deps) {
-        continue;
-      }
-      for (const name of Object.keys(deps)) {
-        if (name.startsWith('@iwsdk/')) {
-          directDependencyNames.add(name);
-          const spec = source.getPackageInstallSpec(name);
-          if (spec) {
-            deps[name] = spec;
-          }
-        }
-      }
-    }
-    const allPackageSpecs = source.getPackageInstallSpecs();
-    const bundleOverrides: Record<string, string> = {};
-    for (const [name, spec] of Object.entries(allPackageSpecs)) {
-      if (!directDependencyNames.has(name)) {
-        bundleOverrides[name] = spec;
-      }
-    }
-    if (Object.keys(bundleOverrides).length > 0) {
-      const existingOverrides =
-        pkg.overrides != null &&
-        typeof pkg.overrides === 'object' &&
-        !Array.isArray(pkg.overrides)
-          ? pkg.overrides
-          : {};
-      pkg.overrides = {
-        ...existingOverrides,
-        ...bundleOverrides,
-      };
-    }
-    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+    configureDependenciesFromBundle(outDir, source);
 
     // Run npm install
     const child = spawn('npm', ['install'], {

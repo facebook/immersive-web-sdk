@@ -65,7 +65,7 @@ exact fast path before broad discovery:
 The first edit is a checkpoint: reach it within 8 tool calls after loading this
 playbook. Do not inspect generated declarations, search node_modules, or invoke
 another specialist before it. If one framework boundary remains unclear, write
-the straightforward typed slice, run npx tsc --noEmit, and investigate only the
+the straightforward typed slice, run npm run --if-present typecheck, and investigate only the
 concrete compiler error. After the focused references, edit before optional
 lookup.
 
@@ -193,7 +193,7 @@ Prefer IWSDK built-ins and project-local patterns. Keep systems small, register
 cleanup functions, avoid per-frame allocation, and preserve feature-flag
 prerequisites. Do not create process documents while code is incomplete.
 
-Run `npx tsc --noEmit` after the coherent slice exists, then fix errors in a
+Run `npm run --if-present typecheck` after the coherent slice exists, then fix errors in a
 batch. Do not typecheck after every small edit. Run the production build near
 the end and again only after a change that can affect it.
 
@@ -280,7 +280,7 @@ Once live assertions pass:
 
 1. check the authored scene for every exact ID, component, and explicit value;
 2. check runtime names and event-listener cleanup;
-3. run `npx tsc --noEmit` and `npm run build`;
+3. run `npm run --if-present typecheck` and `npm run build`;
 4. re-run only assertions affected by the final fixes;
 5. leave the app reset to its initial state and report concise evidence.
 

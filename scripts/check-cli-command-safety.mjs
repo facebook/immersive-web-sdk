@@ -19,7 +19,11 @@ const COMPANION_DIRECTORIES = [
   'webxr-first-steps',
 ];
 const IGNORE_FILES = new Set(['package-lock.json', 'pnpm-lock.yaml']);
+const LEGACY_METAVR_PACKAGE = ['@meta-quest', 'hzdb'].join('/');
+const UNSCOPED_HZDB_PACKAGE = ['hz', 'db'].join('');
+const UNSCOPED_METAVR_PACKAGE = ['meta', 'vr'].join('');
 const UNSCOPED_IWSDK_PACKAGE = ['iw', 'sdk'].join('');
+const UNSCOPED_TYPESCRIPT_BIN = ['t', 'sc'].join('');
 const DLX_COMMANDS = new Set(['dlx']);
 const BUN_X_COMMANDS = new Set(['x']);
 const NPM_EXEC_COMMANDS = new Set(['exec', 'x']);
@@ -294,8 +298,20 @@ function corepackManagerName(token) {
 }
 
 function unsafePackageLabel(spec) {
+  if (packageSpecMatches(spec, LEGACY_METAVR_PACKAGE)) {
+    return 'legacy Meta VR compatibility package';
+  }
+  if (packageSpecMatches(spec, UNSCOPED_HZDB_PACKAGE)) {
+    return 'unscoped legacy Meta VR package';
+  }
+  if (packageSpecMatches(spec, UNSCOPED_METAVR_PACKAGE)) {
+    return 'unscoped Meta VR package';
+  }
   if (packageSpecMatches(spec, UNSCOPED_IWSDK_PACKAGE)) {
     return 'unscoped IWSDK package';
+  }
+  if (packageSpecMatches(spec, UNSCOPED_TYPESCRIPT_BIN)) {
+    return 'unscoped TypeScript compiler package';
   }
   return undefined;
 }

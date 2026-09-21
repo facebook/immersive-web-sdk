@@ -24,7 +24,7 @@ UIKitML panels belong to `iwsdk-ui`, not this skill.
   DOM state, timers, or shared object identity while defining it.
 - Import Three.js classes from `@iwsdk/core`, never directly from `three`.
 - For a new multi-file model, do not start `iwsdk dev up` until the first complete
-  asset module and manifest registration pass `npx tsc --noEmit`. A live browser
+  asset module and manifest registration pass `npm run --if-present typecheck`. A live browser
   evaluating half-written imports can leave HMR connected but not command-ready.
 - Repetition inside one model belongs here. Repetition of placed manifest assets
   belongs to `iwsdk-compose-scene` through prefabs or patterns.
@@ -112,7 +112,7 @@ materials where practical, but preserve names on inspection-critical groups.
   ownership boundary or before a file grows past roughly 500 lines; do not create one
   file and one tool round-trip per visible part.
 - Once module boundaries are chosen, emit independent files together rather than
-  narrating and waiting between assemblies. Run one initial `npx tsc --noEmit` after
+  narrating and waiting between assemblies. Run one initial `npm run --if-present typecheck` after
   all model modules and manifest registration exist; rerun it only after correcting
   an actual error or before final delivery.
 - In Claude Code, `Write` echoes the complete source back into the transcript. Use it

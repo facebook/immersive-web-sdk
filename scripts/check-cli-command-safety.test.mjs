@@ -18,6 +18,10 @@ import {
 } from './check-cli-command-safety.mjs';
 
 const unscopedPackage = ['iw', 'sdk'].join('');
+const legacyMetaVrPackage = ['@meta-quest', 'hzdb'].join('/');
+const unscopedHzdbPackage = ['hz', 'db'].join('');
+const unscopedMetaVrPackage = ['meta', 'vr'].join('');
+const unscopedTypeScriptBin = ['t', 'sc'].join('');
 
 test('rejects the unscoped IWSDK package through shell commands', () => {
   const examples = [
@@ -117,6 +121,59 @@ test('rejects programmatic execution of the unscoped IWSDK package', () => {
   ];
   for (const example of examples) {
     assert.equal(findUnsafeCliInvocations(example).length, 1, example);
+  }
+});
+
+test('rejects unsafe TypeScript and Meta VR package selection through shell commands', () => {
+  const examples = [
+    'npx ' + unscopedTypeScriptBin + ' --noEmit',
+    'npx.ps1 ' + unscopedMetaVrPackage + ' device list',
+    'npm exec ' + legacyMetaVrPackage + ' mcp server',
+    'npm --package=' + unscopedHzdbPackage + ' exec -- echo ok',
+    'pnpm --silent dlx ' + unscopedTypeScriptBin + ' --noEmit',
+    'yarn.cmd dlx -p ' + unscopedMetaVrPackage + ' metavr device list',
+    'bunx.cmd --package=' + unscopedHzdbPackage + ' hzdb mcp server',
+    'corepack npm exec ' + unscopedTypeScriptBin + ' --noEmit',
+    ['npx \\', '  ' + unscopedMetaVrPackage + ' device list'].join('\n'),
+  ];
+  for (const example of examples) {
+    assert.equal(findUnsafeCliInvocations(example).length, 1, example);
+  }
+});
+
+test('rejects protected TypeScript and Meta VR packages in install commands', () => {
+  const examples = [
+    'npm add ' + unscopedTypeScriptBin,
+    'npm install ' + unscopedMetaVrPackage,
+    'pnpm add ' + unscopedHzdbPackage,
+    'yarn add ' + legacyMetaVrPackage,
+    'bun install ' + unscopedTypeScriptBin,
+  ];
+  for (const example of examples) {
+    assert.equal(findUnsafeCliInvocations(example).length, 1, example);
+  }
+});
+
+test('rejects programmatic execution of unsafe TypeScript and Meta VR packages', () => {
+  const examples = [
+    'spawn("npx", ["' + unscopedTypeScriptBin + '", "--noEmit"])',
+    'execFile("npx.ps1", ["' + unscopedMetaVrPackage + '", "device", "list"])',
+    'runCommand("pnpx", ["' + legacyMetaVrPackage + '", "mcp", "server"])',
+  ];
+  for (const example of examples) {
+    assert.equal(findUnsafeCliInvocations(example).length, 1, example);
+  }
+});
+
+test('allows owned Meta VR and explicit TypeScript package selection', () => {
+  const examples = [
+    'npx @meta-quest/metavr device list',
+    'npm exec --package=typescript -- ' + unscopedTypeScriptBin + ' --noEmit',
+    'pnpm exec ' + unscopedTypeScriptBin + ' --noEmit',
+    'npm run ' + unscopedTypeScriptBin,
+  ];
+  for (const example of examples) {
+    assert.deepEqual(findUnsafeCliInvocations(example), [], example);
   }
 });
 

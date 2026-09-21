@@ -34,6 +34,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import { parse } from 'yaml';
 import { isExampleAssetRequest } from '../../../scripts/development-url.mjs';
 import { createPackedExampleAssetFixture } from '../../../scripts/example-asset-package-fixture.mjs';
 import { iwsdkDev } from '../../vite-plugin-dev/src/index.js';
@@ -81,6 +82,7 @@ const LEGACY_EDITOR_CLI_ENV = ['META', 'SPATIAL', 'EDITOR', 'CLI', 'PATH'].join(
 );
 const TEST_MANAGED_WORKSPACE_TOKEN = 'create-flow-managed-workspace-token';
 const PACKED_ASSET_PUBLIC_PATH = '__iwsdk-example-assets/assets';
+const EXPECTED_SHARP_VERSION = '0.35.4';
 const MANAGED_WORKSPACE_HEADERS = {
   'x-iwsdk-managed-workspace': TEST_MANAGED_WORKSPACE_TOKEN,
 };
@@ -680,6 +682,115 @@ describe('create-iwsdk scene flow E2E', () => {
   });
 
   maybeInstallE2ETest(
+    'supports a deferred pnpm install from a downloaded canary bundle',
+    async () => {
+      const workspace = await makeTempDir();
+      const bundleServer = await startBundleServer({
+        packages: BUNDLE_PACKAGE_PATHS,
+      });
+
+      try {
+        await assertBundleTarballsExist();
+        for (const pnpmVersion of ['10.18.3', '11.21.0']) {
+          const appName = `deferred-pnpm-${pnpmVersion.replaceAll('.', '-')}`;
+
+          const result = await runCreate(
+            [
+              appName,
+              '-y',
+              '--target',
+              'vr',
+              '--no-install',
+              '--no-git',
+              '--canary',
+              bundleServer.origin,
+            ],
+            workspace,
+          );
+          expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+
+          const appRoot = path.join(workspace, appName);
+          const pnpmWorkspace = await readPnpmWorkspace(appRoot);
+          expect(pnpmWorkspace.overrides).toMatchObject({
+            sharp: EXPECTED_SHARP_VERSION,
+            '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
+            '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+            '@iwsdk/scene-composition':
+              'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+          });
+          expect(pnpmWorkspace.onlyBuiltDependencies).toEqual([
+            'esbuild',
+            'protobufjs',
+            'sharp',
+          ]);
+          expect(pnpmWorkspace.ignoredBuiltDependencies).toEqual([
+            '@meta-quest/metavr',
+            'onnxruntime-node',
+          ]);
+          expect(pnpmWorkspace.allowBuilds).toEqual({
+            esbuild: true,
+            protobufjs: true,
+            sharp: true,
+            '@meta-quest/metavr': false,
+            'onnxruntime-node': false,
+          });
+
+          const install = await runCommand(
+            'corepack',
+            [`pnpm@${pnpmVersion}`, 'install', '--no-frozen-lockfile'],
+            appRoot,
+            { timeoutMs: 180000 },
+          );
+          expect(install.exitCode, install.stderr + install.stdout).toBe(0);
+          const pnpmLock = await readFile(
+            path.join(appRoot, 'pnpm-lock.yaml'),
+            'utf8',
+          );
+          expect(pnpmLock).toMatch(/^  sharp@0\.35\.4:/mu);
+          expect(pnpmLock).not.toMatch(/^  sharp@0\.34\./mu);
+          expect(install.stderr + install.stdout).not.toContain(
+            'Ignored build scripts',
+          );
+          const ignoredBuilds = await runCommand(
+            'corepack',
+            [`pnpm@${pnpmVersion}`, 'ignored-builds'],
+            appRoot,
+            { timeoutMs: 60000 },
+          );
+          expect(
+            ignoredBuilds.exitCode,
+            ignoredBuilds.stderr + ignoredBuilds.stdout,
+          ).toBe(0);
+          expect(ignoredBuilds.stdout).toMatch(
+            /Automatically ignored builds during installation:\s+None/u,
+          );
+
+          const typecheck = await runCommand(
+            'corepack',
+            [`pnpm@${pnpmVersion}`, 'exec', 'tsc', '--noEmit'],
+            appRoot,
+            { timeoutMs: 180000 },
+          );
+          expect(typecheck.exitCode, typecheck.stderr + typecheck.stdout).toBe(
+            0,
+          );
+
+          const build = await runCommand(
+            'corepack',
+            [`pnpm@${pnpmVersion}`, 'run', 'build'],
+            appRoot,
+            { timeoutMs: 180000 },
+          );
+          expect(build.exitCode, build.stderr + build.stdout).toBe(0);
+        }
+      } finally {
+        await bundleServer.close();
+      }
+    },
+    480000,
+  );
+
+  maybeInstallE2ETest(
     'installs, builds, and serves every generated starter with the native editor route',
     async () => {
       const workspace = await makeTempDir();
@@ -718,6 +829,17 @@ describe('create-iwsdk scene flow E2E', () => {
             const packageJson = JSON.parse(
               await readFile(path.join(appRoot, 'package.json'), 'utf8'),
             );
+            const pnpmWorkspace = await readPnpmWorkspace(appRoot);
+            const packageLock = JSON.parse(
+              await readFile(path.join(appRoot, 'package-lock.json'), 'utf8'),
+            ) as {
+              packages?: Record<string, { version?: string }>;
+            };
+            const sharpVersions = Object.entries(packageLock.packages ?? {})
+              .filter(([packagePath]) =>
+                packagePath.endsWith('node_modules/sharp'),
+              )
+              .map(([, packageEntry]) => packageEntry.version);
             expect(packageJson.dependencies['@iwsdk/core']).toMatch(
               /^file:\.sdk-packages\/core\/iwsdk-core\.tgz$/,
             );
@@ -730,12 +852,31 @@ describe('create-iwsdk scene flow E2E', () => {
               '@iwsdk/scene-composition':
                 'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
             });
+            expect(sharpVersions.length).toBeGreaterThan(0);
+            expect(new Set(sharpVersions)).toEqual(
+              new Set([EXPECTED_SHARP_VERSION]),
+            );
+            expect(pnpmWorkspace.overrides).toMatchObject({
+              sharp: EXPECTED_SHARP_VERSION,
+              '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
+              '@iwsdk/scene-composition':
+                'file:.sdk-packages/scene-composition/iwsdk-scene-composition.tgz',
+            });
+            expect(pnpmWorkspace.onlyBuiltDependencies).toEqual([
+              'esbuild',
+              'protobufjs',
+              'sharp',
+            ]);
+            expect(pnpmWorkspace.ignoredBuiltDependencies).toEqual([
+              '@meta-quest/metavr',
+              'onnxruntime-node',
+            ]);
             await stat(path.join(appRoot, 'node_modules'));
 
             if (language === 'ts') {
               const typecheck = await runCommand(
-                'npx',
-                ['tsc', '--noEmit'],
+                'npm',
+                ['run', 'typecheck'],
                 appRoot,
                 { timeoutMs: 180000 },
               );
@@ -828,8 +969,8 @@ describe('create-iwsdk scene flow E2E', () => {
               if (target === 'browser') {
                 if (language === 'ts') {
                   const workspaceStatus = await runCommand(
-                    'npx',
-                    ['@iwsdk/cli', 'dev', 'status'],
+                    'npm',
+                    ['run', '--silent', 'dev:status'],
                     appRoot,
                     { timeoutMs: 60000 },
                   );
@@ -1238,6 +1379,11 @@ async function smokeGeneratedAppEditorFlow({
   }
 }
 
+async function readPnpmWorkspace(appRoot: string) {
+  return parse(
+    await readFile(path.join(appRoot, 'pnpm-workspace.yaml'), 'utf8'),
+  );
+}
 async function makeTempDir(): Promise<string> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-create-e2e-'));
   tempDirs.push(tempDir);

@@ -58,17 +58,20 @@ From the `main` branch after PRs are merged:
 2. Build all packages:
    - `pnpm -r build`
 
-3. Run the release preflight before any package is published:
+3. Type-check every example against fresh local package tarballs:
+   - `pnpm typecheck:examples`
+
+4. Run the release preflight before any package is published:
    - `pnpm release:preflight`
    - This tests and runs the package-manifest guard against local-path
      dependencies, validates the example-asset publication metadata, and
      confirms Create no longer contains the retired local bridge.
 
-4. Publish to npm (public):
+5. Publish to npm (public):
    - Option A (recommended): `pnpm changeset publish`
    - Option B (explicit): `pnpm -r publish --access public`
 
-5. Push tags and changes:
+6. Push tags and changes:
    - `git push --follow-tags`
 
 ## CI (Optional)
@@ -76,7 +79,8 @@ From the `main` branch after PRs are merged:
 Consider a GitHub Action that:
 
 - Runs on `push` to `main`.
-- Executes `pnpm install`, `pnpm -r build`, then `pnpm changeset publish` (with `NPM_TOKEN`).
+- Executes `pnpm install`, `pnpm -r build`, `pnpm typecheck:examples`, then
+  `pnpm changeset publish` (with `NPM_TOKEN`).
 
 ## Local Testing Tarballs
 

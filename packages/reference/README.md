@@ -37,19 +37,51 @@ package is installed, `@iwsdk/cli` also registers its MCP adapter automatically.
 
 The currently supported `@huggingface/transformers` release still declares
 Sharp `^0.34.x`, while the patched Sharp line begins at 0.35. Create-generated
-projects pin the compatible patched release in their root package manifest:
+projects pin the compatible patched release for both npm and pnpm. For npm, use
+the root package manifest:
 
 ```json
 {
   "overrides": {
-    "sharp": "0.35.3"
+    "sharp": "0.35.4",
+    "three": "npm:super-three@0.181.0"
   }
 }
 ```
 
-Add the same root override when installing `@iwsdk/reference` manually with
-npm. IWSDK uses Transformers for text feature extraction; its test and release
-matrices exercise that path with Sharp 0.35.3.
+Create-generated pnpm projects keep resolution and lifecycle policy in
+`pnpm-workspace.yaml` instead of a `pnpm` field in `package.json`:
+
+```yaml
+packages:
+  - '.'
+overrides:
+  sharp: 0.35.4
+  three: npm:super-three@0.181.0
+onlyBuiltDependencies:
+  - esbuild
+  - protobufjs
+  - sharp
+ignoredBuiltDependencies:
+  - '@meta-quest/metavr'
+  - onnxruntime-node
+allowBuilds:
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  '@meta-quest/metavr': false
+  onnxruntime-node: false
+```
+
+Add the matching root override for your package manager when installing
+`@iwsdk/reference` manually. Generated pnpm projects include both lifecycle-policy
+forms: the explicit allow and ignore lists support pnpm 10.18, while the unified
+`allowBuilds` map supports package managers that prefer the newer form. This lets
+both versions allow the required native helpers while intentionally
+disabling the optional MetaVR and onnxruntime-node install scripts. Bundle-based
+projects also receive local tarball entries in `overrides`. IWSDK uses Transformers
+for text feature extraction; its test and release matrices exercise that path with
+Sharp 0.35.4.
 
 ## License
 

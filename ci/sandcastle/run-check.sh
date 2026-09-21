@@ -11,7 +11,6 @@ readonly XR_INPUT_PROFILES_VERSION="1.0.20"
 export CI=1
 export COREPACK_HOME="${COREPACK_HOME:-${DISK_TEMP:-/tmp}/iwsdk-corepack}"
 export HUSKY=0
-export npm_config_registry="${npm_config_registry:-https://registry.npmjs.org}"
 export NPM_CONFIG_UPDATE_NOTIFIER=false
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 export PNPM_STORE_DIR="${PNPM_STORE_DIR:-${DISK_TEMP:-/tmp}/iwsdk-pnpm-store}"
@@ -19,11 +18,15 @@ export PNPM_STORE_DIR="${PNPM_STORE_DIR:-${DISK_TEMP:-/tmp}/iwsdk-pnpm-store}"
 if [[ -n "${SANDCASTLE_INSTANCE_ID:-}" ]]; then
   export HTTP_PROXY="${HTTP_PROXY:-http://fwdproxy:8080}"
   export HTTPS_PROXY="${HTTPS_PROXY:-http://fwdproxy:8080}"
-  export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,.facebook.com,.fb.com,.fbinfra.net,.tfbnw.net}"
+  export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,.facebook.com,.fb.com,.fbinfra.net,.tfbnw.net},.facebook.net"
+  export npm_config_registry="${npm_config_registry:-https://registry.x2p.facebook.net/}"
+else
+  export npm_config_registry="${npm_config_registry:-https://registry.npmjs.org}"
 fi
 
 export npm_config_https_proxy="${npm_config_https_proxy:-${HTTPS_PROXY:-}}"
 export npm_config_proxy="${npm_config_proxy:-${HTTP_PROXY:-}}"
+export npm_config_noproxy="${npm_config_noproxy:-${NO_PROXY:-}}"
 
 if [[ -z "${npm_config_cafile:-}" && -f /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem ]]; then
   export npm_config_cafile=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
@@ -52,6 +55,33 @@ bootstrap_toolchain() {
       bootstrap_npm="$(command -v npm)"
     fi
 
+    local bootstrap_node=""
+    local -a bootstrap_packages=(
+      "node-linux-${node_arch}@${NODE_VERSION}"
+      "npm@${NPM_VERSION}"
+      "pnpm@${PNPM_VERSION}"
+    )
+    if [[ -n "${SANDCASTLE_INSTANCE_ID:-}" ]]; then
+      # Sandcastle blocks executable npm packages. Use its trusted Jellyfish
+      # Node runtime and fetch the package managers from Meta's npm mirror.
+      bootstrap_node="/usr/local/jellyfish/node-linux-${node_arch}"
+      if [[ ! -f "$bootstrap_node" || ! -x "$bootstrap_node" ]]; then
+        echo "Trusted Node.js binary is unavailable: $bootstrap_node" >&2
+        return 1
+      fi
+      local actual_node_version
+      if ! actual_node_version="$("$bootstrap_node" --version 2>/dev/null)"; then
+        echo "Trusted Node.js binary could not run: $bootstrap_node" >&2
+        return 1
+      fi
+      if [[ "$actual_node_version" != "v${NODE_VERSION}" ]]; then
+        echo "Sandcastle requires Jellyfish Node.js v${NODE_VERSION}; found ${actual_node_version} at ${bootstrap_node}" >&2
+        echo "Update NODE_VERSION or the Sandcastle Jellyfish installation before retrying." >&2
+        return 1
+      fi
+      bootstrap_packages=("npm@${NPM_VERSION}" "pnpm@${PNPM_VERSION}")
+    fi
+
     local temp_root="${toolchain_root}.tmp.$$"
     rm -rf "$temp_root"
     mkdir -p "$temp_root"
@@ -63,9 +93,10 @@ bootstrap_toolchain() {
       --ignore-scripts \
       --no-audit \
       --no-fund \
-      "node-linux-${node_arch}@${NODE_VERSION}" \
-      "npm@${NPM_VERSION}" \
-      "pnpm@${PNPM_VERSION}"
+      "${bootstrap_packages[@]}"
+    if [[ -n "$bootstrap_node" ]]; then
+      install -m 0755 "$bootstrap_node" "$temp_root/node_modules/.bin/node"
+    fi
     rm -rf "$toolchain_root"
     mv "$temp_root" "$toolchain_root"
     trap - RETURN
@@ -130,27 +161,6 @@ prepare_xr_input_profiles() {
     --assets-dir "$profiles_dir"
 }
 
-typecheck_examples() {
-  local example_dir
-  for example_dir in examples/*/; do
-    if [[ ! -f "$example_dir/tsconfig.json" ]]; then
-      continue
-    fi
-
-    echo "Type-checking $example_dir..."
-    (
-      cd "$example_dir"
-      npm install \
-        --ignore-scripts \
-        --no-package-lock \
-        --no-audit \
-        --no-fund
-      ./node_modules/.bin/tsc --noEmit
-    )
-  done
-  echo "All examples pass type checks."
-}
-
 case "${1:-}" in
   all)
     for check in preflight install lint format build typecheck unit; do
@@ -191,7 +201,7 @@ case "${1:-}" in
     pnpm build:tgz:dev
     ;;
   typecheck)
-    typecheck_examples
+    bash scripts/typecheck-examples.sh
     pnpm engines:audit
     pnpm three:check
     ;;

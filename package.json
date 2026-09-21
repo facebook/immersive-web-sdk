@@ -21,7 +21,7 @@
     "docs:native-scene-check": "node scripts/check-native-scene-docs.mjs",
     "lint": "eslint . && node scripts/check-cli-command-safety.mjs",
     "lint:fix": "eslint . --fix",
-    "typecheck:examples": "for dir in examples/*/; do if [ -f \"$dir/tsconfig.json\" ]; then echo \"Type-checking $dir...\" && (cd \"$dir\" && npx tsc --noEmit) || exit 1; fi; done && echo 'All examples pass type checks.'",
+    "typecheck:examples": "corepack pnpm@10.18.3 run build:tgz:dev && bash ./scripts/typecheck-examples.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint-staged": "lint-staged",
@@ -109,7 +109,8 @@
     "typedoc-plugin-markdown": "^4.8.1",
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "^5.8.3",
-    "vitepress": "^2.0.0-alpha.16"
+    "vitepress": "^2.0.0-alpha.16",
+    "yaml": "2.8.3"
   },
   "pnpm": {
     "overrides": {
@@ -117,20 +118,22 @@
       "@isaacs/brace-expansion": "5.0.1",
       "@protobufjs/utf8": "1.1.1",
       "@types/three": "0.181.0",
+      "@vitest/coverage-v8": "4.1.11",
       "ajv@<7": "6.15.0",
       "axios": "^1.18.0",
       "body-parser": "2.3.0",
-      "brace-expansion": "5.0.8",
-      "express-rate-limit": "8.2.2",
+      "brace-expansion": "5.0.12",
       "esbuild": "0.28.1",
-      "fast-uri": "3.1.4",
+      "express-rate-limit": "8.7.0",
+      "fast-uri": "3.1.8",
+      "fflate": "0.8.3",
       "flatted": "3.4.2",
       "form-data": "4.0.6",
       "follow-redirects": "1.16.0",
-      "hono": "4.12.27",
-      "ip-address": "10.1.1",
-      "js-yaml@<4": "3.15.0",
-      "js-yaml@>=4 <5": "4.3.0",
+      "hono": "4.13.8",
+      "ip-address": "10.7.2",
+      "js-yaml@<4": "3.15.2",
+      "js-yaml@>=4 <5": "4.3.2",
       "linkify-it": "5.0.2",
       "lodash": "4.18.1",
       "markdown-it": "14.2.0",
@@ -138,25 +141,34 @@
       "minimatch@>=5 <6": "5.1.8",
       "minimatch@>=9 <10": "9.0.7",
       "minimatch@>=10 <11": "10.2.3",
+      "nanoid@<4": "3.3.19",
       "path-to-regexp": "8.4.0",
       "picomatch@<3": "2.3.2",
       "picomatch@>=4 <5": "4.0.4",
-      "postcss": "8.5.18",
+      "postcss": "8.5.28",
       "preact": "^10.29.7",
       "protobufjs": "7.6.5",
-      "qs": "6.15.2",
+      "qs": "6.16.0",
       "serialize-javascript": "7.0.5",
-      "sharp": "0.35.3",
+      "sharp": "0.35.4",
       "tar": "7.5.22",
       "three": "npm:super-three@0.181.0",
       "three-mesh-bvh": "^0.9.1",
       "@pmndrs/uikit": "^1.0.74",
       "tmp": "0.2.7",
       "vite": "7.3.6",
-      "vitest": "4.1.10",
+      "vitest": "4.1.11",
       "ws": "8.21.1",
       "yaml": "2.8.3"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "onnxruntime-node"
+    ]
   },
   "engines": {
     "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"

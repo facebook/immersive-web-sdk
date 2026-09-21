@@ -36,7 +36,7 @@ The requested scenario is in `$ARGUMENTS`.
 
 ## 1. Verify the app and device
 
-Run `npx tsc --noEmit` and fix type errors before device testing.
+Run `npm run --if-present typecheck` and fix type errors before device testing.
 
 Run `adb devices`. Continue only with one device in the `device` state. A
 `pending`, `offline`, or `unauthorized` device is not ready.

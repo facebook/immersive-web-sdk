@@ -10,6 +10,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ScaffoldConfiguration } from './catalog.js';
+import { createPnpmWorkspaceYaml } from './pnpm-workspace.js';
 import { createProjectManifest } from './project-manifest.js';
 import type { ProjectFileInput } from './scaffold.js';
 import type { Language } from './types.js';
@@ -70,6 +71,10 @@ export async function buildStarterProjectFiles({
       2,
     )}\n`,
   });
+  files.push({
+    path: 'pnpm-workspace.yaml',
+    contents: createPnpmWorkspaceYaml(),
+  });
 
   const index = files.find((file) => file.path === 'index.html');
   if (index != null && typeof index.contents === 'string') {
@@ -124,13 +129,8 @@ function createProjectPackageJson(
       vite: '^7.1.4',
     },
     overrides: {
-      sharp: '0.35.3',
+      sharp: '0.35.4',
       three: 'npm:super-three@0.181.0',
-    },
-    pnpm: {
-      overrides: {
-        three: 'npm:super-three@0.181.0',
-      },
     },
     engines: {
       node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0',
