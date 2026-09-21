@@ -13,7 +13,7 @@ By the end of this chapter, you'll be able to:
 - Set up scene understanding systems for plane and mesh detection
 - Automatically detect flat surfaces like floors, walls, and ceilings
 - Detect complex 3D geometry including furniture and room structure
-- Create stable anchor points that persist across tracking loss
+- Create stable anchor points for the active XR session
 - Build semantic-aware interactions based on detected object types
 - Place virtual content accurately on real-world surfaces
 
@@ -23,7 +23,7 @@ The scene understanding system leverages WebXR's scene understanding capabilitie
 
 - **Plane Detection** - Automatically detect flat surfaces like floors, walls, and ceilings
 - **Mesh Detection** - Detect complex 3D geometry including furniture and room structure
-- **Anchoring** - Create stable reference points that persist across tracking loss
+- **Anchoring** - Create stable reference points for the active session, with optional same-device restoration when the runtime supports persistent anchors
 - **Automatic Entity Management** - Real-world geometry is automatically converted to ECS entities
 - **Semantic Understanding** - Meshes include semantic labels (table, chair, wall, etc.)
 
@@ -40,6 +40,7 @@ Here's a minimal example to enable scene understanding:
 
 ```javascript
 import {
+  createSystem,
   World,
   SceneUnderstandingSystem,
   XRPlane,
@@ -192,7 +193,7 @@ hologram.addComponent(XRAnchor);
 // The system will automatically:
 // 1. Create a stable anchor at the current world position
 // 2. Attach the object to the anchored reference frame
-// 3. Maintain stable positioning across tracking loss
+// 3. Track the anchor for the lifetime of the XR session
 ```
 
 #### Anchor Properties
@@ -353,7 +354,12 @@ class TableInteractionSystem extends createSystem({
 
 ### Understanding Anchors
 
-Anchors provide stable positioning that persists it's world location that won't be changed with recentering the view.
+Anchors provide stable positioning relative to the current XR session. When the
+runtime supports `requestPersistentHandle()` and `restorePersistentAnchor()`,
+IWSDK stores the handle in the current browser profile and attempts to restore it
+in a later session on the same device. This is not a shared/cloud-anchor system:
+IWSDK does not synchronize anchors or align coordinate spaces across users or
+devices.
 
 ### Creating Anchored Content
 
@@ -480,7 +486,7 @@ class PlanePhysicsSystem extends createSystem({
 
 **Anchors not staying stable:**
 
-- Verify 'anchor' feature is enabled in WebXR session
+- Verify the `anchors` feature is enabled in the WebXR session
 - Ensure adequate visual features for tracking
 - Some devices have limitations on anchor count
 

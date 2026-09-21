@@ -142,15 +142,22 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
         const distance = targetPosition.distanceTo(
           DistanceGrabHandle._posHelper,
         );
+        const rawInterpolationAlpha =
+          this.moveSpeedFactor * time * DistanceGrabHandle.MOVE_SPEED_SCALE;
+        // Invalid timing/config input must never poison the target transform.
+        // Freeze on NaN; clamp finite values and infinities to the valid lerp range.
+        const interpolationAlpha = Number.isNaN(rawInterpolationAlpha)
+          ? 0
+          : Math.min(1, Math.max(0, rawInterpolationAlpha));
 
         if (!this.isSnapped && distance > DistanceGrabHandle.SNAP_THRESHOLD) {
           DistanceGrabHandle._posHelper.lerp(
             targetPosition,
-            this.moveSpeedFactor * time * DistanceGrabHandle.MOVE_SPEED_SCALE,
+            interpolationAlpha,
           );
           DistanceGrabHandle._quatHelper.slerp(
             targetQuaternion,
-            this.moveSpeedFactor * time * DistanceGrabHandle.MOVE_SPEED_SCALE,
+            interpolationAlpha,
           );
         } else {
           if (!this.isSnapped) {

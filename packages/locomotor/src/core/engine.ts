@@ -52,7 +52,7 @@ export class LocomotionEngine {
 
   public jumpHeight = 1.5;
   public jumpCooldown = 0.1;
-  private lastJumpTime = 0;
+  private lastJumpTime = -Infinity;
   private isJumping = false;
 
   public acceleration = 100;
@@ -101,6 +101,8 @@ export class LocomotionEngine {
     this.playerPosition.copy(position);
     this.playerVelocity.set(0, 0, 0);
     this.isJumping = false;
+    this.isGrounded = false;
+    this.isGroundedOnStatic = false;
     this.updating = true;
     this.lastUpdateTime = performance.now();
   }
@@ -254,6 +256,7 @@ export class LocomotionEngine {
   }
 
   private handleGroundContact(delta: number) {
+    const wasGroundedOnStatic = this.isGroundedOnStatic;
     const groundInfo = this.groundDetector.detectGround(
       this.environmentManager.getEnvironments(),
       this.playerPosition,
@@ -273,6 +276,10 @@ export class LocomotionEngine {
       this.isGrounded &&
       groundInfo.environment?.type === EnvironmentType.STATIC;
 
+    if (this.isGroundedOnStatic && !wasGroundedOnStatic) {
+      // Start the idle timeout after landing so the float spring can settle.
+      this.lastUpdateTime = performance.now();
+    }
     if (
       this.isGrounded &&
       groundInfo.environment?.type === EnvironmentType.KINEMATIC
@@ -339,10 +346,16 @@ export class LocomotionEngine {
       type,
       worldMatrix,
     );
+    this.isGroundedOnStatic = false;
+    this.updating = true;
+    this.lastUpdateTime = performance.now();
   }
 
   removeEnvironment(handle: number): void {
     this.environmentManager.removeEnvironment(handle);
+    this.isGroundedOnStatic = false;
+    this.updating = true;
+    this.lastUpdateTime = performance.now();
   }
 
   updateKinematicPlatform(handle: number, newWorldMatrix: Matrix4): void {
@@ -355,7 +368,8 @@ export class LocomotionEngine {
   }
 
   jump(): void {
-    const currentTime = performance.now() / 1000;
+    const now = performance.now();
+    const currentTime = now / 1000;
 
     // Validate jump conditions
     if (
@@ -372,9 +386,11 @@ export class LocomotionEngine {
 
     // Update state
     this.isGrounded = false; // Prevent ground snapping during jump
+    this.isGroundedOnStatic = false;
     this.isJumping = true;
     this.lastJumpTime = currentTime;
     this.updating = true;
+    this.lastUpdateTime = now;
   }
 
   getEnvironmentManager(): EnvironmentManager {

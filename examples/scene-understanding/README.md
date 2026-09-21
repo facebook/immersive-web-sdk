@@ -27,15 +27,23 @@ The example includes:
 
 ```
 scene-understanding/
-├── src/                    # Source code
-│   └── index.js           # Main application entry point with SceneShowSystem
-├── dist/                  # Build output (generated)
+├── public/
+│   ├── scenes/scene-understanding.iwsdk.scene.json
+│   ├── textures/venice_sunset_1k.exr
+│   └── ui/welcome.uikitml
+├── src/
+│   ├── assets.ts         # HDR, UIKitML, and anchored-sphere asset manifest
+│   ├── index.ts          # Main application entry point with SceneShowSystem
+│   └── panel.ts          # Welcome-panel behavior
 ├── index.html            # Main HTML file
-├── vite.config.js        # Vite configuration
+├── iwsdk.config.json     # Project, scene, XR, and emulator configuration
+├── vite.config.ts        # Vite configuration
 └── package.json          # Project dependencies
 ```
 
-**Note**: This example focuses on code-based AR scene understanding and doesn't require static scene assets.
+The project manifest loads a native scene containing the anchored sphere and UIKitML
+welcome panel. Its asset manifest also registers the bundled Venice Sunset HDR
+texture used by the scene environment.
 
 ## 🚀 Quick Start
 
@@ -296,9 +304,12 @@ This example demonstrates integration with:
 **Spatial Anchors**:
 
 - Persistent AR content that stays in place
-- Multi-user AR experiences with shared reference points
+- Stable reference points restored on the same supported browser/device
 - AR annotations on real-world objects
 - Virtual markers for navigation
+
+IWSDK currently uses one reference-origin anchor for all `XRAnchor` entities.
+It does not provide shared, cloud, or multi-user anchor synchronization.
 
 ## 📝 License
 

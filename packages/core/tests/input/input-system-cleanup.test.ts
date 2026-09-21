@@ -9,6 +9,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { InputSystem } from '../../src/input/input-system.js';
 
 describe('InputSystem cleanup', () => {
+  it('skips foreign meshes that do not expose the BVH extension', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const foreignMesh = {
+      geometry: {},
+      isMesh: true,
+      name: 'UIKit mesh',
+    };
+    const object3D = {
+      traverse: (visit: (child: typeof foreignMesh) => void) =>
+        visit(foreignMesh),
+    };
+    const system = Object.create(InputSystem.prototype) as InputSystem & {
+      computeBoundsTreeForEntity(entity: typeof object3D): void;
+    };
+
+    expect(() => system.computeBoundsTreeForEntity(object3D)).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('detaches pointer listeners without mutating a destroyed entity', () => {
     const removeEventListener = vi.fn();
     const object3D = { removeEventListener };

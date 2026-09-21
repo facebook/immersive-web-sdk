@@ -97,6 +97,7 @@ describe('XRLayerSystem teardown', () => {
           event === 'qualify' ? cylinderQualify : cylinderDisqualify,
         ),
       },
+      activeLayers: { entities: new Set() },
     };
 
     system.init();

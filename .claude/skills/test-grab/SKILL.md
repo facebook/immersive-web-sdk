@@ -87,7 +87,12 @@ Discover all grab entities dynamically:
 npx @iwsdk/cli ecs find --input-json '{"withComponents":["DistanceGrabbable"]}' 2>/dev/null
 ```
 
-Assert: At least 1 entity. Save first as `<distance>`.
+Assert: At least 1 entity. In the runtime hierarchy below, select the entity
+whose `sceneNodeId` is `pyramid-distance-grab` (the
+`Distance Grabbable Pyramid`) and save its entity index as `<distance>`. This
+example's `Earth` is also distance-grabbable, but it uses `RotateAtSource` and
+therefore is not valid for the positional `MoveTowardsTarget` assertion in
+Test 1.3.
 
 ```bash
 npx @iwsdk/cli ecs find --input-json '{"withComponents":["OneHandGrabbable"]}' 2>/dev/null

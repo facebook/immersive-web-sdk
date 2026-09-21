@@ -21,7 +21,7 @@ Turning rotates the player rig around the vertical axis. IWSDK supports snap tur
 ## Configuration
 
 ```ts
-import { TurnSystem, TurningMethod } from '@iwsdk/core/locomotion';
+import { TurnSystem, TurningMethod } from '@iwsdk/core';
 
 world.registerSystem(TurnSystem, {
   configData: {

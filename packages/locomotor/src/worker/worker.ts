@@ -7,6 +7,7 @@
 
 import { Matrix4, Vector3 } from 'three';
 import { LocomotionEngine } from '../core/engine.js';
+import { EnvironmentType } from '../types/environment-types.js';
 import { MessageType } from '../types/message-types.js';
 
 let engine: LocomotionEngine;
@@ -40,7 +41,7 @@ onmessage = function (e) {
             payload.handle,
             payload.positions,
             payload.indices,
-            payload.type || 'STATIC',
+            payload.type || EnvironmentType.STATIC,
             worldMatrix,
           );
         }

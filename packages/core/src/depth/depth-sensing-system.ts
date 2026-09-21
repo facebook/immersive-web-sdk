@@ -73,6 +73,7 @@ export class DepthSensingSystem extends createSystem(
   // Depth data storage
   cpuDepthData: XRCPUDepthInformation[] = [];
   gpuDepthData: XRWebGLDepthInformation[] = [];
+  private hasCurrentFrameDepthData = false;
   private depthTextures?: DepthTextures;
 
   // Occlusion
@@ -95,6 +96,7 @@ export class DepthSensingSystem extends createSystem(
 
   init(): void {
     const onSessionStart = () => {
+      this.cleanup();
       this.updateEnabledFeatures(this.xrManager.getSession());
     };
     const onSessionEnd = () => {
@@ -151,6 +153,7 @@ export class DepthSensingSystem extends createSystem(
     // released in cleanup() on sessionend; dispose it here too in case the
     // system is torn down mid-session.
     this.cleanupFuncs.push(() => {
+      this.clearAllOcclusionUniforms();
       this.depthTextures?.dispose();
       this.depthTextures = undefined;
       this.preprocessingPass?.dispose();
@@ -206,7 +209,30 @@ export class DepthSensingSystem extends createSystem(
   }
 
   private detachOcclusionFromEntity(entity: Entity): void {
+    const entityUniforms = this.entityShaderMap.get(entity);
+
+    if (entityUniforms) {
+      this.clearOcclusionUniforms(entityUniforms);
+    }
+
     this.entityShaderMap.delete(entity);
+  }
+
+  private clearOcclusionUniforms(
+    entityUniforms: Iterable<ShaderUniforms>,
+  ): void {
+    for (const uniforms of entityUniforms) {
+      uniforms.occlusionEnabled.value = false;
+      uniforms.uXRDepthTextureArray.value = null;
+      uniforms.uMinMaxTexture0.value = null;
+      uniforms.uMinMaxTexture1.value = null;
+    }
+  }
+
+  private clearAllOcclusionUniforms(): void {
+    for (const entityUniforms of this.entityShaderMap.values()) {
+      this.clearOcclusionUniforms(entityUniforms);
+    }
   }
 
   /**
@@ -355,6 +381,14 @@ export class DepthSensingSystem extends createSystem(
     this.depthFeatureEnabled = undefined;
     this.cpuDepthData = [];
     this.gpuDepthData = [];
+    this.hasCurrentFrameDepthData = false;
+
+    // The occlusion materials continue rendering after an immersive session
+    // ends. Clear every session-owned texture before disposing the min/max
+    // render targets, otherwise WebGL attempts to bind those deleted textures
+    // in the non-immersive frame (and again when the next session starts).
+    this.clearAllOcclusionUniforms();
+
     this.preprocessingPass?.dispose();
     this.preprocessingPass = undefined;
   }
@@ -379,14 +413,28 @@ export class DepthSensingSystem extends createSystem(
       return;
     }
 
+    // XR depth information is frame-scoped. A runtime may temporarily return
+    // no depth data while the session remains active, so never carry readiness
+    // (or the public depth information objects) across animation frames.
+    this.hasCurrentFrameDepthData = false;
+    this.cpuDepthData.length = 0;
+    this.gpuDepthData.length = 0;
+
     const frame = this.xrFrame;
     if (frame) {
       this.updateLocalDepth(frame);
     }
 
+    if (!this.hasCurrentFrameDepthData) {
+      this.clearAllOcclusionUniforms();
+      return;
+    }
+
     if (this.config.enableOcclusion.value) {
       this.runMinMaxPreprocessing();
       this.updateOcclusionUniforms();
+    } else {
+      this.clearAllOcclusionUniforms();
     }
   }
 
@@ -401,6 +449,10 @@ export class DepthSensingSystem extends createSystem(
   }
 
   private getDepthTextureArray(): Texture | undefined {
+    if (!this.hasCurrentFrameDepthData) {
+      return undefined;
+    }
+
     return this.isGPUDepth
       ? this.depthTextures?.getNativeTexture()
       : this.depthTextures?.getDataArrayTexture();
@@ -468,20 +520,32 @@ export class DepthSensingSystem extends createSystem(
           // views. We only need to update the ExternalTexture once using the
           // first view's depth data.
           const view = pose.views[0];
+          if (!view) {
+            return;
+          }
           const depthData = binding.getDepthInformation(view);
           if (depthData) {
             this.updateGPUDepthData(depthData);
+            this.hasCurrentFrameDepthData = true;
           }
         } else {
           // CPU path: each view has its own DataTexture.
+          const frameDepthData: XRCPUDepthInformation[] = [];
           for (let viewId = 0; viewId < pose.views.length; ++viewId) {
             const view = pose.views[viewId];
             const depthData = frame.getDepthInformation(view);
             if (!depthData) {
               return;
             }
-            this.updateCPUDepthData(depthData, viewId);
+            frameDepthData.push(depthData);
           }
+
+          // Commit the stereo sample atomically. Updating one eye before the
+          // other reports missing would create a mixed-frame depth texture.
+          for (let viewId = 0; viewId < frameDepthData.length; ++viewId) {
+            this.updateCPUDepthData(frameDepthData[viewId], viewId);
+          }
+          this.hasCurrentFrameDepthData = frameDepthData.length > 0;
         }
       }
     }
@@ -520,6 +584,7 @@ export class DepthSensingSystem extends createSystem(
   private updateOcclusionUniforms(): void {
     const depthTextureArray = this.getDepthTextureArray();
     if (!depthTextureArray) {
+      this.clearAllOcclusionUniforms();
       return;
     }
 

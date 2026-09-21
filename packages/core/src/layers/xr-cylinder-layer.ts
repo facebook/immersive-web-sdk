@@ -33,7 +33,8 @@ export const XRCylinderLayer = createComponent(
     /** Height of the layer's render target in pixels. */
     pixelHeight: { type: Types.Int16, default: 1024 },
     /**
-     * Callback invoked each frame to render layer content.
+     * Callback invoked each frame while the layer is visible and its render
+     * surface is active.
      * The renderer's render target is already set; call
      * `renderer.render(scene, camera)` to draw into the layer.
      */

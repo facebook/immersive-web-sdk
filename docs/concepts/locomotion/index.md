@@ -63,12 +63,12 @@ Because locomotion underpins everything else, we bias toward predictability and 
 ## Quick Start
 
 ```ts
-import { World } from '@iwsdk/core';
 import {
-  LocomotionSystem,
+  EnvironmentType,
   LocomotionEnvironment,
-} from '@iwsdk/core/locomotion';
-import { EnvironmentType } from '@iwsdk/locomotor';
+  LocomotionSystem,
+  World,
+} from '@iwsdk/core';
 
 // 1) Enable locomotion systems
 world.registerSystem(LocomotionSystem, {

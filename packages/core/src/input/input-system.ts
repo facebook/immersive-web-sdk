@@ -283,9 +283,14 @@ export class InputSystem extends createSystem(
     object3D.traverse((child) => {
       if ((child as Mesh).isMesh) {
         const mesh = child as Mesh;
-        if ((mesh as any).geometry && !(mesh as any).geometry.boundsTree) {
+        const geometry = (mesh as any).geometry;
+        if (
+          geometry &&
+          !geometry.boundsTree &&
+          typeof geometry.computeBoundsTree === 'function'
+        ) {
           try {
-            (mesh as any).geometry.computeBoundsTree();
+            geometry.computeBoundsTree();
           } catch (error) {
             console.warn(
               `[InputSystem] Failed to compute BVH for ${mesh.name || 'unnamed'}:`,

@@ -125,6 +125,72 @@ describe('DistanceGrabHandle', () => {
     expect((handle as any).isSnapped).toBe(true);
   });
 
+  it('does not overshoot when a large frame delta accompanies controller movement', () => {
+    const target = new Object3D();
+    const handle = createHandle(target);
+    const down = pointerEvent(1);
+
+    handle.handlers.onPointerDown(down);
+
+    // A stalled frame can produce a delta large enough that an unclamped
+    // Vector3.lerp alpha extrapolates far beyond the controller target. A
+    // sequence of such frames used to compound into enormous coordinates.
+    for (const x of [3, -3, 3, -3]) {
+      const move = pointerEvent(1);
+      const expectedQuaternion = new Quaternion().setFromAxisAngle(
+        new Vector3(0, 1, 0),
+        x > 0 ? Math.PI / 2 : -Math.PI / 2,
+      );
+      move.pointerPosition.set(x, 0, 0);
+      move.pointerQuaternion.copy(expectedQuaternion);
+      handle.handlers.onPointerMove(move);
+      handle.update(0.5);
+
+      expect(target.position.toArray().every(Number.isFinite)).toBe(true);
+      expect(target.position.x).toBeGreaterThanOrEqual(-3);
+      expect(target.position.x).toBeLessThanOrEqual(3);
+      expect(target.quaternion.toArray().every(Number.isFinite)).toBe(true);
+      expect(target.quaternion.length()).toBeCloseTo(1, 6);
+      expect(target.quaternion.angleTo(expectedQuaternion)).toBeLessThan(1e-6);
+    }
+
+    expect(target.position.x).toBeCloseTo(-3, 6);
+  });
+
+  it.each<[string, number, number, number]>([
+    ['negative', -0.5, 0, 0],
+    ['NaN', Number.NaN, 0, 0],
+    ['positive infinity', Number.POSITIVE_INFINITY, 3, Math.PI / 2],
+  ])(
+    'handles a %s frame delta without corrupting transforms',
+    (_label, delta, expectedX, expectedAngle) => {
+      const target = new Object3D();
+      const handle = createHandle(target);
+      const down = pointerEvent(1);
+      handle.handlers.onPointerDown(down);
+
+      const move = pointerEvent(1);
+      const targetQuaternion = new Quaternion().setFromAxisAngle(
+        new Vector3(0, 1, 0),
+        Math.PI / 2,
+      );
+      move.pointerPosition.set(3, 0, 0);
+      move.pointerQuaternion.copy(targetQuaternion);
+      handle.handlers.onPointerMove(move);
+      handle.update(delta);
+
+      expect(target.position.toArray().every(Number.isFinite)).toBe(true);
+      expect(target.position.x).toBe(expectedX);
+      expect(target.quaternion.toArray().every(Number.isFinite)).toBe(true);
+      expect(target.quaternion.length()).toBeCloseTo(1, 6);
+      const expectedQuaternion = new Quaternion().setFromAxisAngle(
+        new Vector3(0, 1, 0),
+        expectedAngle,
+      );
+      expect(target.quaternion.angleTo(expectedQuaternion)).toBeLessThan(1e-6);
+    },
+  );
+
   it('returns to the original transform after a two-pointer handoff', () => {
     const target = new Object3D();
     target.position.set(1, 2, 3);

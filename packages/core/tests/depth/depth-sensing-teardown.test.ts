@@ -98,4 +98,196 @@ describe('DepthSensingSystem teardown', () => {
       expect.any(Function),
     );
   });
+
+  it('clears session-owned shader textures before disposing them on session end', () => {
+    const { system, xr } = createDepthSystem();
+    const depthTexture = { name: 'depth' };
+    const minMaxTexture0 = { name: 'min-max-0' };
+    const minMaxTexture1 = { name: 'min-max-1' };
+    const uniforms = {
+      occlusionEnabled: { value: true },
+      uXRDepthTextureArray: { value: depthTexture },
+      uMinMaxTexture0: { value: minMaxTexture0 },
+      uMinMaxTexture1: { value: minMaxTexture1 },
+    };
+    const dispose = vi.fn();
+
+    (system as any).entityShaderMap.set({}, new Set([uniforms]));
+    (system as any).preprocessingPass = { dispose };
+    (system as any).cpuDepthData = [{ rawValueToMeters: 1 }];
+    (system as any).gpuDepthData = [{ rawValueToMeters: 1 }];
+
+    const sessionEnd = xr.addEventListener.mock.calls.find(
+      ([event]) => event === 'sessionend',
+    )?.[1] as (() => void) | undefined;
+    expect(sessionEnd).toBeDefined();
+    sessionEnd?.();
+
+    expect(uniforms.occlusionEnabled.value).toBe(false);
+    expect(uniforms.uXRDepthTextureArray.value).toBeNull();
+    expect(uniforms.uMinMaxTexture0.value).toBeNull();
+    expect(uniforms.uMinMaxTexture1.value).toBeNull();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect((system as any).preprocessingPass).toBeUndefined();
+    expect((system as any).cpuDepthData).toEqual([]);
+    expect((system as any).gpuDepthData).toEqual([]);
+  });
+
+  it('clears session-owned shader textures when an occludable is removed', () => {
+    const { system } = createDepthSystem();
+    const depthTexture = { name: 'depth' };
+    const minMaxTexture0 = { name: 'min-max-0' };
+    const minMaxTexture1 = { name: 'min-max-1' };
+    const uniforms = {
+      occlusionEnabled: { value: true },
+      uXRDepthTextureArray: { value: depthTexture },
+      uMinMaxTexture0: { value: minMaxTexture0 },
+      uMinMaxTexture1: { value: minMaxTexture1 },
+    };
+    const entity = {};
+
+    (system as any).entityShaderMap.set(entity, new Set([uniforms]));
+    (system as any).detachOcclusionFromEntity(entity);
+
+    expect(uniforms.occlusionEnabled.value).toBe(false);
+    expect(uniforms.uXRDepthTextureArray.value).toBeNull();
+    expect(uniforms.uMinMaxTexture0.value).toBeNull();
+    expect(uniforms.uMinMaxTexture1.value).toBeNull();
+    expect((system as any).entityShaderMap.has(entity)).toBe(false);
+  });
+
+  it('clears session-owned shader textures before system teardown', () => {
+    const { system } = createDepthSystem();
+    const depthTexture = { name: 'depth' };
+    const minMaxTexture0 = { name: 'min-max-0' };
+    const minMaxTexture1 = { name: 'min-max-1' };
+    const uniforms = {
+      occlusionEnabled: { value: true },
+      uXRDepthTextureArray: { value: depthTexture },
+      uMinMaxTexture0: { value: minMaxTexture0 },
+      uMinMaxTexture1: { value: minMaxTexture1 },
+    };
+    const depthTextures = (system as any).depthTextures;
+    const depthDispose = vi.spyOn(depthTextures, 'dispose');
+    const preprocessingDispose = vi.fn();
+
+    (system as any).entityShaderMap.set({}, new Set([uniforms]));
+    (system as any).preprocessingPass = { dispose: preprocessingDispose };
+
+    system.destroy();
+
+    expect(uniforms.occlusionEnabled.value).toBe(false);
+    expect(uniforms.uXRDepthTextureArray.value).toBeNull();
+    expect(uniforms.uMinMaxTexture0.value).toBeNull();
+    expect(uniforms.uMinMaxTexture1.value).toBeNull();
+    expect(depthDispose).toHaveBeenCalledTimes(1);
+    expect((system as any).depthTextures).toBeUndefined();
+    expect(preprocessingDispose).toHaveBeenCalledTimes(1);
+    expect((system as any).preprocessingPass).toBeUndefined();
+  });
+
+  it('does not reuse a previous session texture before a fresh depth sample', () => {
+    const { system, xr } = createDepthSystem();
+    const staleTexture = { name: 'stale-depth' };
+    const uniforms = {
+      occlusionEnabled: { value: true },
+      uXRDepthTextureArray: { value: staleTexture },
+      uMinMaxTexture0: { value: { name: 'stale-min-max-0' } },
+      uMinMaxTexture1: { value: { name: 'stale-min-max-1' } },
+    };
+    const depthTextures = (system as any).depthTextures;
+    const getNativeTexture = vi
+      .spyOn(depthTextures, 'getNativeTexture')
+      .mockReturnValue(staleTexture as any);
+
+    (system as any).entityShaderMap.set({}, new Set([uniforms]));
+    (system as any).gpuDepthData = [{ rawValueToMeters: 1 }];
+    (system as any).hasCurrentFrameDepthData = true;
+
+    const sessionEnd = xr.addEventListener.mock.calls.find(
+      ([event]) => event === 'sessionend',
+    )?.[1] as (() => void) | undefined;
+    const sessionStart = xr.addEventListener.mock.calls.find(
+      ([event]) => event === 'sessionstart',
+    )?.[1] as (() => void) | undefined;
+    expect(sessionEnd).toBeDefined();
+    expect(sessionStart).toBeDefined();
+
+    sessionEnd?.();
+    (xr.getSession as any).mockReturnValue({
+      enabledFeatures: ['depth-sensing'],
+      depthUsage: 'gpu-optimized',
+    });
+    sessionStart?.();
+
+    getNativeTexture.mockClear();
+    expect((system as any).hasCurrentFrameDepthData).toBe(false);
+    expect((system as any).getDepthTextureArray()).toBeUndefined();
+    (system as any).updateOcclusionUniforms();
+
+    expect(getNativeTexture).not.toHaveBeenCalled();
+    expect(uniforms.occlusionEnabled.value).toBe(false);
+    expect(uniforms.uXRDepthTextureArray.value).toBeNull();
+    expect(uniforms.uMinMaxTexture0.value).toBeNull();
+    expect(uniforms.uMinMaxTexture1.value).toBeNull();
+  });
+
+  it('resets stale depth state when a replacement session starts', () => {
+    const { system, xr } = createDepthSystem();
+    const staleTexture = { name: 'stale-depth' };
+    const uniforms = {
+      occlusionEnabled: { value: true },
+      uXRDepthTextureArray: { value: staleTexture },
+      uMinMaxTexture0: { value: { name: 'stale-min-max-0' } },
+      uMinMaxTexture1: { value: { name: 'stale-min-max-1' } },
+    };
+    const preprocessingDispose = vi.fn();
+
+    (system as any).entityShaderMap.set({}, new Set([uniforms]));
+    (system as any).gpuDepthData = [{ rawValueToMeters: 1 }];
+    (system as any).hasCurrentFrameDepthData = true;
+    (system as any).preprocessingPass = { dispose: preprocessingDispose };
+    (xr.getSession as any).mockReturnValue({
+      enabledFeatures: ['depth-sensing'],
+      depthUsage: 'gpu-optimized',
+    });
+
+    const sessionStart = xr.addEventListener.mock.calls.find(
+      ([event]) => event === 'sessionstart',
+    )?.[1] as (() => void) | undefined;
+    expect(sessionStart).toBeDefined();
+    sessionStart?.();
+
+    expect((system as any).hasCurrentFrameDepthData).toBe(false);
+    expect((system as any).gpuDepthData).toEqual([]);
+    expect((system as any).getDepthTextureArray()).toBeUndefined();
+    expect(uniforms.occlusionEnabled.value).toBe(false);
+    expect(uniforms.uXRDepthTextureArray.value).toBeNull();
+    expect(uniforms.uMinMaxTexture0.value).toBeNull();
+    expect(uniforms.uMinMaxTexture1.value).toBeNull();
+    expect(preprocessingDispose).toHaveBeenCalledTimes(1);
+    expect((system as any).depthFeatureEnabled).toBe(true);
+  });
+  it('keeps CPU depth unavailable when the first sample has no depth data', () => {
+    const { system, xr } = createDepthSystem();
+    const views = [{ eye: 'left' }, { eye: 'right' }] as XRView[];
+    const getDepthInformation = vi.fn(() => null);
+    const referenceSpace = {};
+    (xr as any).getBinding = vi.fn(() => ({}));
+    (xr as any).getReferenceSpace = vi.fn(() => referenceSpace);
+    const frame = {
+      getDepthInformation,
+      getViewerPose: vi.fn(() => ({ views })),
+      session: { depthUsage: 'cpu-optimized' },
+    } as unknown as XRFrame;
+
+    expect((system as any).hasCurrentFrameDepthData).toBe(false);
+    (system as any).updateLocalDepth(frame);
+
+    expect(getDepthInformation).toHaveBeenCalledTimes(1);
+    expect(getDepthInformation).toHaveBeenCalledWith(views[0]);
+    expect((system as any).cpuDepthData).toEqual([]);
+    expect((system as any).hasCurrentFrameDepthData).toBe(false);
+    expect((system as any).getDepthTextureArray()).toBeUndefined();
+  });
 });

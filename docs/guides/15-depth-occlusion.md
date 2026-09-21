@@ -290,10 +290,10 @@ You can enable or disable occlusion globally through the system config:
 const depthSystem = world.getSystem(DepthSensingSystem);
 
 // Disable occlusion
-depthSystem.config.enableOcclusion = false;
+depthSystem.config.enableOcclusion.value = false;
 
 // Re-enable occlusion
-depthSystem.config.enableOcclusion = true;
+depthSystem.config.enableOcclusion.value = true;
 ```
 
 ### Adjusting Blur Radius
@@ -304,10 +304,10 @@ Fine-tune the softness of occlusion edges for `SoftOcclusion` mode:
 const depthSystem = world.getSystem(DepthSensingSystem);
 
 // Tighter blur — edges closer to hard occlusion
-depthSystem.config.blurRadius = 5.0;
+depthSystem.config.blurRadius.value = 5.0;
 
 // Wider blur — smoother, more forgiving edges
-depthSystem.config.blurRadius = 40.0;
+depthSystem.config.blurRadius.value = 40.0;
 ```
 
 ## Troubleshooting

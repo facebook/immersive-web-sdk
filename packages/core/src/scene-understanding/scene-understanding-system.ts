@@ -21,6 +21,26 @@ import { XRAnchor } from './anchor.js';
 import { XRMesh } from './mesh.js';
 import { XRPlane } from './plane.js';
 
+type PlaneGeometryState = {
+  lastChangedTime: DOMHighResTimeStamp;
+  polygon: XRPlane['polygon'];
+};
+
+type MeshGeometryState = {
+  indices: XRMesh['indices'];
+  lastChangedTime: DOMHighResTimeStamp;
+  semanticLabel: XRMesh['semanticLabel'];
+  vertices: XRMesh['vertices'];
+};
+
+type MeshMetadata = {
+  dimensions: [number, number, number];
+  isBounded3D: boolean;
+  max: [number, number, number];
+  min: [number, number, number];
+  semanticLabel: string;
+};
+
 /**
  * Manages WebXR scene understanding features including plane detection, mesh detection, and anchoring.
  *
@@ -88,14 +108,23 @@ export class SceneUnderstandingSystem extends createSystem(
   /** Tracks whether an anchor creation request is in progress to prevent duplicate requests */
   private anchorRequested: boolean = false;
 
+  /** Invalidates asynchronous anchor work when the active XR session changes. */
+  private anchorRequestGeneration: number = 0;
+
+  /** Prevents duplicate native-anchor disposal across async teardown paths. */
+  private deletedAnchors = new WeakSet<XRAnchor>();
+
   /** The current XRAnchor instance for this session. Reset on session end to prevent stale XRSpace references. */
   private xrAnchor: XRAnchor | undefined;
 
   private currentPlanes = new Map<XRPlane, Entity>();
   private currentMeshes = new Map<XRMesh, Entity>();
+  private planeGeometryStates = new Map<XRPlane, PlaneGeometryState>();
+  private meshGeometryStates = new Map<XRMesh, MeshGeometryState>();
 
   /** Group that holds all anchored objects, positioned to match the XRAnchor's world pose */
   private anchoredGroup: Group = new Group();
+  private anchoredGroupEntity: Entity | undefined;
 
   private matrixBuffer = new Matrix4();
 
@@ -124,7 +153,7 @@ export class SceneUnderstandingSystem extends createSystem(
       opacity: 0.3,
     });
 
-    this.xrManager.addEventListener('sessionstart', async () => {
+    const onSessionStart = async () => {
       this.updateEnabledFeatures(this.xrManager.getSession());
 
       // Attempt to restore a persistent anchor from previous sessions
@@ -143,39 +172,34 @@ export class SceneUnderstandingSystem extends createSystem(
       // ) {
       // 	await this.xrManager.getSession()?.initiateRoomCapture();
       // }
-    });
+    };
 
-    this.xrManager.addEventListener('sessionend', () => {
+    const onSessionEnd = () => {
       // Clean up all plane and mesh entities to prevent stale XRSpace references
       // XRSpace objects (like planeSpace, meshSpace, anchorSpace) are tied to a specific
       // XRSession and become invalid when the session ends. Using them with a new session's
       // XRFrame will cause "XRSpace and XRFrame sessions do not match" errors.
-      this.queries.planeEntities.entities.forEach((entity) => {
-        this.disposeEntityGeometry(entity);
-        entity.destroy();
-      });
-      this.queries.meshEntities.entities.forEach((entity) => {
-        this.disposeEntityGeometry(entity);
-        entity.destroy();
-      });
+      this.disposeDetectedEntities();
 
       // Clear session-specific state to prevent stale references
       // Note: The persistent anchor UUID in localStorage is preserved for the next session
-      this.xrAnchor = undefined;
-      this.anchorRequested = false;
-      this.planeFeatureEnabled = undefined;
-      this.meshFeatureEnabled = undefined;
-      this.anchorFeatureEnabled = undefined;
-      this.currentPlanes.clear();
-      this.currentMeshes.clear();
-    });
+      this.resetSessionState();
+    };
 
-    this.world.createTransformEntity(this.anchoredGroup, {
-      parent: this.world.sceneEntity,
-      persistent: true,
-    });
+    this.xrManager.addEventListener('sessionstart', onSessionStart);
+    this.xrManager.addEventListener('sessionend', onSessionEnd);
+
+    this.anchoredGroupEntity = this.world.createTransformEntity(
+      this.anchoredGroup,
+      {
+        parent: this.world.sceneEntity,
+        persistent: true,
+      },
+    );
 
     this.cleanupFuncs.push(
+      () => this.xrManager.removeEventListener('sessionstart', onSessionStart),
+      () => this.xrManager.removeEventListener('sessionend', onSessionEnd),
       this.config.showWireFrame.subscribe((value) => {
         this.queries.planeEntities.entities.forEach((planeEntity) => {
           const planeObject = planeEntity.object3D;
@@ -191,6 +215,27 @@ export class SceneUnderstandingSystem extends createSystem(
           }
         });
       }),
+      () => {
+        this.disposeDetectedEntities();
+        this.resetSessionState();
+
+        for (const entity of [...this.queries.anchoredEntities.entities]) {
+          const object = entity.object3D;
+          if (object?.parent === this.anchoredGroup) {
+            this.scene.attach(object);
+          }
+          if (entity.active) {
+            entity.setValue(XRAnchor, 'attached', false);
+          }
+        }
+        this.anchoredGroup.removeFromParent();
+        if (this.anchoredGroupEntity?.active) {
+          this.anchoredGroupEntity.destroy();
+        }
+        this.anchoredGroupEntity = undefined;
+        this.planeMaterial.dispose();
+        this.meshMaterial.dispose();
+      },
     );
   }
 
@@ -213,9 +258,6 @@ export class SceneUnderstandingSystem extends createSystem(
       this.xrAnchor === undefined &&
       !this.anchorRequested
     ) {
-      console.log(
-        '[SceneUnderstandingSystem] Anchor needed but not present, triggering creation',
-      );
       this.createAnchor(referenceSpace);
     }
 
@@ -247,6 +289,61 @@ export class SceneUnderstandingSystem extends createSystem(
     }
   }
 
+  private disposeDetectedEntities(): void {
+    const entities = new Set([
+      ...this.queries.planeEntities.entities,
+      ...this.queries.meshEntities.entities,
+    ]);
+    for (const entity of entities) {
+      this.disposeEntityGeometry(entity);
+      if (entity.active) {
+        entity.destroy();
+      }
+    }
+    this.currentPlanes.clear();
+    this.currentMeshes.clear();
+    this.planeGeometryStates.clear();
+    this.meshGeometryStates.clear();
+  }
+
+  private resetSessionState(): void {
+    this.anchorRequestGeneration++;
+    this.anchorRequested = false;
+    this.clearActiveAnchor();
+    this.planeFeatureEnabled = undefined;
+    this.meshFeatureEnabled = undefined;
+    this.anchorFeatureEnabled = undefined;
+  }
+
+  private isAnchorRequestCurrent(
+    session: XRSession,
+    requestGeneration: number,
+  ): boolean {
+    return (
+      requestGeneration === this.anchorRequestGeneration &&
+      session === this.xrManager.getSession()
+    );
+  }
+
+  private deleteAnchor(anchor: XRAnchor | null | undefined): void {
+    if (!anchor || this.deletedAnchors.has(anchor)) {
+      return;
+    }
+    this.deletedAnchors.add(anchor);
+    try {
+      anchor.delete();
+    } catch (_error) {
+      // The session may already have ended, but the anchor must still be
+      // forgotten locally and must never be installed into a later session.
+    }
+  }
+
+  private clearActiveAnchor(): void {
+    const anchor = this.xrAnchor;
+    this.xrAnchor = undefined;
+    this.deleteAnchor(anchor);
+  }
+
   private updatePlanes(
     planes: XRPlaneSet | undefined,
     referenceSpace: XRReferenceSpace | null,
@@ -259,6 +356,9 @@ export class SceneUnderstandingSystem extends createSystem(
           planeEntity,
         );
       } else {
+        this.planeGeometryStates.delete(
+          planeEntity.getValue(XRPlane, '_plane') as XRPlane,
+        );
         this.disposeEntityGeometry(planeEntity);
         planeEntity.destroy();
       }
@@ -276,28 +376,8 @@ export class SceneUnderstandingSystem extends createSystem(
           this.matrixBuffer.fromArray(pose.transform.matrix);
 
           if (this.currentPlanes.has(plane) === false) {
-            // Only build geometry for newly-seen planes. Doing it every frame
-            // for every plane allocated a BoxGeometry that was then discarded
-            // (without dispose) for already-tracked planes — a per-frame GPU
-            // leak. Existing planes only need their transform refreshed below.
             const polygon = plane.polygon;
-
-            let minX = Number.MAX_SAFE_INTEGER;
-            let maxX = Number.MIN_SAFE_INTEGER;
-            let minZ = Number.MAX_SAFE_INTEGER;
-            let maxZ = Number.MIN_SAFE_INTEGER;
-
-            for (const point of polygon) {
-              minX = Math.min(minX, point.x);
-              maxX = Math.max(maxX, point.x);
-              minZ = Math.min(minZ, point.z);
-              maxZ = Math.max(maxZ, point.z);
-            }
-
-            const width = maxX - minX;
-            const height = maxZ - minZ;
-
-            const geometry = new BoxGeometry(width, 0.001, height);
+            const geometry = this.createPlaneGeometry(polygon);
             const mesh = new Mesh(geometry, this.planeMaterial);
             mesh.visible = this.config.showWireFrame.value;
             mesh.position.setFromMatrixPosition(this.matrixBuffer);
@@ -307,8 +387,32 @@ export class SceneUnderstandingSystem extends createSystem(
             planeEntity.addComponent(XRPlane, {
               _plane: plane,
             });
+            this.planeGeometryStates.set(plane, {
+              lastChangedTime: plane.lastChangedTime,
+              polygon,
+            });
           } else {
             const planeObject = this.currentPlanes.get(plane)?.object3D;
+            const previousState = this.planeGeometryStates.get(plane);
+            if (
+              planeObject instanceof Mesh &&
+              (previousState === undefined ||
+                previousState.lastChangedTime !== plane.lastChangedTime)
+            ) {
+              const polygon = plane.polygon;
+              // Conforming runtimes replace changed topology arrays. Keep the
+              // identity guard because some emulators advance the timestamp on
+              // every frame even when their topology is unchanged.
+              if (previousState?.polygon !== polygon) {
+                const previousGeometry = planeObject.geometry;
+                planeObject.geometry = this.createPlaneGeometry(polygon);
+                previousGeometry.dispose();
+              }
+              this.planeGeometryStates.set(plane, {
+                lastChangedTime: plane.lastChangedTime,
+                polygon,
+              });
+            }
             planeObject?.position.setFromMatrixPosition(this.matrixBuffer);
             planeObject?.quaternion.setFromRotationMatrix(this.matrixBuffer);
           }
@@ -329,6 +433,9 @@ export class SceneUnderstandingSystem extends createSystem(
           meshEntity,
         );
       } else {
+        this.meshGeometryStates.delete(
+          meshEntity.getValue(XRMesh, '_mesh') as XRMesh,
+        );
         this.disposeEntityGeometry(meshEntity);
         meshEntity.destroy();
       }
@@ -346,17 +453,16 @@ export class SceneUnderstandingSystem extends createSystem(
           this.matrixBuffer.fromArray(pose.transform.matrix);
 
           if (this.currentMeshes.has(mesh) === false) {
-            // Only build geometry for newly-seen meshes. Building a
-            // BufferGeometry every frame for every mesh and discarding it
-            // (without dispose) for already-tracked meshes was a per-frame GPU
-            // leak. Existing meshes only need their transform refreshed below.
-            const geometry = new BufferGeometry();
-            geometry.setAttribute(
-              'position',
-              new BufferAttribute(mesh.vertices, 3),
+            const vertices = mesh.vertices;
+            const indices = mesh.indices;
+            const metadata = this.tryGetMeshMetadata(
+              vertices,
+              mesh.semanticLabel,
             );
-            geometry.setIndex(new BufferAttribute(mesh.indices, 1));
-
+            if (metadata === undefined) {
+              return;
+            }
+            const geometry = this.createMeshGeometry(vertices, indices);
             const threeMesh = new Mesh(geometry, this.meshMaterial);
             threeMesh.visible = this.config.showWireFrame.value;
             this.scene.add(threeMesh);
@@ -364,33 +470,152 @@ export class SceneUnderstandingSystem extends createSystem(
             threeMesh.position.setFromMatrixPosition(this.matrixBuffer);
             threeMesh.quaternion.setFromRotationMatrix(this.matrixBuffer);
 
-            if (mesh.semanticLabel === 'global mesh') {
-              meshEntity.addComponent(XRMesh, {
-                _mesh: mesh,
-                isBounded3D: false,
-              });
-            } else {
-              const { minEntry, maxEntry } = findExtremeVertices(mesh.vertices);
-              meshEntity.addComponent(XRMesh, {
-                _mesh: mesh,
-                isBounded3D: true,
-                semanticLabel: mesh.semanticLabel,
-                min: [minEntry.x, minEntry.y, minEntry.z],
-                max: [maxEntry.x, maxEntry.y, maxEntry.z],
-                dimensions: [
-                  maxEntry.x - minEntry.x,
-                  maxEntry.y - minEntry.y,
-                  maxEntry.z - minEntry.z,
-                ],
+            meshEntity.addComponent(XRMesh, {
+              _mesh: mesh,
+              ...metadata,
+            });
+            this.meshGeometryStates.set(mesh, {
+              indices,
+              lastChangedTime: mesh.lastChangedTime,
+              semanticLabel: mesh.semanticLabel,
+              vertices,
+            });
+          } else {
+            const meshEntity = this.currentMeshes.get(mesh);
+            const meshObject = meshEntity?.object3D;
+            const previousState = this.meshGeometryStates.get(mesh);
+            if (
+              meshEntity !== undefined &&
+              meshObject instanceof Mesh &&
+              (previousState === undefined ||
+                previousState.lastChangedTime !== mesh.lastChangedTime)
+            ) {
+              const vertices = mesh.vertices;
+              const indices = mesh.indices;
+              const semanticLabel = mesh.semanticLabel;
+              // See the plane path above: timestamp changes alone are noisy in
+              // some emulators, while conforming topology updates replace the
+              // vertex or index array.
+              const topologyChanged =
+                previousState?.vertices !== vertices ||
+                previousState?.indices !== indices;
+              const metadataChanged =
+                topologyChanged ||
+                previousState?.semanticLabel !== semanticLabel;
+              const metadata = metadataChanged
+                ? this.tryGetMeshMetadata(vertices, semanticLabel)
+                : undefined;
+              if (metadataChanged && metadata === undefined) {
+                // Keep the last known-good geometry and component metadata.
+                // A later valid topology update can still replace them.
+                meshObject.position.setFromMatrixPosition(this.matrixBuffer);
+                meshObject.quaternion.setFromRotationMatrix(this.matrixBuffer);
+                return;
+              }
+              if (topologyChanged) {
+                const previousGeometry = meshObject.geometry;
+                meshObject.geometry = this.createMeshGeometry(
+                  vertices,
+                  indices,
+                );
+                previousGeometry.dispose();
+              }
+              if (metadata !== undefined) {
+                this.updateMeshMetadata(meshEntity, metadata);
+              }
+              this.meshGeometryStates.set(mesh, {
+                indices,
+                lastChangedTime: mesh.lastChangedTime,
+                semanticLabel,
+                vertices,
               });
             }
-          } else {
-            const meshObject = this.currentMeshes.get(mesh)?.object3D;
             meshObject?.position.setFromMatrixPosition(this.matrixBuffer);
             meshObject?.quaternion.setFromRotationMatrix(this.matrixBuffer);
           }
         }
       });
+    }
+  }
+
+  private createPlaneGeometry(polygon: XRPlane['polygon']): BoxGeometry {
+    let minX = Number.MAX_SAFE_INTEGER;
+    let maxX = Number.MIN_SAFE_INTEGER;
+    let minZ = Number.MAX_SAFE_INTEGER;
+    let maxZ = Number.MIN_SAFE_INTEGER;
+
+    for (const point of polygon) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minZ = Math.min(minZ, point.z);
+      maxZ = Math.max(maxZ, point.z);
+    }
+
+    return new BoxGeometry(maxX - minX, 0.001, maxZ - minZ);
+  }
+
+  private createMeshGeometry(
+    vertices: XRMesh['vertices'],
+    indices: XRMesh['indices'],
+  ): BufferGeometry {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(vertices, 3));
+    geometry.setIndex(new BufferAttribute(indices, 1));
+    return geometry;
+  }
+
+  private getMeshMetadata(
+    vertices: XRMesh['vertices'],
+    semanticLabel: XRMesh['semanticLabel'],
+  ): MeshMetadata {
+    if (semanticLabel === 'global mesh') {
+      return {
+        dimensions: [0, 0, 0],
+        isBounded3D: false,
+        max: [0, 0, 0],
+        min: [0, 0, 0],
+        semanticLabel: '',
+      };
+    }
+
+    const { minEntry, maxEntry } = findAxisAlignedBounds(vertices);
+    return {
+      dimensions: [
+        maxEntry.x - minEntry.x,
+        maxEntry.y - minEntry.y,
+        maxEntry.z - minEntry.z,
+      ],
+      isBounded3D: true,
+      max: [maxEntry.x, maxEntry.y, maxEntry.z],
+      min: [minEntry.x, minEntry.y, minEntry.z],
+      semanticLabel: semanticLabel ?? '',
+    };
+  }
+
+  private tryGetMeshMetadata(
+    vertices: XRMesh['vertices'],
+    semanticLabel: XRMesh['semanticLabel'],
+  ): MeshMetadata | undefined {
+    try {
+      return this.getMeshMetadata(vertices, semanticLabel);
+    } catch (error) {
+      console.warn(
+        '[SceneUnderstandingSystem] Skipping mesh with invalid vertex data.',
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  private updateMeshMetadata(entity: Entity, metadata: MeshMetadata): void {
+    entity.getVectorView(XRMesh, 'min').set(metadata.min);
+    entity.getVectorView(XRMesh, 'max').set(metadata.max);
+    entity.getVectorView(XRMesh, 'dimensions').set(metadata.dimensions);
+    if (entity.getValue(XRMesh, 'semanticLabel') !== metadata.semanticLabel) {
+      entity.setValue(XRMesh, 'semanticLabel', metadata.semanticLabel);
+    }
+    if (entity.getValue(XRMesh, 'isBounded3D') !== metadata.isBounded3D) {
+      entity.setValue(XRMesh, 'isBounded3D', metadata.isBounded3D);
     }
   }
 
@@ -438,6 +663,9 @@ export class SceneUnderstandingSystem extends createSystem(
    * anchor will be created in the update loop.
    */
   private async tryRestorePersistentAnchor() {
+    let requestGeneration: number | undefined;
+    let session: XRSession | null = null;
+
     try {
       // Load the saved anchor UUID from localStorage
       const savedUuid = localStorage.getItem(
@@ -448,30 +676,61 @@ export class SceneUnderstandingSystem extends createSystem(
         return;
       }
 
-      const session = this.xrManager.getSession();
+      session = this.xrManager.getSession();
       if (!session) {
         return;
       }
 
-      // Attempt to restore the anchor using the saved UUID
-      this.anchorRequested = true;
-
       if (!session.restorePersistentAnchor) {
         console.warn('XRSession.restorePersistentAnchor not supported');
-        this.anchorRequested = false;
         return;
       }
 
-      this.xrAnchor = await session.restorePersistentAnchor(savedUuid);
+      // Each async request owns a generation. Session end, system teardown, or
+      // a subsequent restore invalidates it so a late result cannot install an
+      // XRAnchor whose XRSpace belongs to an obsolete XRSession.
+      requestGeneration = ++this.anchorRequestGeneration;
+      this.anchorRequested = true;
+      const restoredAnchor = (await session.restorePersistentAnchor(
+        savedUuid,
+      )) as XRAnchor | null;
 
-      if (!this.xrAnchor) {
-        // Restoration returned null, will create new anchor
-        this.anchorRequested = false;
+      if (!this.isAnchorRequestCurrent(session, requestGeneration)) {
+        this.deleteAnchor(restoredAnchor);
+        return;
+      }
+
+      if (!restoredAnchor) {
+        this.clearActiveAnchor();
+        return;
+      }
+
+      if (this.xrAnchor !== restoredAnchor) {
+        this.clearActiveAnchor();
+        this.xrAnchor = restoredAnchor;
       }
     } catch (_error) {
-      // Restoration failed - clear the invalid UUID and allow new anchor creation
-      localStorage.removeItem(SceneUnderstandingSystem.ANCHOR_UUID_STORAGE_KEY);
-      this.anchorRequested = false;
+      // Only the current session's failure proves that its saved UUID is
+      // invalid. A superseded session may reject merely because it ended.
+      if (
+        requestGeneration === undefined ||
+        (session !== null &&
+          this.isAnchorRequestCurrent(session, requestGeneration))
+      ) {
+        try {
+          localStorage.removeItem(
+            SceneUnderstandingSystem.ANCHOR_UUID_STORAGE_KEY,
+          );
+        } catch (_storageError) {
+          // Storage access can be unavailable in privacy-restricted contexts.
+        }
+      }
+    } finally {
+      // A stale request must not clear the in-flight marker owned by the next
+      // session's restore.
+      if (requestGeneration === this.anchorRequestGeneration) {
+        this.anchorRequested = false;
+      }
     }
   }
 
@@ -484,35 +743,77 @@ export class SceneUnderstandingSystem extends createSystem(
    * will only last for the current session.
    */
   private async createAnchor(referenceSpace: XRReferenceSpace | null) {
-    const frame = this.xrManager.getFrame();
-    if (!frame.createAnchor) {
-      throw 'XRFrame.createAnchor is undefined';
-    }
-    if (!referenceSpace) {
-      throw 'renderer.xr.getReferenceSpace() returned null';
-    }
+    let requestGeneration: number | undefined;
+    let session: XRSession | null = null;
+    let createdAnchor: XRAnchor | null | undefined;
 
-    this.anchorRequested = true;
-    this.xrAnchor = await frame.createAnchor(
-      new XRRigidTransform(),
-      referenceSpace,
-    );
-    if (!this.xrAnchor) {
-      this.anchorRequested = false;
-      throw 'XRAnchor creation failed';
-    }
-
-    // Request a persistent handle for the anchor so it can be restored in future sessions
     try {
-      if (this.xrAnchor.requestPersistentHandle) {
-        const uuid = await this.xrAnchor.requestPersistentHandle();
+      session = this.xrManager.getSession();
+      const frame = this.xrManager.getFrame();
+      if (!session || !frame?.createAnchor || !referenceSpace) {
+        return;
+      }
+
+      requestGeneration = ++this.anchorRequestGeneration;
+      this.anchorRequested = true;
+      console.log(
+        '[SceneUnderstandingSystem] Anchor needed but not present, triggering creation',
+      );
+      createdAnchor = (await frame.createAnchor(
+        new XRRigidTransform(),
+        referenceSpace,
+      )) as XRAnchor | null;
+
+      if (!createdAnchor) {
+        return;
+      }
+
+      if (!this.isAnchorRequestCurrent(session, requestGeneration)) {
+        this.deleteAnchor(createdAnchor);
+        return;
+      }
+
+      if (this.xrAnchor !== createdAnchor) {
+        this.clearActiveAnchor();
+        this.xrAnchor = createdAnchor;
+      }
+
+      if (createdAnchor.requestPersistentHandle) {
+        const uuid = await createdAnchor.requestPersistentHandle();
+        if (
+          !this.isAnchorRequestCurrent(session, requestGeneration) ||
+          this.xrAnchor !== createdAnchor
+        ) {
+          if (this.xrAnchor === createdAnchor) {
+            this.xrAnchor = undefined;
+          }
+          this.deleteAnchor(createdAnchor);
+          return;
+        }
         localStorage.setItem(
           SceneUnderstandingSystem.ANCHOR_UUID_STORAGE_KEY,
           uuid,
         );
       }
     } catch (_error) {
-      // Persistence not supported or failed - anchor will work for this session only
+      // Anchor creation and persistence are optional. A current created anchor
+      // remains usable when only persistence fails; a stale one is discarded.
+      if (
+        createdAnchor &&
+        requestGeneration !== undefined &&
+        session !== null &&
+        (!this.isAnchorRequestCurrent(session, requestGeneration) ||
+          this.xrAnchor !== createdAnchor)
+      ) {
+        if (this.xrAnchor === createdAnchor) {
+          this.xrAnchor = undefined;
+        }
+        this.deleteAnchor(createdAnchor);
+      }
+    } finally {
+      if (requestGeneration === this.anchorRequestGeneration) {
+        this.anchorRequested = false;
+      }
     }
   }
 
@@ -530,12 +831,44 @@ export class SceneUnderstandingSystem extends createSystem(
 type Vec3 = { x: number; y: number; z: number };
 
 /**
- * From a flat `[x,y,z, x,y,z, ...]` vertex buffer, return the vertices with the
- * smallest and largest coordinate sum (`x + y + z`).
+ * From a flat `[x,y,z, x,y,z, ...]` vertex buffer, return its axis-aligned
+ * minimum and maximum coordinates. The extrema can come from different source
+ * vertices; treating one smallest-sum and one largest-sum vertex as bounds
+ * under-reports skewed meshes.
+ */
+export function findAxisAlignedBounds(arr: Float32Array): {
+  minEntry: Vec3;
+  maxEntry: Vec3;
+} {
+  if (!arr || arr.length === 0 || arr.length % 3 !== 0) {
+    throw new Error('Array length must be a positive multiple of 3.');
+  }
+  let minX = arr[0];
+  let minY = arr[1];
+  let minZ = arr[2];
+  let maxX = minX;
+  let maxY = minY;
+  let maxZ = minZ;
+  for (let i = 3; i < arr.length; i += 3) {
+    minX = Math.min(minX, arr[i]);
+    minY = Math.min(minY, arr[i + 1]);
+    minZ = Math.min(minZ, arr[i + 2]);
+    maxX = Math.max(maxX, arr[i]);
+    maxY = Math.max(maxY, arr[i + 1]);
+    maxZ = Math.max(maxZ, arr[i + 2]);
+  }
+  return {
+    minEntry: { x: minX, y: minY, z: minZ },
+    maxEntry: { x: maxX, y: maxY, z: maxZ },
+  };
+}
+
+/**
+ * From a flat `[x,y,z, x,y,z, ...]` vertex buffer, return the source
+ * vertices with the smallest and largest coordinate sums.
  *
- * Equivalent to the previous `flatToVec3Array(...)` -> `findMinMaxEntries(...)`
- * pipeline, but it scans the typed array directly and allocates only the two
- * result objects instead of one object per vertex (thousands per mesh).
+ * @deprecated This legacy helper does not calculate an axis-aligned bounding
+ * box. Use {@link findAxisAlignedBounds} for bounds and dimensions.
  */
 export function findExtremeVertices(arr: Float32Array): {
   minEntry: Vec3;

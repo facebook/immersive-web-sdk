@@ -19,7 +19,11 @@
       }
     },
     "render": { "camera": { "position": [0, 1.6, 0] } },
-    "features": { "grabbing": true, "spatialUI": true }
+    "features": {
+      "grabbing": true,
+      "sceneUnderstanding": true,
+      "spatialUI": true
+    }
   },
   "dev": {
     "emulator": {
