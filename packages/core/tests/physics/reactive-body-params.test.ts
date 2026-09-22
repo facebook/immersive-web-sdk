@@ -225,6 +225,28 @@ describe('PhysicsSystem.setBodyTransform', () => {
 });
 
 describe('PhysicsSystem transferable command encoding', () => {
+  it.each([1 / 240, 0.5])(
+    'queues a one-shot force as the exact impulse at render delta %s',
+    (delta) => {
+      const { system, entity } = setup();
+      entity.object3D!.position.set(4, 5, 6);
+      entity.addComponent(PhysicsManipulation, {
+        force: [2, -3, 4],
+      });
+      (system as any).transport = { postMessage: vi.fn() };
+
+      system.update(delta);
+
+      const command = pending(system);
+      expect(command.flags & PhysicsCommandFlag.ApplyImpulse).toBe(
+        PhysicsCommandFlag.ApplyImpulse,
+      );
+      expect(command.impulse).toEqual([2, -3, 4]);
+      expect(command.impulsePoint).toEqual([4, 5, 6]);
+      expect(entity.hasComponent(PhysicsManipulation)).toBe(false);
+    },
+  );
+
   it('re-qualifies pending manipulations when a worker body is created', () => {
     const { system, entity, queries } = setup({ withBody: false });
     entity.addComponent(PhysicsManipulation, {

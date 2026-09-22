@@ -76,7 +76,6 @@ export class FollowSystem extends createSystem({
       if (behavior === FollowBehavior.PivotY) {
         this.targetForward.y = 0;
         this.deltaVec3.y = 0;
-        this.strictFollowTarget.y = this.targetPosition.y;
       }
       if (entity.getValue(Follower, 'needsPositionSync')) {
         object.position

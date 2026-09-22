@@ -359,7 +359,7 @@ export class PhysicsSystem extends createSystem(
     });
 
     this.syncReactiveOverrides();
-    this.queueManipulations(delta);
+    this.queueManipulations();
 
     if (this.pendingDebugStepDelta !== undefined) {
       this.stepAccumulator = 0;
@@ -1052,7 +1052,7 @@ export class PhysicsSystem extends createSystem(
     PhysicsBody.data._engineAngularDamping[index] = target;
   }
 
-  private queueManipulations(delta: number): void {
+  private queueManipulations(): void {
     this.queries.manipluatedEntities.entities.forEach((entity) => {
       const handle = entity.getValue(PhysicsBody, '_engineBody');
       if (!handle || !entity.object3D) {
@@ -1085,9 +1085,9 @@ export class PhysicsSystem extends createSystem(
         command.impulsePoint[0] = impulsePosition.x;
         command.impulsePoint[1] = impulsePosition.y;
         command.impulsePoint[2] = impulsePosition.z;
-        command.impulse[0] += force[0] * delta;
-        command.impulse[1] += force[1] * delta;
-        command.impulse[2] += force[2] * delta;
+        command.impulse[0] += force[0];
+        command.impulse[1] += force[1];
+        command.impulse[2] += force[2];
       }
       if (hasLinearVelocity) {
         command.flags |= PhysicsCommandFlag.SetLinearVelocity;
