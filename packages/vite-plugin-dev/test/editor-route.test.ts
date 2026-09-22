@@ -788,7 +788,7 @@ describe('native editor route middleware', () => {
     expect(headlessConfig.server?.open).toBe(false);
   });
 
-  test('keeps packaged workers out of Vite dependency optimization', () => {
+  test('merges dependency optimization settings idempotently', () => {
     const plugin = iwsdkDev();
     const userConfig: {
       optimizeDeps?: { exclude?: string[]; include?: string[] };
@@ -800,6 +800,7 @@ describe('native editor route middleware', () => {
     };
 
     plugin.config?.(userConfig as never, {} as never);
+    plugin.config?.(userConfig as never, {} as never);
 
     expect(userConfig.optimizeDeps?.exclude).toEqual(
       expect.arrayContaining([
@@ -808,15 +809,17 @@ describe('native editor route middleware', () => {
         '@zappar/msdf-generator',
       ]),
     );
-    expect(userConfig.optimizeDeps?.include).toEqual(
-      expect.arrayContaining([
-        'existing-inclusion',
-        '@iwsdk/scene-composition',
-        'three-viewport-gizmo',
-        'three/examples/jsm/controls/OrbitControls.js',
-        'three/examples/jsm/controls/TransformControls.js',
-      ]),
-    );
+    expect(userConfig.optimizeDeps?.include).toEqual([
+      'existing-inclusion',
+      '@iwsdk/scene-composition',
+      'three',
+      'three-viewport-gizmo',
+      'three/examples/jsm/controls/OrbitControls.js',
+      'three/examples/jsm/controls/TransformControls.js',
+    ]);
+    expect(
+      userConfig.optimizeDeps?.include?.filter((entry) => entry === 'three'),
+    ).toHaveLength(1);
   });
 
   test('deduplicates Three.js without replacing user resolution settings', () => {

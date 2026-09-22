@@ -32,6 +32,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@babylonjs/havok'],
     include: [
+      'three',
       '@pmndrs/uikit',
       '@pmndrs/uikit-horizon',
       '@pmndrs/uikit-lucide',

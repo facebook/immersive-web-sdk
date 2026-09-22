@@ -249,6 +249,7 @@ const OPTIMIZER_EXCLUSIONS = [
 ];
 const OPTIMIZER_INCLUSIONS = [
   '@iwsdk/scene-composition',
+  'three',
   'three-viewport-gizmo',
   'three/examples/jsm/controls/OrbitControls.js',
   'three/examples/jsm/controls/TransformControls.js',

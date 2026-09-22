@@ -80,6 +80,9 @@ describe('common starter project files', () => {
     expect(textFile(outputs[0], 'vite.config.ts')).toContain(
       '@drawcall/uikitml',
     );
+    const viteConfig = textFile(outputs[0], 'vite.config.ts');
+    expect(viteConfig).toContain("include: [\n      'three',");
+    expect(viteConfig.match(/^[ \t]*'three',$/gmu)).toHaveLength(2);
     expect(textFile(outputs[0], 'src/assets.ts')).toContain(
       'VITE_IWSDK_EXAMPLE_ASSET_BASE_URL',
     );
