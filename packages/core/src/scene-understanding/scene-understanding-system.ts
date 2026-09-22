@@ -108,6 +108,20 @@ export class SceneUnderstandingSystem extends createSystem(
   /** Tracks whether an anchor creation request is in progress to prevent duplicate requests */
   private anchorRequested: boolean = false;
 
+  /** Delays between failed native anchor requests. */
+  private static readonly ANCHOR_RETRY_DELAYS_SECONDS = [
+    0.25, 0.5, 1, 2, 5,
+  ] as const;
+
+  /** Render-clock deadline before another native anchor request may start. */
+  private nextAnchorRequestTime: number = 0;
+
+  /** Index of the delay assigned to the next failed native anchor request. */
+  private anchorRetryDelayIndex: number = 0;
+
+  /** Latest elapsed render-clock time, in seconds. */
+  private anchorRetryClockTime: number = 0;
+
   /** Invalidates asynchronous anchor work when the active XR session changes. */
   private anchorRequestGeneration: number = 0;
 
@@ -239,7 +253,8 @@ export class SceneUnderstandingSystem extends createSystem(
     );
   }
 
-  update(_delta: number, _time: number): void {
+  update(_delta: number, time: number): void {
+    this.anchorRetryClockTime = time;
     const frame = this.xrFrame;
     const planes = frame?.detectedPlanes;
     const meshes = frame?.detectedMeshes;
@@ -256,7 +271,8 @@ export class SceneUnderstandingSystem extends createSystem(
     if (
       this.anchorFeatureEnabled &&
       this.xrAnchor === undefined &&
-      !this.anchorRequested
+      !this.anchorRequested &&
+      time >= this.nextAnchorRequestTime
     ) {
       this.createAnchor(referenceSpace);
     }
@@ -309,6 +325,7 @@ export class SceneUnderstandingSystem extends createSystem(
   private resetSessionState(): void {
     this.anchorRequestGeneration++;
     this.anchorRequested = false;
+    this.resetAnchorRetryState();
     this.clearActiveAnchor();
     this.planeFeatureEnabled = undefined;
     this.meshFeatureEnabled = undefined;
@@ -342,6 +359,28 @@ export class SceneUnderstandingSystem extends createSystem(
     const anchor = this.xrAnchor;
     this.xrAnchor = undefined;
     this.deleteAnchor(anchor);
+  }
+
+  private resetAnchorRetryState(): void {
+    this.nextAnchorRequestTime = 0;
+    this.anchorRetryDelayIndex = 0;
+  }
+
+  private increaseAnchorRetryDelay(
+    session: XRSession,
+    requestGeneration: number,
+    requestDelayIndex: number,
+  ): void {
+    if (!this.isAnchorRequestCurrent(session, requestGeneration)) {
+      return;
+    }
+    this.nextAnchorRequestTime =
+      this.anchorRetryClockTime +
+      SceneUnderstandingSystem.ANCHOR_RETRY_DELAYS_SECONDS[requestDelayIndex];
+    this.anchorRetryDelayIndex = Math.min(
+      requestDelayIndex + 1,
+      SceneUnderstandingSystem.ANCHOR_RETRY_DELAYS_SECONDS.length - 1,
+    );
   }
 
   private updatePlanes(
@@ -709,6 +748,7 @@ export class SceneUnderstandingSystem extends createSystem(
         this.clearActiveAnchor();
         this.xrAnchor = restoredAnchor;
       }
+      this.resetAnchorRetryState();
     } catch (_error) {
       // Only the current session's failure proves that its saved UUID is
       // invalid. A superseded session may reject merely because it ended.
@@ -746,6 +786,7 @@ export class SceneUnderstandingSystem extends createSystem(
     let requestGeneration: number | undefined;
     let session: XRSession | null = null;
     let createdAnchor: XRAnchor | null | undefined;
+    let requestDelayIndex: number | undefined;
 
     try {
       session = this.xrManager.getSession();
@@ -756,6 +797,7 @@ export class SceneUnderstandingSystem extends createSystem(
 
       requestGeneration = ++this.anchorRequestGeneration;
       this.anchorRequested = true;
+      requestDelayIndex = this.anchorRetryDelayIndex;
       console.log(
         '[SceneUnderstandingSystem] Anchor needed but not present, triggering creation',
       );
@@ -765,6 +807,11 @@ export class SceneUnderstandingSystem extends createSystem(
       )) as XRAnchor | null;
 
       if (!createdAnchor) {
+        this.increaseAnchorRetryDelay(
+          session,
+          requestGeneration,
+          requestDelayIndex,
+        );
         return;
       }
 
@@ -777,6 +824,7 @@ export class SceneUnderstandingSystem extends createSystem(
         this.clearActiveAnchor();
         this.xrAnchor = createdAnchor;
       }
+      this.resetAnchorRetryState();
 
       if (createdAnchor.requestPersistentHandle) {
         const uuid = await createdAnchor.requestPersistentHandle();
@@ -798,6 +846,18 @@ export class SceneUnderstandingSystem extends createSystem(
     } catch (_error) {
       // Anchor creation and persistence are optional. A current created anchor
       // remains usable when only persistence fails; a stale one is discarded.
+      if (
+        !createdAnchor &&
+        requestGeneration !== undefined &&
+        requestDelayIndex !== undefined &&
+        session !== null
+      ) {
+        this.increaseAnchorRetryDelay(
+          session,
+          requestGeneration,
+          requestDelayIndex,
+        );
+      }
       if (
         createdAnchor &&
         requestGeneration !== undefined &&

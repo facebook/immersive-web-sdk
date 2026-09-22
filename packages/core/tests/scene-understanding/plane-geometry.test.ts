@@ -574,18 +574,29 @@ describe('SceneUnderstandingSystem anchor creation', () => {
     };
   }
 
-  it('logs only when a real anchor request starts and retains retry behavior', async () => {
+  it('logs only when a real anchor request starts and backs off after a null result', async () => {
     stubAnchorGlobals();
-    const creation = deferred<XRAnchor | null>();
-    const createAnchorRequest = vi.fn(() => creation.promise);
+    const firstCreation = deferred<XRAnchor | null>();
+    const secondCreation = deferred<XRAnchor | null>();
+    const createAnchorRequest = vi
+      .fn()
+      .mockImplementationOnce(() => firstCreation.promise)
+      .mockImplementationOnce(() => secondCreation.promise);
     const referenceSpace = {} as XRReferenceSpace;
     const session = {} as XRSession;
     const { system, xr } = createSystem();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const getReferenceSpace = vi.fn(() => referenceSpace);
+    const frame = {
+      createAnchor: createAnchorRequest,
+      getPose: vi.fn(() => null),
+    };
     (xr as any).getReferenceSpace = getReferenceSpace;
-    (xr.getFrame as any).mockReturnValue({ createAnchor: createAnchorRequest });
+    (xr.getFrame as any).mockReturnValue(frame);
     (system as any).anchorFeatureEnabled = true;
+    (system as any).queries = {
+      anchoredEntities: { entities: new Set() },
+    };
 
     // Retry absent prerequisites silently instead of logging every frame.
     system.update(0, 0);
@@ -593,7 +604,7 @@ describe('SceneUnderstandingSystem anchor creation', () => {
     xr.getSession.mockReturnValue(session);
     (xr.getFrame as any).mockReturnValue({});
     system.update(0, 0);
-    (xr.getFrame as any).mockReturnValue({ createAnchor: createAnchorRequest });
+    (xr.getFrame as any).mockReturnValue(frame);
     getReferenceSpace.mockReturnValue(null);
     system.update(0, 0);
     expect(log).not.toHaveBeenCalled();
@@ -602,19 +613,146 @@ describe('SceneUnderstandingSystem anchor creation', () => {
 
     getReferenceSpace.mockReturnValue(referenceSpace);
     system.update(0, 0);
-    system.update(0, 0);
+    system.update(0, 0.1);
     expect(log).toHaveBeenCalledTimes(1);
     expect(createAnchorRequest).toHaveBeenCalledTimes(1);
     expect((system as any).anchorRequested).toBe(true);
+    system.update(0, 10);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(1);
 
-    creation.resolve(null);
+    firstCreation.resolve(null);
     await vi.waitFor(() => {
       expect((system as any).anchorRequested).toBe(false);
     });
 
-    system.update(0, 0);
+    system.update(0, 10);
+    system.update(0, 10.249);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(1);
+
+    system.update(0, 10.25);
     expect(log).toHaveBeenCalledTimes(2);
     expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+    expect((system as any).anchorRequested).toBe(true);
+
+    // A request remains single-flight even after its retry deadline passes.
+    system.update(0, 20);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+
+    const createdAnchor = createNativeAnchor();
+    secondCreation.resolve(createdAnchor);
+    await vi.waitFor(() => {
+      expect((system as any).anchorRequested).toBe(false);
+    });
+
+    expect((system as any).xrAnchor).toBe(createdAnchor);
+    expect((system as any).anchorRetryDelayIndex).toBe(0);
+    expect((system as any).nextAnchorRequestTime).toBe(0);
+    system.update(0, 21);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('exponentially backs off rejected anchor requests to a five-second cap', async () => {
+    stubAnchorGlobals();
+    const createAnchorRequest = vi.fn(() =>
+      Promise.reject(new Error('creation failed')),
+    );
+    const referenceSpace = {} as XRReferenceSpace;
+    const session = {} as XRSession;
+    const { system, xr } = createSystem();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    (xr as any).getReferenceSpace = vi.fn(() => referenceSpace);
+    (xr.getFrame as any).mockReturnValue({ createAnchor: createAnchorRequest });
+    xr.getSession.mockReturnValue(session);
+    (system as any).anchorFeatureEnabled = true;
+
+    const attemptAt = async (time: number, expectedCalls: number) => {
+      system.update(0, time);
+      expect(createAnchorRequest).toHaveBeenCalledTimes(expectedCalls);
+      await vi.waitFor(() => {
+        expect((system as any).anchorRequested).toBe(false);
+      });
+    };
+
+    await attemptAt(0, 1);
+    expect((system as any).anchorRetryDelayIndex).toBe(1);
+    system.update(0, 0.249);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(1);
+
+    await attemptAt(0.25, 2);
+    expect((system as any).anchorRetryDelayIndex).toBe(2);
+    system.update(0, 0.749);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+
+    await attemptAt(0.75, 3);
+    expect((system as any).anchorRetryDelayIndex).toBe(3);
+    system.update(0, 1.749);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(3);
+
+    await attemptAt(1.75, 4);
+    expect((system as any).anchorRetryDelayIndex).toBe(4);
+    system.update(0, 3.749);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(4);
+
+    await attemptAt(3.75, 5);
+    expect((system as any).anchorRetryDelayIndex).toBe(4);
+    system.update(0, 8.749);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(5);
+
+    await attemptAt(8.75, 6);
+    expect((system as any).anchorRetryDelayIndex).toBe(4);
+    system.update(0, 13.749);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(6);
+    await attemptAt(13.75, 7);
+    expect((system as any).anchorRetryDelayIndex).toBe(4);
+  });
+
+  it('resets retry state for a replacement session and ignores stale failures', async () => {
+    stubAnchorGlobals();
+    const firstCreation = deferred<XRAnchor>();
+    const secondCreation = deferred<XRAnchor>();
+    const createAnchorRequest = vi
+      .fn()
+      .mockImplementationOnce(() => firstCreation.promise)
+      .mockImplementationOnce(() => secondCreation.promise);
+    const firstSession = {} as XRSession;
+    const secondSession = {} as XRSession;
+    let activeSession = firstSession;
+    const { system, xr } = createSystem();
+    const createAnchorSpy = vi.spyOn(system as any, 'createAnchor');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    (xr as any).getReferenceSpace = vi.fn(() => ({}) as XRReferenceSpace);
+    (xr.getFrame as any).mockReturnValue({ createAnchor: createAnchorRequest });
+    xr.getSession.mockImplementation(() => activeSession);
+    (system as any).anchorFeatureEnabled = true;
+
+    system.update(0, 1);
+    const firstAttempt = createAnchorSpy.mock.results[0].value as Promise<void>;
+    expect(createAnchorRequest).toHaveBeenCalledTimes(1);
+    expect((system as any).anchorRequested).toBe(true);
+
+    (system as any).resetSessionState();
+    activeSession = secondSession;
+    (system as any).anchorFeatureEnabled = true;
+    system.update(0, 1.05);
+    const secondAttempt = createAnchorSpy.mock.results[1]
+      .value as Promise<void>;
+    expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+    expect((system as any).anchorRequested).toBe(true);
+
+    firstCreation.reject(new Error('stale creation failed'));
+    await firstAttempt;
+    expect((system as any).anchorRequested).toBe(true);
+    expect((system as any).anchorRetryDelayIndex).toBe(0);
+    system.update(0, 20);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(2);
+
+    const newAnchor = createNativeAnchor();
+    secondCreation.resolve(newAnchor);
+    await secondAttempt;
+    expect((system as any).xrAnchor).toBe(newAnchor);
+    expect((system as any).anchorRequested).toBe(false);
+    expect((system as any).anchorRetryDelayIndex).toBe(0);
   });
 
   it('deletes an anchor returned after its XR session was replaced', async () => {
@@ -746,19 +884,32 @@ describe('SceneUnderstandingSystem anchor creation', () => {
     );
     const createdAnchor = createNativeAnchor(requestPersistentHandle);
     const { system, xr } = createSystem();
+    const referenceSpace = {} as XRReferenceSpace;
+    const createAnchorRequest = vi.fn(() => Promise.resolve(createdAnchor));
     (xr.getFrame as any).mockReturnValue({
-      createAnchor: vi.fn(() => Promise.resolve(createdAnchor)),
+      createAnchor: createAnchorRequest,
+      getPose: vi.fn(() => null),
     });
     xr.getSession.mockReturnValue({} as XRSession);
+    (system as any).queries = {
+      anchoredEntities: { entities: new Set() },
+    };
 
     await expect(
-      (system as any).createAnchor({} as XRReferenceSpace),
+      (system as any).createAnchor(referenceSpace),
     ).resolves.toBeUndefined();
 
     expect((system as any).xrAnchor).toBe(createdAnchor);
     expect((system as any).anchorRequested).toBe(false);
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(createdAnchor.delete).not.toHaveBeenCalled();
+    expect((system as any).anchorRetryDelayIndex).toBe(0);
+    expect((system as any).nextAnchorRequestTime).toBe(0);
+
+    (xr as any).getReferenceSpace = vi.fn(() => referenceSpace);
+    (system as any).anchorFeatureEnabled = true;
+    system.update(0, 10);
+    expect(createAnchorRequest).toHaveBeenCalledTimes(1);
 
     (system as any).resetSessionState();
     expect(createdAnchor.delete).toHaveBeenCalledTimes(1);
