@@ -133,4 +133,38 @@ describe('RayPointer', () => {
     geometry.dispose();
     material.dispose();
   });
+
+  test('keeps meshes with hidden materials eligible for ray targeting', () => {
+    const scene = new Scene();
+    const root = new Group();
+    const geometry = new BoxGeometry(1, 1, 0.1);
+    const material = new MeshBasicMaterial({ visible: false });
+    const mesh = new Mesh(geometry, material);
+    mesh.position.z = -1;
+    (root as any).pointerEvents = 'auto';
+    root.add(mesh);
+    scene.add(root);
+    scene.updateMatrixWorld(true);
+
+    const raySpace = new Group();
+    raySpace.updateMatrixWorld(true);
+    const pointer = new RayPointer(
+      new PerspectiveCamera(),
+      {
+        raySpaces: { left: raySpace, right: new Group() },
+      } as unknown as XROrigin,
+      'left',
+    );
+
+    const intersection = pointer.pointer.computeIntersection('pointer', scene, {
+      timeStamp: 0,
+    });
+
+    expect(mesh.visible).toBe(true);
+    expect(material.visible).toBe(false);
+    expect(intersection.object).toBe(mesh);
+    pointer.dispose();
+    geometry.dispose();
+    material.dispose();
+  });
 });
