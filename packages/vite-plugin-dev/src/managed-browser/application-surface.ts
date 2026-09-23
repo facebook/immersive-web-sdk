@@ -70,33 +70,78 @@ export async function showWorkspaceRuntime(
       // a short readiness window, with a bounded fallback for non-IWSDK apps.
       const settleStartedAt = performance.now();
       const minimumSettleAt = settleStartedAt + 500;
-      const fallbackSettleAt = settleStartedAt + 1_500;
-      while (performance.now() < fallbackSettleAt) {
+      const settleDeadline = settleStartedAt + 1_500;
+      const renderStatsDeadline = settleDeadline - 250;
+      const settleWithinDeadline = async <T>(
+        deadline: number,
+        operation: () => Promise<T>,
+        fallback: T,
+      ): Promise<T> => {
+        const remainingMs = Math.max(0, deadline - performance.now());
+        if (remainingMs === 0) {
+          return fallback;
+        }
+        let timeoutId: number | undefined;
+        try {
+          return await Promise.race([
+            operation().catch(() => fallback),
+            new Promise<T>((resolve) => {
+              timeoutId = window.setTimeout(
+                () => resolve(fallback),
+                remainingMs,
+              );
+            }),
+          ]);
+        } finally {
+          if (timeoutId != null) {
+            window.clearTimeout(timeoutId);
+          }
+        }
+      };
+      while (performance.now() < renderStatsDeadline) {
         let renderReady = false;
         const runtime = (runtimeFrame.contentWindow as any)
           ?.FRAMEWORK_MCP_RUNTIME;
         if (runtime?.handles?.('get_render_stats')) {
-          try {
-            const stats = await runtime.dispatch('get_render_stats', {});
-            renderReady =
-              stats?.available === true &&
-              stats?.calls > 0 &&
-              stats?.meshCount > 0;
-          } catch {
-            // The framework bridge can exist before its world is queryable.
-          }
+          const stats = await settleWithinDeadline(
+            renderStatsDeadline,
+            () =>
+              Promise.resolve().then(() =>
+                runtime.dispatch('get_render_stats', {}),
+              ),
+            null,
+          );
+          renderReady =
+            stats?.available === true &&
+            stats?.calls > 0 &&
+            stats?.meshCount > 0;
         }
         if (renderReady && performance.now() >= minimumSettleAt) {
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            Math.min(50, Math.max(0, renderStatsDeadline - performance.now())),
+          ),
+        );
       }
 
-      await new Promise<void>((resolve) => {
-        runtimeFrame.contentWindow!.requestAnimationFrame(() => {
-          runtimeFrame.contentWindow!.requestAnimationFrame(() => resolve());
-        });
-      });
+      await settleWithinDeadline(
+        settleDeadline,
+        () =>
+          new Promise<void>((resolve) => {
+            const runtimeWindow = runtimeFrame.contentWindow;
+            if (runtimeWindow == null) {
+              resolve();
+              return;
+            }
+            runtimeWindow.requestAnimationFrame(() => {
+              runtimeWindow.requestAnimationFrame(() => resolve());
+            });
+          }),
+        undefined,
+      );
     }
     return { isWorkspace: true, previousView };
   });

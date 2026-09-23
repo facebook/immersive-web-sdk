@@ -26,6 +26,409 @@ const MAX_SNAPSHOT_BYTES = 256 * 1024;
 
 const MAX_SNAPSHOT_CANDIDATES = 4_000;
 
+interface ScreenshotClip {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+function requireVisibleScreenshotClip(
+  clip: ScreenshotClip | null,
+  label: string,
+): ScreenshotClip {
+  if (
+    clip == null ||
+    ![clip.x, clip.y, clip.width, clip.height].every(Number.isFinite) ||
+    clip.width <= 0 ||
+    clip.height <= 0
+  ) {
+    throw Object.assign(new Error(`${label} is not visible`), {
+      retryable: true,
+    });
+  }
+  return clip;
+}
+
+function intersectScreenshotClips(
+  target: ScreenshotClip,
+  boundary: ScreenshotClip,
+  label: string,
+): ScreenshotClip {
+  const x = Math.max(target.x, boundary.x);
+  const y = Math.max(target.y, boundary.y);
+  return requireVisibleScreenshotClip(
+    {
+      x,
+      y,
+      width: Math.min(target.x + target.width, boundary.x + boundary.width) - x,
+      height:
+        Math.min(target.y + target.height, boundary.y + boundary.height) - y,
+    },
+    label,
+  );
+}
+
+const MAX_FULL_PAGE_PIXELS = 32_000_000;
+const MAX_FULL_PAGE_TILES = 64;
+const WORKSPACE_SCREENSHOT_STYLE =
+  'html[data-iwsdk-workspace-view] .workspace-view-switcher { visibility: hidden !important; }';
+
+interface ScreenshotScroll {
+  x: number;
+  y: number;
+}
+
+async function restoreScreenshotScroll(
+  frame: Frame,
+  scroll: ScreenshotScroll,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      frame.evaluate(
+        ({ x, y }) => window.scrollTo({ behavior: 'instant', left: x, top: y }),
+        scroll,
+      ),
+      new Promise<void>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Timed out restoring screenshot scroll')),
+          1_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer != null) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function withRestoredScroll<T>(
+  frames: Frame[],
+  operation: () => Promise<T>,
+  onRestoreError: (error: unknown) => void,
+): Promise<T> {
+  const positions = await Promise.all(
+    frames.map(async (frame) => ({
+      frame,
+      ...(await frame.evaluate(() => ({ x: scrollX, y: scrollY }))),
+    })),
+  );
+  try {
+    return await operation();
+  } finally {
+    for (const { frame, x, y } of positions.reverse()) {
+      await restoreScreenshotScroll(frame, { x, y }).catch(onRestoreError);
+    }
+  }
+}
+
+async function scrollFramedApplicationIntoView(
+  frame: Frame,
+): Promise<ScreenshotClip> {
+  const element = await frame.frameElement();
+  try {
+    await element.evaluate((node) =>
+      (node as Element).scrollIntoView({
+        behavior: 'instant',
+        block: 'start',
+        inline: 'start',
+      }),
+    );
+    return requireVisibleScreenshotClip(
+      await element.boundingBox(),
+      'IWSDK workspace application frame',
+    );
+  } finally {
+    await element.dispose().catch(() => {});
+  }
+}
+
+async function resolveFramedApplicationContentClip(
+  frame: Frame,
+  viewport: {
+    height: number;
+    innerHeight: number;
+    innerWidth: number;
+    width: number;
+  },
+): Promise<ScreenshotClip> {
+  const element = await frame.frameElement();
+  try {
+    await element.evaluate((node) =>
+      (node as Element).scrollIntoView({
+        behavior: 'instant',
+        block: 'start',
+        inline: 'start',
+      }),
+    );
+    const borderBox = requireVisibleScreenshotClip(
+      await element.boundingBox(),
+      'IWSDK workspace application frame',
+    );
+    const elementMetrics = await element.evaluate((node) => {
+      const element = node as HTMLElement;
+      return {
+        clientHeight: element.clientHeight,
+        clientLeft: element.clientLeft,
+        clientTop: element.clientTop,
+        clientWidth: element.clientWidth,
+        offsetHeight: element.offsetHeight,
+        offsetWidth: element.offsetWidth,
+      };
+    });
+    if (
+      ![
+        elementMetrics.clientHeight,
+        elementMetrics.clientWidth,
+        elementMetrics.offsetHeight,
+        elementMetrics.offsetWidth,
+        viewport.height,
+        viewport.innerHeight,
+        viewport.innerWidth,
+        viewport.width,
+      ].every((value) => Number.isFinite(value) && value > 0)
+    ) {
+      throw Object.assign(
+        new Error('Application frame has invalid screenshot dimensions'),
+        { retryable: true },
+      );
+    }
+
+    const borderScaleX = borderBox.width / elementMetrics.offsetWidth;
+    const borderScaleY = borderBox.height / elementMetrics.offsetHeight;
+    const contentScaleX =
+      (elementMetrics.clientWidth * borderScaleX) / viewport.innerWidth;
+    const contentScaleY =
+      (elementMetrics.clientHeight * borderScaleY) / viewport.innerHeight;
+    return requireVisibleScreenshotClip(
+      {
+        x: borderBox.x + elementMetrics.clientLeft * borderScaleX,
+        y: borderBox.y + elementMetrics.clientTop * borderScaleY,
+        width: viewport.width * contentScaleX,
+        height: viewport.height * contentScaleY,
+      },
+      'IWSDK workspace application content',
+    );
+  } finally {
+    await element.dispose().catch(() => {});
+  }
+}
+
+function tileOffsets(total: number, viewport: number): number[] {
+  const maximum = Math.max(0, total - viewport);
+  return Array.from(
+    { length: Math.max(1, Math.ceil(total / viewport)) },
+    (_, index) => Math.min(index * viewport, maximum),
+  );
+}
+
+async function normalizeScreenshotTile(
+  bytes: Buffer,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  // With viewport:null (the default headed workspace), Chromium returns clip
+  // pixels at the host display scale even when Playwright receives scale:'css'.
+  // Stitching uses CSS-pixel coordinates, so normalize every tile at that
+  // boundary instead of relying on a context deviceScaleFactor that cannot be
+  // configured for a native viewport.
+  const metadata = await sharp(bytes).metadata();
+  if (metadata.width === width && metadata.height === height) {
+    return bytes;
+  }
+  return sharp(bytes)
+    .resize(width, height, { fit: 'fill', kernel: 'nearest' })
+    .png()
+    .toBuffer();
+}
+
+async function captureFramedFullPage(
+  page: Page,
+  frame: Frame,
+  format: 'jpeg' | 'png',
+  quality: number,
+  timeoutMs: number,
+  onRestoreError: (error: unknown) => void,
+): Promise<Buffer> {
+  const deadline = Date.now() + timeoutMs;
+  const remaining = () => {
+    const value = Math.floor(deadline - Date.now());
+    if (value <= 0) {
+      throw Object.assign(new Error('browser_screenshot timed out'), {
+        retryable: true,
+      });
+    }
+    return value;
+  };
+  remaining();
+  const metrics = await frame.evaluate(() => {
+    const body = document.body;
+    const root = document.documentElement;
+    return {
+      height: Math.max(
+        body?.scrollHeight ?? 0,
+        body?.offsetHeight ?? 0,
+        root.scrollHeight,
+        root.offsetHeight,
+        root.clientHeight,
+        innerHeight,
+      ),
+      scroll: { x: scrollX, y: scrollY },
+      innerHeight,
+      innerWidth,
+      viewportHeight: root.clientHeight,
+      viewportWidth: root.clientWidth,
+      width: Math.max(
+        body?.scrollWidth ?? 0,
+        body?.offsetWidth ?? 0,
+        root.scrollWidth,
+        root.offsetWidth,
+        root.clientWidth,
+        innerWidth,
+      ),
+    };
+  });
+  remaining();
+  if (
+    ![
+      metrics.height,
+      metrics.viewportHeight,
+      metrics.viewportWidth,
+      metrics.width,
+    ].every((value) => Number.isFinite(value) && value > 0)
+  ) {
+    throw Object.assign(
+      new Error('Application document has invalid screenshot dimensions'),
+      { retryable: true },
+    );
+  }
+  const xOffsets = tileOffsets(metrics.width, metrics.viewportWidth);
+  const yOffsets = tileOffsets(metrics.height, metrics.viewportHeight);
+  if (
+    metrics.width * metrics.height > MAX_FULL_PAGE_PIXELS ||
+    xOffsets.length * yOffsets.length > MAX_FULL_PAGE_TILES
+  ) {
+    throw Object.assign(
+      new Error('Application document exceeds full-page screenshot limits'),
+      { code: 'browser_screenshot_too_large', retryable: false },
+    );
+  }
+
+  try {
+    const desiredClip = await resolveFramedApplicationContentClip(frame, {
+      height: metrics.viewportHeight,
+      innerHeight: metrics.innerHeight,
+      innerWidth: metrics.innerWidth,
+      width: metrics.viewportWidth,
+    });
+    remaining();
+    const viewport = await page.evaluate(() => ({
+      height: document.documentElement.clientHeight,
+      width: document.documentElement.clientWidth,
+    }));
+    remaining();
+    const clip = intersectScreenshotClips(
+      desiredClip,
+      { height: viewport.height, width: viewport.width, x: 0, y: 0 },
+      'IWSDK workspace application content',
+    );
+    if (
+      [
+        clip.x - desiredClip.x,
+        clip.y - desiredClip.y,
+        clip.width - desiredClip.width,
+        clip.height - desiredClip.height,
+      ].some((difference) => Math.abs(difference) > 1)
+    ) {
+      throw Object.assign(
+        new Error('IWSDK workspace application frame is partially obscured'),
+        { retryable: true },
+      );
+    }
+
+    // All placement happens in the normalized output-pixel coordinate system.
+    // Ceil the tile dimensions and floor absolute offsets so adjacent tiles can
+    // overlap by at most one pixel but can never leave an unpainted seam.
+    const tileWidth = Math.max(1, Math.ceil(clip.width));
+    const tileHeight = Math.max(1, Math.ceil(clip.height));
+    const scaleX = tileWidth / metrics.viewportWidth;
+    const scaleY = tileHeight / metrics.viewportHeight;
+    const width = Math.max(tileWidth, Math.ceil(metrics.width * scaleX));
+    const height = Math.max(tileHeight, Math.ceil(metrics.height * scaleY));
+    if (width * height > MAX_FULL_PAGE_PIXELS) {
+      throw Object.assign(
+        new Error('Application document exceeds full-page screenshot limits'),
+        { code: 'browser_screenshot_too_large', retryable: false },
+      );
+    }
+
+    const layers: Array<{ input: Buffer; left: number; top: number }> = [];
+    const seen = new Set<string>();
+    for (const y of yOffsets) {
+      for (const x of xOffsets) {
+        const actual = await frame.evaluate(
+          (point) => {
+            scrollTo({ behavior: 'instant', left: point.x, top: point.y });
+            return { x: scrollX, y: scrollY };
+          },
+          { x, y },
+        );
+        remaining();
+        const key = `${actual.x}:${actual.y}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        const tile = Buffer.from(
+          await page.screenshot({
+            clip,
+            scale: 'css',
+            style: WORKSPACE_SCREENSHOT_STYLE,
+            timeout: remaining(),
+            type: 'png',
+          }),
+        );
+        remaining();
+        const normalizedTile = await normalizeScreenshotTile(
+          tile,
+          tileWidth,
+          tileHeight,
+        );
+        remaining();
+        layers.push({
+          input: normalizedTile,
+          left: Math.min(
+            Math.floor(actual.x * scaleX),
+            Math.max(0, width - tileWidth),
+          ),
+          top: Math.min(
+            Math.floor(actual.y * scaleY),
+            Math.max(0, height - tileHeight),
+          ),
+        });
+      }
+    }
+    const stitched = sharp({
+      create: {
+        background: { alpha: 1, b: 255, g: 255, r: 255 },
+        channels: 4,
+        height,
+        width,
+      },
+    }).composite(layers);
+    remaining();
+    const output = await (format === 'jpeg'
+      ? stitched.jpeg({ quality }).toBuffer()
+      : stitched.png().toBuffer());
+    remaining();
+    return output;
+  } finally {
+    await restoreScreenshotScroll(frame, metrics.scroll).catch(onRestoreError);
+  }
+}
+
 export const MAX_BROWSER_INTERACTION_TIMEOUT_MS = 12_000;
 
 export interface BrowserScreenshotOptions {
@@ -234,6 +637,9 @@ export class ManagedInteractionSurface {
       format === 'jpeg'
         ? ({ quality, timeout: timeoutMs, type: 'jpeg' } as const)
         : ({ timeout: timeoutMs, type: 'png' } as const);
+    const mainFrame = page.mainFrame();
+    const restoreError = (error: unknown) =>
+      this.options.onRestoreError('browser_screenshot scroll', error);
     let raw: Buffer;
     if (options.ref) {
       const locator = await resolveRefLocator(
@@ -241,16 +647,100 @@ export class ManagedInteractionSurface {
         this.snapshotRecipes,
         options.ref,
       );
-      raw = Buffer.from(await locator.screenshot(screenshotOptions));
-    } else if (frame !== page.mainFrame()) {
-      if (options.fullPage) {
-        raw = Buffer.from(
-          await frame.locator('html').screenshot(screenshotOptions),
-        );
-      } else {
-        const frameElement = await frame.frameElement();
-        raw = Buffer.from(await frameElement.screenshot(screenshotOptions));
-      }
+      raw = await withRestoredScroll(
+        frame === mainFrame ? [mainFrame] : [mainFrame, frame],
+        async () => {
+          await locator.evaluate((element) =>
+            element.scrollIntoView({
+              behavior: 'instant',
+              block: 'nearest',
+              inline: 'nearest',
+            }),
+          );
+          let frameClip: ScreenshotClip | null = null;
+          if (frame !== mainFrame) {
+            frameClip = await scrollFramedApplicationIntoView(frame);
+          }
+          let clip = requireVisibleScreenshotClip(
+            await locator.boundingBox(),
+            `Browser ref ${options.ref}`,
+          );
+          const boundary =
+            frameClip ??
+            (await page.evaluate(() => ({
+              height: document.documentElement.clientHeight,
+              width: document.documentElement.clientWidth,
+              x: 0,
+              y: 0,
+            })));
+          const visibleClip = intersectScreenshotClips(
+            clip,
+            boundary,
+            `Browser ref ${options.ref}`,
+          );
+          if (
+            [
+              visibleClip.x - clip.x,
+              visibleClip.y - clip.y,
+              visibleClip.width - clip.width,
+              visibleClip.height - clip.height,
+            ].some((difference) => Math.abs(difference) > 1)
+          ) {
+            const targetIsTooLarge =
+              clip.width > boundary.width + 1 ||
+              clip.height > boundary.height + 1;
+            throw Object.assign(
+              new Error(
+                targetIsTooLarge
+                  ? `Browser ref ${options.ref} exceeds the visible application viewport`
+                  : `Browser ref ${options.ref} is partially obscured`,
+              ),
+              targetIsTooLarge
+                ? {
+                    code: 'browser_screenshot_target_too_large',
+                    retryable: false,
+                  }
+                : { retryable: true },
+            );
+          }
+          clip = visibleClip;
+          return Buffer.from(
+            await page.screenshot({
+              ...screenshotOptions,
+              clip,
+              style: WORKSPACE_SCREENSHOT_STYLE,
+            }),
+          );
+        },
+        restoreError,
+      );
+    } else if (frame !== mainFrame) {
+      raw = await withRestoredScroll(
+        [mainFrame],
+        async () => {
+          if (options.fullPage) {
+            return captureFramedFullPage(
+              page,
+              frame,
+              format,
+              quality,
+              timeoutMs,
+              restoreError,
+            );
+          }
+          // Element screenshots wait for stable animation frames. Capture the
+          // visible frame rectangle directly instead.
+          const clip = await scrollFramedApplicationIntoView(frame);
+          return Buffer.from(
+            await page.screenshot({
+              ...screenshotOptions,
+              clip,
+              style: WORKSPACE_SCREENSHOT_STYLE,
+            }),
+          );
+        },
+        restoreError,
+      );
     } else {
       raw = Buffer.from(
         await page.screenshot({

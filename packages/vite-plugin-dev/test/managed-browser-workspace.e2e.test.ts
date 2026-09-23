@@ -10,13 +10,18 @@ import { access, mkdtemp, readFile, rm, stat } from 'fs/promises';
 import { createServer, type Server } from 'http';
 import os from 'os';
 import path from 'path';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import sharp from 'sharp';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import {
   collectRuntimePreflightEvidence,
   collectRuntimePublishEvidence,
   launchManagedBrowser,
   type ManagedBrowser,
 } from '../src/headless-browser.js';
+import {
+  restoreWorkspaceView,
+  showWorkspaceRuntime,
+} from '../src/managed-browser/application-surface.js';
 
 const DOCUMENT_HASH = 'document-hash-for-evidence';
 const RUNTIME_HASH = 'runtime-hash-for-evidence';
@@ -40,7 +45,7 @@ interface AccessRecord {
 const WORKSPACE_HTML = `<!doctype html>
 <html data-iwsdk-workspace-view="editor">
   <body>
-    <nav>
+    <nav class="workspace-view-switcher" style="background:#ff00ff;height:40px;position:fixed;right:0;top:0;width:80px;z-index:30">
       <button data-workspace-view-button="runtime">Runtime</button>
       <button data-workspace-view-button="editor">Editor</button>
     </nav>
@@ -568,18 +573,487 @@ describe('managed browser workspace application surface', () => {
     ]);
     expect(capture.metadata).toMatchObject({
       downscaled: true,
-      height: 300,
       mimeType: 'image/png',
       width: 400,
       workspaceFramed: true,
     });
     expect(capture.metadata.width).toBeLessThanOrEqual(400);
+    expect(capture.metadata.height).toBeGreaterThan(0);
     expect(capture.metadata.height).toBeLessThanOrEqual(300);
+    const { data, info } = await sharp(capture.bytes).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    const overlayPixel =
+      (5 * info.width + Math.max(0, info.width - 5)) * info.channels;
+    expect([...data.subarray(overlayPixel, overlayPixel + 3)]).not.toEqual([
+      255, 0, 255,
+    ]);
     expect(reload.generation).toBe(2);
     expect(
       await page.locator('html').getAttribute('data-iwsdk-workspace-view'),
     ).toBe('editor');
   }, 30_000);
+
+  test('captures animated framed and referenced surfaces without element screenshots', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    const snapshot = await browser.snapshotApplication();
+    const submit = snapshot.elements.find(
+      (element) => element.role === 'button' && element.name === 'Submit',
+    );
+    expect(frame).toBeDefined();
+    expect(submit?.ref).toBeTruthy();
+
+    await page.locator('#workspace-runtime-frame').evaluate((element) => {
+      element.animate(
+        [{ transform: 'translateX(0px)' }, { transform: 'translateX(2px)' }],
+        { direction: 'alternate', duration: 40, iterations: Infinity },
+      );
+    });
+    await frame
+      .locator('button[type="submit"]')
+      .evaluate((element: Element) => {
+        element.animate(
+          [{ transform: 'translateX(0px)' }, { transform: 'translateX(2px)' }],
+          { direction: 'alternate', duration: 40, iterations: Infinity },
+        );
+      });
+
+    try {
+      const framed = await browser.captureRuntimeScreenshot({ format: 'png' });
+      const fullPage = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        fullPage: true,
+      });
+      const referenced = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        ref: submit!.ref,
+      });
+
+      for (const capture of [framed, fullPage]) {
+        expect(capture.metadata.workspaceFramed).toBe(true);
+        expect(capture.metadata.height).toBeGreaterThan(0);
+        expect(capture.metadata.height).toBeLessThanOrEqual(300);
+        expect(capture.metadata.width).toBeGreaterThan(0);
+        expect(capture.metadata.width).toBeLessThanOrEqual(400);
+      }
+      expect(referenced.metadata.height).toBeGreaterThan(0);
+      expect(referenced.metadata.height).toBeLessThanOrEqual(300);
+      expect(referenced.metadata.width).toBeGreaterThan(0);
+      expect(referenced.metadata.width).toBeLessThanOrEqual(400);
+    } finally {
+      await page.evaluate(() =>
+        document.getAnimations().forEach((animation) => animation.cancel()),
+      );
+      await frame.evaluate(() =>
+        document
+          .getAnimations()
+          .forEach((animation: Animation) => animation.cancel()),
+      );
+    }
+    expect(
+      await page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+    ).toBe('editor');
+  }, 30_000);
+
+  test('captures an animated overflowing frame as a full document and restores scroll', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      document.documentElement.style.scrollBehavior = 'smooth';
+      const bands = document.createElement('div');
+      bands.id = 'full-page-bands';
+      bands.innerHTML = [
+        '<div style="height:600px;background:#ff0000"></div>',
+        '<div style="height:600px;background:#00ff00"></div>',
+        '<div style="height:600px;background:#0000ff"></div>',
+      ].join('');
+      document.body.append(bands);
+      bands.animate([{ opacity: 0.98 }, { opacity: 1 }], {
+        direction: 'alternate',
+        duration: 40,
+        iterations: Infinity,
+      });
+      window.scrollTo({ behavior: 'instant', left: 0, top: 137 });
+    });
+
+    try {
+      const initialScroll = await frame.evaluate(() => window.scrollY);
+      const viewport = await browser.captureRuntimeScreenshot({
+        format: 'png',
+      });
+      const fullPage = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        fullPage: true,
+      });
+      expect(await frame.evaluate(() => window.scrollY)).toBe(initialScroll);
+      expect(fullPage.metadata.height).toBe(300);
+      expect(fullPage.metadata.width).toBeLessThan(viewport.metadata.width);
+
+      const { data, info } = await sharp(fullPage.bytes).raw().toBuffer({
+        resolveWithObject: true,
+      });
+      const offset =
+        ((info.height - 5) * info.width + Math.floor(info.width / 2)) *
+        info.channels;
+      const [red, green, blue] = data.subarray(offset, offset + 3);
+      expect(red).toBeLessThan(16);
+      expect(green).toBeLessThan(16);
+      expect(blue).toBeGreaterThan(240);
+    } finally {
+      await frame.evaluate(() => {
+        document.getElementById('full-page-bands')?.remove();
+        document.documentElement.style.scrollBehavior = '';
+        window.scrollTo(0, 0);
+      });
+    }
+  }, 30_000);
+
+  test('captures classic-scrollbar and fractional-scale frames without seams', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await page.locator('#workspace-runtime-frame').evaluate((element) => {
+      Object.assign((element as HTMLElement).style, {
+        transform: 'scale(0.997)',
+        transformOrigin: 'top left',
+      });
+    });
+    await frame.evaluate(() => {
+      document.documentElement.style.background = '#000';
+      document.documentElement.style.overflowY = 'scroll';
+      document.documentElement.style.scrollbarGutter = 'stable';
+      document.body.style.background = '#000';
+      document.body.style.margin = '0';
+      const cover = document.createElement('div');
+      cover.id = 'fractional-full-page-cover';
+      Object.assign(cover.style, {
+        background: '#000',
+        height: '1800px',
+        left: '0',
+        position: 'absolute',
+        top: '0',
+        width: '100%',
+        zIndex: '1000',
+      });
+      document.body.append(cover);
+    });
+
+    try {
+      const capture = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        fullPage: true,
+      });
+      const { data, info } = await sharp(capture.bytes).raw().toBuffer({
+        resolveWithObject: true,
+      });
+      const x = Math.floor(info.width / 2);
+      for (let y = 1; y < info.height - 1; y += 1) {
+        const offset = (y * info.width + x) * info.channels;
+        expect(Math.max(...data.subarray(offset, offset + 3))).toBeLessThan(32);
+      }
+    } finally {
+      await page.locator('#workspace-runtime-frame').evaluate((element) => {
+        (element as HTMLElement).style.transform = '';
+        (element as HTMLElement).style.transformOrigin = '';
+      });
+      await frame.evaluate(() => {
+        document.getElementById('fractional-full-page-cover')?.remove();
+        document.documentElement.style.background = '';
+        document.documentElement.style.overflowY = '';
+        document.documentElement.style.scrollbarGutter = '';
+        document.body.style.background = '';
+        document.body.style.margin = '';
+        window.scrollTo({ behavior: 'instant', left: 0, top: 0 });
+      });
+    }
+  }, 30_000);
+
+  test('normalizes native device-pixel tiles before full-page stitching', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      const bands = document.createElement('div');
+      bands.id = 'hidpi-full-page-bands';
+      bands.innerHTML = [
+        '<div style="height:600px;background:#ff0000"></div>',
+        '<div style="height:600px;background:#0000ff"></div>',
+      ].join('');
+      document.body.append(bands);
+    });
+
+    const originalScreenshot = page.screenshot.bind(page);
+    const screenshot = vi
+      .spyOn(page, 'screenshot')
+      .mockImplementation(async (options: any) => {
+        const bytes = Buffer.from(await originalScreenshot(options));
+        if (options?.clip == null || options.scale !== 'css') {
+          return bytes;
+        }
+        const metadata = await sharp(bytes).metadata();
+        return sharp(bytes)
+          .resize((metadata.width ?? 1) * 2, (metadata.height ?? 1) * 2, {
+            fit: 'fill',
+            kernel: 'nearest',
+          })
+          .png()
+          .toBuffer();
+      });
+
+    try {
+      const capture = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        fullPage: true,
+      });
+      expect(capture.metadata).toMatchObject({
+        height: 300,
+        width: expect.any(Number),
+        workspaceFramed: true,
+      });
+      expect(capture.metadata.width).toBeLessThanOrEqual(400);
+    } finally {
+      screenshot.mockRestore();
+      await frame.evaluate(() => {
+        document.getElementById('hidpi-full-page-bands')?.remove();
+        window.scrollTo({ behavior: 'instant', left: 0, top: 0 });
+      });
+    }
+  }, 30_000);
+
+  test('scrolls offscreen frames and partial refs into view, then restores scroll', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.id = 'workspace-offscreen-spacer';
+      spacer.style.height = '700px';
+      document.body.prepend(spacer);
+      window.scrollTo(0, 0);
+    });
+    await frame.evaluate(() => {
+      document.body.style.minHeight = '700px';
+      const button = document.createElement('button');
+      button.id = 'partial-screenshot-target';
+      button.textContent = 'Partial screenshot target';
+      Object.assign(button.style, {
+        height: '80px',
+        left: '20px',
+        position: 'absolute',
+        top: '560px',
+        width: '120px',
+      });
+      document.body.append(button);
+      window.scrollTo(0, 0);
+    });
+
+    try {
+      await expect(
+        browser.captureRuntimeScreenshot({ format: 'png' }),
+      ).resolves.toMatchObject({ metadata: { workspaceFramed: true } });
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+      const snapshot = await browser.snapshotApplication();
+      const target = snapshot.elements.find(
+        (element) => element.name === 'Partial screenshot target',
+      );
+      expect(target?.ref).toBeTruthy();
+      const capture = await browser.captureRuntimeScreenshot({
+        format: 'png',
+        ref: target!.ref,
+      });
+      expect(capture.metadata).toMatchObject({ height: 80, width: 120 });
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await frame.evaluate(() => window.scrollY)).toBe(0);
+    } finally {
+      await page.evaluate(() => {
+        document.getElementById('workspace-offscreen-spacer')?.remove();
+        window.scrollTo(0, 0);
+      });
+      await frame.evaluate(() => {
+        document.getElementById('partial-screenshot-target')?.remove();
+        document.body.style.minHeight = '';
+        window.scrollTo(0, 0);
+      });
+    }
+  }, 30_000);
+
+  test('rejects oversized framed full-page captures before allocation', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      document.body.style.minHeight = '41000px';
+    });
+    try {
+      const error = await browser
+        .captureRuntimeScreenshot({ fullPage: true })
+        .then(
+          () => null,
+          (reason) => reason,
+        );
+      expect(error).toMatchObject({
+        code: 'browser_screenshot_too_large',
+        retryable: false,
+      });
+      expect(error).toHaveProperty(
+        'message',
+        expect.stringContaining('exceeds full-page screenshot limits'),
+      );
+    } finally {
+      await frame.evaluate(() => {
+        document.body.style.minHeight = '';
+        window.scrollTo(0, 0);
+      });
+    }
+  }, 10_000);
+
+  test('rejects oversized refs without inviting a retry and restores scroll', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      const target = document.createElement('button');
+      target.id = 'oversized-screenshot-target';
+      target.textContent = 'Oversized screenshot target';
+      Object.assign(target.style, {
+        height: '900px',
+        width: '120px',
+      });
+      document.body.append(target);
+      window.scrollTo({ behavior: 'instant', left: 0, top: 91 });
+    });
+
+    try {
+      const initialScroll = await frame.evaluate(() => window.scrollY);
+      const snapshot = await browser.snapshotApplication();
+      const target = snapshot.elements.find(
+        (element) => element.name === 'Oversized screenshot target',
+      );
+      expect(target?.ref).toBeTruthy();
+      const error = await browser
+        .captureRuntimeScreenshot({ format: 'png', ref: target!.ref })
+        .then(
+          () => null,
+          (reason) => reason,
+        );
+      expect(error).toMatchObject({
+        code: 'browser_screenshot_target_too_large',
+        retryable: false,
+      });
+      expect(await frame.evaluate(() => window.scrollY)).toBe(initialScroll);
+    } finally {
+      await frame.evaluate(() => {
+        document.getElementById('oversized-screenshot-target')?.remove();
+        window.scrollTo({ behavior: 'instant', left: 0, top: 0 });
+      });
+    }
+  }, 10_000);
+
+  test('reserves a double-animation-frame budget after render stats stall', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      const target = window as any;
+      const runtime = target.FRAMEWORK_MCP_RUNTIME;
+      target.__IWSDK_TEST_ORIGINAL_DISPATCH = runtime.dispatch;
+      target.__IWSDK_TEST_ORIGINAL_RAF = window.requestAnimationFrame;
+      target.__IWSDK_TEST_RAF_CALLS = 0;
+      runtime.dispatch = (method: string, params: unknown) =>
+        method === 'get_render_stats'
+          ? new Promise(() => {})
+          : target.__IWSDK_TEST_ORIGINAL_DISPATCH.call(runtime, method, params);
+      window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+        return window.setTimeout(() => {
+          target.__IWSDK_TEST_RAF_CALLS += 1;
+          callback(performance.now());
+        }, 50);
+      }) as typeof window.requestAnimationFrame;
+    });
+
+    let visibility: Awaited<ReturnType<typeof showWorkspaceRuntime>> | null =
+      null;
+    const startedAt = Date.now();
+    try {
+      visibility = await showWorkspaceRuntime(page);
+      expect(
+        await frame.evaluate(() => (window as any).__IWSDK_TEST_RAF_CALLS),
+      ).toBe(2);
+      expect(Date.now() - startedAt).toBeLessThan(2_000);
+    } finally {
+      await frame.evaluate(() => {
+        const target = window as any;
+        target.FRAMEWORK_MCP_RUNTIME.dispatch =
+          target.__IWSDK_TEST_ORIGINAL_DISPATCH;
+        window.requestAnimationFrame = target.__IWSDK_TEST_ORIGINAL_RAF;
+        delete target.__IWSDK_TEST_ORIGINAL_DISPATCH;
+        delete target.__IWSDK_TEST_ORIGINAL_RAF;
+        delete target.__IWSDK_TEST_RAF_CALLS;
+      });
+      if (visibility != null) {
+        await restoreWorkspaceView(page, visibility);
+      }
+    }
+  }, 10_000);
+
+  test('bounds workspace settling when render stats and animation frames stall', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      const target = window as any;
+      const runtime = target.FRAMEWORK_MCP_RUNTIME;
+      target.__IWSDK_TEST_ORIGINAL_DISPATCH = runtime.dispatch;
+      target.__IWSDK_TEST_ORIGINAL_RAF = window.requestAnimationFrame;
+      runtime.dispatch = (method: string, params: unknown) =>
+        method === 'get_render_stats'
+          ? new Promise(() => {})
+          : target.__IWSDK_TEST_ORIGINAL_DISPATCH.call(runtime, method, params);
+      window.requestAnimationFrame = (() =>
+        1) as typeof window.requestAnimationFrame;
+    });
+
+    const startedAt = Date.now();
+    try {
+      await expect(
+        browser.captureRuntimeScreenshot({ format: 'png' }),
+      ).resolves.toMatchObject({ metadata: { workspaceFramed: true } });
+    } finally {
+      await frame.evaluate(() => {
+        const target = window as any;
+        target.FRAMEWORK_MCP_RUNTIME.dispatch =
+          target.__IWSDK_TEST_ORIGINAL_DISPATCH;
+        window.requestAnimationFrame = target.__IWSDK_TEST_ORIGINAL_RAF;
+        delete target.__IWSDK_TEST_ORIGINAL_DISPATCH;
+        delete target.__IWSDK_TEST_ORIGINAL_RAF;
+      });
+    }
+    expect(Date.now() - startedAt).toBeLessThan(4_000);
+    expect(
+      await page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+    ).toBe('editor');
+  }, 10_000);
 
   test('serializes interaction, screenshot, and reload without leaking workspace view state', async () => {
     const page = browser.page as any;

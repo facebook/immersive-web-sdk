@@ -1183,11 +1183,13 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
         },
         fullPage: {
           type: 'boolean',
-          description: 'Capture the full application document.',
+          description:
+            'Capture the full application document when it fits the bounded 32-megapixel and 64-tile limits.',
         },
         ref: {
           type: 'string',
-          description: 'Capture one element ref returned by browser_snapshot.',
+          description:
+            'Capture one fully visible element ref returned by browser_snapshot. Targets larger than the application viewport are rejected as non-retryable.',
         },
       },
       required: [],
