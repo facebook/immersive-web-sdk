@@ -38,6 +38,12 @@ const APP_HTML = `<!doctype html>
       sessionStorage.setItem('generation', String(generation));
       window.__IWSDK_MCP_TAB_GENERATION = generation;
       window.fixtureState = { clicks: 0, canvasClicks: 0 };
+      window.keyboardEvents = [];
+      for (const type of ['keydown', 'keyup']) {
+        document.addEventListener(type, (event) => {
+          window.keyboardEvents.push({ code: event.code, type: event.type });
+        });
+      }
       const bindButton = () => {
         document.querySelector('#action').addEventListener('click', () => {
           window.fixtureState.clicks += 1;
@@ -232,6 +238,86 @@ describe('managed browser desktop development', () => {
     });
     expect(rerendered.success).toBe(true);
     expect(await page.locator('#result').textContent()).toBe('Ada:2');
+  });
+
+  test('holds keys across timed waits and releases them after success and failure', async () => {
+    const page = browser.page as any;
+    const resetEvents = () =>
+      page.evaluate(() => {
+        (window as any).keyboardEvents = [];
+      });
+    const readEvents = () =>
+      page.evaluate(() => (window as any).keyboardEvents);
+
+    await resetEvents();
+    const explicit = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyW' },
+        { action: 'wait', durationMs: 80 },
+        { action: 'keyUp', key: 'KeyW' },
+      ],
+    });
+    expect(explicit).toMatchObject({ success: true });
+    expect(explicit.completed.map((step) => step.action)).toEqual([
+      'keyDown',
+      'wait',
+      'keyUp',
+    ]);
+    expect(explicit.completed[1]?.durationMs).toBeGreaterThanOrEqual(60);
+    expect(await readEvents()).toEqual([
+      expect.objectContaining({ code: 'KeyW', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyW', type: 'keyup' }),
+    ]);
+
+    await resetEvents();
+    const releasedAtEnd = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyA' },
+        { action: 'wait', durationMs: 20 },
+      ],
+    });
+    expect(releasedAtEnd).toMatchObject({ success: true });
+    expect(await readEvents()).toEqual([
+      expect.objectContaining({ code: 'KeyA', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyA', type: 'keyup' }),
+    ]);
+
+    await resetEvents();
+    const releasedAfterFailure = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyD' },
+        {
+          action: 'fill',
+          locator: { name: 'Missing keyboard target', role: 'textbox' },
+          timeoutMs: 100,
+          value: 'missing',
+        },
+      ],
+    });
+    expect(releasedAfterFailure).toMatchObject({
+      failure: { action: 'fill', index: 1 },
+      success: false,
+    });
+    expect(await readEvents()).toEqual([
+      expect.objectContaining({ code: 'KeyD', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyD', type: 'keyup' }),
+    ]);
+
+    await resetEvents();
+    const rejectedDuration = await browser.interactApplication({
+      steps: [
+        {
+          action: 'press',
+          durationMs: 1,
+          key: 'KeyS',
+        },
+      ],
+    });
+    expect(rejectedDuration).toMatchObject({
+      failure: { message: 'durationMs is supported only for wait actions' },
+      success: false,
+    });
+    expect(await readEvents()).toEqual([]);
   });
 
   test('re-resolves absent and invalid input types plus labelled canvases', async () => {

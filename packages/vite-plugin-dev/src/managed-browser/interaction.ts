@@ -71,6 +71,8 @@ function intersectScreenshotClips(
 
 const MAX_FULL_PAGE_PIXELS = 32_000_000;
 const MAX_FULL_PAGE_TILES = 64;
+const KEY_RELEASE_CLEANUP_TIMEOUT_MS = 250;
+const KEY_RELEASE_FOCUS_TIMEOUT_MS = 100;
 const WORKSPACE_SCREENSHOT_STYLE =
   'html[data-iwsdk-workspace-view] .workspace-view-switcher { visibility: hidden !important; }';
 
@@ -481,6 +483,7 @@ export interface BrowserInteractionPoint {
 
 export interface BrowserInteractionStep {
   action: string;
+  durationMs?: number;
   button?: 'left' | 'middle' | 'right';
   deltaX?: number;
   deltaY?: number;
@@ -612,7 +615,12 @@ export class ManagedInteractionSurface {
   async interactApplication(
     request: BrowserInteractionRequest,
   ): Promise<BrowserInteractionResult> {
-    if (!Array.isArray(request.steps) || request.steps.length === 0) {
+    if (
+      request == null ||
+      typeof request !== 'object' ||
+      !Array.isArray(request.steps) ||
+      request.steps.length === 0
+    ) {
       throw new Error('browser_interact requires at least one step');
     }
     if (request.steps.length > 10) {
@@ -789,13 +797,22 @@ export class ManagedInteractionSurface {
   ): Promise<BrowserInteractionResult> {
     const { getRemainingOperationTimeMs, page, profiler } = this.options;
     const completed: BrowserInteractionStepResult[] = [];
+    const pressedKeys = new Set<string>();
     const frame = await resolveApplicationFrame(page);
+    const releasePressedKeys = () =>
+      releaseInteractionKeys(
+        page,
+        frame,
+        pressedKeys,
+        KEY_RELEASE_CLEANUP_TIMEOUT_MS,
+      );
     const initialState = await getApplicationState(page, frame);
     const buildFailure = async (
       error: unknown,
       index: number,
       action: BrowserInteractionStep['action'],
     ): Promise<BrowserInteractionResult> => {
+      await releasePressedKeys();
       const message = errorMessage(error);
       const retryable = isRetryableInteractionError(error);
       const nextEvidenceTimeout = () =>
@@ -844,6 +861,21 @@ export class ManagedInteractionSurface {
         success: false,
       };
     };
+    for (const [index, step] of request.steps.entries()) {
+      try {
+        validateInteractionStep(step);
+      } catch (error) {
+        return buildFailure(
+          error,
+          index,
+          step != null &&
+            typeof step === 'object' &&
+            typeof step.action === 'string'
+            ? step.action
+            : '<invalid>',
+        );
+      }
+    }
     const remainingInteractionTimeMs = getRemainingOperationTimeMs(
       'browser_interact',
       MAX_BROWSER_INTERACTION_TIMEOUT_MS,
@@ -858,7 +890,8 @@ export class ManagedInteractionSurface {
           { retryable: true },
         ),
         0,
-        request.steps[0]!.action,
+        (request.steps[0] as BrowserInteractionStep | null | undefined)
+          ?.action ?? '<invalid>',
       );
     }
     const batchTimeoutMs = Math.min(
@@ -867,73 +900,88 @@ export class ManagedInteractionSurface {
       remainingInteractionTimeMs,
     );
     const batchDeadline = Date.now() + batchTimeoutMs;
-    for (const [index, step] of request.steps.entries()) {
-      const startedAt = Date.now();
-      try {
-        const profileDeadline = profiler.activeDeadline;
-        const remainingBatchTimeoutMs = Math.min(
-          batchDeadline - startedAt,
-          getRemainingOperationTimeMs(
-            'browser_interact',
-            Number.POSITIVE_INFINITY,
-            'zero',
-          ),
-          profileDeadline == null
-            ? Number.POSITIVE_INFINITY
-            : profileDeadline - startedAt,
-        );
-        if (remainingBatchTimeoutMs < 100) {
-          throw new Error(
-            `browser_interact batch timed out after ${batchTimeoutMs}ms`,
-          );
-        }
-        await profiler.markInteractionStep(frame, index, step.action);
-        await executeInteractionStep(
-          page,
-          frame,
-          this.snapshotRecipes,
-          step,
-          remainingBatchTimeoutMs,
-        );
-        const currentFrame = await resolveApplicationFrame(page);
-        const currentState = await getApplicationState(page, currentFrame);
-        if (
-          applicationIdentityChanged(
-            {
-              documentTimeOrigin: initialState.documentTimeOrigin,
-              generation: initialState.application.generation,
-              id: initialState.application.id,
-            },
-            {
-              documentTimeOrigin: currentState.documentTimeOrigin,
-              generation: currentState.application.generation,
-              id: currentState.application.id,
-            },
-          )
-        ) {
-          throw Object.assign(
-            new Error(
-              'The current application reloaded or changed while browser_interact was running',
+    try {
+      for (const [index, step] of request.steps.entries()) {
+        const startedAt = Date.now();
+        const action =
+          step != null &&
+          typeof step === 'object' &&
+          typeof step.action === 'string'
+            ? step.action
+            : '<invalid>';
+        try {
+          if (step == null || typeof step !== 'object') {
+            throw new Error('browser_interact steps must be objects');
+          }
+          const profileDeadline = profiler.activeDeadline;
+          const remainingBatchTimeoutMs = Math.min(
+            batchDeadline - startedAt,
+            getRemainingOperationTimeMs(
+              'browser_interact',
+              Number.POSITIVE_INFINITY,
+              'zero',
             ),
-            { retryable: true },
+            profileDeadline == null
+              ? Number.POSITIVE_INFINITY
+              : profileDeadline - startedAt,
           );
+          if (remainingBatchTimeoutMs < 100) {
+            throw new Error(
+              `browser_interact batch timed out after ${batchTimeoutMs}ms`,
+            );
+          }
+          await profiler.markInteractionStep(frame, index, step.action);
+          await executeInteractionStep(
+            page,
+            frame,
+            this.snapshotRecipes,
+            step,
+            remainingBatchTimeoutMs,
+            pressedKeys,
+          );
+          const currentFrame = await resolveApplicationFrame(page);
+          const currentState = await getApplicationState(page, currentFrame);
+          if (
+            applicationIdentityChanged(
+              {
+                documentTimeOrigin: initialState.documentTimeOrigin,
+                generation: initialState.application.generation,
+                id: initialState.application.id,
+              },
+              {
+                documentTimeOrigin: currentState.documentTimeOrigin,
+                generation: currentState.application.generation,
+                id: currentState.application.id,
+              },
+            )
+          ) {
+            throw Object.assign(
+              new Error(
+                'The current application reloaded or changed while browser_interact was running',
+              ),
+              { retryable: true },
+            );
+          }
+          completed.push({
+            action: step.action,
+            durationMs: Date.now() - startedAt,
+            index,
+          });
+        } catch (error) {
+          return await buildFailure(error, index, action);
         }
-        completed.push({
-          action: step.action,
-          durationMs: Date.now() - startedAt,
-          index,
-        });
-      } catch (error) {
-        return buildFailure(error, index, step.action);
       }
+      await releasePressedKeys();
+      return {
+        application: await getApplicationMetadata(page).catch(
+          () => initialState.application,
+        ),
+        completed,
+        success: true,
+      };
+    } finally {
+      await releasePressedKeys();
     }
-    return {
-      application: await getApplicationMetadata(page).catch(
-        () => initialState.application,
-      ),
-      completed,
-      success: true,
-    };
   }
 }
 
@@ -1154,12 +1202,17 @@ async function resolvePagePoint(
     return { x: box.x + x, y: box.y + y };
   }
   if (frame !== page.mainFrame()) {
-    const frameBox = await (await frame.frameElement()).boundingBox();
-    if (frameBox == null) {
-      throw new Error('Application frame is not visible');
+    const frameElement = await frame.frameElement();
+    try {
+      const frameBox = await frameElement.boundingBox();
+      if (frameBox == null) {
+        throw new Error('Application frame is not visible');
+      }
+      x += frameBox.x;
+      y += frameBox.y;
+    } finally {
+      await frameElement.dispose().catch(() => {});
     }
-    x += frameBox.x;
-    y += frameBox.y;
   }
   return { x, y };
 }
@@ -1204,13 +1257,205 @@ async function waitForLocatorState(
   throw new Error(`Timed out after ${timeout}ms waiting for ${state} state`);
 }
 
+async function releaseInteractionKeys(
+  page: Page,
+  frame: Frame,
+  pressedKeys: Set<string>,
+  timeoutMs: number,
+): Promise<void> {
+  const keys = [...pressedKeys].reverse();
+  pressedKeys.clear();
+  if (keys.length === 0) {
+    return;
+  }
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+  const remaining = () => Math.max(1, deadline - Date.now());
+  try {
+    await focusApplicationFrameForKeyboard(
+      page,
+      frame,
+      Math.min(KEY_RELEASE_FOCUS_TIMEOUT_MS, remaining()),
+    );
+  } catch {
+    // The application frame may have closed. Continue best-effort cleanup.
+  }
+  for (const key of keys) {
+    if (Date.now() >= deadline) {
+      break;
+    }
+    try {
+      await runWithInteractionTimeout(
+        () => page.keyboard.up(key),
+        remaining(),
+        `Timed out releasing ${key}`,
+      );
+    } catch {
+      // The page may have closed or navigated. Continue releasing other keys.
+    }
+  }
+}
+
+async function runWithInteractionTimeout<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(Object.assign(new Error(message), { retryable: true })),
+          Math.max(1, timeoutMs),
+        );
+      }),
+    ]);
+  } finally {
+    if (timer != null) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function focusApplicationFrameForKeyboard(
+  page: Page,
+  frame: Frame,
+  timeoutMs: number,
+): Promise<void> {
+  if (frame === page.mainFrame()) {
+    return;
+  }
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+  const remaining = () => Math.max(1, deadline - Date.now());
+  const frameElement = await runWithInteractionTimeout(
+    () => frame.frameElement(),
+    remaining(),
+    'Timed out resolving the application frame for keyboard input',
+  );
+  try {
+    await runWithInteractionTimeout(
+      () => frameElement.focus(),
+      remaining(),
+      'Timed out focusing the application frame element for keyboard input',
+    );
+    await runWithInteractionTimeout(
+      () => frame.evaluate(() => window.focus()),
+      remaining(),
+      'Timed out focusing the application frame for keyboard input',
+    );
+  } finally {
+    await frameElement.dispose().catch(() => {});
+  }
+}
+
+async function focusKeyboardTarget(
+  page: Page,
+  frame: Frame,
+  locator: Locator,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+  const remaining = () => Math.max(1, deadline - Date.now());
+  await focusApplicationFrameForKeyboard(page, frame, remaining());
+  await locator.waitFor({ state: 'attached', timeout: remaining() });
+  const focused = await runWithInteractionTimeout(
+    () =>
+      locator.evaluate((element) => {
+        (element as HTMLElement).focus?.({ preventScroll: true });
+        const activeElement = document.activeElement;
+        return (
+          activeElement === element ||
+          (activeElement != null && element.contains(activeElement))
+        );
+      }),
+    remaining(),
+    'Timed out focusing the keyboard target',
+  );
+  if (!focused) {
+    await focusApplicationFrameForKeyboard(page, frame, remaining());
+  }
+}
+
+const SUPPORTED_INTERACTION_ACTIONS = new Set([
+  'check',
+  'clear',
+  'click',
+  'doubleClick',
+  'drag',
+  'fill',
+  'hover',
+  'keyDown',
+  'keyUp',
+  'pointerDown',
+  'pointerMove',
+  'pointerUp',
+  'press',
+  'scroll',
+  'select',
+  'type',
+  'uncheck',
+  'wait',
+  'wheel',
+]);
+
+function validateInteractionStep(
+  step: unknown,
+): asserts step is BrowserInteractionStep {
+  if (step == null || typeof step !== 'object') {
+    throw new Error('browser_interact steps must be objects');
+  }
+  const candidate = step as BrowserInteractionStep;
+  if (!SUPPORTED_INTERACTION_ACTIONS.has(candidate.action)) {
+    throw new Error(
+      `Unsupported browser interaction action: ${candidate.action}`,
+    );
+  }
+  if (candidate.durationMs != null && candidate.action !== 'wait') {
+    throw new Error('durationMs is supported only for wait actions');
+  }
+  if (candidate.action !== 'wait' || candidate.durationMs == null) {
+    return;
+  }
+  if (
+    !Number.isInteger(candidate.durationMs) ||
+    candidate.durationMs < 0 ||
+    candidate.durationMs > MAX_BROWSER_INTERACTION_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `wait durationMs must be an integer between 0 and ${MAX_BROWSER_INTERACTION_TIMEOUT_MS}`,
+    );
+  }
+  if (
+    candidate.state != null ||
+    candidate.text != null ||
+    candidate.path != null ||
+    candidate.loadState != null ||
+    candidate.ref != null ||
+    candidate.locator != null ||
+    candidate.point != null ||
+    candidate.targetRef != null ||
+    candidate.targetLocator != null ||
+    candidate.targetPoint != null
+  ) {
+    throw new Error(
+      'wait durationMs cannot be combined with a wait condition or target',
+    );
+  }
+}
+
 async function executeInteractionStep(
   page: Page,
   frame: Frame,
   recipes: Map<string, BrowserSnapshotRecipe>,
   step: BrowserInteractionStep,
   remainingBatchTimeoutMs: number,
+  pressedKeys: Set<string>,
 ): Promise<void> {
+  if (step.durationMs != null && step.action !== 'wait') {
+    throw new Error('durationMs is supported only for wait actions');
+  }
+
   const timeout = Math.min(
     MAX_BROWSER_INTERACTION_TIMEOUT_MS,
     Math.max(
@@ -1221,6 +1466,8 @@ async function executeInteractionStep(
       ),
     ),
   );
+  const stepDeadline = Date.now() + timeout;
+  const remainingStepTimeout = () => Math.max(1, stepDeadline - Date.now());
   const button = step.button ?? 'left';
   let stepLocator: Locator | null = null;
   const locator = async () =>
@@ -1294,14 +1541,81 @@ async function executeInteractionStep(
         throw new Error('press requires key');
       }
       if (step.ref || step.locator) {
-        await (
-          await locator()
-        ).press(step.key, {
-          timeout,
-        });
+        await focusKeyboardTarget(
+          page,
+          frame,
+          await locator(),
+          remainingStepTimeout(),
+        );
+        await runWithInteractionTimeout(
+          () => page.keyboard.press(step.key!),
+          remainingStepTimeout(),
+          'press timed out',
+        );
       } else {
-        await page.keyboard.press(step.key);
+        await focusApplicationFrameForKeyboard(
+          page,
+          frame,
+          remainingStepTimeout(),
+        );
+        await runWithInteractionTimeout(
+          () => page.keyboard.press(step.key!),
+          remainingStepTimeout(),
+          'press timed out',
+        );
       }
+      return;
+    }
+    case 'keyDown': {
+      if (!step.key) {
+        throw new Error('keyDown requires key');
+      }
+      if (step.ref || step.locator) {
+        await focusKeyboardTarget(
+          page,
+          frame,
+          await locator(),
+          remainingStepTimeout(),
+        );
+      } else {
+        await focusApplicationFrameForKeyboard(
+          page,
+          frame,
+          remainingStepTimeout(),
+        );
+      }
+      await runWithInteractionTimeout(
+        () => page.keyboard.down(step.key!),
+        remainingStepTimeout(),
+        'keyDown timed out',
+      );
+      pressedKeys.add(step.key);
+      return;
+    }
+    case 'keyUp': {
+      if (!step.key) {
+        throw new Error('keyUp requires key');
+      }
+      if (step.ref || step.locator) {
+        await focusKeyboardTarget(
+          page,
+          frame,
+          await locator(),
+          remainingStepTimeout(),
+        );
+      } else {
+        await focusApplicationFrameForKeyboard(
+          page,
+          frame,
+          remainingStepTimeout(),
+        );
+      }
+      await runWithInteractionTimeout(
+        () => page.keyboard.up(step.key!),
+        remainingStepTimeout(),
+        'keyUp timed out',
+      );
+      pressedKeys.delete(step.key);
       return;
     }
     case 'check':
@@ -1353,6 +1667,38 @@ async function executeInteractionStep(
       return;
     }
     case 'wait': {
+      if (step.durationMs != null) {
+        if (
+          !Number.isInteger(step.durationMs) ||
+          step.durationMs < 0 ||
+          step.durationMs > MAX_BROWSER_INTERACTION_TIMEOUT_MS
+        ) {
+          throw new Error(
+            `wait durationMs must be an integer between 0 and ${MAX_BROWSER_INTERACTION_TIMEOUT_MS}`,
+          );
+        }
+        if (
+          step.state != null ||
+          step.text != null ||
+          step.path != null ||
+          step.loadState != null ||
+          step.ref != null ||
+          step.locator != null ||
+          step.point != null ||
+          step.targetRef != null ||
+          step.targetLocator != null ||
+          step.targetPoint != null
+        ) {
+          throw new Error(
+            'wait durationMs cannot be combined with a wait condition or target',
+          );
+        }
+        if (step.durationMs > remainingBatchTimeoutMs) {
+          throw new Error('wait durationMs exceeds the remaining batch budget');
+        }
+        await page.waitForTimeout(step.durationMs);
+        return;
+      }
       if (step.state) {
         await waitForLocatorState(page, await locator(), step.state, timeout);
         return;

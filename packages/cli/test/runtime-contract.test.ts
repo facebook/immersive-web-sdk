@@ -267,6 +267,32 @@ describe('runtime contract scene tools', () => {
       params: { steps: [{ action: 'click', ref: 'e1' }] },
       target: { role: 'app' },
     });
+    const heldKeyBatch = {
+      steps: [
+        { action: 'keyDown', key: 'KeyW' },
+        { action: 'wait', durationMs: 250 },
+        { action: 'keyUp', key: 'KeyW' },
+      ],
+    };
+    expect(resolveRuntimeOperationRequest(interact, heldKeyBatch)).toEqual({
+      params: heldKeyBatch,
+      target: { role: 'app' },
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(interact, {
+        steps: [{ action: 'wait', durationMs: -1 }],
+      }),
+    ).toThrow('browser_interact.steps[0].durationMs must be at least 0');
+    expect(() =>
+      resolveRuntimeOperationRequest(interact, {
+        steps: [{ action: 'wait', durationMs: 12_001 }],
+      }),
+    ).toThrow('browser_interact.steps[0].durationMs must be at most 12000');
+    expect(() =>
+      resolveRuntimeOperationRequest(interact, {
+        steps: [{ action: 'keyDown', key: 'x'.repeat(101) }],
+      }),
+    ).toThrow('browser_interact.steps[0].key allows at most 100 characters');
   });
 
   test('turns result._tab into a strict routing precondition', () => {

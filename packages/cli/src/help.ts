@@ -55,6 +55,20 @@ function formatSchemaPropertyLines(
     }
   }
 
+  if (schema.items?.properties) {
+    const itemRequired = new Set(schema.items.required ?? []);
+    for (const [name, itemSchema] of Object.entries(schema.items.properties)) {
+      lines.push(
+        ...formatSchemaPropertyLines(
+          `${propertyPath}[].${name}`,
+          itemSchema,
+          itemRequired.has(name),
+          indent + 2,
+        ),
+      );
+    }
+  }
+
   if (schema.items?.enum?.length) {
     lines.push(`${prefix}  item values: ${schema.items.enum.join(', ')}`);
   }

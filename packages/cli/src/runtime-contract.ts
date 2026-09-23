@@ -1226,7 +1226,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'browser_interact',
     description:
-      'Perform up to 10 trusted Playwright actions against the current application. Prefer refs from browser_snapshot; use coordinates for canvas input. This tool does not navigate to arbitrary URLs.',
+      'Perform up to 10 trusted Playwright actions against the current application. Prefer refs from browser_snapshot; use coordinates for canvas input. Hold keys within one batch with keyDown, wait, and keyUp; keyDown and keyUp focus an optional ref or locator, and any held keys are released when the batch ends. This tool does not navigate to arbitrary URLs.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -1260,6 +1260,8 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
                   'type',
                   'clear',
                   'press',
+                  'keyDown',
+                  'keyUp',
                   'check',
                   'uncheck',
                   'select',
@@ -1314,7 +1316,19 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
                 type: 'string',
                 enum: ['left', 'middle', 'right'],
               },
-              key: { type: 'string' },
+              key: {
+                type: 'string',
+                maxLength: 100,
+                description:
+                  'Keyboard key for press, keyDown, or keyUp. Keys held by keyDown are scoped to this batch and released automatically at the end.',
+              },
+              durationMs: {
+                type: 'integer',
+                minimum: 0,
+                maximum: 12000,
+                description:
+                  'For wait, pause for this duration within the batch timeout.',
+              },
               value: { type: 'string' },
               values: { type: 'array', items: { type: 'string' } },
               text: { type: 'string' },

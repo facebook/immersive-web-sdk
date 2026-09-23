@@ -231,10 +231,30 @@ add `canvasRef` to make coordinates relative to a canvas.
 
 Supported actions are `click`, `doubleClick`, `hover`, `pointerMove`, `pointerDown`,
 `pointerUp`, `wheel`, `fill`, `type`, `clear`, `press`, `check`, `uncheck`, `select`,
-`scroll`, `drag`, and `wait`. Batch and per-step timeouts are capped at 12,000
-milliseconds (the batch defaults to 10,000), leaving time inside the host command
-budget to restore the previous workspace view. A `wait` step can wait for element
-state, load state, or an expected application path; it does not initiate navigation.
+`scroll`, `drag`, `keyDown`, `keyUp`, and `wait`. Keyboard actions target the
+current application, including its runtime frame in the managed workspace. `press`
+is atomic. To hold a key for frame-sampled controls, keep `keyDown`, a duration-only
+`wait`, and `keyUp` in the same batch:
+
+```json
+{
+  "steps": [
+    { "action": "keyDown", "key": "KeyW" },
+    { "action": "wait", "durationMs": 500 },
+    { "action": "keyUp", "key": "KeyW" }
+  ]
+}
+```
+
+Held keys cannot span batches. IWSDK releases any unmatched keys when the batch
+succeeds or fails. A duration wait accepts `durationMs` from 0 through 12,000, must
+fit the remaining batch budget, and cannot be combined with `state`, `text`, `path`,
+or `loadState`.
+
+Batch and per-step timeouts are capped at 12,000 milliseconds (the batch defaults to
+10,000), leaving time inside the host command budget to restore the previous
+workspace view. A condition-based `wait` step can wait for element state, load state,
+or an expected application path; it does not initiate navigation.
 
 The result lists completed steps and their durations. On failure, it identifies the
 failed step, reports whether retrying is appropriate, suggests recovery, and attempts

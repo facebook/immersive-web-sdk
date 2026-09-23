@@ -49,7 +49,10 @@ const WORKSPACE_HTML = `<!doctype html>
       <button data-workspace-view-button="runtime">Runtime</button>
       <button data-workspace-view-button="editor">Editor</button>
     </nav>
-    <main id="editor">Editor view</main>
+    <main id="editor">
+      Editor view
+      <input id="editor-focus" aria-label="Editor focus" />
+    </main>
     <iframe id="workspace-runtime-frame" title="Application runtime" src="/runtime" width="800" height="600" style="border: 0"></iframe>
     <img alt="attacker probe" src="__ATTACKER_ORIGIN__/pixel.png" />
     <script>
@@ -98,6 +101,16 @@ const WORKSPACE_HTML = `<!doctype html>
       for (const button of document.querySelectorAll('[data-workspace-view-button]')) {
         button.addEventListener('click', () => setView(button.dataset.workspaceViewButton));
       }
+      window.keyboardEvents = [];
+      for (const type of ['keydown', 'keyup']) {
+        document.addEventListener(type, (event) => {
+          window.keyboardEvents.push({
+            code: event.code,
+            targetId: event.target?.id || null,
+            type: event.type,
+          });
+        });
+      }
       setView('editor');
       console.log('editor evidence fixture ready');
     </script>
@@ -132,6 +145,16 @@ const RUNTIME_HTML = `<!doctype html>
       const generation = Number(sessionStorage.getItem('workspace-generation') || '0') + 1;
       sessionStorage.setItem('workspace-generation', String(generation));
       window.__IWSDK_MCP_TAB_GENERATION = generation;
+      window.keyboardEvents = [];
+      for (const type of ['keydown', 'keyup']) {
+        document.addEventListener(type, (event) => {
+          window.keyboardEvents.push({
+            code: event.code,
+            targetId: event.target?.id || null,
+            type: event.type,
+          });
+        });
+      }
       const recordDispatch = (method) => {
         const calls = JSON.parse(localStorage.getItem('evidence-dispatches') || '[]');
         calls.push('runtime:' + method);
@@ -489,7 +512,7 @@ describe('managed browser workspace application surface', () => {
     });
   }, 30_000);
 
-  test('characterizes all 17 trusted interaction actions', async () => {
+  test('characterizes trusted pointer, form, and conditional-wait actions', async () => {
     const snapshot = await browser.snapshotApplication();
     const input = snapshot.elements.find(
       (element) => element.role === 'textbox' && element.name === 'Name',
@@ -1078,6 +1101,251 @@ describe('managed browser workspace application surface', () => {
     expect(
       await page.locator('html').getAttribute('data-iwsdk-workspace-view'),
     ).toBe('editor');
+  }, 30_000);
+
+  test('routes page-scoped keyboard actions to the framed application', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+
+    await page.locator('#editor-focus').focus();
+    await page.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+    await frame.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+
+    const interaction = await browser.interactApplication({
+      steps: [
+        { action: 'press', key: 'KeyQ' },
+        { action: 'keyDown', key: 'KeyW' },
+        { action: 'wait', durationMs: 20 },
+        { action: 'keyUp', key: 'KeyW' },
+      ],
+    });
+
+    expect(interaction.success).toBe(true);
+    expect(await page.evaluate(() => (window as any).keyboardEvents)).toEqual(
+      [],
+    );
+    expect(await frame.evaluate(() => (window as any).keyboardEvents)).toEqual([
+      expect.objectContaining({ code: 'KeyQ', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyQ', type: 'keyup' }),
+      expect.objectContaining({ code: 'KeyW', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyW', type: 'keyup' }),
+    ]);
+
+    await page.locator('#editor-focus').focus();
+    await page.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+    await frame.evaluate(() => {
+      (window as any).keyboardEvents = [];
+      const stealFocus = (event: KeyboardEvent) => {
+        if (event.code !== 'KeyA') {
+          return;
+        }
+        window.removeEventListener('keydown', stealFocus);
+        (
+          window.parent.document.querySelector(
+            '#editor-focus',
+          ) as HTMLElement | null
+        )?.focus();
+      };
+      window.addEventListener('keydown', stealFocus);
+    });
+
+    const releasedAfterFocusLoss = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyA' },
+        { action: 'wait', durationMs: 20 },
+      ],
+    });
+
+    expect(releasedAfterFocusLoss.success).toBe(true);
+    expect(await page.evaluate(() => (window as any).keyboardEvents)).toEqual(
+      [],
+    );
+    expect(await frame.evaluate(() => (window as any).keyboardEvents)).toEqual([
+      expect.objectContaining({ code: 'KeyA', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyA', type: 'keyup' }),
+    ]);
+    expect(
+      await page.locator('html').getAttribute('data-iwsdk-workspace-view'),
+    ).toBe('editor');
+  }, 30_000);
+
+  test('focuses held-key targets and releases keys after malformed raw steps', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    await frame.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+
+    const targeted = await browser.interactApplication({
+      steps: [
+        {
+          action: 'keyDown',
+          key: 'KeyZ',
+          locator: { name: 'Name', role: 'textbox' },
+        },
+        { action: 'wait', durationMs: 20 },
+        {
+          action: 'keyUp',
+          key: 'KeyZ',
+          locator: { name: 'Name', role: 'textbox' },
+        },
+      ],
+    });
+
+    expect(targeted.success).toBe(true);
+    expect(await frame.evaluate(() => (window as any).keyboardEvents)).toEqual([
+      expect.objectContaining({
+        code: 'KeyZ',
+        targetId: 'workspace-name',
+        type: 'keydown',
+      }),
+      expect.objectContaining({
+        code: 'KeyZ',
+        targetId: 'workspace-name',
+        type: 'keyup',
+      }),
+    ]);
+
+    const snapshot = await browser.snapshotApplication();
+    const canvas = snapshot.elements.find(
+      (element) =>
+        element.tag === 'canvas' && element.name === 'Workspace canvas',
+    );
+    expect(canvas?.ref).toBeTruthy();
+    await page.locator('#editor-focus').focus();
+    await page.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+    await frame.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+
+    const targetedCanvas = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyC', ref: canvas!.ref },
+        { action: 'keyUp', key: 'KeyC', ref: canvas!.ref },
+      ],
+    });
+    expect(targetedCanvas.success).toBe(true);
+    expect(await page.evaluate(() => (window as any).keyboardEvents)).toEqual(
+      [],
+    );
+    expect(await frame.evaluate(() => (window as any).keyboardEvents)).toEqual([
+      expect.objectContaining({ code: 'KeyC', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyC', type: 'keyup' }),
+    ]);
+
+    await frame.evaluate(() => {
+      (window as any).keyboardEvents = [];
+    });
+    const failedAfterKeyDown = await browser.interactApplication({
+      steps: [
+        { action: 'keyDown', key: 'KeyX' },
+        { action: 'click', ref: 'missing-ref' },
+      ],
+    });
+    expect(failedAfterKeyDown).toMatchObject({
+      failure: {
+        action: 'click',
+        index: 1,
+        message: 'Unknown or stale browser ref: missing-ref',
+      },
+      success: false,
+    });
+    expect(await frame.evaluate(() => (window as any).keyboardEvents)).toEqual([
+      expect.objectContaining({ code: 'KeyX', type: 'keydown' }),
+      expect.objectContaining({ code: 'KeyX', type: 'keyup' }),
+    ]);
+
+    await frame.evaluate(() => {
+      (document.querySelector('#workspace-name') as HTMLInputElement).value =
+        'before-validation';
+    });
+    const targetedDuration = await browser.interactApplication({
+      steps: [
+        {
+          action: 'fill',
+          locator: { name: 'Name', role: 'textbox' },
+          value: 'should-not-run',
+        },
+        {
+          action: 'wait',
+          durationMs: 20,
+          locator: { name: 'Name', role: 'textbox' },
+        },
+      ],
+    });
+    expect(targetedDuration).toMatchObject({
+      failure: {
+        index: 1,
+        message:
+          'wait durationMs cannot be combined with a wait condition or target',
+      },
+      success: false,
+    });
+    expect(
+      await frame.evaluate(
+        () =>
+          (document.querySelector('#workspace-name') as HTMLInputElement).value,
+      ),
+    ).toBe('before-validation');
+  }, 30_000);
+
+  test('bounds frame focus and held-key cleanup by the interaction timeout', async () => {
+    const page = browser.page as any;
+    const frame = page
+      .frames()
+      .find((candidate: any) => candidate.url().includes('/runtime'));
+    expect(frame).toBeDefined();
+    const originalEvaluate = frame.evaluate.bind(frame);
+    let focusCalls = 0;
+    const evaluate = vi
+      .spyOn(frame, 'evaluate')
+      .mockImplementation((pageFunction: any, argument?: any) => {
+        if (String(pageFunction).includes('window.focus')) {
+          focusCalls += 1;
+          if (focusCalls > 1) {
+            return new Promise(() => {});
+          }
+        }
+        return originalEvaluate(pageFunction, argument);
+      });
+
+    try {
+      const startedAt = Date.now();
+      const result = await browser.interactApplication({
+        steps: [
+          { action: 'keyDown', key: 'KeyT' },
+          { action: 'wait', durationMs: 1000 },
+        ],
+        timeoutMs: 500,
+      });
+      const elapsedMs = Date.now() - startedAt;
+      expect(result).toMatchObject({
+        failure: {
+          action: 'wait',
+          index: 1,
+          message: 'wait durationMs exceeds the remaining batch budget',
+        },
+        success: false,
+      });
+      expect(elapsedMs).toBeLessThan(1500);
+    } finally {
+      evaluate.mockRestore();
+      await page.keyboard.up('KeyT').catch(() => {});
+    }
   }, 30_000);
 
   test('serializes evidence collectors with interaction, screenshot, and profiling', async () => {
