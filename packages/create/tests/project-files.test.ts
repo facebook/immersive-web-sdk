@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSceneDocument } from '@iwsdk/scene-composition';
@@ -17,8 +18,22 @@ const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
+const REPOSITORY_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
 const TEMPLATE_ROOT = path.join(PACKAGE_ROOT, 'dist', 'template');
 const npmSource = { getPackageInstallSpec: () => undefined };
+
+async function listUIKitMLFiles(directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listUIKitMLFiles(entryPath)));
+    } else if (entry.isFile() && entry.name.endsWith('.uikitml')) {
+      files.push(entryPath);
+    }
+  }
+  return files;
+}
 
 describe('common starter project files', () => {
   it('uses byte-identical TypeScript application source for every target', async () => {
@@ -97,7 +112,7 @@ describe('common starter project files', () => {
     );
   });
 
-  it('demonstrates the bundled Horizon kit, Lucide icons, and a remote font', async () => {
+  it('demonstrates the bundled Horizon kit and Lucide icons without network fonts', async () => {
     const files = await buildStarterProjectFiles({
       appName: 'uikit-app',
       configuration: getRecommendedConfiguration('vr'),
@@ -107,13 +122,24 @@ describe('common starter project files', () => {
     });
     const panel = textFile(files, 'public/ui/welcome.uikitml');
 
-    expect(panel).toContain('@font-face');
-    expect(panel).toContain('font-family: "DM Sans"');
-    expect(panel).toContain('https://fonts.gstatic.com/s/dmsans/');
+    expect(panel).not.toContain('@font-face');
+    expect(panel).not.toContain('font-family: "DM Sans"');
+    expect(panel).not.toContain('fonts.gstatic.com');
     expect(panel).toContain('<Panel class="panel-root">');
     expect(panel).toContain('<Button id="xr-button"');
     expect(panel).toContain('<RectangleGoggles>');
     expect(panel).toContain('<LogIn>');
+  });
+
+  it('keeps canonical UIKitML panels free of network-required fonts', async () => {
+    const panels = await listUIKitMLFiles(
+      path.join(REPOSITORY_ROOT, 'examples'),
+    );
+    expect(panels.length).toBeGreaterThan(0);
+    for (const panelPath of panels) {
+      const panel = await readFile(panelPath, 'utf8');
+      expect(panel).not.toContain('fonts.gstatic.com');
+    }
   });
 
   it('uses build-time mechanical JavaScript output with no TypeScript files', async () => {
