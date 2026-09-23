@@ -127,10 +127,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isBrowserRelaunchedResult(value: unknown): boolean {
-  return isRecord(value) && value.status === 'browser_relaunched';
-}
-
 function withBrowserStatus(
   result: unknown,
   session: RuntimeSession,
@@ -226,12 +222,6 @@ export async function handleRuntimeOperation(
   let rawResult;
   try {
     rawResult = await sendRuntimeCommand(sendOptions);
-    if (
-      operation.mcpName === 'browser_screenshot' &&
-      isBrowserRelaunchedResult(rawResult.result ?? rawResult)
-    ) {
-      rawResult = await sendRuntimeCommand(sendOptions);
-    }
   } catch (error) {
     if (
       operation.mcpName === 'xr_accept_session' &&
@@ -242,8 +232,10 @@ export async function handleRuntimeOperation(
     throw error;
   }
 
+  // Managed browser status would misdescribe a headset's session.
   let result: unknown =
-    operation.mcpName === 'xr_get_session_status'
+    operation.mcpName === 'xr_get_session_status' &&
+    command.target?.deviceClass !== 'physical'
       ? withBrowserStatus(rawResult.result ?? rawResult, session)
       : (rawResult.result ?? rawResult);
   if (operation.mcpName === 'browser_interact') {

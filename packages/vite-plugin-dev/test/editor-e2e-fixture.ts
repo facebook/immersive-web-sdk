@@ -16,6 +16,7 @@ import sharp from 'sharp';
 import { createServer } from 'vite';
 import { expect } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
+import { unusedPort } from './unused-port.js';
 
 export const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -96,6 +97,8 @@ export interface EditorTestHarness {
 
 export interface EditorTestHarnessOptions {
   managedBrowser?: boolean;
+  https?: boolean;
+  nativeXR?: boolean;
 }
 
 export async function createEditorTestHarness(
@@ -122,7 +125,7 @@ export async function createEditorTestHarness(
     server = await createServer({
       cacheDir: path.join(tempRoot, '.vite'),
       logLevel: 'silent',
-      plugins: [iwsdkDev()],
+      plugins: [iwsdkDev({ https: options.https })],
       resolve: {
         // The fixture uses IWSDK source from outside its temporary app root,
         // whereas a real installed app resolves this transitive dependency from
@@ -165,7 +168,7 @@ export async function createEditorTestHarness(
           allow: [tempRoot, REPO_ROOT],
         },
         host: '127.0.0.1',
-        port: 0,
+        port: await unusedPort(),
         strictPort: false,
       },
     });
@@ -195,6 +198,15 @@ export async function createEditorTestHarness(
     async close() {
       await browser.close();
       await server.close();
+      if (options.managedBrowser) {
+        const { managedBrowserProfilePath } = await import(
+          '../src/managed-browser/launch.js'
+        );
+        await rm(managedBrowserProfilePath(tempRoot), {
+          force: true,
+          recursive: true,
+        });
+      }
       await rm(tempRoot, { force: true, recursive: true });
     },
     async openApp() {
@@ -341,7 +353,7 @@ export async function expectRealWebGLViewport(
     'swiftshader',
   );
   expect(await hasNonBlankCanvas(context.page, '#scene-canvas')).toBe(true);
-  expect(context.errors()).toEqual([]);
+  expect(context.errors(), context.failedRequests.join('\n')).toEqual([]);
   expect(
     context.failedRequests.filter(
       (entry) =>
@@ -498,7 +510,7 @@ async function writeFixtureProject(
         assets: { module: './src/assets' },
         components: { module: './src/components' },
         world: {
-          xr: false,
+          xr: _options.nativeXR ? { mode: 'vr', offer: 'always' } : false,
           input: { canvasPointerEvents: false },
           render: {
             camera: { lookAt: [0, 0, 0], position: [3, 2.5, 5] },

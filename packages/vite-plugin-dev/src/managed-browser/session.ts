@@ -186,6 +186,7 @@ export async function launchManagedBrowser(
   const { browser, browserAutomationEndpoint, context, dispose, page } =
     await openManagedChromium({
       browserAutomation,
+      workspaceRoot,
       headless,
       launchUrl,
       managedAccess,
@@ -198,7 +199,9 @@ export async function launchManagedBrowser(
     managedAccess?.token,
     browserAutomationEndpoint,
   ]);
-  const commandCoordinator = new ManagedBrowserCommandCoordinator(dispose);
+  const commandCoordinator = new ManagedBrowserCommandCoordinator(dispose, () =>
+    fireCloseCallback(),
+  );
   const profiler = new BrowserProfiler(
     page,
     context,
@@ -215,6 +218,7 @@ export async function launchManagedBrowser(
       managedWorkspaceToken: bootstrap.token,
       page,
       readiness,
+      waitForRuntime: managedAccess?.runtimeIdentity == null,
       signal,
       traceMcp,
       url: bootstrap.url,
@@ -248,7 +252,7 @@ export async function launchManagedBrowser(
     const callback =
       typeof unexpectedCloseState === 'function' ? unexpectedCloseState : null;
     unexpectedCloseState = 'unexpected';
-    void dispose();
+    void dispose().catch(() => {});
     profiler.handleBrowserClose();
     callback?.();
   };

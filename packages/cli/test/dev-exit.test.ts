@@ -5,9 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   describeChildExit,
+  describeStartupExit,
   isAbnormalChildExit,
   shouldOpenExternalBrowser,
 } from '../src/commands/dev.js';
@@ -75,5 +79,36 @@ describe('describeChildExit', () => {
     expect(describeChildExit({ exitCode: null, signal: null })).toBe(
       'Dev server exited abnormally',
     );
+  });
+});
+
+describe('describeStartupExit', () => {
+  const writeLog = (content: string) => {
+    const logPath = path.join(
+      mkdtempSync(path.join(tmpdir(), 'iwsdk-dev-exit-')),
+      'dev.log',
+    );
+    writeFileSync(logPath, content);
+    return logPath;
+  };
+
+  it('names an occupied configured port instead of a generic exit', async () => {
+    const logPath = writeLog(
+      'error when starting dev server:\nError: Port 8081 is already in use\n',
+    );
+    await expect(describeStartupExit(logPath)).resolves.toBe(
+      'Port 8081 is already in use. The runtime keeps its configured port instead of moving; stop the process using it or change server.port.',
+    );
+  });
+
+  it('keeps the generic message for other or unreadable logs', async () => {
+    const generic = 'Dev server exited before registering a runtime session';
+    await expect(
+      describeStartupExit(writeLog('SyntaxError: bad config\n')),
+    ).resolves.toBe(generic);
+    await expect(describeStartupExit('/nonexistent/dev.log')).resolves.toBe(
+      generic,
+    );
+    await expect(describeStartupExit(null)).resolves.toBe(generic);
   });
 });

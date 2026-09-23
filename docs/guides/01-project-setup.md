@@ -247,7 +247,10 @@ Fresh starters ship the `iwsdk` CLI through `@iwsdk/cli`, so the default command
 - `npx @iwsdk/cli dev status` shows the current runtime URL/port and adapter state
 - `npx @iwsdk/cli dev down` stops the managed runtime if you started it in the background
 
-Vite chooses the actual dev-server port, so treat the reported runtime URL as the source of truth instead of hardcoding a port.
+The starter's configured port (8081) is the runtime's address, so an occupied
+port stops `dev up` with an error instead of moving to another port. Stop the
+other process or change `server.port`. Treat the runtime URL reported by the CLI
+as the source of truth instead of hardcoding a port.
 
 ## What's Next
 

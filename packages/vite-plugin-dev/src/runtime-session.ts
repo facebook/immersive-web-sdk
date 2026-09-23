@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdirSync, readFileSync, rmSync } from 'fs';
-import path from 'path';
+import { readFileSync, rmSync } from 'fs';
 import {
   IWSDK_RUNTIME_SESSION_PATH,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
@@ -14,13 +13,14 @@ import {
   type RuntimeSession,
 } from '@iwsdk/cli/contract';
 import {
-  getRuntimeFileLockPath,
   getRuntimeFilePath,
+  getRuntimeProcessStart,
   isRuntimeProcessAlive,
   normalizeWorkspaceRoot,
   readRuntimeJson,
   removeRuntimeFile,
   withRuntimeFileLock,
+  tryRuntimeFileLockSync,
   writeRuntimeJson,
 } from '@iwsdk/cli/runtime-files';
 
@@ -34,6 +34,7 @@ interface RegisterRuntimeSessionInput {
   aiMode?: string;
   browser?: RuntimeBrowserState;
   browserAutomation?: RuntimeSession['browserAutomation'];
+  ownerSessionId?: string;
 }
 
 export class RuntimeSessionOwnershipError extends Error {
@@ -106,7 +107,11 @@ export async function registerRuntimeSession(
         existing != null &&
         existing.sessionId !== input.sessionId &&
         existing.pid !== input.pid &&
-        isRuntimeProcessAlive(existing.pid)
+        isRuntimeProcessAlive(existing.pid) &&
+        !(
+          existing.browser?.lifecycle &&
+          input.ownerSessionId === input.sessionId
+        )
       ) {
         throw new RuntimeSessionOwnershipError(existing);
       }
@@ -120,6 +125,7 @@ export async function registerRuntimeSession(
         sessionId: input.sessionId,
         workspaceRoot,
         pid: input.pid,
+        processStart: getRuntimeProcessStart(input.pid),
         port: input.port,
         localUrl: input.localUrl,
         networkUrls: input.networkUrls ?? [],
@@ -227,22 +233,9 @@ export function unregisterRuntimeSessionSync(
 ): void {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
   const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
-  const lockPath = getRuntimeFileLockPath(filePath);
-  try {
-    mkdirSync(lockPath);
-  } catch {
-    try {
-      const owner = JSON.parse(
-        readFileSync(path.join(lockPath, 'owner.json'), 'utf8'),
-      ) as { pid?: number };
-      if (owner.pid !== process.pid) {
-        return;
-      }
-      rmSync(lockPath, { force: true, recursive: true });
-      mkdirSync(lockPath);
-    } catch {
-      return;
-    }
+  const release = tryRuntimeFileLockSync(filePath);
+  if (!release) {
+    return;
   }
   try {
     let existing: RuntimeSession | null = null;
@@ -253,6 +246,6 @@ export function unregisterRuntimeSessionSync(
       rmSync(filePath, { force: true });
     }
   } finally {
-    rmSync(lockPath, { force: true, recursive: true });
+    release();
   }
 }

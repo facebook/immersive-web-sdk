@@ -19,6 +19,13 @@ import {
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
 
+vi.mock('@iwsdk/cli/runtime-owner', () => ({
+  acquireRuntimeOwner: vi.fn(async () => ({
+    identity: { sessionId: 'test' },
+    release: vi.fn(async () => {}),
+  })),
+}));
+
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
 }));

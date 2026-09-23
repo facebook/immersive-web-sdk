@@ -770,7 +770,8 @@ describe('managed browser desktop development', () => {
     });
     await expect(timedOutActive).rejects.toMatchObject({
       code: 'browser_command_timeout',
-      retryable: true,
+      retryable: false,
+      outcome: 'outcome_unknown',
     });
     await queuedRejection;
     expect(browser.isClosed()).toBe(true);

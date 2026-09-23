@@ -39,7 +39,7 @@ Use `npx @iwsdk/cli dev up --ai-mode agent` for a headless agent session, or
 explicitly.
 
 ::: tip
-Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle and browser opening. Vite still chooses the real port, so treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
+Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle and browser opening. A configured `server.port` (8081 in starters) fails startup when it is occupied instead of moving to another port; treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
 :::
 
 When the server starts, several things happen automatically:
@@ -48,7 +48,7 @@ When the server starts, several things happen automatically:
 2. Runtime and editor views share that one managed browser session
 3. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
 
-If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx @iwsdk/cli dev status`. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
+If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx @iwsdk/cli dev status`. The `dev up` result also reports `browserCommandReady` and may return while a lifecycle-managed browser is still launching. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
 
 ::: tip Optional reference warmup
 If your project installs `@iwsdk/reference`, run `npx @iwsdk/cli reference warmup` once after install. That step prepares the pinned reference corpus under your project's `.iwsdk/reference` state, populates the shared corpus store, and eagerly downloads the pinned model into the shared model cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of relying on the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host it separately before warmup. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.

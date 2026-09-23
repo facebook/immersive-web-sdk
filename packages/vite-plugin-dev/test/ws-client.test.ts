@@ -134,11 +134,14 @@ describe('MCPWebSocketClient', () => {
     // Mock window for browser-like environment
     originalWindow = (globalThis as any).window;
     (globalThis as any).window = {
+      history: { state: { test: true }, replaceState: vi.fn() },
       location: {
         protocol: 'http:',
         hostname: 'localhost',
         pathname: '/',
         port: '5173',
+        href: 'http://localhost:5173/?__iwsdk_headset=test#view',
+        replace: vi.fn(),
         reload: vi.fn(),
       },
     };
@@ -469,6 +472,111 @@ describe('MCPWebSocketClient', () => {
   });
 
   describe('message handling', () => {
+    test('waits for framework XR teardown before acknowledging and navigating', async () => {
+      vi.useFakeTimers();
+      let endSession!: () => void;
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {
+        prepareForReload: () =>
+          new Promise<void>((resolve) => {
+            endSession = resolve;
+          }),
+      };
+      client = initMCPBridge({ deviceClass: 'physical' });
+      await vi.advanceTimersByTimeAsync(0);
+      mockWebSocketInstance!.simulateMessage({
+        id: 'reload',
+        method: 'reload_page',
+        params: {},
+      });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(0);
+      expect(window.location.replace).not.toHaveBeenCalled();
+      endSession();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+        id: 'reload',
+        result: { success: true },
+      });
+      expect(window.location.replace).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(window.location.replace).toHaveBeenCalledTimes(1);
+      const destination = new URL(
+        vi.mocked(window.location.replace).mock.calls[0][0],
+      );
+      expect(destination.searchParams.get('__iwsdk_reload')).toBeTruthy();
+      destination.searchParams.delete('__iwsdk_reload');
+      expect(destination.href).toBe(
+        'http://localhost:5173/?__iwsdk_headset=test#view',
+      );
+      expect(window.location.reload).not.toHaveBeenCalled();
+    });
+
+    test('bootstrap removes only the private reload query and preserves history state', () => {
+      window.location.href =
+        'http://localhost:5173/?__iwsdk_headset=test&__iwsdk_reload=nonce#view';
+      client = new MCPWebSocketClient(mockDevice as any);
+      expect(window.history.replaceState).toHaveBeenCalledExactlyOnceWith(
+        { test: true },
+        '',
+        'http://localhost:5173/?__iwsdk_headset=test#view',
+      );
+    });
+
+    test.each([
+      '',
+      '?',
+      '#',
+      '?#',
+      '?__iwsdk_headset=t&q=a%20b&debug#/r?x=1',
+      '?path=/levels/2&tags=a,b#view',
+      '?cfg={%22a%22:1}&',
+      '?debug#route&__iwsdk_reload=app-fragment',
+      '?value=?__iwsdk_reload=app-value',
+      'level&__iwsdk_reload=path-value',
+    ])('reload round-trips the exact raw URL: %s', async (suffix) => {
+      vi.useFakeTimers();
+      const original = `http://localhost:5173/${suffix}`;
+      window.location.href = original;
+      client = initMCPBridge({ deviceClass: 'physical' });
+      await vi.advanceTimersByTimeAsync(0);
+      mockWebSocketInstance!.simulateMessage({
+        id: 'reload',
+        method: 'reload_page',
+        params: {},
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      const destination = vi.mocked(window.location.replace).mock.calls[0][0];
+      expect(new URL(destination).search).not.toBe(new URL(original).search);
+      client.disconnect();
+      window.location.href = destination;
+      client = new MCPWebSocketClient(mockDevice as any);
+      expect(window.history.replaceState).toHaveBeenCalledExactlyOnceWith(
+        { test: true },
+        '',
+        original,
+      );
+    });
+
+    test('reports failed XR teardown without starting navigation', async () => {
+      vi.useFakeTimers();
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {
+        prepareForReload: () => Promise.reject(new Error('XR teardown failed')),
+      };
+      client = initMCPBridge({ deviceClass: 'physical' });
+      await vi.advanceTimersByTimeAsync(0);
+      mockWebSocketInstance!.simulateMessage({
+        id: 'reload',
+        method: 'reload_page',
+        params: {},
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+        id: 'reload',
+        error: { message: 'XR teardown failed' },
+      });
+      expect(window.location.replace).not.toHaveBeenCalled();
+    });
+
     test('responds before reloading a relayed physical page', async () => {
       client = new MCPWebSocketClient(mockDevice as any);
       client.connect();
@@ -490,7 +598,7 @@ describe('MCPWebSocketClient', () => {
         result: { success: true, message: 'Page reload initiated' },
       });
       await vi.waitFor(() => {
-        expect((globalThis as any).window.location.reload).toHaveBeenCalled();
+        expect((globalThis as any).window.location.replace).toHaveBeenCalled();
       });
       expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
     });

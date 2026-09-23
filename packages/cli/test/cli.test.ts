@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   INTERNAL_BROWSER_PROBE_METHOD,
+  INTERNAL_RUNTIME_SHUTDOWN_METHOD,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
   type RuntimeBrowserState,
 } from '@iwsdk/cli/contract';
@@ -20,6 +21,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { WebSocketServer } from 'ws';
 import type { AiTool } from '../src/runtime-contract.js';
 import { getRuntimeFileLockPath } from '../src/runtime-files.js';
+import {
+  acquireRuntimeOwner,
+  inspectRuntimeOwner,
+  runtimeOwnerEndpoint,
+} from '../src/runtime-owner.js';
 import {
   getRuntimeLaunchFilePath,
   getRuntimeSessionFilePath,
@@ -36,6 +42,10 @@ const CLI_PACKAGE_ROOT = path.resolve(
 const WORKSPACE_ROOT = path.resolve(CLI_PACKAGE_ROOT, '..', '..');
 const CLI_PATH = path.join(CLI_PACKAGE_ROOT, 'dist', 'cli.js');
 const CLI_PACKAGE_JSON_PATH = path.join(CLI_PACKAGE_ROOT, 'package.json');
+const CLI_RUNTIME_OWNER_URL = new URL(
+  '../dist/runtime-owner.js',
+  import.meta.url,
+).href;
 
 const ONE_BY_ONE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0ZQAAAAASUVORK5CYII=';
@@ -421,15 +431,39 @@ function buildManagedRuntimeScript(
     finalBrowserStatus?: RuntimeBrowserState['status'];
     finalBrowserDelayMs?: number;
     finalBrowserError?: RuntimeBrowserState['lastError'];
+    includeLifecycle?: boolean;
+    includeOwner?: boolean;
     probeReadyDelayMs?: number;
     probeWritesSession?: boolean;
     startupMarkerPath?: string;
     workspaceOnly?: boolean;
   } = {},
 ): string {
+  const includeLifecycle = options.includeLifecycle ?? false;
+  const includeOwner = options.includeOwner ?? true;
+  const lifecycle = (state: 'launching' | 'running') => ({
+    state,
+    policy: 'eager' as const,
+    sessionId,
+    browserEpoch: 1,
+    revision: state === 'running' ? 2 : 1,
+    stateEnteredAt: new Date().toISOString(),
+    lastObservedAt: new Date().toISOString(),
+    failures: 0,
+    cleanupConfirmed: true,
+    attemptLimit: 3,
+    historyTruncated: false,
+    retryEligible: false,
+    nextAction:
+      state === 'running'
+        ? 'Use runtime_list_targets to inspect endpoint readiness.'
+        : 'Use runtime_wait to observe launch progress.',
+    history: [],
+  });
   const initialBrowser = JSON.stringify(
     createBrowserState(options.initialBrowserStatus ?? 'launching', {
       commandReady: false,
+      ...(includeLifecycle ? { lifecycle: lifecycle('launching') } : {}),
     }),
   );
   const finalBrowser =
@@ -437,6 +471,7 @@ function buildManagedRuntimeScript(
       ? JSON.stringify(
           createBrowserState(options.finalBrowserStatus ?? 'connected', {
             commandReady: false,
+            ...(includeLifecycle ? { lifecycle: lifecycle('running') } : {}),
             ...(options.finalBrowserError
               ? {
                   lastError: options.finalBrowserError,
@@ -458,6 +493,7 @@ const require = createRequire(${JSON.stringify(CLI_PACKAGE_JSON_PATH)});
 const { WebSocketServer } = require('ws');
 
 const workspaceRoot = realpathSync.native(process.cwd());
+const ownerLease = ${includeOwner ? `await (await import(${JSON.stringify(CLI_RUNTIME_OWNER_URL)})).acquireRuntimeOwner(workspaceRoot, ${JSON.stringify(sessionId)})` : 'null'};
 const startupMarkerPath = ${JSON.stringify(options.startupMarkerPath ?? null)};
 if (startupMarkerPath) {
   appendFileSync(startupMarkerPath, String(process.pid) + '\\n', 'utf8');
@@ -505,6 +541,11 @@ async function writeSession(port, browser) {
 wss.on('connection', (socket) => {
   socket.on('message', (chunk) => {
     const request = JSON.parse(chunk.toString());
+    if (request.method === ${JSON.stringify(INTERNAL_RUNTIME_SHUTDOWN_METHOD)}) {
+      socket.send(JSON.stringify({ id: request.id, result: { accepted: true } }));
+      setImmediate(() => process.kill(process.pid, 'SIGTERM'));
+      return;
+    }
     if (request.method !== ${JSON.stringify(INTERNAL_BROWSER_PROBE_METHOD)}) {
       return;
     }
@@ -583,6 +624,7 @@ server.listen(0, '127.0.0.1', async () => {
 
 process.on('SIGTERM', async () => {
   await rm(sessionFile, { force: true }).catch(() => {});
+  await ownerLease?.release();
   wss.close(() => server.close(() => process.exit(0)));
 });
 
@@ -702,7 +744,7 @@ describe('runtime commands and project resolution', () => {
     }
   });
 
-  test('retries a screenshot after browser relaunch and creates output parents', async () => {
+  test('reports recovery without replay and writes the screenshot on a fresh command', async () => {
     const runtime = await startRuntimeFixture(appA, {
       relaunchFirstScreenshot: true,
     });
@@ -714,6 +756,15 @@ describe('runtime commands and project resolution', () => {
     );
 
     try {
+      const recovered = await runCli(
+        ['browser', 'screenshot', '--output-file', requestedScreenshot],
+        appA,
+      );
+      expect(JSON.parse(recovered.stdout).data.result.status).toBe(
+        'browser_relaunched',
+      );
+      expect(runtime.getScreenshotRequestCount()).toBe(1);
+      expect(existsSync(requestedScreenshot)).toBe(false);
       const screenshot = await runCli(
         ['browser', 'screenshot', '--output-file', requestedScreenshot],
         appA,
@@ -1363,6 +1414,7 @@ process.exit(1);
     expect(up.exitCode).toBe(0);
     const parsedUp = JSON.parse(up.stdout);
     expect(parsedUp.data.action).toBe('started');
+    expect(parsedUp.data.browserCommandReady).toBe(true);
     expect(parsedUp.data.session.localUrl).toContain('http://localhost:');
     expect(parsedUp.data.session.browser.status).toBe('connected');
     expect(parsedUp.data.session.browser.commandReady).toBe(true);
@@ -1414,6 +1466,7 @@ process.exit(1);
     expect(again.exitCode).toBe(0);
     const parsedAgain = JSON.parse(again.stdout);
     expect(parsedAgain.data.action).toBe('attached');
+    expect(parsedAgain.data.browserCommandReady).toBe(true);
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
@@ -1469,6 +1522,41 @@ process.exit(1);
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode, down.stderr).toBe(0);
+  });
+
+  test('terminates and forgets a background launch that times out', async () => {
+    const fixtureScript = path.join(appA, 'dev-never-registers.mjs');
+    const pidPath = path.join(appA, 'dev-never-registers.pid');
+    await writeFile(
+      fixtureScript,
+      `import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(pidPath)}, String(process.pid), 'utf8');
+setInterval(() => {}, 1000);
+`,
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: { 'dev:runtime': 'node dev-never-registers.mjs' },
+    });
+
+    const up = await runCli(
+      ['dev', 'up', '--no-open', '--timeout', '1000'],
+      appA,
+    );
+    expect(up.exitCode).toBe(1);
+    const parsedUp = JSON.parse(up.stderr);
+    expect(parsedUp.error).toMatchObject({
+      code: 'dev_up_timeout',
+      details: { cleanupConfirmed: true },
+    });
+    expect(existsSync(getRuntimeLaunchFilePath(appA))).toBe(false);
+
+    const runtimePid = Number(await readFile(pidPath, 'utf8'));
+    expect(() => process.kill(runtimePid, 0)).toThrow();
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode, down.stderr).toBe(0);
+    expect(JSON.parse(down.stdout).data.stopped).toBe(false);
   });
 
   test('treats dev down as a clean stop for a foreground dev process', async () => {
@@ -1594,6 +1682,7 @@ process.exit(1);
     const elapsedMs = Date.now() - startedAt;
     expect(up.exitCode).toBe(0);
     const parsedUp = JSON.parse(up.stdout);
+    expect(parsedUp.data.browserCommandReady).toBe(true);
     expect(parsedUp.data.session.browser.commandReady).toBe(true);
     expect(parsedUp.data.session.browser.lastCommandReadyAt).toEqual(
       expect.any(String),
@@ -1602,6 +1691,43 @@ process.exit(1);
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
+  });
+
+  test('reports lifecycle-managed startup before browser command readiness', async () => {
+    const fixtureScript = path.join(appA, 'dev-lifecycle-launching.mjs');
+    await writeFile(
+      fixtureScript,
+      buildManagedRuntimeScript('fixture-lifecycle-launching', {
+        finalBrowserDelayMs: 10_000,
+        includeLifecycle: true,
+      }),
+      'utf8',
+    );
+    await createAppFixture(appA, {
+      scripts: {
+        'dev:runtime': 'node dev-lifecycle-launching.mjs',
+      },
+    });
+
+    const startedAt = Date.now();
+    const up = await runCli(['dev', 'up', '--timeout', '15000'], appA);
+    expect(up.exitCode, up.stderr).toBe(0);
+    expect(Date.now() - startedAt).toBeLessThan(5_000);
+    expect(JSON.parse(up.stdout).data).toMatchObject({
+      action: 'started',
+      browserCommandReady: false,
+      browserIssue: null,
+      browserNextAction: 'Use runtime_wait to observe launch progress.',
+      session: {
+        browser: {
+          commandReady: false,
+          lifecycle: { state: 'launching' },
+        },
+      },
+    });
+
+    const down = await runCli(['dev', 'down'], appA);
+    expect(down.exitCode, down.stderr).toBe(0);
   });
 
   test('returns workspace-only command-ready probe state when session persistence lags', async () => {
@@ -1633,7 +1759,7 @@ process.exit(1);
     expect(down.exitCode).toBe(0);
   });
 
-  test('does not accept a workspace-only browser before commands are ready', async () => {
+  test('keeps the server available while browser commands warm up', async () => {
     const fixtureScript = path.join(appA, 'dev-workspace-only.mjs');
     await writeFile(
       fixtureScript,
@@ -1652,17 +1778,12 @@ process.exit(1);
     });
 
     const up = await runCli(['dev', 'up', '--timeout', '750'], appA);
-    expect(up.exitCode).toBe(1);
-    const parsedUp = JSON.parse(up.stderr);
-    expect(parsedUp.error.code).toBe('dev_browser_not_ready');
-    expect(parsedUp.error.details.session.aiMode).toBeUndefined();
-    expect(parsedUp.error.details.session.browser.status).toBe(
-      'waiting_for_connection',
-    );
-    expect(parsedUp.error.details.session.browser.commandReady).toBe(false);
-    expect(
-      parsedUp.error.details.session.browser.lastCommandReadyAt,
-    ).toBeUndefined();
+    expect(up.exitCode).toBe(0);
+    const parsedUp = JSON.parse(up.stdout);
+    expect(parsedUp.data.session.aiMode).toBeUndefined();
+    expect(parsedUp.data.session.browser.status).toBe('waiting_for_connection');
+    expect(parsedUp.data.session.browser.commandReady).toBe(false);
+    expect(parsedUp.data.session.browser.lastCommandReadyAt).toBeUndefined();
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
@@ -1776,6 +1897,14 @@ process.exit(1);
       const parsedStatus = JSON.parse(status.stdout);
       expect(parsedStatus.data.state.browserConnected).toBe(true);
       expect(parsedStatus.data.state.browserCommandReady).toBe(true);
+
+      const down = await runCli(['dev', 'down'], appA);
+      expect(down.exitCode).toBe(1);
+      expect(JSON.parse(down.stderr).error.message).toContain(
+        'no verifiable owner endpoint',
+      );
+      expect(keeper.exitCode).toBeNull();
+      expect(keeper.signalCode).toBeNull();
     } finally {
       await unregisterRuntimeSession(appA);
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1807,7 +1936,7 @@ process.exit(1);
     }
   });
 
-  test('fails when the managed browser reports launch_failed', async () => {
+  test('keeps the server running when managed browser launch fails', async () => {
     const fixtureScript = path.join(appA, 'dev-browser-fail.mjs');
     await writeFile(
       fixtureScript,
@@ -1831,12 +1960,12 @@ process.exit(1);
     });
 
     const up = await runCli(['dev', 'up', '--timeout', '5000'], appA);
-    expect(up.exitCode).toBe(1);
-    const parsedUp = JSON.parse(up.stderr);
-    expect(parsedUp.error.code).toBe('dev_browser_not_ready');
-    expect(parsedUp.error.message).toContain('Playwright sandbox denied');
-    expect(parsedUp.error.details.cause).toBe('browser_launch_failed');
-    expect(parsedUp.error.details.browser.status).toBe('launch_failed');
+    expect(up.exitCode).toBe(0);
+    const parsedUp = JSON.parse(up.stdout);
+    expect(parsedUp.data.session.browser.status).toBe('launch_failed');
+    expect(parsedUp.data.session.browser.lastError.message).toContain(
+      'Playwright sandbox denied',
+    );
 
     const down = await runCli(['dev', 'down'], appA);
     expect(down.exitCode).toBe(0);
@@ -1856,4 +1985,84 @@ process.exit(1);
       'Missing required "dev:runtime" script',
     );
   });
+
+  test.each(['up', 'down', 'restart'])(
+    'dev %s recovers a stale lifecycle session with a reused PID',
+    async (action) => {
+      const file = getRuntimeSessionFilePath(appA);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(
+        file,
+        JSON.stringify({
+          sessionId: 'stale',
+          workspaceRoot: await realpath(appA),
+          pid: process.pid,
+          processStart: 'previous-birth',
+          browser: { lifecycle: { state: 'idle' } },
+        }),
+      );
+      const result = await runCli(['dev', action, '--no-open'], appA);
+      expect(existsSync(file)).toBe(false);
+      if (action === 'down') {
+        expect(result.exitCode).toBe(0);
+      } else {
+        // Reaches normal startup validation instead of attaching to stale JSON.
+        expect(result.stderr).toContain('Missing required');
+        expect(result.stdout).not.toContain('attached');
+      }
+    },
+  );
+
+  test('dev up and down find a live owner without a session registry file', async () => {
+    const code = `import { acquireRuntimeOwner } from ${JSON.stringify(new URL('../dist/runtime-owner.js', import.meta.url).href)};
+      await acquireRuntimeOwner(process.cwd(), 'unregistered');
+      setInterval(() => {}, 1000);`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', code], {
+      cwd: appA,
+      stdio: 'ignore',
+    });
+    const exited = new Promise<void>((resolve) =>
+      child.once('exit', () => resolve()),
+    );
+    try {
+      await expect
+        .poll(
+          async () =>
+            (await inspectRuntimeOwner(runtimeOwnerEndpoint(appA))).state,
+        )
+        .toBe('live');
+      const up = await runCli(
+        ['dev', 'up', '--no-open', '--timeout', '200'],
+        appA,
+      );
+      expect(up.exitCode).toBe(1);
+      expect(up.stderr).toContain('runtime_owner_unregistered');
+      expect(existsSync(getRuntimeLaunchFilePath(appA))).toBe(false);
+      const down = await runCli(['dev', 'down'], appA);
+      expect(down.exitCode).toBe(0);
+      expect(JSON.parse(down.stdout).data.stopped).toBe(true);
+      await exited;
+    } finally {
+      if (child.exitCode == null && child.signalCode == null) {
+        child.kill('SIGKILL');
+      }
+      await exited;
+    }
+  });
+
+  test('attaching dev up exits promptly when the observed owner stops', async () => {
+    const lease = await acquireRuntimeOwner(appA, 'stopping');
+    const up = runCli(['dev', 'up', '--no-open'], appA);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await lease.release();
+      const result = await up;
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'stopped while this command was attaching',
+      );
+    } finally {
+      await lease.release();
+    }
+  }, 5000);
 });

@@ -5,551 +5,447 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { normalizeDeviceClass } from './browser-client-routing.js';
+import { randomUUID } from 'crypto';
+import {
+  getDefaultRuntimeCommandTimeoutMs,
+  type RuntimePageTarget,
+} from '@iwsdk/cli/contract';
+import {
+  isSameBrowserEndpoint,
+  isValidBrowserEndpoint,
+} from './browser-client-routing.js';
 
-/**
- * Minimal WebSocket interface used by the relay.
- * Compatible with both the `ws` library and the browser WebSocket API.
- */
 export interface RelayWebSocket {
   readyState: number;
   send(data: string): void;
+  close(code?: number, reason?: string): void;
 }
-
-/** WebSocket OPEN readyState constant */
-const WS_OPEN = 1;
-
 export type RelayPageRole = 'app' | 'editor' | 'preview';
 export type RelayDeviceClass = 'managed' | 'physical';
-
-export interface RelayPageTarget {
-  role?: RelayPageRole;
-  deviceClass?: RelayDeviceClass;
-  pageId?: string;
-  tabGeneration?: number;
-  sceneSessionId?: string;
-}
-
-export interface RelayClientMetadata {
+export type RelayPageTarget = RuntimePageTarget;
+export interface RelayClientMetadata extends RuntimePageTarget {
   pageId: string;
   role: RelayPageRole;
-  deviceClass?: RelayDeviceClass;
   tabGeneration: number;
-  sceneSessionId?: string;
+  commandReady?: boolean;
 }
-
 export interface RelayOptions {
   verbose?: boolean;
-  /** Grace period for a role-only target to reconnect during page navigation. */
   targetReconnectGraceMs?: number;
-}
-
-interface PendingRelayRequest {
-  sourceWs: RelayWebSocket;
-  targetClients?: Set<RelayWebSocket>;
-  timestamp: number;
-  requestData?: string;
-  reconnectTarget?: RelayPageTarget;
-  reconnectTimer?: ReturnType<typeof setTimeout>;
-}
-
-export interface RelayHandler {
   /**
-   * Handle an incoming message from a connected client.
-   * Routes requests to all other clients and deduplicates responses
-   * using first-response-wins semantics.
+   * Called once per dispatched command whose outcome became unknown (deadline,
+   * dispatch failure or target disconnect), after the relay has fenced the
+   * exact endpoint generation the command reached and before the caller is
+   * told.
    */
+  onOutcomeUnknown?(
+    endpoint: RelayClientMetadata,
+    code: RelayUnknownOutcomeCode,
+  ): void;
+}
+export type RelayUnknownOutcomeCode = 'command_timeout' | 'connection_lost';
+export interface RelayHandler {
   onMessage(
     senderWs: RelayWebSocket,
     data: string,
     clients: Set<RelayWebSocket>,
   ): void;
-
-  /** Register or update metadata for a browser/runtime bridge client. */
+  /**
+   * Registers a socket's one endpoint generation. A registered socket may only
+   * update readiness; identity or generation changes return false unchanged.
+   */
   registerBrowserClient(
     ws: RelayWebSocket,
     metadata: RelayClientMetadata,
-  ): void;
-
-  /** Remove a client and any associated metadata. */
+  ): boolean;
   unregisterClient(ws: RelayWebSocket): void;
-
-  /** Number of pending (unresolved) relay requests. */
   pendingCount(): number;
-
-  /** Clean up stale pending entries older than `maxAgeMs`. */
-  cleanStale(maxAgeMs: number): void;
+  /** Settles every pending command as the runtime stops. */
+  close(): void;
 }
-
 /**
- * Create a relay handler that implements first-response-wins message routing.
- *
- * When multiple browser tabs are connected, a request from the MCP server is
- * broadcast to all tabs. Each tab processes it and responds. The relay
- * forwards only the FIRST response for each request ID and silently drops
- * duplicates.
+ * A request's absolute `deadline` is shared with its caller, so the relay
+ * settles this long before it for the fenced timeout reply to arrive in time.
  */
+export const RELAY_TRANSPORT_MARGIN_MS = 250;
+/**
+ * Raw legacy requests without a `deadline` get their method's default budget,
+ * ending this long before the caller's matching transport timeout.
+ */
+export const RELAY_DEADLINE_MARGIN_MS = 3_000;
+/** setTimeout fires longer delays immediately, so reject such deadlines. */
+const MAX_RELAY_WINDOW_MS = 2 ** 31 - 1;
+/**
+ * Generation floors kept for endpoints that are gone, oldest forgotten first.
+ * Unknown-outcome fences are never forgotten.
+ */
+const MAX_TRACKED_IDENTITIES = 4096;
+interface UnknownOutcome {
+  code: RelayUnknownOutcomeCode;
+  message: string;
+  /** Retire and close a still-registered target with this reason. */
+  closeReason?: string;
+}
+const COMMAND_TIMEOUT: UnknownOutcome = {
+  code: 'command_timeout',
+  message:
+    'Target did not reply before the deadline. Inspect state before retrying.',
+  closeReason: 'Runtime command deadline exceeded',
+};
+const DISPATCH_FAILED: UnknownOutcome = {
+  code: 'connection_lost',
+  message:
+    'Target connection failed while dispatching; inspect state before retrying.',
+  closeReason: 'Runtime command dispatch failed',
+};
+const TARGET_DISCONNECTED: UnknownOutcome = {
+  code: 'connection_lost',
+  message:
+    'Target disconnected before replying. The command may have executed; inspect state before retrying.',
+};
+interface Pending {
+  source: RelayWebSocket;
+  target: RelayWebSocket;
+  sourceId: string;
+  endpoint: RelayClientMetadata;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** A request is delivered once to exactly one registered endpoint. Never replay. */
 export function createRelayHandler(options?: RelayOptions): RelayHandler {
-  const verbose = options?.verbose ?? false;
-  const targetReconnectGraceMs = options?.targetReconnectGraceMs ?? 3_000;
-
-  // Track pending request IDs for first-response-wins deduplication.
-  const pendingRelayRequests = new Map<string, PendingRelayRequest>();
-  const browserClients = new Map<RelayWebSocket, RelayClientMetadata>();
-  const latestGenerationByPageId = new Map<string, number>();
-
-  function isLatestBrowserClient(ws: RelayWebSocket): boolean {
-    const metadata = browserClients.get(ws);
-    return (
-      metadata != null &&
-      metadata.tabGeneration === latestGenerationByPageId.get(metadata.pageId)
-    );
+  const endpoints = new Map<RelayWebSocket, RelayClientMetadata>();
+  // A socket's endpoint ends when it is unregistered; it never registers again.
+  const retired = new WeakSet<RelayWebSocket>();
+  const pending = new Map<string, Pending>();
+  const generations = new Map<string, number>();
+  // Identities whose generation may still be running an unknown-outcome
+  // command, until a newer generation registers.
+  const fenced = new Set<string>();
+  const key = (m: RelayClientMetadata) =>
+    JSON.stringify([
+      m.deviceClass ?? 'managed',
+      m.headsetId,
+      m.sessionId,
+      m.browserEpoch,
+      m.role,
+      m.pageId,
+    ]);
+  /** Records a generation floor as the most recently used identity. */
+  function setGeneration(identity: string, generation: number) {
+    generations.delete(identity);
+    generations.set(identity, generation);
   }
-
-  function onMessage(
-    senderWs: RelayWebSocket,
-    data: string,
-    clients: Set<RelayWebSocket>,
-  ): void {
-    let parsed: {
-      id?: string;
-      method?: string;
-      params?: unknown;
-      result?: unknown;
-      error?: unknown;
-      target?: RelayPageTarget;
-    } | null = null;
-    try {
-      parsed = JSON.parse(data);
-    } catch {
-      // Not JSON — broadcast as-is for backward compatibility
-    }
-
-    if (parsed && typeof parsed.id === 'string') {
-      const isRequest = typeof parsed.method === 'string';
-      const isResponse =
-        !parsed.method &&
-        (parsed.result !== undefined || parsed.error !== undefined);
-
-      if (isRequest) {
-        const targetClients = resolveRequestTargets(senderWs, parsed, clients);
-        if (targetClients === 'ambiguous_physical') {
-          sendAmbiguousTargetError(senderWs, parsed.id, clients, parsed.target);
-          return;
-        }
-        if (targetClients.length === 0) {
-          const reconnectTarget = reconnectableTarget(parsed.target);
-          if (reconnectTarget != null) {
-            const entry: PendingRelayRequest = {
-              reconnectTarget,
-              requestData: data,
-              sourceWs: senderWs,
-              targetClients: new Set<RelayWebSocket>(),
-              timestamp: Date.now(),
-            };
-            pendingRelayRequests.set(parsed.id, entry);
-            entry.reconnectTimer = setTimeout(() => {
-              if (pendingRelayRequests.get(parsed!.id!) !== entry) {
-                return;
-              }
-              pendingRelayRequests.delete(parsed!.id!);
-              sendNoTargetError(senderWs, parsed!.id!, parsed!);
-            }, targetReconnectGraceMs);
-            return;
-          }
-          sendNoTargetError(senderWs, parsed.id, parsed);
-          return;
-        }
-
-        // Track this request for deduplication
-        pendingRelayRequests.set(parsed.id, {
-          ...(reconnectableTarget(parsed.target) == null
-            ? {}
-            : {
-                reconnectTarget: parsed.target,
-                requestData: data,
-              }),
-          targetClients: new Set(targetClients),
-          timestamp: Date.now(),
-          sourceWs: senderWs,
-        });
-
-        targetClients.forEach((client) => {
-          client.send(data);
-        });
-        return;
-      }
-
-      if (isResponse) {
-        const pending = pendingRelayRequests.get(parsed.id);
-        if (pending) {
-          if (
-            browserClients.has(senderWs) &&
-            !isLatestBrowserClient(senderWs)
-          ) {
-            if (verbose) {
-              console.log(
-                `[MCP-IWER] Response for ${parsed.id} dropped from stale tab generation`,
-              );
-            }
-            return;
-          }
-          if (
-            pending.targetClients != null &&
-            !pending.targetClients.has(senderWs)
-          ) {
-            if (verbose) {
-              console.log(
-                `[MCP-IWER] Response for ${parsed.id} dropped from non-target client`,
-              );
-            }
-            return;
-          }
-          // First response wins — forward to the original requester
-          pendingRelayRequests.delete(parsed.id);
-          if (pending.reconnectTimer != null) {
-            clearTimeout(pending.reconnectTimer);
-          }
-          if (pending.sourceWs.readyState === WS_OPEN) {
-            pending.sourceWs.send(data);
-          }
-          if (verbose) {
-            console.log(
-              `[MCP-IWER] Response for ${parsed.id} forwarded (first-wins)`,
-            );
-          }
-        } else if (verbose) {
-          console.log(`[MCP-IWER] Duplicate response for ${parsed.id} dropped`);
-        }
-        return;
-      }
-    }
-
-    // Unknown message shape — broadcast for backward compatibility
-    clients.forEach((client) => {
-      if (client !== senderWs && client.readyState === WS_OPEN) {
-        client.send(data);
-      }
-    });
-  }
-
-  function registerBrowserClient(
-    ws: RelayWebSocket,
-    metadata: RelayClientMetadata,
-  ): void {
-    browserClients.set(ws, {
-      ...metadata,
-      deviceClass: normalizeDeviceClass(metadata.deviceClass),
-    });
-    latestGenerationByPageId.set(
-      metadata.pageId,
-      Math.max(
-        latestGenerationByPageId.get(metadata.pageId) ?? 0,
-        metadata.tabGeneration,
-      ),
-    );
-    for (const pending of pendingRelayRequests.values()) {
-      if (
-        pending.reconnectTarget == null ||
-        pending.requestData == null ||
-        pending.targetClients == null ||
-        pending.targetClients.size !== 0 ||
-        !isLatestBrowserClient(ws) ||
-        !matchesTarget(metadata, pending.reconnectTarget)
-      ) {
-        continue;
-      }
-      if (pending.reconnectTimer != null) {
-        clearTimeout(pending.reconnectTimer);
-        pending.reconnectTimer = undefined;
-      }
-      pending.targetClients.add(ws);
-      ws.send(pending.requestData);
-    }
-  }
-
-  function unregisterClient(ws: RelayWebSocket): void {
-    const removedMetadata = browserClients.get(ws);
-    browserClients.delete(ws);
-    if (removedMetadata != null) {
-      const remainingGenerations = [...browserClients.values()]
-        .filter((metadata) => metadata.pageId === removedMetadata.pageId)
-        .map((metadata) => metadata.tabGeneration);
-      if (remainingGenerations.length === 0) {
-        latestGenerationByPageId.delete(removedMetadata.pageId);
-      }
-    }
-    for (const [id, pending] of pendingRelayRequests) {
-      if (pending.sourceWs === ws) {
-        if (pending.reconnectTimer != null) {
-          clearTimeout(pending.reconnectTimer);
-        }
-        pendingRelayRequests.delete(id);
-        continue;
-      }
-
-      if (pending.targetClients?.delete(ws) === true) {
-        if (pending.targetClients.size === 0) {
-          if (pending.reconnectTarget != null && pending.requestData != null) {
-            pending.timestamp = Date.now();
-            pending.reconnectTimer = setTimeout(() => {
-              if (pendingRelayRequests.get(id) !== pending) {
-                return;
-              }
-              pendingRelayRequests.delete(id);
-              sendTargetDisconnectedError(pending.sourceWs, id);
-            }, targetReconnectGraceMs);
-          } else {
-            pendingRelayRequests.delete(id);
-            sendTargetDisconnectedError(pending.sourceWs, id);
-          }
-        }
-      }
-    }
-  }
-
-  function pendingCount(): number {
-    return pendingRelayRequests.size;
-  }
-
-  function cleanStale(maxAgeMs: number): void {
-    const now = Date.now();
-    for (const [id, entry] of pendingRelayRequests) {
-      if (now - entry.timestamp > maxAgeMs) {
-        if (entry.reconnectTimer != null) {
-          clearTimeout(entry.reconnectTimer);
-        }
-        pendingRelayRequests.delete(id);
-      }
-    }
-  }
-
-  function resolveRequestTargets(
-    senderWs: RelayWebSocket,
-    parsed: {
-      method?: string;
-      params?: unknown;
-      target?: RelayPageTarget;
-    },
-    clients: Set<RelayWebSocket>,
-  ): RelayWebSocket[] | 'ambiguous_physical' {
-    const candidates = Array.from(clients).filter(
-      (client) => client !== senderWs && client.readyState === WS_OPEN,
-    );
-    const browserCandidates = candidates.filter((client) =>
-      isLatestBrowserClient(client),
-    );
-    const target = getRequestTarget(parsed);
-
-    if (target != null) {
-      const matchingClients = browserCandidates.filter((client) =>
-        matchesTarget(browserClients.get(client), target),
-      );
-      const matchingPhysicalApps = matchingClients.filter((client) => {
-        const metadata = browserClients.get(client);
-        return metadata?.role === 'app' && metadata.deviceClass === 'physical';
-      });
-      return matchingPhysicalApps.length > 1
-        ? 'ambiguous_physical'
-        : matchingClients;
-    }
-
-    const appClients = browserCandidates.filter(
-      (client) => browserClients.get(client)?.role === 'app',
-    );
-    if (appClients.length === 1) {
-      return appClients;
-    }
-    const physicalAppClients = appClients.filter(
-      (client) => browserClients.get(client)?.deviceClass === 'physical',
-    );
-    if (physicalAppClients.length === 1) {
-      return physicalAppClients;
-    }
-    if (physicalAppClients.length > 1) {
-      return 'ambiguous_physical';
-    }
-    if (appClients.length > 0) {
-      return appClients;
-    }
-
-    return browserCandidates.length > 0 ? browserCandidates : candidates;
-  }
-
-  function getRequestTarget(parsed: {
-    target?: RelayPageTarget;
-    params?: unknown;
-  }): RelayPageTarget | undefined {
-    if (isRelayPageTarget(parsed.target)) {
-      return parsed.target;
-    }
-
-    return undefined;
-  }
-
-  function matchesTarget(
-    metadata: RelayClientMetadata | undefined,
-    target: RelayPageTarget,
-  ): boolean {
-    if (metadata == null) {
-      return false;
-    }
-    if (target.role != null && metadata.role !== target.role) {
-      return false;
-    }
+  /**
+   * Bounds the generation map: the least recently used identity that has no
+   * live endpoint (so no pending command) and no unknown-outcome fence is
+   * forgotten. With none left, the new endpoint is refused.
+   */
+  function hasRoomFor(identity: string): boolean {
     if (
-      target.deviceClass != null &&
-      normalizeDeviceClass(metadata.deviceClass) !== target.deviceClass
+      generations.has(identity) ||
+      generations.size < MAX_TRACKED_IDENTITIES
     ) {
-      return false;
+      return true;
     }
-    if (target.pageId != null && metadata.pageId !== target.pageId) {
-      return false;
+    const live = new Set([...endpoints.values()].map(key));
+    for (const old of generations.keys()) {
+      if (!live.has(old) && !fenced.has(old)) {
+        generations.delete(old);
+        return true;
+      }
     }
-    if (
-      target.tabGeneration != null &&
-      metadata.tabGeneration !== target.tabGeneration
-    ) {
-      return false;
-    }
-    if (
-      target.sceneSessionId != null &&
-      metadata.sceneSessionId !== target.sceneSessionId
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  function sendAmbiguousTargetError(
-    sourceWs: RelayWebSocket,
-    requestId: string,
-    clients: Set<RelayWebSocket>,
-    target?: RelayPageTarget,
-  ): void {
-    if (sourceWs.readyState !== WS_OPEN) {
-      return;
-    }
-    const candidates = [...clients]
-      .filter(
-        (client) =>
-          client !== sourceWs &&
-          client.readyState === WS_OPEN &&
-          isLatestBrowserClient(client),
-      )
-      .map((client) => browserClients.get(client))
-      .filter(
-        (metadata): metadata is RelayClientMetadata =>
-          metadata != null &&
-          metadata.role === 'app' &&
-          metadata.deviceClass === 'physical' &&
-          (target == null || matchesTarget(metadata, target)),
-      )
-      .map(({ pageId, tabGeneration }) => ({ pageId, tabGeneration }));
-    sourceWs.send(
-      JSON.stringify({
-        id: requestId,
-        error: {
-          code: -32005,
-          message:
-            'More than one physical headset page is connected; target a pageId and tabGeneration explicitly.',
-          data: { code: 'ambiguous_target', candidates },
-        },
-      }),
-    );
-  }
-
-  function sendNoTargetError(
-    sourceWs: RelayWebSocket,
-    requestId: string,
-    parsed: { target?: RelayPageTarget },
-  ): void {
-    if (sourceWs.readyState !== WS_OPEN) {
-      return;
-    }
-    const stalePrecondition =
-      parsed.target?.pageId != null || parsed.target?.tabGeneration != null;
-    sourceWs.send(
-      JSON.stringify({
-        id: requestId,
-        error: {
-          code: -32004,
-          message: stalePrecondition
-            ? `Browser tab precondition failed; no current page matches ${JSON.stringify(parsed.target ?? {})}. Re-query state and retry with its _tab value.`
-            : `No connected browser page matches target ${JSON.stringify(parsed.target ?? {})}`,
-          ...(stalePrecondition
-            ? {
-                data: {
-                  code: 'stale_browser_tab',
-                  expectedTab: parsed.target,
-                },
-              }
-            : {}),
-        },
-      }),
-    );
-  }
-
-  function sendTargetDisconnectedError(
-    sourceWs: RelayWebSocket,
-    requestId: string,
-  ): void {
-    if (sourceWs.readyState !== WS_OPEN) {
-      return;
-    }
-    sourceWs.send(
-      JSON.stringify({
-        id: requestId,
-        error: {
-          code: -32004,
-          message:
-            'All target browser pages disconnected before responding to the request',
-        },
-      }),
-    );
-  }
-
-  return {
-    cleanStale,
-    onMessage,
-    pendingCount,
-    registerBrowserClient,
-    unregisterClient,
-  };
-}
-
-function reconnectableTarget(
-  target: RelayPageTarget | undefined,
-): RelayPageTarget | undefined {
-  if (
-    target == null ||
-    (target.role == null && target.deviceClass == null) ||
-    target.pageId != null ||
-    target.tabGeneration != null ||
-    target.sceneSessionId != null
-  ) {
-    return undefined;
-  }
-  return {
-    ...(target.role == null ? {} : { role: target.role }),
-    ...(target.deviceClass == null ? {} : { deviceClass: target.deviceClass }),
-  };
-}
-
-function isRelayPageTarget(value: unknown): value is RelayPageTarget {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-
-  const target = value as RelayPageTarget;
-  return (
-    target.role === 'app' ||
-    target.role === 'editor' ||
-    target.role === 'preview' ||
-    target.deviceClass === 'managed' ||
-    target.deviceClass === 'physical' ||
-    typeof target.pageId === 'string' ||
-    typeof target.tabGeneration === 'number' ||
-    typeof target.sceneSessionId === 'string'
+  function replyError(
+    source: RelayWebSocket,
+    id: string,
+    code: string,
+    message: string,
+    outcome = 'not_executed',
+    details = {},
+  ) {
+    if (source.readyState !== 1) {
+      return;
+    }
+    try {
+      source.send(
+        JSON.stringify({
+          id,
+          error: { code: -32004, message, data: { code, outcome, ...details } },
+        }),
+      );
+    } catch {}
+  }
+  function settle(id: string): Pending | undefined {
+    const request = pending.get(id);
+    if (request) {
+      pending.delete(id);
+      clearTimeout(request.timer);
+    }
+    return request;
+  }
+  /** The only settlement path for a dispatched command with no reply. */
+  function settleUnknown(id: string, outcome: UnknownOutcome) {
+    const request = settle(id);
+    if (!request) {
+      return;
+    }
+    // The command may still be running, so this exact generation must never
+    // receive another command. A reload is a new generation and may register.
+    const identity = key(request.endpoint);
+    fenced.add(identity);
+    setGeneration(
+      identity,
+      Math.max(
+        generations.get(identity) ?? 0,
+        request.endpoint.tabGeneration + 1,
+      ),
+    );
+    if (outcome.closeReason && endpoints.has(request.target)) {
+      unregisterClient(request.target);
+      try {
+        request.target.close(1011, outcome.closeReason);
+      } catch {}
+    }
+    options?.onOutcomeUnknown?.(request.endpoint, outcome.code);
+    replyError(
+      request.source,
+      request.sourceId,
+      outcome.code,
+      outcome.message,
+      'outcome_unknown',
+    );
+  }
+  /** Milliseconds this relay may wait, NaN when the deadline is malformed. */
+  function relayWindowMs(method: string, deadline: unknown): number {
+    // Only an omitted deadline is legacy; an explicit null is malformed.
+    if (deadline === undefined) {
+      return (
+        getDefaultRuntimeCommandTimeoutMs(method) - RELAY_DEADLINE_MARGIN_MS
+      );
+    }
+    if (typeof deadline !== 'number' || !Number.isFinite(deadline)) {
+      return NaN;
+    }
+    const remainingMs = deadline - Date.now();
+    return remainingMs <= MAX_RELAY_WINDOW_MS
+      ? remainingMs - RELAY_TRANSPORT_MARGIN_MS
+      : NaN;
+  }
+  function onMessage(
+    source: RelayWebSocket,
+    data: string,
+    clients: Set<RelayWebSocket>,
+  ) {
+    let message: {
+      id?: string;
+      method?: string;
+      /** The caller's absolute deadline in epoch milliseconds. */
+      deadline?: unknown;
+      target?: RuntimePageTarget;
+      result?: unknown;
+      error?: unknown;
+      [key: string]: unknown;
+    };
+    try {
+      message = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (!message || typeof message.id !== 'string') {
+      return;
+    }
+    if (typeof message.method !== 'string') {
+      const request = pending.get(message.id);
+      if (!request || request.target !== source) {
+        return;
+      }
+      settle(message.id);
+      if (request.source.readyState === 1) {
+        try {
+          request.source.send(
+            JSON.stringify({ ...message, id: request.sourceId }),
+          );
+        } catch {}
+      }
+      return;
+    }
+    const windowMs = relayWindowMs(message.method, message.deadline);
+    if (Number.isNaN(windowMs)) {
+      return replyError(
+        source,
+        message.id,
+        'invalid_params',
+        'deadline must be an absolute epoch time in milliseconds within 24 days.',
+      );
+    }
+    if (windowMs <= 0) {
+      return replyError(
+        source,
+        message.id,
+        'deadline_exceeded',
+        'The request deadline elapsed before dispatch; the command did not run.',
+      );
+    }
+    const target = {
+      role: 'app' as const,
+      deviceClass: 'managed' as const,
+      ...message.target,
+    };
+    if (
+      target.deviceClass === 'physical' &&
+      (!target.headsetId ||
+        !target.pageId ||
+        !Number.isInteger(target.tabGeneration))
+    ) {
+      return replyError(
+        source,
+        message.id,
+        'invalid_target',
+        'Physical targets require headsetId, pageId and tabGeneration. Use runtime_list_targets.',
+      );
+    }
+    const candidates = [...endpoints].filter(
+      ([ws, metadata]) =>
+        ws !== source &&
+        ws.readyState === 1 &&
+        clients.has(ws) &&
+        matches(metadata, target),
+    );
+    if (candidates.length !== 1) {
+      const stale = target.pageId != null || target.tabGeneration != null;
+      return replyError(
+        source,
+        message.id,
+        candidates.length > 1
+          ? 'ambiguous_target'
+          : stale
+            ? 'stale_browser_tab'
+            : 'target_unavailable',
+        candidates.length > 1
+          ? 'More than one endpoint matches; supply an exact runtimeTarget.'
+          : 'No current endpoint matches. Use runtime_list_targets to refresh its identity.',
+        'not_executed',
+        { target },
+      );
+    }
+    const [destination, metadata] = candidates[0];
+    if (metadata.commandReady === false && message.method !== 'reload_page') {
+      return replyError(
+        source,
+        message.id,
+        'target_not_ready',
+        'The selected runtime is connected but not command-ready.',
+      );
+    }
+    if (pending.size >= 256) {
+      return replyError(
+        source,
+        message.id,
+        'runtime_busy',
+        'Runtime command capacity reached.',
+      );
+    }
+    const wireId = randomUUID();
+    const timer = setTimeout(
+      () => settleUnknown(wireId, COMMAND_TIMEOUT),
+      windowMs,
+    );
+    timer.unref?.();
+    pending.set(wireId, {
+      source,
+      target: destination,
+      sourceId: message.id,
+      endpoint: metadata,
+      timer,
+    });
+    try {
+      destination.send(JSON.stringify({ ...message, id: wireId, target }));
+    } catch {
+      settleUnknown(wireId, DISPATCH_FAILED);
+    }
+  }
+  function unregisterClient(ws: RelayWebSocket) {
+    endpoints.delete(ws);
+    retired.add(ws);
+    // A departed caller leaves its commands armed: the target still owns an
+    // unknown outcome until it replies or the deadline fences it.
+    for (const [id, request] of pending) {
+      if (request.target === ws) {
+        settleUnknown(id, TARGET_DISCONNECTED);
+      }
+    }
+  }
+  return {
+    onMessage,
+    registerBrowserClient(ws, metadata) {
+      if (!isValidBrowserEndpoint(metadata)) {
+        return false;
+      }
+      const endpoint = {
+        ...metadata,
+        deviceClass: metadata.deviceClass ?? 'managed',
+      };
+      const current = endpoints.get(ws);
+      if (current) {
+        // Pending commands stay bound to the identity they were admitted to.
+        if (!isSameBrowserEndpoint(current, endpoint)) {
+          return false;
+        }
+        endpoints.set(ws, { ...current, commandReady: endpoint.commandReady });
+        return true;
+      }
+      const identity = key(endpoint);
+      const predecessors = [...endpoints].filter(
+        ([, old]) => key(old) === identity,
+      );
+      if (
+        retired.has(ws) ||
+        (generations.get(identity) ?? 0) > endpoint.tabGeneration ||
+        predecessors.some(
+          ([, old]) => old.tabGeneration > endpoint.tabGeneration,
+        ) ||
+        !hasRoomFor(identity)
+      ) {
+        return false;
+      }
+      // A new connection/generation retires its predecessor. This also fences
+      // responses from old sockets and prevents a stale generation resurfacing.
+      for (const [existing] of predecessors) {
+        unregisterClient(existing);
+      }
+      // A retired predecessor with an unknown outcome fences its generation.
+      if ((generations.get(identity) ?? 0) > endpoint.tabGeneration) {
+        return false;
+      }
+      setGeneration(identity, endpoint.tabGeneration);
+      fenced.delete(identity);
+      endpoints.set(ws, endpoint);
+      return true;
+    },
+    unregisterClient,
+    pendingCount: () => pending.size,
+    close() {
+      endpoints.clear();
+      for (const [id, request] of pending) {
+        settle(id);
+        replyError(
+          request.source,
+          request.sourceId,
+          'runtime_stopping',
+          'Runtime stopped before the target replied. Inspect state after restarting.',
+          'outcome_unknown',
+        );
+      }
+    },
+  };
+}
+function matches(metadata: RelayClientMetadata, target: RuntimePageTarget) {
+  return Object.entries(target).every(
+    ([key, value]) =>
+      value == null ||
+      (key === 'deviceClass'
+        ? (metadata.deviceClass ?? 'managed')
+        : metadata[key as keyof RelayClientMetadata]) === value,
   );
 }

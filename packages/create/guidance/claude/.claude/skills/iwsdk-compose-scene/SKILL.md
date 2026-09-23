@@ -119,20 +119,22 @@ npx @iwsdk/cli scene open \
 npx @iwsdk/cli scene state --raw
 ```
 
-`iwsdk dev up` starts the server in the background, launches the configured
-managed editor browser, and waits for the command bridge. Do not edit
-`vite.config.ts` to change browser mode as an ad hoc startup workaround.
+`iwsdk dev up` starts the server in the background and launches the configured
+managed editor browser. It can return while that browser is still starting; use
+`iwsdk runtime wait` or inspect `iwsdk runtime status` before browser-backed
+commands. Do not edit `vite.config.ts` to change browser mode as an ad hoc
+startup workaround.
 
 `scene_render_file` renders a file without replacing the editor's active document,
 but it still uses the managed editor browser for manifest evaluation and WebGL.
 MCP screenshot tools persist their PNG and return `screenshotPath`; read the file only
 when the requested visual check requires it.
-If startup reports `dev_browser_not_ready`, inspect `iwsdk dev status` and
-`iwsdk dev logs --tail 100`. Retry only when the diagnostics indicate a transient
-startup failure. Do not invent a custom CPU or Playwright renderer and present it as
-authoritative editor evidence. Preserve the structured failure, continue
-type/schema/build checks that remain meaningful, and report the visual-verification
-gate as blocked.
+If readiness does not arrive, inspect `iwsdk runtime status` and `iwsdk dev logs
+--tail 100`. Use `iwsdk runtime recover` only when the diagnostics indicate a
+recoverable launch failure. Do not invent a custom CPU or Playwright renderer
+and present it as authoritative editor evidence. Preserve the structured
+failure, continue type/schema/build checks that remain meaningful, and report
+the visual-verification gate as blocked.
 
 Camera parameters are intentionally distinct: `view` accepts only the built-in
 presets (`current`, `top`, `front`, `back`, `left`, `right`, `quarter`, `orbit`),

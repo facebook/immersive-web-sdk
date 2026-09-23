@@ -15,6 +15,55 @@ import {
   resolveRuntimeOperationRequest,
 } from '../src/runtime-contract.js';
 
+describe('explicit runtime destination contract', () => {
+  const target = {
+    deviceClass: 'physical',
+    headsetId: 'quest-serial',
+    pageId: 'native-page',
+    tabGeneration: 3,
+  };
+
+  test('preserves an XR position target separately from its execution destination', () => {
+    const operation = getRuntimeOperationByToolName('xr_look_at')!;
+    const position = { x: 1, y: 2, z: -3 };
+    expect(
+      resolveRuntimeOperationRequest(operation, {
+        device: 'headset',
+        target: position,
+        runtimeTarget: target,
+      }),
+    ).toEqual({ params: { device: 'headset', target: position }, target });
+  });
+
+  test('rejects incomplete physical identities and contradictory legacy preconditions', () => {
+    const operation = getRuntimeOperationByToolName('browser_reload_page')!;
+    for (const key of ['headsetId', 'pageId', 'tabGeneration']) {
+      const incomplete = { ...target } as Record<string, unknown>;
+      delete incomplete[key];
+      expect(() =>
+        resolveRuntimeOperationRequest(operation, {
+          runtimeTarget: incomplete,
+        }),
+      ).toThrow('Physical runtimeTarget requires');
+    }
+    expect(() =>
+      resolveRuntimeOperationRequest(operation, {
+        runtimeTarget: target,
+        expectedTab: { id: target.pageId, generation: 2 },
+      }),
+    ).toThrow('must identify the same page generation');
+  });
+
+  test('does not let a selector change an operation role', () => {
+    const operation = getRuntimeOperationByToolName('ecs_list_systems')!;
+    expect(() =>
+      resolveRuntimeOperationRequest(operation, {
+        runtimeTarget: { deviceClass: 'managed', role: 'editor' },
+      }),
+    ).toThrow();
+  });
+});
+
 test('allows isolated UI rendering extra time for editor resource settling', () => {
   expect(getDefaultRuntimeCommandTimeoutMs('asset_render_preview')).toBe(
     120_000,

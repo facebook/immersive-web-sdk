@@ -323,6 +323,7 @@ export function usageLines(): string[] {
     'Commands:',
     '  status',
     '  dev up|restart [--ai-mode <mode>] [--headed|--headless] [--open|--no-open]',
+    '  runtime status|targets|wait|recover|pair-headset',
     '  dev down|logs|open|status',
     '  adapter sync|status|prune|prompt',
     '  reference status|warmup|inspect|search|relationship|api|file|components|systems|dependents|examples',

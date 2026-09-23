@@ -46,6 +46,7 @@ import {
   buildRuntimeDomainHelp,
   usageLines,
 } from './help.js';
+import { RuntimeOwnerError } from './runtime-owner.js';
 import {
   RuntimeCommandExecutionError,
   sendRuntimeCommand,
@@ -92,7 +93,8 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         command === 'asset' ||
         command === 'scene' ||
         command === 'ui' ||
-        command === 'ecs'
+        command === 'ecs' ||
+        command === 'runtime'
       ) {
         if (command === 'browser' && subcommand === 'run') {
           stdout.write(`${buildBrowserRunHelp().join('\n')}\n`);
@@ -179,6 +181,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
       case 'scene':
       case 'ui':
       case 'ecs':
+      case 'runtime':
         if (command === 'browser' && subcommand === 'run') {
           result = await handleBrowserRun(argument, parsed.options, context);
           break;
@@ -220,7 +223,13 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
             cause: error.issueCause,
             browser: error.browser ?? null,
           })
-        : createFailure(error instanceof Error ? error.message : String(error));
+        : error instanceof RuntimeOwnerError
+          ? createFailure(error.message, error.code, {
+              owner: error.owner,
+            })
+          : createFailure(
+              error instanceof Error ? error.message : String(error),
+            );
     writeJson(stderr, failure);
     return 1;
   }

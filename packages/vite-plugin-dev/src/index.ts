@@ -25,6 +25,7 @@ import type { Duplex } from 'stream';
 import { inflateSync } from 'zlib';
 import {
   INTERNAL_BROWSER_PROBE_METHOD,
+  RUNTIME_OPERATIONS,
   INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV,
   INTERNAL_RUNTIME_SHUTDOWN_METHOD,
   type RuntimeBrowserClient,
@@ -33,6 +34,7 @@ import {
   type RuntimeIssueCause,
   type RuntimeIssueInfo,
 } from '@iwsdk/cli/contract';
+import { acquireRuntimeOwner } from '@iwsdk/cli/runtime-owner';
 import {
   normalizeProjectDevOptions,
   type IwsdkProjectManifestV1,
@@ -66,8 +68,11 @@ import type {
 } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
+  hasManagedCommandRoles,
   hasReadyBrowserCommandPath,
   isBrowserBridgeConnectionAllowed,
+  isSameBrowserEndpoint,
+  normalizeBrowserHello,
   normalizeDeviceClass,
 } from './browser-client-routing.js';
 import { createUnavailableBrowserRpcError } from './browser-rpc-errors.js';
@@ -84,12 +89,14 @@ import {
 } from './editor/editor-runtime-source.js';
 import { EDITOR_SHELL_CSS } from './editor/editor-shell-styles.js';
 import {
+  ensureChromiumInstalled,
   launchManagedBrowser,
   MANAGED_WORKSPACE_QUERY,
   type ManagedBrowser,
   type ManagedRuntimePublishEvidence,
 } from './headless-browser.js';
 import { buildInjectionBundle } from './injection-bundler.js';
+import { ManagedBrowserLifecycle } from './managed-browser/lifecycle.js';
 import { createRelayHandler } from './mcp-relay.js';
 import { reportSessionStart, reportSessionEnd } from './metavr-telemetry.js';
 import {
@@ -133,6 +140,10 @@ import type {
 import { validateUIKitMLDirectory } from './uikitml-preflight.js';
 
 interface ManagedBrowserCommandTarget {
+  deviceClass?: 'managed' | 'physical';
+  headsetId?: string;
+  sessionId?: string;
+  browserEpoch?: number;
   pageId?: string;
   role?: string;
   tabGeneration?: number;
@@ -712,10 +723,6 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let bundledFonts: ReadonlySet<string> | null = null;
   let injectionBundle: InjectionBundleResult | null = null;
   let config: ResolvedConfig;
-  let mcpWss: WebSocketServer | null = null;
-  let mcpClients: Set<WebSocket> | null = null;
-  let managedBrowser: ManagedBrowser | null = null;
-  let closeManagedWorkspace: (() => Promise<void>) | null = null;
   const hotClientRoles = new WeakMap<
     WebSocketClient,
     'editor' | 'preview' | 'runtime'
@@ -900,6 +907,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // source. Watching session/lock churn causes full-page reload loops while
       // the managed browser is connecting or shutting down.
       userConfig.server ??= {};
+      userConfig.server.fs ??= {};
+      // Configure before Vite compiles fsDenyGlob. Preserve either the user's
+      // deny list or Vite 7's defaults when extending it with private state.
+      userConfig.server.fs.deny = [
+        ...(userConfig.server.fs.deny ?? [
+          '.env',
+          '.env.*',
+          '*.{crt,pem}',
+          '**/.git/**',
+        ]),
+        '**/.iwsdk/**',
+        '**/.iwsdk-browser-*/**',
+      ];
       if (userConfig.server.watch !== null) {
         userConfig.server.watch ??= {};
         const existingIgnored = userConfig.server.watch.ignored;
@@ -918,11 +938,15 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // The Playwright window is the managed browser surface in every workspace
       // mode, so suppress Vite's independent browser launch.
       if (pluginOptions.workspace) {
-        if (userConfig.server) {
-          userConfig.server.open = false;
-        } else {
-          userConfig.server = { open: false };
-        }
+        userConfig.server ??= {};
+        userConfig.server.open = false;
+      }
+      // A configured port is the runtime's address (adb reverse forwards it
+      // to headsets), so an occupied port fails startup instead of moving the
+      // singleton runtime. An explicit strictPort still wins, and preview,
+      // which inherits server.strictPort for its own port, is left alone.
+      if (userConfig.server?.port !== undefined && !environment.isPreview) {
+        userConfig.server.strictPort ??= true;
       }
     },
 
@@ -949,7 +973,14 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       }
     },
 
-    configureServer(server: ViteDevServer) {
+    async configureServer(server: ViteDevServer) {
+      // These resources belong to this Vite server generation. Vite constructs
+      // its replacement before closing the previous server, even when it reuses
+      // the plugin object from an inline config.
+      let mcpWss: WebSocketServer | null = null;
+      let mcpClients: Set<WebSocket> | null = null;
+      let managedBrowser: ManagedBrowser | null = null;
+      const httpServer = server.httpServer;
       const sessionId = randomUUID();
       const sessionStartTime = Date.now();
       if (loadedProject != null) {
@@ -998,15 +1029,41 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       server.watcher?.on('add', onSceneAdd);
       server.watcher?.on('change', onSceneChange);
       server.watcher?.on('unlink', onSceneUnlink);
-      server.httpServer?.once?.('close', () => {
+      let serverObserversRemoved = false;
+      const removeServerObservers = () => {
+        if (serverObserversRemoved) {
+          return;
+        }
+        serverObserversRemoved = true;
         server.ws?.off?.(HOT_CLIENT_ROLE_EVENT, registerHotClient);
         server.watcher?.off('add', onSceneAdd);
         server.watcher?.off('change', onSceneChange);
         server.watcher?.off('unlink', onSceneUnlink);
-      });
+      };
+      server.httpServer?.once?.('close', removeServerObservers);
 
       server.middlewares.use((request, response, next) => {
         const pathname = getRequestPathname(request.url);
+        let privatePath = pathname;
+        try {
+          for (let n = 0; n < 4; n++) {
+            const decoded = decodeURIComponent(privatePath);
+            if (decoded === privatePath) {
+              break;
+            }
+            privatePath = decoded;
+          }
+          privatePath = privatePath.replace(/\\/gu, '/');
+        } catch {}
+        if (
+          /(?:^|\/)\.iwsdk(?:\/|$)|(?:^|\/)\.iwsdk-browser-[^/]*(?:\/|$)/iu.test(
+            privatePath,
+          )
+        ) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
         const isManagedWorkspaceRequest = hasManagedWorkspaceAccess(
           request,
           managedWorkspaceToken,
@@ -1198,16 +1255,21 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       if (!pluginOptions.workspace) {
         return;
       }
+      let owner: Awaited<ReturnType<typeof acquireRuntimeOwner>> | undefined;
+      let ownerAcquisition: Promise<void> | undefined;
+      const acquireOwner = () =>
+        (ownerAcquisition ??= acquireRuntimeOwner(config.root, sessionId).then(
+          async (lease) => {
+            owner = lease;
+            if (serverShuttingDown) {
+              await lease.release();
+              throw new Error(
+                'Runtime was closed before acquiring workspace ownership.',
+              );
+            }
+          },
+        ));
 
-      // Closure-scoped state for browser auto-recovery
-      let browserLaunchPromise: Promise<void> | null = null;
-      let browserLaunchAbortController: AbortController | null = null;
-      let browserCommandReadyPromise: Promise<{
-        browser: ManagedBrowser | null;
-        relaunched: boolean;
-        bridgeConnected: boolean;
-        waitedForBridgeMs: number;
-      }> | null = null;
       let browserRuntimeClients: Set<WebSocket> | null = null;
       let browserCommandReadyClients: Set<WebSocket> | null = null;
       const browserPageRoles = new WeakMap<
@@ -1217,9 +1279,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const browserClientMetadata = new Map<WebSocket, RuntimeBrowserClient>();
       let serverShuttingDown = false;
       let browserUrl = '';
-      let consecutiveFailures = 0;
       let currentBrowserState: RuntimeBrowserState | null = null;
-      const MAX_LAUNCH_FAILURES = 3;
+      let lastBridgeConnectedAt: string | undefined;
+      let lastCommandReadyAt: string | undefined;
+      // Evidence that this epoch's managed bridge was connected and then lost.
+      let managedBridgeLoss: { browserEpoch: number; at: string } | undefined;
       const BRIDGE_READY_TIMEOUT_MS = pluginOptions.bridgeReadyTimeoutMs;
       const traceEnabled = process.env.IWSDK_RUNTIME_TRACE === '1';
       const wsConnectionIds = new WeakMap<WebSocket, string>();
@@ -1253,22 +1317,27 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const createBrowserIssue = (
         cause: RuntimeIssueCause,
         message: string,
+        at: string,
       ): RuntimeIssueInfo => ({
         cause,
         message,
-        at: new Date().toISOString(),
+        at,
       });
-
-      const classifyBrowserLaunchFailure = (
-        message: string,
-      ): RuntimeIssueCause =>
-        /permission|not permitted|denied|sandbox|eacces|eperm/i.test(message)
-          ? 'permission_denied'
-          : 'browser_launch_failed';
 
       const listBrowserClients = (): RuntimeBrowserClient[] =>
         [...browserClientMetadata.entries()]
-          .filter(([client]) => browserRuntimeClients?.has(client))
+          .filter(
+            ([client, metadata]) =>
+              browserRuntimeClients?.has(client) &&
+              client.readyState === WebSocket.OPEN &&
+              (metadata.deviceClass === 'physical' ||
+                (metadata.sessionId === sessionId &&
+                  metadata.browserEpoch ===
+                    controller.snapshot().browserEpoch &&
+                  ['launching', 'running'].includes(
+                    controller.snapshot().state,
+                  ))),
+          )
           .map(([client, metadata]) => ({
             ...metadata,
             commandReady: browserCommandReadyClients?.has(client) ?? false,
@@ -1281,399 +1350,171 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               left.tabGeneration - right.tabGeneration,
           );
 
-      const createBrowserState = (
-        status: RuntimeBrowserState['status'],
-        options: {
-          connected?: boolean;
-          commandReady?: boolean;
-          connectedClientCount?: number;
-          lastError?: RuntimeIssueInfo;
-          lastBridgeConnectedAt?: string;
-          lastCommandReadyAt?: string;
-        } = {},
-        previous: RuntimeBrowserState | null = currentBrowserState,
-      ): RuntimeBrowserState => {
-        const connectedClientCount =
-          options.connectedClientCount ?? browserRuntimeClients?.size ?? 0;
-        const connected = options.connected ?? status === 'connected';
-        const commandReady = options.commandReady ?? false;
-
-        return {
-          status,
-          connected,
-          commandReady,
-          connectedClientCount,
-          clients: listBrowserClients(),
-          lastTransitionAt: new Date().toISOString(),
-          ...((options.lastBridgeConnectedAt ?? previous?.lastBridgeConnectedAt)
-            ? {
-                lastBridgeConnectedAt:
-                  options.lastBridgeConnectedAt ??
-                  previous?.lastBridgeConnectedAt,
-              }
-            : {}),
-          ...((options.lastCommandReadyAt ?? previous?.lastCommandReadyAt)
-            ? {
-                lastCommandReadyAt:
-                  options.lastCommandReadyAt ?? previous?.lastCommandReadyAt,
-              }
-            : {}),
-          ...(options.lastError ? { lastError: options.lastError } : {}),
-        };
-      };
-
+      const browserLaunchAllowed = pluginOptions.workspace.open !== false;
       const isBrowserCommandPathReady = (): boolean =>
         hasReadyBrowserCommandPath(listBrowserClients());
-
-      const browserLaunchAllowed = pluginOptions.workspace.open !== false;
-      // --no-open is an explicit no-browser session. Record that state so CLI
-      // and MCP callers receive an actionable cause instead of waiting on a
-      // bridge that cannot connect.
-      currentBrowserState = browserLaunchAllowed
-        ? createBrowserState('launching', { connected: false }, null)
-        : createBrowserState(
-            'not_launched',
-            {
-              connected: false,
-              commandReady: false,
-              lastError: createBrowserIssue(
-                'browser_not_launched',
-                'No managed browser was launched because the dev server was started with --no-open. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',
-              ),
-            },
-            null,
-          );
-
-      const publishBrowserState = (browser: RuntimeBrowserState): void => {
-        currentBrowserState = browser;
-        traceRuntime('browser_state', {
-          status: browser.status,
-          bridgeConnected: browser.connected,
-          commandReady: browser.commandReady,
-          connectedClientCount: browser.connectedClientCount,
-          lastError: browser.lastError ?? null,
-        });
+      const createBrowserState = (): RuntimeBrowserState => {
+        const lifecycle = controller.snapshot();
+        const clients = listBrowserClients();
+        const managed = clients.filter(
+          (client) => client.deviceClass === 'managed',
+        );
+        // A lost bridge is reported, not repaired: Chromium keeps running and
+        // the lifecycle stays `running` until the page reconnects. Losing
+        // either required role breaks the command path, so it is reported too.
+        const bridgeLoss =
+          lifecycle.state === 'running' &&
+          !hasManagedCommandRoles(clients) &&
+          managedBridgeLoss?.browserEpoch === lifecycle.browserEpoch
+            ? managedBridgeLoss
+            : undefined;
+        const status: RuntimeBrowserState['status'] =
+          lifecycle.state === 'launching'
+            ? 'launching'
+            : lifecycle.state === 'failed'
+              ? 'launch_failed'
+              : lifecycle.state === 'running'
+                ? bridgeLoss
+                  ? 'disconnected'
+                  : managed.length
+                    ? 'connected'
+                    : 'waiting_for_connection'
+                : lifecycle.state === 'idle'
+                  ? 'not_launched'
+                  : 'disconnected';
+        return {
+          lifecycle,
+          status,
+          clients,
+          lastBridgeConnectedAt,
+          lastCommandReadyAt,
+          connected: managed.length > 0,
+          commandReady:
+            lifecycle.state === 'running' && isBrowserCommandPathReady(),
+          connectedClientCount: managed.length,
+          lastTransitionAt: lifecycle.stateEnteredAt,
+          ...(lifecycle.issue
+            ? {
+                lastError: createBrowserIssue(
+                  lifecycle.issueCause ??
+                    (lifecycle.state === 'failed'
+                      ? 'browser_launch_failed'
+                      : 'connection_lost'),
+                  lifecycle.issue,
+                  lifecycle.issueAt ?? lifecycle.stateEnteredAt,
+                ),
+              }
+            : bridgeLoss
+              ? {
+                  lastError: createBrowserIssue(
+                    'connection_lost',
+                    'The managed browser bridge disconnected while Chromium kept running; a reloading page reconnects on its own. Use runtime_wait to observe it, and run `npx @iwsdk/cli browser reload` only if it does not reconnect. Chromium is not restarted.',
+                    bridgeLoss.at,
+                  ),
+                }
+              : !browserLaunchAllowed
+                ? {
+                    lastError: createBrowserIssue(
+                      'browser_not_launched',
+                      'Managed browser launch is disabled (--no-open). Physical targets and server tools remain available.',
+                      lifecycle.stateEnteredAt,
+                    ),
+                  }
+                : {}),
+        };
+      };
+      const publishBrowserState = (): void => {
+        currentBrowserState = createBrowserState();
         void setRuntimeSessionBrowserState(
           config.root,
           sessionId,
-          browser,
+          currentBrowserState,
         ).catch((error) => {
           console.error('[IWSDK Dev] Failed to update browser state:', error);
         });
       };
-
-      /**
-       * Launch (or re-launch) the Playwright-managed browser.
-       * Guards against concurrent launches via `browserLaunchPromise`.
-       * Stops retrying after MAX_LAUNCH_FAILURES consecutive failures.
-       */
-      const launchBrowser = (): Promise<void> => {
-        if (serverShuttingDown || !browserLaunchAllowed) {
-          return Promise.resolve();
-        }
-        if (managedBrowser != null && !managedBrowser.isClosed()) {
-          return Promise.resolve();
-        }
-        if (browserLaunchPromise) {
-          return browserLaunchPromise;
-        }
-
-        const launchAbortController = new AbortController();
-        browserLaunchAbortController = launchAbortController;
-        browserLaunchPromise = (async () => {
-          publishBrowserState(createBrowserState('launching'));
-          traceRuntime('browser_launch_start', {
-            browserUrl,
-            headless: pluginOptions.workspace!.headless,
-          });
-          try {
-            const browser = await launchManagedBrowser(
-              browserUrl,
-              pluginOptions.workspace!.headless,
-              pluginOptions.verbose,
-              pluginOptions.workspace!.viewport,
-              pluginOptions.workspace!.screenshotSize,
-              traceEnabled,
-              {
-                headerName: MANAGED_WORKSPACE_HEADER,
-                pathnames: [
-                  WORKSPACE_ROUTE,
-                  WORKSPACE_FILES_ROUTE,
-                  WORKSPACE_SCENES_ROUTE,
-                  WORKSPACE_REVIEWS_ROUTE,
-                  WORKSPACE_REVIEW_CAPTURES_ROUTE,
-                  WORKSPACE_REVIEW_TRANSITIONS_ROUTE,
-                  WORKSPACE_PUBLISH_ROUTE,
-                  WORKSPACE_OPEN_RUNTIME_ROUTE,
-                  WORKSPACE_RUNTIME_PREFLIGHT_ROUTE,
-                  `${EDITOR_ROUTE}/document`,
-                ],
-                topLevelPathnames: ['/'],
-                token: managedWorkspaceToken,
-              },
-              pluginOptions.ai ? 'iwer' : 'workspace',
-              config.root,
-              pluginOptions.workspace!.browserAutomation,
-              launchAbortController.signal,
-            );
-            if (serverShuttingDown || launchAbortController.signal.aborted) {
-              await browser.close();
-              return;
+      const controller = new ManagedBrowserLifecycle<ManagedBrowser>({
+        sessionId,
+        enabled: browserLaunchAllowed,
+        prepare: ensureChromiumInstalled,
+        onChange: (_state, browser) => {
+          managedBrowser = browser;
+          publishBrowserState();
+          const automation = browser?.getAutomationTarget?.() ?? null;
+          void setRuntimeSessionBrowserAutomation(config.root, sessionId, {
+            configured: pluginOptions.workspace!.browserAutomation,
+            enabled: automation != null,
+            ...(automation ?? {}),
+            protocol: 'cdp',
+          }).catch(() => {});
+        },
+        launch: async (signal, browserEpoch) => {
+          // Old endpoints are invalid before the next process is started.
+          for (const [ws, metadata] of browserClientMetadata) {
+            if (metadata.deviceClass === 'managed') {
+              ws.close(1001, 'Managed browser epoch retired');
             }
-            managedBrowser = browser;
-            consecutiveFailures = 0;
-            const automationTarget = browser.getAutomationTarget?.() ?? null;
-            void setRuntimeSessionBrowserAutomation(config.root, sessionId, {
-              configured: pluginOptions.workspace!.browserAutomation,
-              enabled: automationTarget != null,
-              ...(automationTarget == null ? {} : automationTarget),
-              protocol: 'cdp',
-            }).catch((error) => {
-              console.error(
-                '[IWSDK Dev] Failed to update browser automation state:',
-                error,
-              );
-            });
-            traceRuntime('browser_launch_success', {
-              browserRuntimeClients: browserRuntimeClients?.size ?? 0,
-            });
-            publishBrowserState(
-              createBrowserState(
-                (browserRuntimeClients?.size ?? 0) > 0
-                  ? 'connected'
-                  : 'waiting_for_connection',
-                {
-                  connected: (browserRuntimeClients?.size ?? 0) > 0,
-                  commandReady: isBrowserCommandPathReady(),
-                  lastBridgeConnectedAt:
-                    (browserRuntimeClients?.size ?? 0) > 0
-                      ? new Date().toISOString()
-                      : undefined,
-                },
-              ),
-            );
-
-            // On unexpected close, mark as null. The browser will be
-            // relaunched lazily on the next MCP request via ensureBrowser().
-            browser.onClose(() => {
-              if (managedBrowser !== browser) {
-                return;
-              }
-              managedBrowser = null;
-              browserCommandReadyPromise = null;
-              void setRuntimeSessionBrowserAutomation(config.root, sessionId, {
-                configured: pluginOptions.workspace!.browserAutomation,
-                enabled: false,
-                protocol: 'cdp',
-              }).catch(() => {});
-              traceRuntime('browser_closed', {
-                serverShuttingDown,
-              });
-              publishBrowserState(
-                createBrowserState('disconnected', {
-                  connected: false,
-                  commandReady: false,
-                  lastError: createBrowserIssue(
-                    'connection_lost',
-                    'Managed browser closed unexpectedly. It will relaunch on the next MCP request.',
-                  ),
-                }),
-              );
-              if (!serverShuttingDown) {
-                console.log(
-                  '🔄 IWSDK: Browser closed. Will relaunch on next MCP request.',
-                );
-              }
-            });
-          } catch (error) {
-            if (serverShuttingDown) {
-              traceRuntime('browser_launch_cancelled_by_shutdown');
-              return;
-            }
-            consecutiveFailures++;
-            const message =
-              error instanceof Error ? error.message : String(error);
-            traceRuntime('browser_launch_failed', {
-              consecutiveFailures,
-              message,
-            });
-            publishBrowserState(
-              createBrowserState('launch_failed', {
-                connected: false,
-                commandReady: false,
-                lastError: createBrowserIssue(
-                  classifyBrowserLaunchFailure(message),
-                  message,
-                ),
-              }),
-            );
-            console.error('❌ IWSDK: Failed to launch browser:', error);
-            if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
-              console.error(
-                `❌ IWSDK: ${MAX_LAUNCH_FAILURES} consecutive launch failures, giving up. ` +
-                  'Restart the dev server to retry.',
-              );
-            }
-          } finally {
-            if (browserLaunchAbortController === launchAbortController) {
-              browserLaunchAbortController = null;
-            }
-            browserLaunchPromise = null;
           }
-        })();
-
-        return browserLaunchPromise;
-      };
-
-      /**
-       * Return the current managed browser, re-launching if it was closed.
-       * `relaunched` is true when the browser was just freshly launched
-       * (meaning the previous page state was lost).
-       */
-      const ensureBrowser = async (): Promise<{
-        browser: ManagedBrowser | null;
-        relaunched: boolean;
-      }> => {
-        if (serverShuttingDown || !browserLaunchAllowed) {
-          return { browser: null, relaunched: false };
-        }
-        const current = managedBrowser;
-        if (current && !current.isClosed()) {
-          traceRuntime('ensure_browser_reuse', {
-            browserRuntimeClients: browserRuntimeClients?.size ?? 0,
-          });
-          return { browser: current, relaunched: false };
-        }
-        managedBrowser = null;
-        if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
-          traceRuntime('ensure_browser_aborted', {
-            consecutiveFailures,
-          });
-          return { browser: null, relaunched: false };
-        }
-        await launchBrowser();
-        traceRuntime('ensure_browser_relaunch_result', {
-          relaunched: managedBrowser !== null,
-          browserRuntimeClients: browserRuntimeClients?.size ?? 0,
-        });
-        return { browser: managedBrowser, relaunched: managedBrowser !== null };
-      };
-
+          return launchManagedBrowser(
+            browserUrl,
+            pluginOptions.workspace!.headless,
+            pluginOptions.verbose,
+            pluginOptions.workspace!.viewport,
+            pluginOptions.workspace!.screenshotSize,
+            traceEnabled,
+            {
+              headerName: MANAGED_WORKSPACE_HEADER,
+              pathnames: [
+                WORKSPACE_ROUTE,
+                WORKSPACE_FILES_ROUTE,
+                WORKSPACE_SCENES_ROUTE,
+                WORKSPACE_REVIEWS_ROUTE,
+                WORKSPACE_REVIEW_CAPTURES_ROUTE,
+                WORKSPACE_REVIEW_TRANSITIONS_ROUTE,
+                WORKSPACE_PUBLISH_ROUTE,
+                WORKSPACE_OPEN_RUNTIME_ROUTE,
+                WORKSPACE_RUNTIME_PREFLIGHT_ROUTE,
+                `${EDITOR_ROUTE}/document`,
+              ],
+              topLevelPathnames: ['/'],
+              token: managedWorkspaceToken,
+              runtimeIdentity: { sessionId, browserEpoch },
+            },
+            pluginOptions.ai ? 'iwer' : 'workspace',
+            config.root,
+            pluginOptions.workspace!.browserAutomation,
+            signal,
+          );
+        },
+      });
+      currentBrowserState = createBrowserState();
+      const launchBrowser = () => controller.ensure();
+      const ensureBrowser = () => controller.ensure();
       const waitForBridgeConnection = async (
         timeoutMs: number,
-        reason: string,
-      ): Promise<number> => {
-        const startedAt = Date.now();
-        traceRuntime('bridge_wait_start', {
-          reason,
-          timeoutMs,
-          browserRuntimeClients: browserRuntimeClients?.size ?? 0,
-        });
-        while (!serverShuttingDown && Date.now() - startedAt < timeoutMs) {
-          if (isBrowserCommandPathReady()) {
-            const waitedForBridgeMs = Date.now() - startedAt;
-            traceRuntime('bridge_wait_ready', {
-              reason,
-              waitedForBridgeMs,
-            });
-            return waitedForBridgeMs;
+        target: ManagedBrowserCommandTarget,
+      ): Promise<void> => {
+        const deadline = Date.now() + Math.min(timeoutMs, 5000);
+        while (!serverShuttingDown && Date.now() < deadline) {
+          if (
+            listBrowserClients().some(
+              (client) =>
+                client.deviceClass === 'managed' &&
+                client.role === target.role &&
+                (target.sessionId == null ||
+                  client.sessionId === target.sessionId) &&
+                (target.browserEpoch == null ||
+                  client.browserEpoch === target.browserEpoch) &&
+                client.commandReady,
+            )
+          ) {
+            return;
           }
-          await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, 100);
-            timer.unref();
-          });
+          await controller.wait(
+            controller.snapshot().revision,
+            Math.min(250, deadline - Date.now()),
+          );
         }
-        const waitedForBridgeMs = Date.now() - startedAt;
-        traceRuntime('bridge_wait_timeout', {
-          reason,
-          waitedForBridgeMs,
-        });
-        return waitedForBridgeMs;
-      };
-
-      const ensureBrowserCommandReady = async (
-        reason: string,
-      ): Promise<{
-        browser: ManagedBrowser | null;
-        relaunched: boolean;
-        bridgeConnected: boolean;
-        waitedForBridgeMs: number;
-      }> => {
-        if (browserCommandReadyPromise) {
-          return browserCommandReadyPromise;
-        }
-
-        const readinessPromise = (async () => {
-          const { browser, relaunched } = await ensureBrowser();
-          if (!browser) {
-            return {
-              browser: null,
-              relaunched: false,
-              bridgeConnected: false,
-              waitedForBridgeMs: 0,
-            };
-          }
-
-          const needsBridgeWait =
-            relaunched ||
-            !currentBrowserState?.connected ||
-            currentBrowserState?.commandReady === false;
-          const waitedForBridgeMs = needsBridgeWait
-            ? await waitForBridgeConnection(BRIDGE_READY_TIMEOUT_MS, reason)
-            : 0;
-          const bridgeConnected = (browserRuntimeClients?.size ?? 0) > 0;
-          const commandReady = isBrowserCommandPathReady();
-
-          if (commandReady) {
-            publishBrowserState(
-              createBrowserState('connected', {
-                connected: true,
-                commandReady: true,
-                connectedClientCount: browserRuntimeClients!.size,
-                lastBridgeConnectedAt:
-                  currentBrowserState?.lastBridgeConnectedAt ??
-                  new Date().toISOString(),
-                lastCommandReadyAt: new Date().toISOString(),
-              }),
-            );
-          } else {
-            publishBrowserState(
-              createBrowserState('waiting_for_connection', {
-                connected: bridgeConnected,
-                commandReady: false,
-                connectedClientCount: browserRuntimeClients?.size ?? 0,
-                lastError: createBrowserIssue(
-                  relaunched ? 'browser_relaunched' : 'browser_not_ready',
-                  relaunched
-                    ? 'Browser relaunched and is waiting for the runtime bridge to reconnect.'
-                    : 'Managed browser bridge has not connected yet.',
-                ),
-              }),
-            );
-          }
-
-          traceRuntime('browser_command_ready_result', {
-            reason,
-            relaunched,
-            bridgeConnected,
-            waitedForBridgeMs,
-          });
-
-          return {
-            browser,
-            relaunched,
-            bridgeConnected,
-            waitedForBridgeMs,
-          };
-        })();
-        browserCommandReadyPromise = readinessPromise;
-        void readinessPromise.finally(() => {
-          if (browserCommandReadyPromise === readinessPromise) {
-            browserCommandReadyPromise = null;
-          }
-        });
-
-        return readinessPromise;
       };
 
       // Initialize WebSocket server and client tracking
@@ -1682,22 +1523,37 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       browserCommandReadyClients = new Set();
       mcpWss = new WebSocketServer({ noServer: true });
 
-      // First-response-wins relay handler (extracted for testability)
+      // Each request belongs to one exact endpoint and one caller.
+      const pairedHeadsets = new Map<string, string>();
       const relay = createRelayHandler({
         verbose: pluginOptions.verbose,
+        // The relay already fenced the endpoint generation. A managed page
+        // that missed its deadline is unresponsive, so retire exactly that
+        // epoch. A lost bridge is only reported: the page's reload registers
+        // a new generation, and a healthy Chromium is never restarted for it.
+        onOutcomeUnknown: ({ deviceClass, browserEpoch }, code) => {
+          const browser = controller.current();
+          if (
+            code === 'command_timeout' &&
+            deviceClass === 'managed' &&
+            browser &&
+            browserEpoch != null
+          ) {
+            controller.invalidateIfCurrent(
+              browser,
+              browserEpoch,
+              'A runtime command exceeded its deadline, so its outcome is unknown.',
+            );
+          }
+        },
       });
 
-      // Clean up stale entries every 60 seconds
-      const relayCleanupInterval = setInterval(() => {
-        relay.cleanStale(60000);
-      }, 60000);
-      relayCleanupInterval.unref();
-
       const BROWSER_RELAUNCHED_RESULT = {
-        status: 'browser_relaunched',
+        code: 'browser_relaunched',
+        outcome: 'not_executed',
+        retryable: true,
         message:
-          'Browser was closed and has been relaunched. ' +
-          'The page state has been reset — please retry your request.',
+          'A managed browser generation is now available. Rediscover its target and retry the request. In-memory page state changed; stored site data is retained.',
       };
 
       const sendWsJson = (
@@ -1733,10 +1589,24 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         tab: { generation: number | null; id: string | null };
       }> =>
         browser.runCommandExclusive(async () => {
+          if (controller.current() !== browser || serverShuttingDown) {
+            throw Object.assign(
+              new Error('Managed browser changed while command was queued.'),
+              { code: 'stale_browser_tab', outcome: 'not_executed' },
+            );
+          }
           const startedAt = Date.now();
           const initialTab = await browser
             .getTabMetadata()
             .catch(() => ({ generation: null, id: null }));
+          if (
+            target?.deviceClass === 'physical' ||
+            (target?.sessionId != null && target.sessionId !== sessionId) ||
+            (target?.browserEpoch != null &&
+              target.browserEpoch !== controller.snapshot().browserEpoch)
+          ) {
+            throw new ManagedBrowserTargetError(target, initialTab);
+          }
           if (target?.role != null && target.role !== 'app') {
             throw new Error(
               `Managed browser commands require the app target; received ${JSON.stringify(target)}`,
@@ -1805,7 +1675,27 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               message: error instanceof Error ? error.message : String(error),
               relaunched: false,
             });
-            throw error;
+            const source =
+              typeof error === 'object' && error != null
+                ? (error as Record<string, unknown>)
+                : null;
+            throw Object.assign(
+              new Error(error instanceof Error ? error.message : String(error)),
+              {
+                code:
+                  typeof source?.code === 'string'
+                    ? source.code
+                    : 'browser_command_failed',
+                outcome:
+                  typeof source?.outcome === 'string'
+                    ? source.outcome
+                    : 'outcome_unknown',
+                retryable:
+                  typeof source?.retryable === 'boolean'
+                    ? source.retryable
+                    : false,
+              },
+            );
           }
         });
 
@@ -1818,7 +1708,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           ws,
           {
             id: requestId,
-            error: createUnavailableBrowserRpcError(currentBrowserState),
+            error: {
+              ...createUnavailableBrowserRpcError(currentBrowserState),
+              data: { outcome: 'not_executed', browser: currentBrowserState },
+            },
           },
           context,
         );
@@ -1840,6 +1733,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                     code: error.code,
                     currentTab: error.currentTab,
                     expectedTab: error.expectedTab,
+                    outcome: 'not_executed',
                   }
                 : typeof error === 'object' &&
                     error != null &&
@@ -1847,6 +1741,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                     typeof error.code === 'string'
                   ? {
                       code: error.code,
+                      ...('outcome' in error ? { outcome: error.outcome } : {}),
                       ...('retryable' in error &&
                       typeof error.retryable === 'boolean'
                         ? { retryable: error.retryable }
@@ -1888,18 +1783,18 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             return;
           }
           if (readiness.relaunched) {
-            const tab = await readiness.browser.getTabMetadata();
             sendWsJson(
               ws,
               {
                 id: parsed.id,
-                result: BROWSER_RELAUNCHED_RESULT,
-                ...(tab.id == null
-                  ? {}
-                  : {
-                      _tabId: tab.id,
-                      _tabGeneration: tab.generation ?? undefined,
-                    }),
+                error: {
+                  code: -32010,
+                  message: BROWSER_RELAUNCHED_RESULT.message,
+                  data: {
+                    ...BROWSER_RELAUNCHED_RESULT,
+                    browser: createBrowserState(),
+                  },
+                },
               },
               `${options.resultContext}_relaunched`,
             );
@@ -1939,12 +1834,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         bridgeConnected: Boolean(currentBrowserState?.connected),
         commandReady: Boolean(currentBrowserState?.commandReady),
         waitedForBridgeMs,
-        browser:
-          currentBrowserState ??
-          createBrowserState('launching', {
-            connected: false,
-            commandReady: false,
-          }),
+        browser: createBrowserState(),
       });
 
       mcpWss.on('connection', (ws: WebSocket, request: IncomingMessage) => {
@@ -1990,12 +1880,375 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               commandReady?: boolean;
               tabId?: string;
               tabGeneration?: number;
+              sessionId?: string;
+              expectedSessionId?: string;
+              browserEpoch?: number;
+              headsetToken?: string;
               target?: ManagedBrowserCommandTarget;
             };
+
+            if (
+              parsed.method &&
+              parsed.expectedSessionId != null &&
+              parsed.expectedSessionId !== sessionId
+            ) {
+              intercepted = true;
+              sendWsJson(
+                ws,
+                {
+                  id: parsed.id,
+                  error: {
+                    code: -32004,
+                    message:
+                      'Runtime ownership changed. Rediscover the workspace session.',
+                    data: {
+                      code: 'stale_runtime_owner',
+                      outcome: 'not_executed',
+                      sessionId,
+                    },
+                  },
+                },
+                'stale_owner',
+              );
+              return;
+            }
+            if (parsed.method === '__iwsdk_browser_lease_release') {
+              intercepted = true;
+              return;
+            }
+            if (serverShuttingDown) {
+              intercepted = true;
+              if (parsed.type === 'iwsdk_browser_hello') {
+                ws.close(1012, 'Runtime is shutting down');
+              } else if (typeof parsed.id === 'string' && parsed.method) {
+                sendWsJson(
+                  ws,
+                  {
+                    id: parsed.id,
+                    error: {
+                      code: -32004,
+                      message:
+                        'Runtime is shutting down. Rediscover the workspace session.',
+                      data: {
+                        code: 'runtime_stopping',
+                        outcome: 'not_executed',
+                      },
+                    },
+                  },
+                  'runtime_stopping',
+                );
+              }
+              return;
+            }
+            if (
+              parsed.method === '__iwsdk_browser_lease' &&
+              typeof parsed.id === 'string'
+            ) {
+              intercepted = true;
+              const browser = controller.current();
+              if (!browser) {
+                sendUnavailableBrowser(ws, parsed.id, 'lease_unavailable');
+                return;
+              }
+              const requestId = parsed.id;
+              const epoch = controller.snapshot().browserEpoch;
+              const timeoutMs = Number(parsed.params?.timeoutMs ?? 65000);
+              if (
+                !Number.isFinite(timeoutMs) ||
+                timeoutMs < 1000 ||
+                timeoutMs > 115000
+              ) {
+                sendInternalError(
+                  ws,
+                  requestId,
+                  new Error(
+                    'Browser lease timeout must be between 1000 and 115000 milliseconds.',
+                  ),
+                  'lease_error',
+                );
+                return;
+              }
+              let granted = false;
+              try {
+                await browser.runCommandExclusive(
+                  async () => {
+                    const automation = browser.getAutomationTarget();
+                    if (
+                      ws.readyState !== WebSocket.OPEN ||
+                      controller.current() !== browser ||
+                      parsed.params?.browserEpoch !== epoch ||
+                      parsed.params?.targetId !== automation?.targetId
+                    ) {
+                      throw new Error(
+                        'Managed browser identity changed before lease acquisition. Refresh runtime status.',
+                      );
+                    }
+                    granted = true;
+                    await new Promise<void>((resolve, reject) => {
+                      const closed = () => {
+                        cleanup();
+                        reject(
+                          new Error(
+                            'Browser runner disconnected without releasing its lease.',
+                          ),
+                        );
+                      };
+                      const released = (raw: Buffer) => {
+                        try {
+                          const message = JSON.parse(raw.toString());
+                          if (
+                            message.id === requestId &&
+                            message.method === '__iwsdk_browser_lease_release'
+                          ) {
+                            cleanup();
+                            resolve();
+                          }
+                        } catch {}
+                      };
+                      const cleanup = () => {
+                        ws.off('close', closed);
+                        ws.off('message', released);
+                      };
+                      ws.once('close', closed);
+                      ws.on('message', released);
+                      sendWsJson(
+                        ws,
+                        {
+                          id: requestId,
+                          result: {
+                            leased: true,
+                            sessionId,
+                            browserEpoch: epoch,
+                          },
+                        },
+                        'browser_leased',
+                      );
+                    });
+                  },
+                  { timeoutMs },
+                );
+              } catch (error) {
+                if (granted) {
+                  controller.invalidateIfCurrent(
+                    browser,
+                    epoch,
+                    'Browser runner lease was lost; retiring the browser to stop uncertain commands.',
+                  );
+                  ws.close(
+                    1011,
+                    'Browser lease ended before script completion',
+                  );
+                } else {
+                  sendInternalError(ws, requestId, error, 'lease_error');
+                }
+              }
+              return;
+            }
+            if (
+              parsed.method &&
+              [
+                'runtime_get_status',
+                'runtime_list_targets',
+                'runtime_wait',
+                'runtime_recover',
+                'runtime_pair_headset',
+              ].includes(parsed.method) &&
+              typeof parsed.id === 'string'
+            ) {
+              intercepted = true;
+              if (
+                parsed.target != null ||
+                parsed.params?.runtimeTarget != null ||
+                parsed.params?.expectedTab != null
+              ) {
+                throw Object.assign(
+                  new Error(
+                    'Runtime control operations do not select a browser target.',
+                  ),
+                  { code: 'invalid_target', outcome: 'not_executed' },
+                );
+              }
+              if (parsed.method === 'runtime_recover') {
+                await controller.ensure(true);
+              }
+              if (parsed.method === 'runtime_wait') {
+                const afterRevision =
+                  parsed.params?.afterRevision ??
+                  controller.snapshot().revision;
+                const timeoutMs = parsed.params?.timeoutMs ?? 25000;
+                if (
+                  typeof afterRevision !== 'number' ||
+                  !Number.isSafeInteger(afterRevision) ||
+                  afterRevision < 0 ||
+                  typeof timeoutMs !== 'number' ||
+                  !Number.isSafeInteger(timeoutMs) ||
+                  timeoutMs < 0 ||
+                  timeoutMs > 25000
+                ) {
+                  throw Object.assign(
+                    new Error(
+                      'runtime_wait requires a nonnegative revision and a timeout from 0 to 25000ms.',
+                    ),
+                    { code: 'invalid_params', outcome: 'not_executed' },
+                  );
+                }
+                const cancel = new AbortController();
+                const closed = () => cancel.abort();
+                ws.once('close', closed);
+                try {
+                  await controller.wait(
+                    afterRevision,
+                    timeoutMs,
+                    cancel.signal,
+                  );
+                } finally {
+                  ws.off('close', closed);
+                }
+              }
+              if (parsed.method === 'runtime_pair_headset') {
+                const headsetId = parsed.params?.headsetId;
+                // adb serial forms: USB `1WMHH8`, wireless `192.168.1.5:5555`
+                // and mDNS `adb-1WMHH8-AbCd._adb-tls-connect._tcp`. The id is
+                // only published as JSON; the pairing URL carries the token.
+                if (
+                  typeof headsetId !== 'string' ||
+                  !/^[A-Za-z0-9._:-]{1,128}$/.test(headsetId)
+                ) {
+                  throw new Error(
+                    'headsetId must be the device identifier (for example, its adb serial).',
+                  );
+                }
+                let token = [...pairedHeadsets].find(
+                  ([, pairedId]) => pairedId === headsetId,
+                )?.[0];
+                if (!token && pairedHeadsets.size >= 32) {
+                  const active = new Set(
+                    listBrowserClients().map((client) => client.headsetId),
+                  );
+                  const inactive = [...pairedHeadsets].find(
+                    ([, pairedId]) => !active.has(pairedId),
+                  );
+                  if (inactive) {
+                    pairedHeadsets.delete(inactive[0]);
+                  }
+                }
+                if (!token && pairedHeadsets.size >= 32) {
+                  throw new Error(
+                    'Headset pairing capacity reached (32 connected headsets).',
+                  );
+                }
+                token ??= randomUUID();
+                pairedHeadsets.set(token, headsetId);
+                const url = new URL(browserUrl);
+                url.searchParams.set('__iwsdk_headset', token);
+                sendWsJson(
+                  ws,
+                  {
+                    id: parsed.id,
+                    result: {
+                      headsetId,
+                      sessionId,
+                      url: url.toString(),
+                      nextAction:
+                        'Open this URL on that headset via adb reverse. Then use runtime_list_targets to select the exact page generation.',
+                    },
+                  },
+                  'headset_pair',
+                );
+                return;
+              }
+              const browser = createBrowserState();
+              const targets = listBrowserClients().map((client) => ({
+                ...client,
+                runtimeTarget: {
+                  deviceClass: client.deviceClass,
+                  headsetId: client.headsetId,
+                  pageId: client.pageId,
+                  tabGeneration: client.tabGeneration,
+                  sessionId: client.sessionId,
+                  browserEpoch: client.browserEpoch,
+                },
+                methods: RUNTIME_OPERATIONS.filter(
+                  (operation) =>
+                    operation.execution !== 'server' &&
+                    (client.deviceClass === 'managed' || operation.physical) &&
+                    (operation.target?.role ?? 'app') === client.role,
+                ).map((operation) => operation.mcpName),
+              }));
+              sendWsJson(
+                ws,
+                {
+                  id: parsed.id,
+                  result: {
+                    sessionId,
+                    serverReady: !serverShuttingDown,
+                    owner: owner?.identity,
+                    browser,
+                    targets,
+                  },
+                },
+                'runtime_status',
+              );
+              return;
+            }
 
             if (parsed?.type === 'iwsdk_browser_hello') {
               intercepted = true;
               const deviceClass = normalizeDeviceClass(parsed.deviceClass);
+              const headsetId =
+                deviceClass === 'physical'
+                  ? pairedHeadsets.get(parsed.headsetToken ?? '')
+                  : undefined;
+              const helloOwner = {
+                sessionId,
+                browserEpoch: controller.snapshot().browserEpoch,
+                headsetId,
+                fallbackPageId: connectionId,
+              };
+              const registered = browserClientMetadata.get(ws);
+              if (registered) {
+                // A socket carries one immutable endpoint generation. Another
+                // hello may restate it with new readiness; any other change is
+                // ignored so pending commands keep their admitted endpoint.
+                const repeated = normalizeBrowserHello(parsed, helloOwner);
+                if (
+                  !repeated ||
+                  !isSameBrowserEndpoint(registered, repeated) ||
+                  !relay.registerBrowserClient(ws, repeated)
+                ) {
+                  traceRuntime('bridge_hello_rejected', {
+                    connectionId,
+                    deviceClass,
+                    reason: 'endpoint_identity_immutable',
+                  });
+                  return;
+                }
+                browserClientMetadata.set(ws, repeated);
+                if (repeated.commandReady) {
+                  browserCommandReadyClients!.add(ws);
+                } else {
+                  browserCommandReadyClients!.delete(ws);
+                }
+                if (
+                  repeated.deviceClass === 'managed' &&
+                  isBrowserCommandPathReady()
+                ) {
+                  lastCommandReadyAt = new Date().toISOString();
+                }
+                controller.observe();
+                return;
+              }
+              if (
+                deviceClass === 'managed' &&
+                (parsed.sessionId !== sessionId ||
+                  parsed.browserEpoch !== controller.snapshot().browserEpoch ||
+                  !['launching', 'running'].includes(
+                    controller.snapshot().state,
+                  ))
+              ) {
+                ws.close(1008, 'Stale managed browser identity');
+                return;
+              }
               const remoteAddress = request.socket.remoteAddress;
               if (!isBrowserBridgeConnectionAllowed(remoteAddress)) {
                 traceRuntime('browser_bridge_rejected', {
@@ -2009,49 +2262,77 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 );
                 return;
               }
-              markConnectionKind(ws, 'bridge');
-              const pageRole = normalizePageRole(
-                parsed.pageRole ?? parsed.role,
-              );
-              browserPageRoles.set(ws, pageRole);
-              const pageId = parsed.pageId ?? parsed.tabId ?? connectionId;
-              const tabGeneration = parsed.tabGeneration ?? 1;
-              const browserClient: RuntimeBrowserClient = {
-                commandReady: parsed.commandReady === true,
-                deviceClass,
-                pageId,
-                role: pageRole,
-                sceneSessionId: parsed.sceneSessionId,
-                tabGeneration,
-              };
-              browserClientMetadata.set(ws, browserClient);
-              relay.registerBrowserClient(ws, browserClient);
-              if (!browserRuntimeClients!.has(ws)) {
-                browserRuntimeClients!.add(ws);
-                if (parsed.commandReady === true) {
-                  browserCommandReadyClients!.add(ws);
-                }
-                const commandReady = isBrowserCommandPathReady();
-                publishBrowserState(
-                  createBrowserState('connected', {
-                    connected: true,
-                    commandReady,
-                    connectedClientCount: browserRuntimeClients!.size,
-                    lastBridgeConnectedAt: new Date().toISOString(),
-                    lastCommandReadyAt: commandReady
-                      ? new Date().toISOString()
-                      : undefined,
-                  }),
+              if (deviceClass === 'physical' && !headsetId) {
+                ws.close(
+                  1008,
+                  'Unpaired headset. Use runtime_pair_headset and open its URL on the device.',
                 );
+                return;
               }
+              // Validate before touching any registry, so a malformed hello
+              // cannot displace, sort beside or publish over a live endpoint.
+              const browserClient = normalizeBrowserHello(parsed, helloOwner);
+              if (!browserClient) {
+                traceRuntime('bridge_hello_rejected', {
+                  connectionId,
+                  deviceClass,
+                  reason: 'malformed_identity',
+                });
+                ws.close(1008, 'Malformed browser identity');
+                return;
+              }
+              const { pageId, role: pageRole, tabGeneration } = browserClient;
+              const predecessors = [...browserClientMetadata].filter(
+                ([oldWs, old]) =>
+                  oldWs !== ws &&
+                  old.deviceClass === deviceClass &&
+                  old.headsetId === browserClient.headsetId &&
+                  old.pageId === pageId,
+              );
+              if (
+                predecessors.some(
+                  ([, old]) => old.tabGeneration > tabGeneration,
+                )
+              ) {
+                ws.close(1008, 'Stale page generation');
+                return;
+              }
+              // Retire the old connection before registering a new generation.
+              for (const [oldWs] of predecessors) {
+                browserClientMetadata.delete(oldWs);
+                relay.unregisterClient(oldWs);
+                oldWs.close(1001, 'Page generation superseded');
+              }
+              if (!relay.registerBrowserClient(ws, browserClient)) {
+                ws.close(1008, 'Stale endpoint or endpoint capacity reached');
+                return;
+              }
+              markConnectionKind(ws, 'bridge');
+              browserPageRoles.set(ws, pageRole);
+              browserClientMetadata.set(ws, browserClient);
+              browserRuntimeClients!.add(ws);
+              if (browserClient.commandReady) {
+                browserCommandReadyClients!.add(ws);
+              }
+              if (deviceClass === 'managed') {
+                // Loss evidence lasts until the whole command path is back.
+                if (hasManagedCommandRoles(listBrowserClients())) {
+                  managedBridgeLoss = undefined;
+                }
+                lastBridgeConnectedAt = new Date().toISOString();
+                if (isBrowserCommandPathReady()) {
+                  lastCommandReadyAt = lastBridgeConnectedAt;
+                }
+              }
+              controller.observe();
               traceRuntime('bridge_hello', {
                 connectionId,
                 deviceClass,
                 pageId,
                 pageRole,
-                sceneSessionId: parsed.sceneSessionId ?? null,
+                sceneSessionId: browserClient.sceneSessionId ?? null,
                 tabId: parsed.tabId ?? null,
-                tabGeneration: parsed.tabGeneration ?? null,
+                tabGeneration,
                 connectedClientCount: browserRuntimeClients!.size,
               });
               return;
@@ -2061,24 +2342,31 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               intercepted = true;
               if (browserRuntimeClients!.has(ws)) {
                 const metadata = browserClientMetadata.get(ws);
-                if (metadata != null) {
-                  browserClientMetadata.set(ws, {
-                    ...metadata,
-                    commandReady: true,
-                  });
+                // A superseding hello can retire this socket before a queued
+                // ready message is handled. Never recreate a metadata-less
+                // relay endpoint from that late signal.
+                if (metadata == null) {
+                  return;
+                }
+                const readyMetadata = {
+                  ...metadata,
+                  commandReady: true,
+                };
+                browserClientMetadata.set(ws, readyMetadata);
+                if (metadata.deviceClass === 'managed') {
+                  lastCommandReadyAt = new Date().toISOString();
+                }
+                if (!relay.registerBrowserClient(ws, readyMetadata)) {
+                  browserClientMetadata.delete(ws);
+                  browserRuntimeClients!.delete(ws);
+                  browserCommandReadyClients!.delete(ws);
+                  ws.close(1008, 'Stale endpoint or endpoint capacity reached');
+                  controller.observe();
+                  return;
                 }
                 browserCommandReadyClients!.add(ws);
+                controller.observe();
                 const commandReady = isBrowserCommandPathReady();
-                publishBrowserState(
-                  createBrowserState('connected', {
-                    connected: true,
-                    commandReady,
-                    connectedClientCount: browserRuntimeClients!.size,
-                    lastCommandReadyAt: commandReady
-                      ? new Date().toISOString()
-                      : undefined,
-                  }),
-                );
                 traceRuntime('bridge_command_ready', {
                   connectionId,
                   pageRole: browserPageRoles.get(ws) ?? null,
@@ -2096,9 +2384,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               const expectedClaimId =
                 process.env[INTERNAL_RUNTIME_LAUNCH_CLAIM_ENV];
               if (
-                expectedClaimId == null ||
-                expectedClaimId === '' ||
-                parsed.params?.claimId !== expectedClaimId
+                expectedClaimId
+                  ? parsed.params?.claimId !== expectedClaimId
+                  : parsed.params?.sessionId !== sessionId ||
+                    parsed.expectedSessionId !== sessionId
               ) {
                 sendWsJson(
                   ws,
@@ -2136,23 +2425,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                 requestId: parsed.id,
               });
               try {
-                const readiness = await ensureBrowserCommandReady(
-                  'internal_browser_probe',
+                sendWsJson(
+                  ws,
+                  { id: parsed.id, result: createBrowserProbeResult(0) },
+                  'probe_status',
                 );
-                if (!readiness.browser || !readiness.bridgeConnected) {
-                  sendUnavailableBrowser(ws, parsed.id, 'probe_unavailable');
-                } else {
-                  sendWsJson(
-                    ws,
-                    {
-                      id: parsed.id,
-                      result: createBrowserProbeResult(
-                        readiness.waitedForBridgeMs,
-                      ),
-                    },
-                    'probe_ready',
-                  );
-                }
               } catch (error) {
                 sendInternalError(ws, parsed.id, error, 'probe_error');
               }
@@ -2261,9 +2538,169 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             }
 
             if (
+              typeof parsed.method === 'string' &&
+              typeof parsed.id === 'string'
+            ) {
+              intercepted = true;
+              const operation =
+                RUNTIME_OPERATIONS.find(
+                  (entry) => entry.wsMethod === parsed.method,
+                ) ??
+                (parsed.method === 'workspace_get_state'
+                  ? {
+                      execution: 'runtime',
+                      physical: false,
+                      target: { role: 'editor' },
+                    }
+                  : undefined);
+              if (!operation) {
+                sendWsJson(
+                  ws,
+                  {
+                    id: parsed.id,
+                    error: {
+                      code: -32601,
+                      message: 'Unknown runtime method',
+                      data: { code: 'unknown_method', outcome: 'not_executed' },
+                    },
+                  },
+                  'unknown_method',
+                );
+                return;
+              }
+              const target = {
+                role: operation.target?.role ?? 'app',
+                deviceClass: 'managed',
+                ...parsed.target,
+              } as ManagedBrowserCommandTarget;
+              if (
+                !['managed', 'physical'].includes(target.deviceClass!) ||
+                target.role !== (operation.target?.role ?? 'app')
+              ) {
+                sendWsJson(
+                  ws,
+                  {
+                    id: parsed.id,
+                    error: {
+                      code: -32602,
+                      message:
+                        "The target must use a supported deviceClass and the operation's owning page role.",
+                      data: { code: 'invalid_target', outcome: 'not_executed' },
+                    },
+                  },
+                  'invalid_target',
+                );
+                return;
+              }
+              if (target.deviceClass === 'physical') {
+                if (
+                  !target.headsetId ||
+                  !target.pageId ||
+                  !Number.isInteger(target.tabGeneration) ||
+                  target.tabGeneration! < 1
+                ) {
+                  sendWsJson(
+                    ws,
+                    {
+                      id: parsed.id,
+                      error: {
+                        code: -32602,
+                        message:
+                          'Physical targets require headsetId, pageId and tabGeneration from runtime_list_targets.',
+                        data: {
+                          code: 'invalid_target',
+                          outcome: 'not_executed',
+                        },
+                      },
+                    },
+                    'invalid_target',
+                  );
+                  return;
+                }
+                if (!operation.physical) {
+                  sendWsJson(
+                    ws,
+                    {
+                      id: parsed.id,
+                      error: {
+                        code: -32004,
+                        message: `${parsed.method} is not supported on physical headset targets.`,
+                        data: {
+                          code: 'unsupported_on_target',
+                          target,
+                          outcome: 'not_executed',
+                        },
+                      },
+                    },
+                    'unsupported_target',
+                  );
+                  return;
+                }
+              } else if (operation.execution === 'runtime') {
+                const readiness = await ensureBrowser();
+                if (!readiness.browser) {
+                  sendUnavailableBrowser(ws, parsed.id, 'runtime_unavailable');
+                  return;
+                }
+                if (readiness.relaunched) {
+                  sendWsJson(
+                    ws,
+                    {
+                      id: parsed.id,
+                      error: {
+                        code: -32010,
+                        message: BROWSER_RELAUNCHED_RESULT.message,
+                        data: {
+                          ...BROWSER_RELAUNCHED_RESULT,
+                          browser: createBrowserState(),
+                        },
+                      },
+                    },
+                    'runtime_recovered',
+                  );
+                  return;
+                }
+                const admittedBrowser = readiness.browser;
+                const admittedEpoch = controller.snapshot().browserEpoch;
+                target.sessionId ??= sessionId;
+                target.browserEpoch ??= admittedEpoch;
+                await waitForBridgeConnection(BRIDGE_READY_TIMEOUT_MS, target);
+                if (
+                  controller.current() !== admittedBrowser ||
+                  controller.snapshot().browserEpoch !== admittedEpoch
+                ) {
+                  sendWsJson(
+                    ws,
+                    {
+                      id: parsed.id,
+                      error: {
+                        code: -32010,
+                        message: BROWSER_RELAUNCHED_RESULT.message,
+                        data: {
+                          ...BROWSER_RELAUNCHED_RESULT,
+                          browser: createBrowserState(),
+                        },
+                      },
+                    },
+                    'runtime_generation_changed',
+                  );
+                  return;
+                }
+              }
+              parsed.target = target;
+              if (
+                operation.execution === 'runtime' ||
+                target.deviceClass === 'physical'
+              ) {
+                relay.onMessage(ws, JSON.stringify(parsed), mcpClients!);
+                return;
+              }
+            }
+
+            if (
               parsed.method === 'reload_page' &&
               typeof parsed.id === 'string' &&
-              !pluginOptions.nativeXRControl
+              parsed.target?.deviceClass !== 'physical'
             ) {
               intercepted = true;
               await handleManagedBrowserRequest(
@@ -2401,7 +2838,37 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               );
               return;
             }
+
+            if (
+              intercepted &&
+              typeof parsed.id === 'string' &&
+              typeof parsed.method === 'string'
+            ) {
+              sendWsJson(
+                ws,
+                {
+                  id: parsed.id,
+                  error: {
+                    code: -32603,
+                    message: `No host handler is registered for ${parsed.method}.`,
+                    data: {
+                      code: 'host_handler_missing',
+                      outcome: 'not_executed',
+                    },
+                  },
+                },
+                'host_handler_missing',
+              );
+              return;
+            }
           } catch (error) {
+            try {
+              const failed = JSON.parse(message);
+              if (typeof failed.id === 'string') {
+                intercepted = true;
+                sendInternalError(ws, failed.id, error, 'dispatch_error');
+              }
+            } catch {}
             traceRuntime('ws_message_parse_fallthrough', {
               connectionId,
               kind: getConnectionKind(ws),
@@ -2423,29 +2890,24 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               : reasonBuffer.toString('utf8');
           mcpClients!.delete(ws);
           relay.unregisterClient(ws);
+          const metadata = browserClientMetadata.get(ws);
           const removedBridge = browserRuntimeClients!.delete(ws);
           browserCommandReadyClients!.delete(ws);
           browserClientMetadata.delete(ws);
+          if (
+            removedBridge &&
+            metadata?.deviceClass === 'managed' &&
+            metadata.browserEpoch === controller.snapshot().browserEpoch
+          ) {
+            // Only status changes: a healthy Chromium is never restarted for
+            // a lost bridge, and runtime_recover leaves it running.
+            managedBridgeLoss = {
+              browserEpoch: metadata.browserEpoch,
+              at: new Date().toISOString(),
+            };
+          }
           if (removedBridge) {
-            browserCommandReadyPromise = null;
-            const remainingBridgeCount = browserRuntimeClients!.size;
-            publishBrowserState(
-              createBrowserState(
-                remainingBridgeCount > 0 ? 'connected' : 'disconnected',
-                {
-                  connected: remainingBridgeCount > 0,
-                  commandReady: isBrowserCommandPathReady(),
-                  connectedClientCount: remainingBridgeCount,
-                  lastError:
-                    remainingBridgeCount > 0
-                      ? undefined
-                      : createBrowserIssue(
-                          'connection_lost',
-                          'Managed browser runtime disconnected from the MCP bridge.',
-                        ),
-                },
-              ),
-            );
+            controller.observe();
           }
           traceRuntime('ws_closed', {
             connectionId,
@@ -2479,6 +2941,26 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         head: Buffer,
       ): void => {
         if (request.url !== '/__iwer_mcp') {
+          return;
+        }
+        const origin = request.headers.origin;
+        let sameOrigin = origin == null;
+        let localHost = false;
+        try {
+          const host = new URL(`http://${request.headers.host}`).hostname;
+          localHost = ['localhost', '127.0.0.1', '[::1]'].includes(host);
+        } catch {}
+        if (origin != null) {
+          try {
+            sameOrigin = new URL(origin).host === request.headers.host;
+          } catch {}
+        }
+        if (
+          !isBrowserBridgeConnectionAllowed(request.socket.remoteAddress) ||
+          !localHost ||
+          !sameOrigin
+        ) {
+          socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
           return;
         }
         const webSocketServer = mcpWss;
@@ -2527,9 +3009,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       }
 
       let sessionRegistered = false;
+      let sessionRegistration:
+        | ReturnType<typeof registerRuntimeSession>
+        | undefined;
       let sessionStartReported = false;
       let lifecycleHandlersInstalled = false;
       let workspaceShutdownPromise: Promise<void> | null = null;
+      let pendingHttpListen: Promise<void> | null = null;
       const waitForShutdownStep = async (
         operation: Promise<unknown>,
       ): Promise<void> => {
@@ -2559,32 +3045,47 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         process.off('SIGHUP', handleProcessSignal);
         process.off('SIGTERM', handleProcessSignal);
       };
+      const stopApplicationListener = async (): Promise<void> => {
+        // Vite considers a server that has not emitted `listening` closed, even
+        // when Node has already begun an asynchronous bind. Join that bind so
+        // shutdown can close it before releasing workspace ownership.
+        while (pendingHttpListen) {
+          await pendingHttpListen;
+        }
+        if (!httpServer?.listening) {
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          httpServer.close((error) => {
+            if (
+              error &&
+              (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING'
+            ) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          });
+        });
+      };
       const shutdownManagedWorkspace = (): Promise<void> => {
         if (workspaceShutdownPromise) {
           return workspaceShutdownPromise;
         }
         serverShuttingDown = true;
         removeLifecycleHandlers();
-        browserLaunchAbortController?.abort();
+        const retiringBrowser = controller.stop();
+        const applicationListenerStopped = Promise.resolve().then(
+          stopApplicationListener,
+        );
 
         workspaceShutdownPromise = (async () => {
-          clearInterval(relayCleanupInterval);
+          relay.close();
+          removeServerObservers();
           server.httpServer?.off?.('upgrade', handleMcpUpgrade);
           server.httpServer?.off?.('listening', handleServerListening);
 
-          // Abort a launch first, then give Playwright a bounded window to
-          // return its partially-created browser so it can be disposed.
-          const activeLaunch = browserLaunchPromise;
-          if (activeLaunch != null) {
-            await waitForShutdownStep(activeLaunch);
-          }
-
-          const browser = managedBrowser;
-          managedBrowser = null;
-          if (browser) {
-            await waitForShutdownStep(browser.close());
-          }
-
+          await waitForShutdownStep(retiringBrowser);
           const webSocketServer = mcpWss;
           mcpWss = null;
           if (webSocketServer) {
@@ -2604,13 +3105,33 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             );
           }
 
-          if (sessionRegistered) {
-            await unregisterRuntimeSession(config.root, sessionId).catch(
-              () => {},
-            );
-            sessionRegistered = false;
-          }
-          process.off('exit', processExitCleanup);
+          // listen() resolves before this plugin's async registration finishes.
+          // Join that write before unregistering or releasing the owner, so an
+          // immediate close cannot publish state after its successor starts.
+          await sessionRegistration?.catch(() => {});
+          const releaseOwner = async () => {
+            await controller.whenStopped();
+            await ownerAcquisition?.catch(() => {});
+            await applicationListenerStopped;
+            // Keep discovery and the synchronous exit fallback alive until all
+            // owned resources are confirmed stopped. The owner endpoint is the
+            // last thing released, so a replacement can never overlap cleanup.
+            if (sessionRegistered) {
+              await unregisterRuntimeSession(config.root, sessionId);
+              sessionRegistered = false;
+            }
+            process.off('exit', processExitCleanup);
+            await owner?.release();
+          };
+          // The replacement cannot bind until this exact generation releases
+          // ownership. A cleanup deadline rejects close; late confirmed cleanup
+          // can still release the lease, without ever allowing overlap.
+          const released = releaseOwner();
+          void released.catch((error) =>
+            console.error('[IWSDK Dev] Retaining owner lease:', error),
+          );
+          await retiringBrowser;
+          await released;
 
           if (sessionStartReported) {
             reportSessionEnd(sessionId, {
@@ -2630,18 +3151,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         }
         process.exitCode =
           signal === 'SIGINT' ? 130 : signal === 'SIGHUP' ? 129 : 143;
-        // Parent package managers can close stdin and cause Vite to call
-        // process.exit() before asynchronous plugin cleanup finishes. Remove
-        // the owned registry record synchronously before yielding.
-        unregisterRuntimeSessionSync(config.root, sessionId);
-        void shutdownManagedWorkspace()
-          .then(() => server.close())
-          .catch((error) => {
-            console.error(
-              `[IWSDK Dev] Failed to close after ${signal}:`,
-              error,
-            );
-          });
+        void server.close().catch((error) => {
+          console.error(`[IWSDK Dev] Failed to close after ${signal}:`, error);
+        });
       };
       const installLifecycleHandlers = () => {
         if (lifecycleHandlersInstalled) {
@@ -2658,7 +3170,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // prevents duplicate browser launches if the event is emitted twice.
       let serverListeningHandled = false;
       const handleServerListening = async (): Promise<void> => {
-        if (serverListeningHandled) {
+        if (serverListeningHandled || serverShuttingDown) {
           return;
         }
         serverListeningHandled = true;
@@ -2675,8 +3187,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           server.resolvedUrls?.local?.[0] ?? fallbackLocalUrl,
         ).toString();
         try {
-          await registerRuntimeSession({
+          sessionRegistration = registerRuntimeSession({
             sessionId,
+            ownerSessionId: owner?.identity.sessionId,
             workspaceRoot: config.root,
             pid: process.pid,
             port: actualPort,
@@ -2690,6 +3203,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               protocol: 'cdp',
             },
           });
+          await sessionRegistration;
           sessionRegistered = true;
         } catch (error) {
           process.exitCode = 1;
@@ -2702,6 +3216,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           return;
         }
 
+        if (serverShuttingDown) {
+          return;
+        }
         installLifecycleHandlers();
 
         // Report session start to MetaVR telemetry (fire-and-forget).
@@ -2712,19 +3229,113 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         });
         sessionStartReported = true;
 
-        // Launch Playwright-managed browser when requested. If open=false, the
-        // MCP/browser tooling can still launch it lazily on first command.
+        // Launch only under the enabled policy; --no-open also disables recovery.
         if (pluginOptions.workspace?.open !== false) {
-          launchBrowser();
+          void launchBrowser();
         }
       };
       server.httpServer?.on('listening', handleServerListening);
-      closeManagedWorkspace = shutdownManagedWorkspace;
+
+      // Ownership is acquired immediately before the application listener binds.
+      // A replacement can be prepared while the old server is still serving;
+      // Vite closes the old listener and awaits its cleanup before calling listen
+      // on the replacement. No handoff exception or second owner is needed.
+      const originalClose = server.close?.bind(server);
+      server.close = async () => {
+        const stopping = shutdownManagedWorkspace();
+        await Promise.all([originalClose?.(), stopping]);
+      };
+      // A host without Vite's listen has no bind failure to clean up after.
+      const originalServerListen = server.listen?.bind(server);
+      if (originalServerListen) {
+        server.listen = async (port?: number, isRestart?: boolean) => {
+          try {
+            return await originalServerListen(port, isRestart);
+          } catch (error) {
+            // A bind error does not emit `close`, so Vite otherwise leaves the
+            // workspace owner and plugin resources alive in an embedding host.
+            await server.close().catch((cleanupError) => {
+              console.error(
+                '[IWSDK Dev] Failed to clean up after listener startup failed:',
+                cleanupError,
+              );
+            });
+            throw error;
+          }
+        };
+      }
+      if (httpServer?.listen) {
+        const listen = httpServer.listen.bind(httpServer);
+        const rejectListenerStart = () =>
+          queueMicrotask(() =>
+            httpServer.emit(
+              'error',
+              new Error('Runtime listener has stopped.'),
+            ),
+          );
+        httpServer.listen = ((...args: Parameters<typeof listen>) => {
+          if (serverShuttingDown) {
+            rejectListenerStart();
+            return httpServer;
+          }
+          // Unless strictPort is set (the default for a configured port),
+          // Vite retries listen() with the next port after EADDRINUSE.
+          // Ownership is memoized independently, so a retry remains the same
+          // singleton runtime rather than a second owner acquisition.
+          void acquireOwner()
+            .then(() => {
+              if (serverShuttingDown) {
+                rejectListenerStart();
+                return;
+              }
+              let settleHttpListen!: () => void;
+              const attempt = new Promise<void>((resolve) => {
+                settleHttpListen = resolve;
+              });
+              pendingHttpListen = attempt;
+              const settle = () => {
+                httpServer.off('listening', settle);
+                httpServer.off('error', settle);
+                if (pendingHttpListen === attempt) {
+                  pendingHttpListen = null;
+                }
+                settleHttpListen();
+              };
+              httpServer.once('listening', settle);
+              httpServer.once('error', settle);
+              try {
+                listen(...args);
+              } catch (error) {
+                settle();
+                throw error;
+              }
+            })
+            .catch((error) => {
+              httpServer.emit('error', error);
+              void server.close().catch(() => {});
+            });
+          return httpServer;
+        }) as typeof httpServer.listen;
+      } else {
+        // Middleware-mode servers have no owned application listener.
+        try {
+          await acquireOwner();
+        } catch (error) {
+          // configureServer() can reject before Vite calls close hooks. Join
+          // the same idempotent cleanup path here so relay deadlines, the
+          // WebSocket server, and listeners created above cannot outlive a
+          // failed owner acquisition.
+          await shutdownManagedWorkspace().catch(() => {});
+          throw error;
+        }
+      }
 
       // The HTTP close event cannot await cleanup, so start it here and let
       // Vite's awaited closeBundle hook join the same idempotent promise.
       server.httpServer?.on('close', () => {
-        void shutdownManagedWorkspace();
+        void shutdownManagedWorkspace().catch((error) => {
+          console.error('[IWSDK Dev] Runtime cleanup failed:', error);
+        });
       });
     },
 
@@ -3016,8 +3627,6 @@ if (import.meta.hot) {
     closeBundle: {
       order: 'post',
       async handler() {
-        await closeManagedWorkspace?.();
-
         // Only show summary when the runtime/workspace bundle actually loaded.
         const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
 
@@ -3240,12 +3849,6 @@ async function handleOpenRuntimeRequest(
     console.error('[IWSDK] Failed to open the default browser:', error);
     sendJsonError(response, 500, 'Failed to open the default browser.');
   }
-}
-
-function normalizePageRole(
-  role: string | undefined,
-): 'app' | 'editor' | 'preview' {
-  return role === 'editor' || role === 'preview' ? role : 'app';
 }
 
 async function handleEditorDocumentRequest(

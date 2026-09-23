@@ -120,16 +120,20 @@ function initDevRuntime(config: ProcessedDevOptions): void {
 
   const isManagedTab = (window as any).__IWER_MCP_MANAGED === true;
   const isQuestBrowser = /OculusBrowser/i.test(navigator.userAgent || '');
-  const nativeOverrideRequested = config.nativeXRControl;
-
-  // Native control is deliberately scoped to Meta Quest Browser. Never fall
-  // through to force-installing desktop emulation when the caller explicitly
-  // requested native ownership on an unsupported browser.
-  if (nativeOverrideRequested && !isQuestBrowser) {
-    console.error(
-      '[IWSDK Dev] Native XR control requires Meta Quest Browser; refusing ' +
-        "to replace this browser's native navigator.xr with desktop emulation.",
-    );
+  const nativeOverrideRequested = config.nativeXRControl && isQuestBrowser;
+  const hasHeadsetPairing =
+    new URL(location.href).searchParams.has('__iwsdk_headset') ||
+    sessionStorage.getItem('iwsdk:headset-token') != null;
+  if (
+    config.workspace &&
+    isQuestBrowser &&
+    hasHeadsetPairing &&
+    !nativeOverrideRequested
+  ) {
+    (window as any).IWER_MCP = initMCPBridge({
+      deviceClass: 'physical',
+      verbose: config.verbose,
+    });
     return;
   }
 

@@ -8,3 +8,4 @@
 // Compatibility entry point. Managed-browser implementation lives with its
 // domain owners under managed-browser/.
 export * from './managed-browser/session.js';
+export { ensureChromiumInstalled } from './managed-browser/launch.js';

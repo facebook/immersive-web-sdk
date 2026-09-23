@@ -18,8 +18,11 @@ The requested scenario is in `$ARGUMENTS`.
 
 - Use only public Android platform tools and IWSDK commands. Do not depend on a
   device-rental service, XRPilot, or internal Meta tooling.
-- Require exactly one authorized device from `adb devices`, or require the
-  user to choose a serial. Pass `-s <serial>` to every ADB command.
+- Always work with an explicit device serial. With exactly one authorized
+  device in `adb devices`, use its serial. With several connected devices,
+  require the user to name the serial to test; never choose one yourself. Pass
+  `-s <serial>` to every ADB command and use the same serial as the IWSDK
+  `headsetId`.
 - Support Quest Browser only. Do not broaden the browser user-agent check.
 - Keep the command bridge on loopback. Use `adb reverse`; never expose or
   forward the bridge over a LAN.
@@ -34,12 +37,58 @@ The requested scenario is in `$ARGUMENTS`.
 - Always remove the ADB reverse and stop the dev session during cleanup,
   including after a failed test.
 
+## Target the headset explicitly
+
+A command without `runtimeTarget` always routes to the managed host browser,
+never to a headset, even when a paired headset page is the only connected page.
+This workflow starts with `--no-open`, so such a command fails with
+`browser_not_launched`. Do not restart with `--open` to fix a headset command;
+the managed browser never forwards commands to the Quest.
+
+- Discover connected targets with `npx @iwsdk/cli runtime targets --raw`. Each
+  entry in `targets` carries a nested `runtimeTarget` object and the `methods`
+  that page supports.
+- A headset page qualifies only when its entry has `deviceClass: "physical"`,
+  `role: "app"`, `commandReady: true`, and a `headsetId` equal to the explicit
+  serial.
+- Copy the qualifying entry's complete `runtimeTarget` unchanged: `deviceClass`,
+  `headsetId`, `pageId`, `tabGeneration`, and any returned `sessionId` or
+  `browserEpoch`. Never rebuild it from separate fields, drop or edit a field,
+  or pass the surrounding entry instead.
+- Put it under the top-level `runtimeTarget` key of every headset command's
+  `--input-json`, next to that command's own parameters. It is unrelated to the
+  position-vector `target` parameter of commands such as `xr look-at`.
+- Never select a headset page with `expectedTab` alone. It carries no
+  `deviceClass` or `headsetId`, so the command stays on the managed browser.
+- Never guess between candidates. If these rules do not identify exactly one
+  page, or a command returns `ambiguous_target`, ask the user to close the extra
+  app tabs in the headset, then rediscover. Do not fall back to list order, the
+  newest entry, another headset, or an untargeted command.
+- A reload or relaunch advances the page generation. After one, or after a
+  `stale_browser_tab` or `target_unavailable` error, run `runtime targets` again
+  and reselect with these rules. An old `runtimeTarget` stays fenced to its
+  generation.
+- `outcome_unknown` means the command may have executed. Never replay it.
+  Rediscover the target, inspect state with read-only commands such as
+  `xr status`, `ecs query`, or `scene transform`, and only then decide whether a
+  new command is needed.
+- Headset pages accept runtime commands only. Host-only browser tools, such as
+  screenshots, snapshots, interaction, profiling, and console capture, return
+  `unsupported_on_target`; check the entry's `methods` first.
+
+To test several headsets in one dev session, set up each serial separately: one
+`adb -s <serial> reverse` route and one `runtime pair-headset` call per device,
+discovery by each device's own `headsetId`, and one recorded `runtimeTarget` per
+headset. Send each command with the `runtimeTarget` of the headset it is meant
+for; never reuse one headset's `runtimeTarget` for another.
+
 ## 1. Verify the app and device
 
 Run `npm run --if-present typecheck` and fix type errors before device testing.
 
-Run `adb devices`. Continue only with one device in the `device` state. A
-`pending`, `offline`, or `unauthorized` device is not ready.
+Run `adb devices` and settle the explicit serial as described above. Continue
+only when that serial is in the `device` state. A `pending`, `offline`, or
+`unauthorized` device is not ready.
 
 This workflow expects a manifest-first app that imports
 `virtual:iwsdk-project` and passes it to `World.create()`. For a hand-built
@@ -64,54 +113,73 @@ Inspect `npx @iwsdk/cli dev status` and record the numeric port from the
 active runtime. Native-control sessions default to HTTP when the application
 does not explicitly configure Vite HTTPS. The app is loaded from
 headset-localhost through ADB reverse, so the default remains a trustworthy
-WebXR origin.
+WebXR origin. `--no-open` leaves the managed host browser unlaunched, so only
+commands that carry the headset's `runtimeTarget` can run.
 
-## 3. Install the reversible ADB route
+## 3. Install the ADB route and pair the headset
 
 Replace `<serial>` and `<port>` with the values verified above:
 
 ```bash
 adb -s <serial> reverse tcp:<port> tcp:<port>
+npx @iwsdk/cli runtime pair-headset --input-json '{"headsetId":"<serial>"}' --raw
 ```
 
-Open `http://127.0.0.1:<port>/` in Quest Browser once and verify the app loads.
-Do not continue if it redirects to a network hostname or if the page is not the
-expected local app. Record the physical app clients from
-`npx @iwsdk/cli dev status`; this lets you distinguish the immersive tab
-created next from any retained verification tab.
+Record the returned `url`. It carries this headset's pairing token for the
+current dev session; an unpaired headset page is refused and never becomes a
+target. Continue only if the URL points at `localhost` or `127.0.0.1` on
+`<port>`. Pair again after any dev-session restart.
 
 ## 4. Enter the real immersive session
 
-URL-encode `http://127.0.0.1:<port>/`, then launch:
+Before each launch, run `npx @iwsdk/cli runtime targets --raw` and record the
+`pageId` and `tabGeneration` of every physical target whose `headsetId` is
+`<serial>`.
+
+URL-encode the returned pairing URL without changing its host or dropping its
+query, then launch:
 
 ```bash
 adb -s <serial> shell am broadcast \
   -n com.oculus.vrshell/.ShellControlBroadcastReceiver \
   -a com.oculus.vrshell.intent.action.LAUNCH \
   -d apk://com.oculus.browser \
-  -e uri "ovrweb://vr?uri=<encoded-localhost-url>"
+  -e uri "ovrweb://vr?uri=<encoded-pairing-url>"
 ```
 
 Keep the nested URL encoded so `?`, `&`, and fragment characters cannot be
 interpreted as parameters of the outer deep link.
 
-Poll the dev status again. If exactly one new command-ready `physical` app
-client appeared, record its `pageId` and `tabGeneration` as the active tab.
-If multiple new physical clients appeared, ask the user to close the extras
-and retry. Never send an untargeted command while multiple physical clients
-are connected.
+Poll `npx @iwsdk/cli runtime targets --raw`. Select the qualifying target that
+this launch created: its `pageId` was not recorded, or its `tabGeneration` is
+higher than recorded. If exactly one target matches, record its complete
+`runtimeTarget`. A physical target has this shape:
 
-Use the active tab as `expectedTab` on each command:
-
-```bash
-npx @iwsdk/cli xr status --input-json \
-  '{"expectedTab":{"id":"<pageId>","generation":<tabGeneration>}}' --raw
+```json
+{
+  "deviceClass": "physical",
+  "headsetId": "<serial>",
+  "pageId": "<pageId>",
+  "tabGeneration": 1,
+  "sessionId": "<sessionId>"
+}
 ```
 
-The dev status must show a command-ready `physical` app client. XR status must
-show an active `immersive-vr` or `immersive-ar` session. If the session stays
-inactive, ask the user to accept the one-time browser permission in the
-headset, relaunch the deep link, and poll again.
+If no target appears, check in the headset that the page loaded from the
+pairing URL and did not redirect to a network hostname. If more than one
+matches, ask the user to close the extra tabs and relaunch.
+
+Replace `<runtimeTarget>` below with the recorded object, verbatim:
+
+```bash
+npx @iwsdk/cli xr status --input-json '{"runtimeTarget":<runtimeTarget>}' --raw
+```
+
+XR status must show an active `immersive-vr` or `immersive-ar` session. Its
+`browserConnected` and `browserCommandReady` fields describe the managed host
+browser, not the headset. If the session stays inactive, ask the user to accept
+the one-time browser permission in the headset, then repeat this step from the
+pre-launch record.
 
 Do not use `iwsdk xr enter` for this step: that command accepts an emulated
 offer, while this workflow must preserve the browser's native session.
@@ -126,9 +194,16 @@ npx @iwsdk/cli ecs --help
 npx @iwsdk/cli scene --help
 ```
 
-Include the recorded `expectedTab` object in each command's `--input-json`.
-This both selects the intended physical tab and rejects stale commands after a
-page reload.
+Add the recorded `runtimeTarget` to each command's `--input-json`, next to the
+command's own parameters. Here `target` is the world position to aim at:
+
+```bash
+npx @iwsdk/cli xr look-at --input-json \
+  '{"device":"controller-right","target":{"x":0,"y":1.2,"z":-1},"runtimeTarget":<runtimeTarget>}' --raw
+```
+
+The exact `runtimeTarget` both selects the intended headset page and rejects
+stale commands after a page reload.
 
 Use the same commands as desktop automation. Typical controls are:
 
@@ -149,17 +224,22 @@ pose/input sequence, and show the corresponding state change afterward.
 Run these cleanup actions individually even if an earlier assertion failed:
 
 ```bash
-npx @iwsdk/cli xr exit --input-json \
-  '{"expectedTab":{"id":"<pageId>","generation":<tabGeneration>}}' --raw
+npx @iwsdk/cli xr exit --input-json '{"runtimeTarget":<runtimeTarget>}' --raw
 adb -s <serial> reverse --remove tcp:<port>
 npx @iwsdk/cli dev down
 ```
 
+Use the most recently discovered `runtimeTarget` for `xr exit`. If it returns
+`stale_browser_tab` or `target_unavailable`, rediscover and exit with the fresh
+object; if it returns `outcome_unknown`, check `xr status` instead of repeating
+the exit. Remove the reverse route from every device you configured.
+
 Report:
 
-- device serial and app URL used;
+- device serial (`headsetId`) and app URL used;
+- the exact `runtimeTarget` of the final command;
 - native session mode and enabled features;
-- the physical client's command-ready state;
+- the selected target's command-ready state;
 - pose/input actions performed;
 - before/after evidence for the requested behavior;
 - console errors or capability notes;

@@ -20,6 +20,13 @@ import { isFileServingAllowed, resolveConfig } from 'vite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
 
+vi.mock('@iwsdk/cli/runtime-owner', () => ({
+  acquireRuntimeOwner: vi.fn(async () => ({
+    identity: { sessionId: 'test' },
+    release: vi.fn(async () => {}),
+  })),
+}));
+
 let projectRoot: string;
 
 beforeEach(async () => {
@@ -454,7 +461,7 @@ describe('manifest-first Vite integration', () => {
     const plugin = iwsdkDev({ https: false });
     const userConfig = {
       root: projectRoot,
-      server: { open: true },
+      server: { open: true, strictPort: false },
     };
 
     await expect(
@@ -464,6 +471,7 @@ describe('manifest-first Vite integration', () => {
       }),
     ).resolves.toBeUndefined();
     expect(userConfig.server.open).toBe(false);
+    expect(userConfig.server.strictPort).toBe(false);
 
     callHook(plugin.configResolved, plugin, {
       command: 'serve',
@@ -491,9 +499,28 @@ describe('manifest-first Vite integration', () => {
       runtimeId,
     );
     expect(runtimeSource).toContain('"nativeXRControl": true');
-    expect(runtimeSource).toContain(
-      'Native XR control requires Meta Quest Browser',
-    );
+    expect(runtimeSource).toContain('Native XR control is unavailable:');
+  });
+
+  it('keeps a configured port instead of moving the runtime', async () => {
+    const configure = async (
+      server: Record<string, unknown>,
+      isPreview = false,
+    ) => {
+      const userConfig = { root: projectRoot, server };
+      const plugin = iwsdkDev({ https: false });
+      await callHook(plugin.config, plugin, userConfig, {
+        command: 'serve',
+        mode: 'development',
+        isPreview,
+      });
+      return userConfig.server.strictPort;
+    };
+    // adb reverse forwards the configured port, so occupied fails closed.
+    expect(await configure({ port: 8081 })).toBe(true);
+    expect(await configure({ port: 8081, strictPort: false })).toBe(false);
+    expect(await configure({})).toBeUndefined();
+    expect(await configure({ port: 8081 }, true)).toBeUndefined();
   });
 
   it('rejects native XR control when IWER is disabled', async () => {

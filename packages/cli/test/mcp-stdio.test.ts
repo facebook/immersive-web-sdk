@@ -729,4 +729,41 @@ describe('mcp stdio interface shaping', () => {
       await runtime.close();
     }
   });
+
+  test('keeps managed browser status out of a headset session status', async () => {
+    const runtime = await startRuntimeFixture(appRoot, () => ({
+      result: { sessionOffered: true, sessionActive: true },
+    }));
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const headset = await mcp.client.callTool({
+        name: 'xr_get_session_status',
+        arguments: {
+          runtimeTarget: {
+            deviceClass: 'physical',
+            headsetId: '192.168.1.5:5555',
+            pageId: 'page-a',
+            tabGeneration: 1,
+          },
+        },
+      });
+      expect(headset.isError).not.toBe(true);
+      const headsetStatus = JSON.parse(headset.content[0]?.text ?? '');
+      expect(headsetStatus).toMatchObject({ sessionActive: true });
+      expect(headsetStatus).not.toHaveProperty('browserCommandReady');
+
+      // The managed browser keeps its merged status.
+      const managed = await mcp.client.callTool({
+        name: 'xr_get_session_status',
+        arguments: {},
+      });
+      expect(JSON.parse(managed.content[0]?.text ?? '')).toHaveProperty(
+        'browserCommandReady',
+      );
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
 });

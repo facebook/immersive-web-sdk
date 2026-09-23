@@ -5,738 +5,856 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { describe, test, expect, vi } from 'vitest';
-import { createRelayHandler, type RelayWebSocket } from '../src/mcp-relay.js';
-
-/** Create a mock WebSocket in the OPEN state. */
-function createMockWs(): RelayWebSocket & { send: ReturnType<typeof vi.fn> } {
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import {
+  createRelayHandler,
+  RELAY_TRANSPORT_MARGIN_MS,
+  type RelayOptions,
+} from '../src/mcp-relay.js';
+const socket = () => ({ readyState: 1, send: vi.fn(), close: vi.fn() });
+const decode = (ws: ReturnType<typeof socket>, index = 0) =>
+  JSON.parse(ws.send.mock.calls[index][0]);
+const QUEST_TARGET = {
+  deviceClass: 'physical',
+  headsetId: 'quest',
+  pageId: 'native',
+  tabGeneration: 1,
+};
+function fixture(options?: RelayOptions) {
+  const relay = createRelayHandler(options);
+  const agent = socket();
+  const app = socket();
+  const quest = socket();
+  const editor = socket();
+  const clients = new Set([agent, app, quest, editor]);
+  relay.registerBrowserClient(app, {
+    deviceClass: 'managed',
+    pageId: 'app',
+    role: 'app',
+    tabGeneration: 1,
+    commandReady: true,
+  });
+  relay.registerBrowserClient(editor, {
+    deviceClass: 'managed',
+    pageId: 'editor',
+    role: 'editor',
+    tabGeneration: 1,
+    commandReady: true,
+  });
+  relay.registerBrowserClient(quest, {
+    deviceClass: 'physical',
+    headsetId: 'quest',
+    pageId: 'native',
+    role: 'app',
+    tabGeneration: 1,
+    commandReady: true,
+  });
   return {
-    readyState: 1, // OPEN
-    send: vi.fn(),
+    relay,
+    agent,
+    app,
+    quest,
+    editor,
+    clients,
+    request: (
+      target?: unknown,
+      id = 'request',
+      method = 'ecs_pause',
+      extra: Record<string, unknown> = {},
+    ) =>
+      relay.onMessage(
+        agent,
+        JSON.stringify({ id, method, target, ...extra }),
+        clients,
+      ),
   };
 }
-
-describe('createRelayHandler', () => {
-  test('request from one client is broadcast to all others, not echoed to sender', () => {
-    const relay = createRelayHandler();
-    const sender = createMockWs();
-    const clientA = createMockWs();
-    const clientB = createMockWs();
-    const clients = new Set<RelayWebSocket>([sender, clientA, clientB]);
-
-    const request = JSON.stringify({
-      id: '1',
-      method: 'get_transform',
-      params: {},
-    });
-    relay.onMessage(sender, request, clients);
-
-    // Sender should NOT receive its own request
-    expect(sender.send).not.toHaveBeenCalled();
-    // Both other clients should receive the request
-    expect(clientA.send).toHaveBeenCalledWith(request);
-    expect(clientB.send).toHaveBeenCalledWith(request);
-  });
-
-  test('first response for an ID is forwarded to the original requester only', () => {
-    const relay = createRelayHandler();
-    const mcpServer = createMockWs();
-    const tab1 = createMockWs();
-    const tab2 = createMockWs();
-    const clients = new Set<RelayWebSocket>([mcpServer, tab1, tab2]);
-
-    // MCP server sends request
-    const request = JSON.stringify({
-      id: '42',
-      method: 'get_session_status',
-      params: {},
-    });
-    relay.onMessage(mcpServer, request, clients);
-    expect(relay.pendingCount()).toBe(1);
-
-    // Clear send mocks from the broadcast phase so we only track response routing
-    mcpServer.send.mockClear();
-    tab1.send.mockClear();
-    tab2.send.mockClear();
-
-    // tab1 responds first
-    const response = JSON.stringify({ id: '42', result: { active: true } });
-    relay.onMessage(tab1, response, clients);
-
-    // Original requester (mcpServer) should receive the response
-    expect(mcpServer.send).toHaveBeenCalledWith(response);
-    // tab2 should NOT receive the response (only the requester gets it)
-    expect(tab2.send).not.toHaveBeenCalled();
-    // Pending should be cleared
-    expect(relay.pendingCount()).toBe(0);
-  });
-
-  test('second response for the same ID is silently dropped', () => {
-    const relay = createRelayHandler();
-    const mcpServer = createMockWs();
-    const tab1 = createMockWs();
-    const tab2 = createMockWs();
-    const clients = new Set<RelayWebSocket>([mcpServer, tab1, tab2]);
-
-    // MCP server sends request
-    relay.onMessage(
-      mcpServer,
-      JSON.stringify({ id: '7', method: 'get_transform', params: {} }),
-      clients,
+const QUEST_PAGE = {
+  deviceClass: 'physical' as const,
+  headsetId: 'quest',
+  pageId: 'native',
+  role: 'app' as const,
+  commandReady: true,
+};
+describe('single-destination runtime relay', () => {
+  test('default selects only managed app, even with one physical headset', () => {
+    const f = fixture();
+    f.request();
+    expect(f.app.send).toHaveBeenCalledOnce();
+    expect(f.quest.send).not.toHaveBeenCalled();
+    expect(f.editor.send).not.toHaveBeenCalled();
+    const wireId = decode(f.app).id;
+    f.relay.onMessage(
+      f.app,
+      JSON.stringify({
+        id: wireId,
+        result: { paused: true },
+        _tabId: 'app',
+        _tabGeneration: 1,
+      }),
+      f.clients,
     );
-
-    // tab1 responds
-    const response1 = JSON.stringify({ id: '7', result: { pos: [0, 0, 0] } });
-    relay.onMessage(tab1, response1, clients);
-    expect(mcpServer.send).toHaveBeenCalledTimes(1);
-
-    // tab2 also responds (duplicate) — should be dropped
-    const response2 = JSON.stringify({ id: '7', result: { pos: [1, 1, 1] } });
-    relay.onMessage(tab2, response2, clients);
-    expect(mcpServer.send).toHaveBeenCalledTimes(1); // Still 1
+    expect(decode(f.agent)).toMatchObject({
+      id: 'request',
+      result: { paused: true },
+      _tabId: 'app',
+    });
+    expect(f.relay.pendingCount()).toBe(0);
   });
-
-  test('response with unknown ID (no pending entry) is silently dropped', () => {
-    const relay = createRelayHandler();
-    const tab = createMockWs();
-    const other = createMockWs();
-    const clients = new Set<RelayWebSocket>([tab, other]);
-
-    // Send a response without a prior request
-    const orphanResponse = JSON.stringify({ id: 'unknown-99', result: {} });
-    relay.onMessage(tab, orphanResponse, clients);
-
-    // Neither client should receive anything
-    expect(tab.send).not.toHaveBeenCalled();
+  test('never falls back to a physical headset when managed app is absent', () => {
+    const f = fixture();
+    f.relay.unregisterClient(f.app);
+    f.request();
+    expect(f.quest.send).not.toHaveBeenCalled();
+    expect(decode(f.agent).error.data).toMatchObject({
+      code: 'target_unavailable',
+      outcome: 'not_executed',
+    });
+  });
+  test('requires full physical identity and resolves exactly that device/page/generation', () => {
+    const f = fixture();
+    f.request({ deviceClass: 'physical', pageId: 'native' });
+    expect(decode(f.agent).error.data.code).toBe('invalid_target');
+    f.request({
+      deviceClass: 'physical',
+      headsetId: 'quest',
+      pageId: 'native',
+      tabGeneration: 1,
+    });
+    expect(f.quest.send).toHaveBeenCalledOnce();
+    expect(f.app.send).not.toHaveBeenCalled();
+    f.request({
+      deviceClass: 'physical',
+      headsetId: 'other',
+      pageId: 'native',
+      tabGeneration: 1,
+    });
+    expect(decode(f.agent, 1).error.data.code).toBe('stale_browser_tab');
+  });
+  test('explicit editor role only reaches editor; two matching apps fail as ambiguous', () => {
+    const f = fixture();
+    f.request({ role: 'editor' });
+    expect(f.editor.send).toHaveBeenCalledOnce();
+    expect(f.app.send).not.toHaveBeenCalled();
+    const other = socket();
+    f.clients.add(other);
+    f.relay.registerBrowserClient(other, {
+      pageId: 'other',
+      role: 'app',
+      tabGeneration: 1,
+    });
+    f.request();
+    expect(decode(f.agent).error.data.code).toBe('ambiguous_target');
     expect(other.send).not.toHaveBeenCalled();
   });
-
-  test('non-JSON message is broadcast to all others', () => {
-    const relay = createRelayHandler();
-    const sender = createMockWs();
-    const clientA = createMockWs();
-    const clientB = createMockWs();
-    const clients = new Set<RelayWebSocket>([sender, clientA, clientB]);
-
-    const badData = 'this is not json {{{';
-    relay.onMessage(sender, badData, clients);
-
-    expect(sender.send).not.toHaveBeenCalled();
-    expect(clientA.send).toHaveBeenCalledWith(badData);
-    expect(clientB.send).toHaveBeenCalledWith(badData);
-  });
-
-  test('message with ID but no method/result/error is broadcast (unknown shape)', () => {
-    const relay = createRelayHandler();
-    const sender = createMockWs();
-    const client = createMockWs();
-    const clients = new Set<RelayWebSocket>([sender, client]);
-
-    // Has an id but is neither a request nor a response
-    const weirdMessage = JSON.stringify({ id: '5', foo: 'bar' });
-    relay.onMessage(sender, weirdMessage, clients);
-
-    expect(sender.send).not.toHaveBeenCalled();
-    expect(client.send).toHaveBeenCalledWith(weirdMessage);
-  });
-
-  test('error response is forwarded as first-wins just like success response', () => {
-    const relay = createRelayHandler();
-    const mcpServer = createMockWs();
-    const tab = createMockWs();
-    const clients = new Set<RelayWebSocket>([mcpServer, tab]);
-
-    // Request
-    relay.onMessage(
-      mcpServer,
-      JSON.stringify({ id: '10', method: 'set_transform', params: {} }),
-      clients,
-    );
-
-    // Tab responds with error
-    const errorResponse = JSON.stringify({
-      id: '10',
-      error: { code: -32000, message: 'device not connected' },
-    });
-    relay.onMessage(tab, errorResponse, clients);
-
-    expect(mcpServer.send).toHaveBeenCalledWith(errorResponse);
-    expect(relay.pendingCount()).toBe(0);
-  });
-
-  test('does not send to clients with non-OPEN readyState', () => {
-    const relay = createRelayHandler();
-    const sender = createMockWs();
-    const openClient = createMockWs();
-    const closedClient = createMockWs();
-    closedClient.readyState = 3; // CLOSED
-    const clients = new Set<RelayWebSocket>([sender, openClient, closedClient]);
-
-    const request = JSON.stringify({ id: '1', method: 'test', params: {} });
-    relay.onMessage(sender, request, clients);
-
-    expect(openClient.send).toHaveBeenCalled();
-    expect(closedClient.send).not.toHaveBeenCalled();
-  });
-
-  test('cleanStale removes entries older than maxAgeMs', async () => {
-    const relay = createRelayHandler();
-    const ws = createMockWs();
-    const clients = new Set<RelayWebSocket>([ws, createMockWs()]);
-
-    // Send a request to create a pending entry
-    relay.onMessage(
-      ws,
-      JSON.stringify({ id: 'stale-1', method: 'test', params: {} }),
-      clients,
-    );
-    expect(relay.pendingCount()).toBe(1);
-
-    // Wait a tick so the entry is at least 1ms old
-    await new Promise((r) => setTimeout(r, 5));
-
-    // Clean with 1ms max age — should remove the entry
-    relay.cleanStale(1);
-    expect(relay.pendingCount()).toBe(0);
-  });
-
-  test('defaults command requests to app browser clients when page roles are registered', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const app = createMockWs();
-    const editor = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, app, editor]);
-    relay.registerBrowserClient(app, {
-      pageId: 'app-tab',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(editor, {
-      pageId: 'editor-tab',
-      role: 'editor',
-      tabGeneration: 1,
-    });
-
-    const request = JSON.stringify({
-      id: 'target-default',
-      method: 'get_session_status',
-      params: {},
-    });
-    relay.onMessage(command, request, clients);
-
-    expect(app.send).toHaveBeenCalledWith(request);
-    expect(editor.send).not.toHaveBeenCalled();
-  });
-
-  test('routes explicit editor-targeted requests only to matching editor clients', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const app = createMockWs();
-    const editor = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, app, editor]);
-    relay.registerBrowserClient(app, {
-      pageId: 'app-tab',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(editor, {
-      pageId: 'editor-tab',
-      role: 'editor',
-      sceneSessionId: 'scene-1',
-      tabGeneration: 3,
-    });
-
-    const request = JSON.stringify({
-      id: 'target-editor',
-      method: 'scene_screenshot',
-      params: {},
-      target: {
-        role: 'editor',
-        pageId: 'editor-tab',
-        tabGeneration: 3,
-        sceneSessionId: 'scene-1',
-      },
-    });
-    relay.onMessage(command, request, clients);
-
-    expect(app.send).not.toHaveBeenCalled();
-    expect(editor.send).toHaveBeenCalledWith(request);
-  });
-
-  test('fails targeted requests when generation is stale', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const app = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, app]);
-    relay.registerBrowserClient(app, {
-      pageId: 'app-tab',
+  test('disconnect settles uncertain commands without replay on reconnect', () => {
+    const f = fixture();
+    f.request();
+    f.relay.unregisterClient(f.app);
+    expect(decode(f.agent).error.data.outcome).toBe('outcome_unknown');
+    const next = socket();
+    f.clients.add(next);
+    f.relay.registerBrowserClient(next, {
+      pageId: 'app',
       role: 'app',
       tabGeneration: 2,
     });
-
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'stale-target',
-        method: 'get_session_status',
-        params: {},
-        target: {
-          role: 'app',
-          pageId: 'app-tab',
-          tabGeneration: 1,
-        },
-      }),
-      clients,
-    );
-
-    expect(app.send).not.toHaveBeenCalled();
-    expect(command.send).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
-      id: 'stale-target',
-      error: {
-        code: -32004,
-        data: { code: 'stale_browser_tab' },
-      },
-    });
-    expect(relay.pendingCount()).toBe(0);
+    expect(next.send).not.toHaveBeenCalled();
+    expect(f.relay.pendingCount()).toBe(0);
+    f.request({ pageId: 'app', tabGeneration: 1 });
+    expect(decode(f.agent, 1).error.data.code).toBe('stale_browser_tab');
   });
-
-  test('never routes a later command or response through an older generation of the same tab', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const oldPage = createMockWs();
-    const currentPage = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, oldPage, currentPage]);
-    relay.registerBrowserClient(oldPage, {
-      pageId: 'stable-tab',
-      role: 'app',
-      tabGeneration: 3,
-    });
-    relay.registerBrowserClient(currentPage, {
-      pageId: 'stable-tab',
-      role: 'app',
-      tabGeneration: 5,
-    });
-
-    const request = JSON.stringify({
-      id: 'monotonic-generation',
-      method: 'get_session_status',
-      params: {},
-    });
-    relay.onMessage(command, request, clients);
-    expect(oldPage.send).not.toHaveBeenCalled();
-    expect(currentPage.send).toHaveBeenCalledWith(request);
-
-    relay.onMessage(
-      oldPage,
-      JSON.stringify({ id: 'monotonic-generation', result: { old: true } }),
-      clients,
+  test('fences superseded sockets and ignores unsolicited responses', () => {
+    const f = fixture();
+    f.request();
+    const wireId = decode(f.app).id;
+    f.relay.onMessage(
+      f.quest,
+      JSON.stringify({ id: wireId, result: 'wrong page' }),
+      f.clients,
     );
-    expect(command.send).not.toHaveBeenCalled();
-    relay.onMessage(
-      currentPage,
-      JSON.stringify({ id: 'monotonic-generation', result: { current: true } }),
-      clients,
+    expect(f.agent.send).not.toHaveBeenCalled();
+    const next = socket();
+    f.clients.add(next);
+    f.relay.registerBrowserClient(next, {
+      pageId: 'app',
+      role: 'app',
+      tabGeneration: 2,
+    });
+    f.relay.onMessage(
+      f.app,
+      JSON.stringify({ id: wireId, result: 'old page' }),
+      f.clients,
     );
-    expect(command.send).toHaveBeenCalledTimes(1);
+    expect(f.agent.send).toHaveBeenCalledOnce();
+    expect(decode(f.agent).error.data.outcome).toBe('outcome_unknown');
   });
-
-  test('drops responses from non-target browser clients', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const app = createMockWs();
-    const editor = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, app, editor]);
-    relay.registerBrowserClient(app, {
-      pageId: 'app-tab',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(editor, {
-      pageId: 'editor-tab',
-      role: 'editor',
-      tabGeneration: 1,
-    });
-
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'target-response',
-        method: 'scene_screenshot',
-        params: {},
-        target: { role: 'editor' },
-      }),
-      clients,
+  test('request IDs are scoped to callers and rewritten on responses', () => {
+    const f = fixture();
+    const other = socket();
+    f.clients.add(other);
+    f.request();
+    f.relay.onMessage(
+      other,
+      JSON.stringify({ id: 'request', method: 'ecs_pause' }),
+      f.clients,
     );
-
-    relay.onMessage(
-      app,
-      JSON.stringify({ id: 'target-response', result: { wrong: true } }),
-      clients,
-    );
-    expect(command.send).not.toHaveBeenCalled();
-
-    const editorResponse = JSON.stringify({
-      id: 'target-response',
-      result: { ok: true },
-    });
-    relay.onMessage(editor, editorResponse, clients);
-    expect(command.send).toHaveBeenCalledWith(editorResponse);
+    const one = decode(f.app).id;
+    const two = decode(f.app, 1).id;
+    expect(one).not.toBe(two);
+    f.relay.onMessage(f.app, JSON.stringify({ id: two, result: 2 }), f.clients);
+    expect(decode(other)).toEqual({ id: 'request', result: 2 });
+    expect(f.agent.send).not.toHaveBeenCalled();
+    f.relay.onMessage(f.app, JSON.stringify({ id: one, result: 1 }), f.clients);
+    expect(decode(f.agent).result).toBe(1);
   });
-
-  test('keeps a pending request alive when one broadcast target disconnects', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const appA = createMockWs();
-    const appB = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, appA, appB]);
-    relay.registerBrowserClient(appA, {
-      pageId: 'app-a',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(appB, {
-      pageId: 'app-b',
-      role: 'app',
-      tabGeneration: 1,
-    });
-
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'multi-target',
-        method: 'get_session_status',
-        params: {},
-      }),
-      clients,
-    );
-    expect(relay.pendingCount()).toBe(1);
-
-    relay.unregisterClient(appA);
-    clients.delete(appA);
-    expect(relay.pendingCount()).toBe(1);
-    expect(command.send).not.toHaveBeenCalled();
-
-    const response = JSON.stringify({
-      id: 'multi-target',
-      result: { active: true },
-    });
-    relay.onMessage(appB, response, clients);
-    expect(command.send).toHaveBeenCalledWith(response);
-    expect(relay.pendingCount()).toBe(0);
+  test('unknown messages never broadcast', () => {
+    const f = fixture();
+    f.relay.onMessage(f.agent, 'raw message', f.clients);
+    expect(f.app.send).not.toHaveBeenCalled();
+    expect(f.editor.send).not.toHaveBeenCalled();
+    expect(f.quest.send).not.toHaveBeenCalled();
   });
-
-  test('notifies the requester when every pending target disconnects', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const app = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, app]);
-    relay.registerBrowserClient(app, {
+  test('reload is available before framework readiness; other commands fail without dispatch', () => {
+    const f = fixture();
+    f.relay.registerBrowserClient(f.app, {
       pageId: 'app',
       role: 'app',
       tabGeneration: 1,
+      commandReady: false,
     });
+    f.request();
+    expect(decode(f.agent).error.data.code).toBe('target_not_ready');
+    expect(f.app.send).not.toHaveBeenCalled();
+    f.relay.onMessage(
+      f.agent,
+      JSON.stringify({ id: 'reload', method: 'reload_page' }),
+      f.clients,
+    );
+    expect(f.app.send).toHaveBeenCalledOnce();
+  });
+});
 
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'target-gone',
-        method: 'get_session_status',
-        params: {},
+describe('runtime relay command deadlines', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('keeps a long preview pending past 60s and times it out once at its deadline', () => {
+    vi.useFakeTimers();
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.request({ role: 'editor' }, 'preview', 'asset_render_preview');
+    const wireId = decode(f.editor).id;
+
+    // asset_render_preview: 120s caller deadline minus the 3s relay margin.
+    vi.advanceTimersByTime(60_000);
+    expect(f.relay.pendingCount()).toBe(1);
+    vi.advanceTimersByTime(56_999);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    expect(f.editor.close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(f.agent.send).toHaveBeenCalledOnce();
+    expect(decode(f.agent)).toMatchObject({
+      id: 'preview',
+      error: { data: { code: 'command_timeout', outcome: 'outcome_unknown' } },
+    });
+    expect(f.editor.close).toHaveBeenCalledOnce();
+    expect(f.editor.close).toHaveBeenCalledWith(
+      1011,
+      'Runtime command deadline exceeded',
+    );
+    expect(onOutcomeUnknown).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deviceClass: 'managed',
+        pageId: 'editor',
+        role: 'editor',
+        tabGeneration: 1,
       }),
-      clients,
+      'command_timeout',
     );
 
-    relay.unregisterClient(app);
-
-    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
-      error: {
-        code: -32004,
-      },
-      id: 'target-gone',
-    });
-    expect(relay.pendingCount()).toBe(0);
-  });
-
-  test('replays a role-targeted request to an editor that reconnects after navigation', () => {
-    vi.useFakeTimers();
-    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
-    const command = createMockWs();
-    const oldEditor = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, oldEditor]);
-    relay.registerBrowserClient(oldEditor, {
-      pageId: 'workspace',
-      role: 'editor',
-      sceneSessionId: 'scene-old',
-      tabGeneration: 1,
-    });
-
-    const request = JSON.stringify({
-      id: 'after-create',
-      method: 'scene_get_document',
-      params: {},
-      target: { role: 'editor' },
-    });
-    relay.onMessage(command, request, clients);
-    expect(oldEditor.send).toHaveBeenCalledWith(request);
-
-    relay.unregisterClient(oldEditor);
-    clients.delete(oldEditor);
-    expect(command.send).not.toHaveBeenCalled();
-    expect(relay.pendingCount()).toBe(1);
-
-    const newEditor = createMockWs();
-    clients.add(newEditor);
-    relay.registerBrowserClient(newEditor, {
-      pageId: 'workspace',
-      role: 'editor',
-      sceneSessionId: 'scene-new',
-      tabGeneration: 2,
-    });
-    expect(newEditor.send).toHaveBeenCalledWith(request);
-
-    const response = JSON.stringify({
-      id: 'after-create',
-      result: { documentHash: 'sha256:new' },
-    });
-    relay.onMessage(newEditor, response, clients);
-    expect(command.send).toHaveBeenCalledWith(response);
-    expect(relay.pendingCount()).toBe(0);
-    vi.useRealTimers();
-  });
-
-  test('keeps a parked physical target away from managed clients', () => {
-    vi.useFakeTimers();
-    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
-    const command = createMockWs();
-    const clients = new Set<RelayWebSocket>([command]);
-    const request = JSON.stringify({
-      id: 'physical-coming-back',
-      method: 'get_session_status',
-      params: {},
-      target: { deviceClass: 'physical' },
-    });
-
-    relay.onMessage(command, request, clients);
-    expect(relay.pendingCount()).toBe(1);
-
-    const managed = createMockWs();
-    clients.add(managed);
-    relay.registerBrowserClient(managed, {
-      deviceClass: 'managed',
-      pageId: 'managed-app',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    expect(managed.send).not.toHaveBeenCalled();
-    expect(relay.pendingCount()).toBe(1);
-
-    const physical = createMockWs();
-    clients.add(physical);
-    relay.registerBrowserClient(physical, {
-      deviceClass: 'physical',
-      pageId: 'quest-app',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    expect(physical.send).toHaveBeenCalledWith(request);
-
-    vi.useRealTimers();
-  });
-
-  test('waits briefly for a missing role-only target but not a stale exact target', () => {
-    vi.useFakeTimers();
-    const relay = createRelayHandler({ targetReconnectGraceMs: 1_000 });
-    const command = createMockWs();
-    const clients = new Set<RelayWebSocket>([command]);
-    const request = JSON.stringify({
-      id: 'editor-coming-back',
-      method: 'scene_get_document',
-      params: {},
-      target: { role: 'editor' },
-    });
-    relay.onMessage(command, request, clients);
-    expect(command.send).not.toHaveBeenCalled();
-    expect(relay.pendingCount()).toBe(1);
-
-    const editor = createMockWs();
-    clients.add(editor);
-    relay.registerBrowserClient(editor, {
-      pageId: 'workspace',
-      role: 'editor',
-      tabGeneration: 2,
-    });
-    expect(editor.send).toHaveBeenCalledWith(request);
-
-    const stale = JSON.stringify({
-      id: 'stale-exact-editor',
-      method: 'scene_get_document',
-      params: {},
-      target: { role: 'editor', sceneSessionId: 'gone' },
-    });
-    relay.onMessage(command, stale, clients);
-    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
-      id: 'stale-exact-editor',
-      error: { code: -32004 },
-    });
-    vi.useRealTimers();
-  });
-
-  test('prefers one physical app over managed app clients', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const managed = createMockWs();
-    const physical = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, managed, physical]);
-    relay.registerBrowserClient(managed, {
-      deviceClass: 'managed',
-      pageId: 'managed-app',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(physical, {
-      deviceClass: 'physical',
-      pageId: 'quest-app',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    const request = JSON.stringify({
-      id: 'physical-preferred',
-      method: 'get_session_status',
-      params: {},
-    });
-
-    relay.onMessage(command, request, clients);
-
-    expect(physical.send).toHaveBeenCalledWith(request);
-    expect(managed.send).not.toHaveBeenCalled();
-  });
-
-  test('returns an ambiguity error instead of racing physical headsets', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const questA = createMockWs();
-    const questB = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, questA, questB]);
-    relay.registerBrowserClient(questA, {
-      deviceClass: 'physical',
-      pageId: 'quest-a',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(questB, {
-      deviceClass: 'physical',
-      pageId: 'quest-b',
-      role: 'app',
-      tabGeneration: 2,
-    });
-
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'ambiguous',
-        method: 'get_session_status',
-        params: {},
-      }),
-      clients,
+    f.relay.onMessage(
+      f.editor,
+      JSON.stringify({ id: wireId, result: 'late' }),
+      f.clients,
     );
+    vi.advanceTimersByTime(600_000);
+    expect(f.agent.send).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledOnce();
+    expect(f.relay.pendingCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
-    expect(questA.send).not.toHaveBeenCalled();
-    expect(questB.send).not.toHaveBeenCalled();
-    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
-      id: 'ambiguous',
-      error: {
-        code: -32005,
-        data: {
-          code: 'ambiguous_target',
-          candidates: [
-            { pageId: 'quest-a', tabGeneration: 1 },
-            { pageId: 'quest-b', tabGeneration: 2 },
-          ],
-        },
-      },
+  test('a default command uses its shorter deadline', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request();
+
+    // Default runtime methods: 30s caller deadline minus the 3s relay margin.
+    vi.advanceTimersByTime(26_999);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(decode(f.agent).error.data).toMatchObject({
+      code: 'command_timeout',
+      outcome: 'outcome_unknown',
     });
   });
 
-  test('rejects a broad explicit target and lists only routable physical tabs', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const staleQuestA = createMockWs();
-    const questA = createMockWs();
-    const questB = createMockWs();
-    const clients = new Set<RelayWebSocket>([
-      command,
-      staleQuestA,
-      questA,
-      questB,
+  test('every settlement path disarms the exact deadline', () => {
+    vi.useFakeTimers();
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+
+    f.request();
+    f.relay.onMessage(
+      f.app,
+      JSON.stringify({ id: decode(f.app).id, result: 'done' }),
+      f.clients,
+    );
+    f.request({ role: 'editor' }, 'target-disconnect');
+    f.relay.unregisterClient(f.editor);
+    f.quest.send.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    f.request(QUEST_TARGET, 'dispatch-failure');
+    expect(f.relay.pendingCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    // Both unknown outcomes settled through the one fencing path.
+    expect(onOutcomeUnknown.mock.calls).toEqual([
+      [expect.objectContaining({ pageId: 'editor' }), 'connection_lost'],
+      [expect.objectContaining({ headsetId: 'quest' }), 'connection_lost'],
     ]);
-    relay.registerBrowserClient(staleQuestA, {
-      deviceClass: 'physical',
-      pageId: 'quest-a',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    relay.registerBrowserClient(questA, {
-      deviceClass: 'physical',
-      pageId: 'quest-a',
-      role: 'app',
-      tabGeneration: 2,
-    });
-    relay.registerBrowserClient(questB, {
-      deviceClass: 'physical',
-      pageId: 'quest-b',
-      role: 'app',
-      tabGeneration: 1,
-    });
-
-    relay.onMessage(
-      command,
-      JSON.stringify({
-        id: 'broad-physical-target',
-        method: 'get_session_status',
-        params: {},
-        target: { deviceClass: 'physical', role: 'app' },
-      }),
-      clients,
+    expect(f.quest.close).toHaveBeenCalledWith(
+      1011,
+      'Runtime command dispatch failed',
     );
 
-    expect(staleQuestA.send).not.toHaveBeenCalled();
-    expect(questA.send).not.toHaveBeenCalled();
-    expect(questB.send).not.toHaveBeenCalled();
-    expect(JSON.parse(command.send.mock.calls[0][0])).toMatchObject({
-      id: 'broad-physical-target',
-      error: {
-        code: -32005,
-        data: {
-          code: 'ambiguous_target',
-          candidates: [
-            { pageId: 'quest-a', tabGeneration: 2 },
-            { pageId: 'quest-b', tabGeneration: 1 },
-          ],
-        },
-      },
+    const stopping = fixture({ onOutcomeUnknown });
+    stopping.request();
+    stopping.relay.close();
+    expect(decode(stopping.agent).error.data).toMatchObject({
+      code: 'runtime_stopping',
+      outcome: 'outcome_unknown',
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    stopping.request(undefined, 'after-close');
+    expect(decode(stopping.agent, 1).error.data.code).toBe(
+      'target_unavailable',
+    );
+
+    vi.advanceTimersByTime(600_000);
+    expect(onOutcomeUnknown).toHaveBeenCalledTimes(2);
+    expect(f.app.close).not.toHaveBeenCalled();
+    expect(f.editor.close).not.toHaveBeenCalled();
+  });
+
+  test('a departed caller leaves the deadline armed to fence a silent target', () => {
+    vi.useFakeTimers();
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.request();
+    f.agent.readyState = 3;
+    f.relay.unregisterClient(f.agent);
+    expect(f.relay.pendingCount()).toBe(1);
+
+    vi.advanceTimersByTime(27_000);
+    expect(f.app.close).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledWith(
+      expect.objectContaining({ pageId: 'app' }),
+      'command_timeout',
+    );
+    expect(f.agent.send).not.toHaveBeenCalled();
+  });
+
+  test('a departed caller leaves a target that later succeeds healthy', () => {
+    vi.useFakeTimers();
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.request(QUEST_TARGET, 'orphaned');
+    const wireId = decode(f.quest).id;
+    f.agent.readyState = 3;
+    f.relay.unregisterClient(f.agent);
+    expect(f.relay.pendingCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // The target, not the departed caller, settles the command internally.
+    f.relay.onMessage(
+      f.quest,
+      JSON.stringify({ id: wireId, result: 'done' }),
+      f.clients,
+    );
+    expect(f.relay.pendingCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(600_000);
+    expect(f.quest.close).not.toHaveBeenCalled();
+    expect(onOutcomeUnknown).not.toHaveBeenCalled();
+    expect(f.agent.send).not.toHaveBeenCalled();
+
+    // The same generation stays routable for the next caller.
+    const next = socket();
+    f.clients.add(next);
+    f.relay.onMessage(
+      next,
+      JSON.stringify({ id: 'next', method: 'ecs_pause', target: QUEST_TARGET }),
+      f.clients,
+    );
+    expect(f.quest.send).toHaveBeenCalledTimes(2);
+    f.relay.onMessage(
+      f.quest,
+      JSON.stringify({ id: decode(f.quest, 1).id, result: 'again' }),
+      f.clients,
+    );
+    expect(decode(next)).toEqual({ id: 'next', result: 'again' });
+  });
+
+  test('a timeout fences exactly the admitted endpoint generation', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request(QUEST_TARGET);
+    vi.advanceTimersByTime(27_000);
+    expect(f.quest.close).toHaveBeenCalledOnce();
+
+    const reconnect = socket();
+    f.clients.add(reconnect);
+    const questPage = {
+      deviceClass: 'physical' as const,
+      headsetId: 'quest',
+      pageId: 'native',
+      role: 'app' as const,
+      commandReady: true,
+    };
+    expect(
+      f.relay.registerBrowserClient(reconnect, {
+        ...questPage,
+        tabGeneration: 1,
+      }),
+    ).toBe(false);
+    f.request(QUEST_TARGET, 'same-generation');
+    expect(decode(f.agent, 1).error.data).toMatchObject({
+      code: 'stale_browser_tab',
+      outcome: 'not_executed',
+    });
+    expect(reconnect.send).not.toHaveBeenCalled();
+
+    f.request(undefined, 'managed-app');
+    expect(f.app.send).toHaveBeenCalledOnce();
+    expect(
+      f.relay.registerBrowserClient(reconnect, {
+        ...questPage,
+        tabGeneration: 2,
+      }),
+    ).toBe(true);
+    f.request({ ...QUEST_TARGET, tabGeneration: 2 }, 'reloaded-page');
+    expect(reconnect.send).toHaveBeenCalledOnce();
+  });
+});
+
+describe('runtime relay absolute deadlines', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('settles at the caller deadline, not a fresh window after admission', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const deadline = Date.now() + 10_000;
+    // Admission (browser and bridge waits) already spent part of the budget.
+    vi.advanceTimersByTime(4_000);
+    f.request(undefined, 'short', 'ecs_pause', { deadline });
+    expect(f.app.send).toHaveBeenCalledOnce();
+
+    vi.advanceTimersByTime(6_000 - RELAY_TRANSPORT_MARGIN_MS - 1);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(decode(f.agent)).toMatchObject({
+      id: 'short',
+      error: { data: { code: 'command_timeout', outcome: 'outcome_unknown' } },
     });
   });
 
-  test('routes an explicit device-class target', () => {
-    const relay = createRelayHandler();
-    const command = createMockWs();
-    const managed = createMockWs();
-    const clients = new Set<RelayWebSocket>([command, managed]);
-    relay.registerBrowserClient(managed, {
-      pageId: 'managed-app',
-      role: 'app',
-      tabGeneration: 1,
-    });
-    const request = JSON.stringify({
-      id: 'managed-only',
-      method: 'get_session_status',
-      params: {},
-      target: { deviceClass: 'managed', role: 'app' },
+  test('a custom deadline may outlast the method default', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request(QUEST_TARGET, 'long', 'ecs_pause', {
+      deadline: Date.now() + 50_000,
     });
 
-    relay.onMessage(command, request, clients);
+    // Past the 27s window a legacy ecs_pause request would get.
+    vi.advanceTimersByTime(27_000);
+    expect(f.relay.pendingCount()).toBe(1);
+    vi.advanceTimersByTime(23_000 - RELAY_TRANSPORT_MARGIN_MS - 1);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(decode(f.agent).error.data.code).toBe('command_timeout');
+    expect(f.quest.close).toHaveBeenCalledWith(
+      1011,
+      'Runtime command deadline exceeded',
+    );
+  });
 
-    expect(managed.send).toHaveBeenCalledWith(request);
+  test('an elapsed deadline is rejected before physical dispatch', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request(QUEST_TARGET, 'elapsed', 'ecs_pause', {
+      deadline: Date.now() - 1,
+    });
+    // No time is left to relay a timeout reply before the caller gives up.
+    f.request(QUEST_TARGET, 'inside-margin', 'ecs_pause', {
+      deadline: Date.now() + RELAY_TRANSPORT_MARGIN_MS,
+    });
+    expect(f.quest.send).not.toHaveBeenCalled();
+    expect([decode(f.agent), decode(f.agent, 1)]).toEqual([
+      expect.objectContaining({ id: 'elapsed' }),
+      expect.objectContaining({ id: 'inside-margin' }),
+    ]);
+    for (const index of [0, 1]) {
+      expect(decode(f.agent, index).error.data).toEqual({
+        code: 'deadline_exceeded',
+        outcome: 'not_executed',
+      });
+    }
+    expect(f.relay.pendingCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    f.request(QUEST_TARGET, 'in-time', 'ecs_pause', {
+      deadline: Date.now() + RELAY_TRANSPORT_MARGIN_MS + 1,
+    });
+    expect(f.quest.send).toHaveBeenCalledOnce();
+  });
+
+  test('rejects malformed and overlong deadlines without dispatch', () => {
+    const f = fixture();
+    const deadlines = [
+      'soon',
+      true,
+      {},
+      [Date.now() + 1_000],
+      Date.now() + 2 ** 31,
+      // Only an omitted deadline takes the legacy default.
+      null,
+    ];
+    for (const deadline of deadlines) {
+      f.request(QUEST_TARGET, 'malformed', 'ecs_pause', { deadline });
+    }
+    expect(f.quest.send).not.toHaveBeenCalled();
+    expect(f.relay.pendingCount()).toBe(0);
+    deadlines.forEach((_, index) =>
+      expect(decode(f.agent, index).error.data).toEqual({
+        code: 'invalid_params',
+        outcome: 'not_executed',
+      }),
+    );
+  });
+});
+
+describe('runtime relay unknown-outcome fencing', () => {
+  function expectFencedUntilReload(
+    f: ReturnType<typeof fixture>,
+    generation: number,
+  ) {
+    const replies = f.agent.send.mock.calls.length;
+    const reconnect = socket();
+    f.clients.add(reconnect);
+    expect(
+      f.relay.registerBrowserClient(reconnect, {
+        ...QUEST_PAGE,
+        tabGeneration: generation,
+      }),
+    ).toBe(false);
+    f.request({ ...QUEST_TARGET, tabGeneration: generation }, 'fenced');
+    expect(decode(f.agent, replies).error.data).toMatchObject({
+      code: 'stale_browser_tab',
+      outcome: 'not_executed',
+    });
+    expect(reconnect.send).not.toHaveBeenCalled();
+
+    const reloaded = socket();
+    f.clients.add(reloaded);
+    expect(
+      f.relay.registerBrowserClient(reloaded, {
+        ...QUEST_PAGE,
+        tabGeneration: generation + 1,
+      }),
+    ).toBe(true);
+    f.request({ ...QUEST_TARGET, tabGeneration: generation + 1 }, 'reloaded');
+    f.relay.onMessage(
+      reloaded,
+      JSON.stringify({ id: decode(reloaded).id, result: 'ok' }),
+      f.clients,
+    );
+    expect(decode(f.agent, replies + 1)).toEqual({
+      id: 'reloaded',
+      result: 'ok',
+    });
+  }
+
+  test('a dispatch failure fences generation N while N+1 succeeds', () => {
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.quest.send.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    f.request(QUEST_TARGET, 'lost');
+    expect(decode(f.agent)).toMatchObject({
+      id: 'lost',
+      error: { data: { code: 'connection_lost', outcome: 'outcome_unknown' } },
+    });
+    expect(f.quest.close).toHaveBeenCalledWith(
+      1011,
+      'Runtime command dispatch failed',
+    );
+    expect(onOutcomeUnknown).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledWith(
+      expect.objectContaining({ headsetId: 'quest', tabGeneration: 1 }),
+      'connection_lost',
+    );
+    expect(f.relay.pendingCount()).toBe(0);
+    expectFencedUntilReload(f, 1);
+    f.request(undefined, 'managed');
+    expect(f.app.send).toHaveBeenCalledOnce();
+  });
+
+  test('a target disconnect fences generation N while N+1 succeeds', () => {
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.request(QUEST_TARGET, 'lost');
+    f.quest.readyState = 3;
+    f.relay.unregisterClient(f.quest);
+    f.relay.unregisterClient(f.quest);
+    expect(f.agent.send).toHaveBeenCalledOnce();
+    expect(decode(f.agent)).toMatchObject({
+      id: 'lost',
+      error: { data: { code: 'connection_lost', outcome: 'outcome_unknown' } },
+    });
+    expect(f.quest.close).not.toHaveBeenCalled();
+    expect(onOutcomeUnknown).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).toHaveBeenCalledWith(
+      expect.objectContaining({ headsetId: 'quest', tabGeneration: 1 }),
+      'connection_lost',
+    );
+    expectFencedUntilReload(f, 1);
+  });
+
+  test('a disconnect with nothing pending leaves the generation reusable', () => {
+    const onOutcomeUnknown = vi.fn();
+    const f = fixture({ onOutcomeUnknown });
+    f.relay.unregisterClient(f.quest);
+    const reconnect = socket();
+    f.clients.add(reconnect);
+    expect(
+      f.relay.registerBrowserClient(reconnect, {
+        ...QUEST_PAGE,
+        tabGeneration: 1,
+      }),
+    ).toBe(true);
+    f.request(QUEST_TARGET);
+    expect(reconnect.send).toHaveBeenCalledOnce();
+    expect(onOutcomeUnknown).not.toHaveBeenCalled();
+  });
+});
+
+describe('runtime relay endpoint registration', () => {
+  test('a socket keeps one identity and generation, even with a command pending', () => {
+    const f = fixture();
+    f.request(QUEST_TARGET, 'pending');
+    const wireId = decode(f.quest).id;
+    const mutations = [
+      { tabGeneration: 2 },
+      { pageId: 'other' },
+      { headsetId: 'other' },
+      { role: 'editor' as const },
+      { sceneSessionId: 'scene' },
+      { deviceClass: 'managed' as const, headsetId: undefined },
+    ];
+    for (const mutation of mutations) {
+      expect(
+        f.relay.registerBrowserClient(f.quest, {
+          ...QUEST_PAGE,
+          tabGeneration: 1,
+          ...mutation,
+        }),
+      ).toBe(false);
+    }
+
+    // The pending command settles against the endpoint it was admitted to.
+    f.relay.onMessage(
+      f.quest,
+      JSON.stringify({ id: wireId, result: 'done' }),
+      f.clients,
+    );
+    expect(decode(f.agent)).toEqual({ id: 'pending', result: 'done' });
+    f.request({ ...QUEST_TARGET, tabGeneration: 2 }, 'mutated');
+    expect(decode(f.agent, 1).error.data.code).toBe('stale_browser_tab');
+
+    // Readiness is the one field an exact restatement may change.
+    expect(
+      f.relay.registerBrowserClient(f.quest, {
+        ...QUEST_PAGE,
+        tabGeneration: 1,
+        commandReady: false,
+      }),
+    ).toBe(true);
+    f.request(QUEST_TARGET, 'not-ready');
+    expect(decode(f.agent, 2).error.data.code).toBe('target_not_ready');
+    expect(
+      f.relay.registerBrowserClient(f.quest, {
+        ...QUEST_PAGE,
+        tabGeneration: 1,
+      }),
+    ).toBe(true);
+    f.request(QUEST_TARGET, 'ready');
+    expect(f.quest.send).toHaveBeenCalledTimes(2);
+    expect(f.quest.close).not.toHaveBeenCalled();
+  });
+
+  test('rejects malformed metadata without disturbing registrations or fences', () => {
+    const f = fixture();
+    const intruder = socket();
+    f.clients.add(intruder);
+    const malformed = [
+      { pageId: 42 },
+      { pageId: '' },
+      { pageId: 'x'.repeat(257) },
+      { tabGeneration: '2' },
+      { tabGeneration: 0 },
+      { tabGeneration: 1.5 },
+      { tabGeneration: -1 },
+      { tabGeneration: 2 ** 53 },
+      { tabGeneration: 99, role: 'admin' },
+      { tabGeneration: 99, deviceClass: 'tablet' },
+      { tabGeneration: 99, headsetId: undefined },
+      { tabGeneration: 99, sessionId: 7 },
+      { tabGeneration: 99, sceneSessionId: {} },
+      { tabGeneration: 99, browserEpoch: -1 },
+    ];
+    for (const change of malformed) {
+      expect(
+        f.relay.registerBrowserClient(intruder, {
+          ...QUEST_PAGE,
+          tabGeneration: 1,
+          ...change,
+        } as never),
+      ).toBe(false);
+    }
+
+    f.request(QUEST_TARGET);
+    expect(f.quest.send).toHaveBeenCalledOnce();
+    expect(intruder.send).not.toHaveBeenCalled();
+    f.relay.onMessage(
+      f.quest,
+      JSON.stringify({ id: decode(f.quest).id, result: 'ok' }),
+      f.clients,
+    );
+    expect(decode(f.agent)).toEqual({ id: 'request', result: 'ok' });
+    // None of the rejected generations (such as 99) became a fence.
+    const reloaded = socket();
+    f.clients.add(reloaded);
+    expect(
+      f.relay.registerBrowserClient(reloaded, {
+        ...QUEST_PAGE,
+        tabGeneration: 2,
+      }),
+    ).toBe(true);
+  });
+
+  test('bounds generation floors by forgetting the oldest unfenced gone endpoint', () => {
+    const f = fixture();
+    f.quest.send.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    f.request(QUEST_TARGET, 'lost');
+    const register = (pageId: string, tabGeneration = 1) => {
+      const ws = socket();
+      f.clients.add(ws);
+      return {
+        ws,
+        registered: f.relay.registerBrowserClient(ws, {
+          ...QUEST_PAGE,
+          pageId,
+          tabGeneration,
+        }),
+      };
+    };
+    // With app, editor and the fenced Quest page, 4093 more fill the table.
+    for (let index = 0; index < 4093; index += 1) {
+      const page = register(`gone-${index}`);
+      expect(page.registered).toBe(true);
+      f.relay.unregisterClient(page.ws);
+    }
+    expect(register('native').registered).toBe(false);
+    // A new identity forgets the oldest unfenced gone one, never the fence.
+    expect(register('one-more').registered).toBe(true);
+    expect(register('native').registered).toBe(false);
+    expect(register('gone-0').registered).toBe(true);
+    // The fence clears once a newer generation replaces the fenced page.
+    expect(register('native', 2).registered).toBe(true);
+    f.request(undefined, 'managed');
+    expect(f.app.send).toHaveBeenCalledOnce();
+  });
+
+  test('refuses a new identity when every tracked one is live or fenced', () => {
+    const f = fixture();
+    f.quest.send.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    f.request(QUEST_TARGET, 'lost');
+    for (let index = 0; index < 4093; index += 1) {
+      const ws = socket();
+      f.clients.add(ws);
+      expect(
+        f.relay.registerBrowserClient(ws, {
+          ...QUEST_PAGE,
+          pageId: `live-${index}`,
+          tabGeneration: 1,
+        }),
+      ).toBe(true);
+    }
+    const ws = socket();
+    f.clients.add(ws);
+    expect(
+      f.relay.registerBrowserClient(ws, {
+        ...QUEST_PAGE,
+        pageId: 'overflow',
+        tabGeneration: 1,
+      }),
+    ).toBe(false);
+  });
+
+  test('refuses a new identity only when every tracked one is live', () => {
+    const f = fixture();
+    const register = (pageId: string, tabGeneration = 1) => {
+      const ws = socket();
+      f.clients.add(ws);
+      return f.relay.registerBrowserClient(ws, {
+        ...QUEST_PAGE,
+        pageId,
+        tabGeneration,
+      });
+    };
+    for (let index = 0; index < 4093; index += 1) {
+      expect(register(`live-${index}`)).toBe(true);
+    }
+    expect(register('overflow')).toBe(false);
+    // Tracked identities still reload into their next generation.
+    expect(register('live-0', 2)).toBe(true);
+    f.request({ ...QUEST_TARGET, tabGeneration: 1 });
+    expect(f.quest.send).toHaveBeenCalledOnce();
+  });
+
+  test('an unregistered socket never registers again', () => {
+    const f = fixture();
+    f.relay.unregisterClient(f.quest);
+    expect(
+      f.relay.registerBrowserClient(f.quest, {
+        ...QUEST_PAGE,
+        tabGeneration: 2,
+      }),
+    ).toBe(false);
+    f.request({ ...QUEST_TARGET, tabGeneration: 2 });
+    expect(f.quest.send).not.toHaveBeenCalled();
+    expect(decode(f.agent).error.data.code).toBe('stale_browser_tab');
   });
 });

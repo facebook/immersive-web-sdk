@@ -211,6 +211,8 @@ export interface RuntimeOperationDefinition {
   mcpName: string;
   wsMethod: string;
   target?: RuntimePageTarget;
+  execution: 'server' | 'host' | 'runtime';
+  physical: boolean;
   description: string;
   inputSchema: JsonSchema;
 }
@@ -224,6 +226,9 @@ export interface RuntimePageTarget {
   pageId?: string;
   tabGeneration?: number;
   sceneSessionId?: string;
+  headsetId?: string;
+  browserEpoch?: number;
+  sessionId?: string;
 }
 
 export const IWSDK_PROJECT_STATE_DIR = '.iwsdk';
@@ -268,9 +273,41 @@ export interface RuntimeBrowserClient {
   tabGeneration: number;
   commandReady: boolean;
   sceneSessionId?: string;
+  headsetId?: string;
+  browserEpoch?: number;
+  sessionId?: string;
+}
+
+export interface RuntimeBrowserLifecycle {
+  state: 'idle' | 'launching' | 'running' | 'closing' | 'failed' | 'stopped';
+  policy: 'disabled' | 'eager';
+  sessionId: string;
+  browserEpoch: number;
+  revision: number;
+  stateEnteredAt: string;
+  lastObservedAt: string;
+  attemptId?: string;
+  phase?: 'installing' | 'starting';
+  deadline?: string;
+  cleanupConfirmed?: boolean;
+  issueAt?: string;
+  issueCause?: RuntimeIssueCause;
+  historyTruncated?: boolean;
+  attemptLimit?: number;
+  failures: number;
+  retryEligible: boolean;
+  nextAction: string;
+  issue?: string;
+  history: Array<{
+    revision: number;
+    state: RuntimeBrowserLifecycle['state'];
+    at: string;
+    reason: string;
+  }>;
 }
 
 export interface RuntimeBrowserState {
+  lifecycle?: RuntimeBrowserLifecycle;
   status: RuntimeBrowserStatus;
   connected: boolean;
   commandReady: boolean;
@@ -294,6 +331,7 @@ export interface RuntimeSession {
   sessionId: string;
   workspaceRoot: string;
   pid: number;
+  processStart?: string | null;
   port: number;
   localUrl: string;
   networkUrls: string[];
@@ -318,6 +356,7 @@ export interface LaunchMetadata {
   phase?: 'starting' | 'running';
   workspaceRoot: string;
   pid: number;
+  processStart?: string | null;
   /** Package-manager shim initially spawned by the CLI. */
   launcherPid?: number;
   /** Detached POSIX process group used to stop the complete dev subprocess tree. */
@@ -3099,25 +3138,91 @@ const EXPECTED_TAB_SCHEMA: JsonSchema = {
   required: ['id', 'generation'],
 };
 
+const RUNTIME_TARGET_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'Execution destination. Omit for the managed browser. Physical devices require headsetId, pageId and tabGeneration from runtime_list_targets.',
+  properties: {
+    deviceClass: { type: 'string', enum: ['managed', 'physical'] },
+    headsetId: { type: 'string' },
+    pageId: { type: 'string' },
+    tabGeneration: { type: 'integer', minimum: 1 },
+    browserEpoch: { type: 'integer', minimum: 1 },
+    sessionId: { type: 'string' },
+  },
+  required: ['deviceClass'],
+};
+
+const CONTROL_TOOLS: McpToolDefinition[] = [
+  {
+    name: 'runtime_pair_headset',
+    description:
+      'Associate an exact headset identifier (adb serial) with this dev session. Open the returned bootstrap URL on that device, then discover its page using runtime_list_targets.',
+    inputSchema: {
+      type: 'object',
+      properties: { headsetId: { type: 'string' } },
+      required: ['headsetId'],
+    },
+  },
+  {
+    name: 'runtime_get_status',
+    description:
+      'Read live runtime ownership and managed browser lifecycle. Does not launch or recover a browser.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'runtime_list_targets',
+    description:
+      'Discover connected targets, exact identities, readiness and supported methods. Physical targets must be explicitly selected.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'runtime_wait',
+    description:
+      'Wait for a lifecycle revision change, without causing recovery. Returns a current snapshot on timeout.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        afterRevision: { type: 'integer', minimum: 0 },
+        timeoutMs: { type: 'integer', minimum: 0, maximum: 25000 },
+      },
+    },
+  },
+  {
+    name: 'runtime_recover',
+    description:
+      'Explicitly retry launching the managed browser after failures. Does not replay previous commands or reset live page state.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+];
+
 function withExpectedTabPrecondition(schema: JsonSchema): JsonSchema {
   return {
     ...schema,
     properties: {
       ...(schema.properties ?? {}),
       expectedTab: EXPECTED_TAB_SCHEMA,
+      runtimeTarget: RUNTIME_TARGET_SCHEMA,
     },
   };
 }
 
-export const RUNTIME_MCP_TOOLS: McpToolDefinition[] =
-  ALL_RUNTIME_MCP_TOOLS.filter(
+export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
+  ...ALL_RUNTIME_MCP_TOOLS,
+  ...CONTROL_TOOLS,
+]
+  .filter(
     (tool) =>
       (!tool.name.startsWith('scene_') ||
         PUBLIC_SCENE_MCP_TOOL_NAME_SET.has(tool.name)) &&
       !REMOVED_WORKSPACE_MCP_TOOL_NAME_SET.has(tool.name),
-  ).map((tool) => ({
+  )
+  .map((tool) => ({
     ...tool,
-    inputSchema: withExpectedTabPrecondition(tool.inputSchema),
+    inputSchema: CONTROL_TOOLS.some((control) => control.name === tool.name)
+      ? tool.inputSchema
+      : withExpectedTabPrecondition(tool.inputSchema),
   }));
 
 export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
@@ -3293,7 +3398,17 @@ const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
 
 export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
   RUNTIME_MCP_TOOLS.map((tool) => {
-    const cliPath = RUNTIME_CLI_PATHS[tool.name];
+    const cliPath =
+      RUNTIME_CLI_PATHS[tool.name] ??
+      (
+        {
+          runtime_get_status: ['runtime', 'status'],
+          runtime_list_targets: ['runtime', 'targets'],
+          runtime_wait: ['runtime', 'wait'],
+          runtime_recover: ['runtime', 'recover'],
+          runtime_pair_headset: ['runtime', 'pair-headset'],
+        } as Record<string, string[]>
+      )[tool.name];
     const target = EDITOR_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
       ? ({ role: 'editor' } as const)
       : APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
@@ -3307,6 +3422,15 @@ export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
       mcpName: tool.name,
       wsMethod: RUNTIME_TOOL_TO_METHOD[tool.name] ?? tool.name,
       ...(target ? { target } : {}),
+      execution: tool.name.startsWith('runtime_')
+        ? 'server'
+        : APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
+          ? 'host'
+          : 'runtime',
+      physical:
+        !EDITOR_TARGET_MCP_TOOL_NAME_SET.has(tool.name) &&
+        (!APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name) ||
+          tool.name === 'browser_reload_page'),
       description: tool.description,
       inputSchema: tool.inputSchema,
     };
@@ -3368,18 +3492,47 @@ export function resolveRuntimeOperationRequest(
     paramsRecord == null
       ? params
       : Object.fromEntries(
-          Object.entries(paramsRecord).filter(([key]) => key !== 'expectedTab'),
+          Object.entries(paramsRecord).filter(
+            ([key]) => key !== 'expectedTab' && key !== 'runtimeTarget',
+          ),
         );
+  const selection = paramsRecord?.runtimeTarget as
+    | RuntimePageTarget
+    | undefined;
+  if (
+    selection?.deviceClass === 'physical' &&
+    (!selection.headsetId ||
+      !selection.pageId ||
+      !Number.isInteger(selection.tabGeneration))
+  ) {
+    throw new Error(
+      'Physical runtimeTarget requires headsetId, pageId and tabGeneration from runtime_list_targets.',
+    );
+  }
+  if (
+    selection &&
+    isRecord(expectedTab) &&
+    ((selection.pageId != null && selection.pageId !== expectedTab.id) ||
+      (selection.tabGeneration != null &&
+        selection.tabGeneration !== expectedTab.generation))
+  ) {
+    throw new Error(
+      'runtimeTarget and expectedTab must identify the same page generation.',
+    );
+  }
   const target =
     isRecord(expectedTab) &&
     typeof expectedTab.id === 'string' &&
     typeof expectedTab.generation === 'number'
       ? {
           ...(operation.target ?? {}),
+          ...selection,
           pageId: expectedTab.id,
           tabGeneration: expectedTab.generation,
         }
-      : operation.target;
+      : selection
+        ? { ...operation.target, ...selection }
+        : operation.target;
   return { params: commandParams, target };
 }
 

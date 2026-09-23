@@ -369,6 +369,64 @@ describe('common starter project files', () => {
       false,
     );
   });
+
+  it('teaches explicit physical headset targeting in the native XR skill', async () => {
+    const files = await buildStarterProjectFiles({
+      appName: 'native-xr-app',
+      configuration: getRecommendedConfiguration('vr'),
+      language: 'ts',
+      packageSource: npmSource,
+      templateRoot: TEMPLATE_ROOT,
+    });
+    const skill = textFile(
+      files,
+      '.claude/skills/iwsdk-native-xr-test/SKILL.md',
+    );
+    expect(
+      textFile(files, '.agents/skills/iwsdk-native-xr-test/SKILL.md'),
+    ).toBe(skill);
+    const prose = skill.replace(/\s+/gu, ' ');
+    for (const guidance of [
+      'A command without `runtimeTarget` always routes to the managed host browser, never to a headset, even when a paired headset page is the only connected page.',
+      'Discover connected targets with `npx @iwsdk/cli runtime targets --raw`.',
+      'A headset page qualifies only when its entry has `deviceClass: "physical"`, `role: "app"`, `commandReady: true`, and a `headsetId` equal to the explicit serial.',
+      "Copy the qualifying entry's complete `runtimeTarget` unchanged: `deviceClass`, `headsetId`, `pageId`, `tabGeneration`, and any returned `sessionId` or `browserEpoch`. Never rebuild it from separate fields, drop or edit a field, or pass the surrounding entry instead.",
+      'With several connected devices, require the user to name the serial to test; never choose one yourself. Pass `-s <serial>` to every ADB command and use the same serial as the IWSDK `headsetId`.',
+      "Send each command with the `runtimeTarget` of the headset it is meant for; never reuse one headset's `runtimeTarget` for another.",
+      'Never select a headset page with `expectedTab` alone.',
+      'Never guess between candidates.',
+      'or a command returns `ambiguous_target`, ask the user to close the extra app tabs in the headset, then rediscover. Do not fall back to list order, the newest entry, another headset, or an untargeted command.',
+      '`outcome_unknown` means the command may have executed. Never replay it.',
+      'if it returns `outcome_unknown`, check `xr status` instead of repeating the exit.',
+    ]) {
+      expect(prose).toContain(guidance);
+    }
+    expect(skill).toContain(
+      `npx @iwsdk/cli runtime pair-headset --input-json '{"headsetId":"<serial>"}' --raw`,
+    );
+    expect(skill).toContain('-e uri "ovrweb://vr?uri=<encoded-pairing-url>"');
+    expect(skill.match(/expectedTab/gu)).toHaveLength(1);
+    expect(skill).not.toContain('Continue only with one device');
+
+    // Join shell continuations so each command is checked as one line.
+    const pageCommands = skill
+      .replace(/\\\n\s*/gu, '')
+      .split('\n')
+      .filter(
+        (line) =>
+          /^npx @iwsdk\/cli (?:xr|ecs|scene|browser|ui) /u.test(line) &&
+          !line.endsWith(' --help'),
+      );
+    expect(pageCommands).toContain(
+      `npx @iwsdk/cli xr status --input-json '{"runtimeTarget":<runtimeTarget>}' --raw`,
+    );
+    expect(pageCommands).toContain(
+      `npx @iwsdk/cli xr exit --input-json '{"runtimeTarget":<runtimeTarget>}' --raw`,
+    );
+    for (const command of pageCommands) {
+      expect(command).toContain('"runtimeTarget":<runtimeTarget>');
+    }
+  });
 });
 
 function textFile(

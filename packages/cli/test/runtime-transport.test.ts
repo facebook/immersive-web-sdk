@@ -8,34 +8,62 @@
 import net from 'net';
 import { describe, expect, test } from 'vitest';
 import { WebSocketServer } from 'ws';
-import type { RuntimeSession } from '../src/runtime-contract.js';
+import {
+  getDefaultRuntimeCommandTimeoutMs,
+  type RuntimeSession,
+} from '../src/runtime-contract.js';
 import { sendRuntimeCommand } from '../src/runtime-transport.js';
 
 describe('runtime command transport', () => {
-  test('fails immediately with an actionable cause when --no-open skipped the browser', async () => {
-    const session = createTestRuntimeSession(5173);
+  test('allows server and physical commands even when the managed browser is disabled', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' ? address.port : 0;
+    const session = createTestRuntimeSession(port);
     session.browser = {
       status: 'not_launched',
       connected: false,
       commandReady: false,
       connectedClientCount: 0,
       lastTransitionAt: new Date().toISOString(),
-      lastError: {
-        cause: 'browser_not_launched',
-        message: 'Started with --no-open. Run iwsdk dev restart --open.',
-        at: new Date().toISOString(),
-      },
     };
-    await expect(
-      sendRuntimeCommand({
-        port: 5173,
-        method: 'scene_get_state',
-        runtimeSession: session,
+    const received: unknown[] = [];
+    server.on('connection', (socket) =>
+      socket.on('message', (data) => {
+        const request = JSON.parse(data.toString());
+        received.push(request);
+        socket.send(JSON.stringify({ id: request.id, result: { ok: true } }));
       }),
-    ).rejects.toMatchObject({
-      issueCause: 'browser_not_launched',
-      message: expect.stringContaining('restart --open'),
-    });
+    );
+    try {
+      await sendRuntimeCommand({
+        port,
+        method: 'runtime_list_targets',
+        runtimeSession: session,
+      });
+      await sendRuntimeCommand({
+        port,
+        method: 'reload_page',
+        runtimeSession: session,
+        target: {
+          deviceClass: 'physical',
+          headsetId: 'quest',
+          pageId: 'native',
+          tabGeneration: 1,
+        },
+      });
+      expect(received).toHaveLength(2);
+      expect(received[1]).toMatchObject({
+        expectedSessionId: session.sessionId,
+        target: { headsetId: 'quest' },
+      });
+    } finally {
+      for (const ws of server.clients) {
+        ws.terminate();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   test('uses one timeout budget across the WSS to WS fallback path', async () => {
@@ -196,6 +224,79 @@ describe('runtime command transport', () => {
       method: 'scene_screenshot',
       target: { role: 'editor', sceneSessionId: 'scene-a' },
     });
+  });
+
+  test('sends every sub-request the caller absolute deadline', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const scenePath = 'public/scenes/room.iwsdk.scene.json';
+    const received: Array<{ id: string; method: string; deadline?: unknown }> =
+      [];
+    server.on('connection', (socket) =>
+      socket.on('message', (chunk) => {
+        const request = JSON.parse(chunk.toString());
+        received.push(request);
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            result:
+              request.method === 'scene_open'
+                ? { opened: true, path: scenePath, reloading: true }
+                : {
+                    editor: {
+                      ready: true,
+                      scenePath,
+                      sceneSessionId:
+                        received.length > 2 ? 'scene-new' : 'scene-old',
+                    },
+                  },
+          }),
+        );
+      }),
+    );
+    try {
+      let before = Date.now();
+      await sendRuntimeCommand({
+        port,
+        method: 'ecs_pause',
+        runtimeSession: createTestRuntimeSession(port),
+      });
+      const defaultTimeoutMs = getDefaultRuntimeCommandTimeoutMs('ecs_pause');
+      expect(received[0].deadline).toBeGreaterThanOrEqual(
+        before + defaultTimeoutMs,
+      );
+      expect(received[0].deadline).toBeLessThanOrEqual(
+        Date.now() + defaultTimeoutMs,
+      );
+
+      received.length = 0;
+      before = Date.now();
+      await sendRuntimeCommand({
+        method: 'scene_open',
+        params: { path: scenePath },
+        port,
+        runtimeSession: createTestRuntimeSession(port),
+        timeoutMs: 4000,
+      });
+      expect(received.map((request) => request.method)).toEqual([
+        'scene_get_state',
+        'scene_open',
+        'scene_get_state',
+      ]);
+      // Polling for readiness never restarts the budget the caller chose.
+      const deadlines = new Set(received.map((request) => request.deadline));
+      expect(deadlines.size).toBe(1);
+      const [deadline] = deadlines as Set<number>;
+      expect(deadline).toBeGreaterThanOrEqual(before + 4000);
+      expect(deadline).toBeLessThanOrEqual(Date.now() + 4000);
+    } finally {
+      for (const ws of server.clients) {
+        ws.terminate();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   test('classifies closed-before-response as browser_not_ready while warming', async () => {

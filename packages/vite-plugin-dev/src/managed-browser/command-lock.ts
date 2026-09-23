@@ -19,7 +19,13 @@ const DEFAULT_MANAGED_BROWSER_COMMAND_TIMEOUT_MS = 27_000;
 export const EVIDENCE_COMMAND_TIMEOUT_MS = 120_000;
 
 function managedBrowserCommandError(code: string, message: string): Error {
-  return Object.assign(new Error(message), { code, retryable: true });
+  const outcome =
+    code === 'browser_command_timeout' ? 'outcome_unknown' : 'not_executed';
+  return Object.assign(new Error(message), {
+    code,
+    outcome,
+    retryable: outcome === 'not_executed',
+  });
 }
 
 export class ManagedBrowserCommandCoordinator {
@@ -38,7 +44,10 @@ export class ManagedBrowserCommandCoordinator {
     timer: ReturnType<typeof setTimeout>;
   }> = [];
 
-  constructor(private readonly abortActiveOperation: () => Promise<void>) {}
+  constructor(
+    private readonly abortActiveOperation: () => Promise<void>,
+    private readonly onInvalidated?: () => void,
+  ) {}
 
   async runExclusive<T>(
     operation: () => Promise<T>,
@@ -93,6 +102,8 @@ export class ManagedBrowserCommandCoordinator {
         clearTimeout(timer);
       }
       if (timedOut) {
+        this.closing = true;
+        this.onInvalidated?.();
         // Playwright operations do not consistently accept AbortSignals. Tear
         // down the owned context so a timed-out operation cannot continue to
         // mutate the application after the transport has given up. The plugin
@@ -134,21 +145,9 @@ export class ManagedBrowserCommandCoordinator {
         'Managed browser is closing; retry after it relaunches.',
       ),
     );
-    this.shutdownPromise = (async () => {
-      let timeout: ReturnType<typeof setTimeout> | null = null;
-      try {
-        await Promise.race([
-          this.abortActiveOperation().catch(() => {}),
-          new Promise<void>((resolve) => {
-            timeout = setTimeout(resolve, 2_000);
-          }),
-        ]);
-      } finally {
-        if (timeout != null) {
-          clearTimeout(timeout);
-        }
-      }
-    })();
+    // The lifecycle controller bounds waiting, but retains ownership until
+    // this disposal promise confirms the process is gone.
+    this.shutdownPromise = this.abortActiveOperation();
     return this.shutdownPromise;
   }
 

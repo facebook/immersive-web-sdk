@@ -6,14 +6,17 @@
  */
 
 import { mkdir, readFile, realpath, rm, writeFile } from 'fs/promises';
+import { createServer } from 'net';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
+  getRuntimeProcessStart,
   getRuntimeFileLockPath,
   withRuntimeFileLock,
   writeRuntimeJson,
 } from '../src/runtime-files.js';
+import { acquireRuntimeOwner } from '../src/runtime-owner.js';
 import {
   claimLaunchMetadata,
   clearLaunchMetadata,
@@ -130,6 +133,84 @@ describe('workspace detection', () => {
 });
 
 describe('project-local runtime state', () => {
+  test('IPC verification does not hold the registration file lock', async () => {
+    const lease = await acquireRuntimeOwner(appA, 'respond-after-write');
+    const identity = lease.identity;
+    await lease.release();
+    const file = getRuntimeSessionFilePath(appA);
+    const snapshot = { ...identity, browser: { lifecycle: { state: 'idle' } } };
+    await writeRuntimeJson(file, snapshot);
+    const server = createServer((socket) => {
+      socket.on('error', () => {});
+      void withRuntimeFileLock(file, async () => {
+        socket.end(`${JSON.stringify(identity)}\n`);
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(identity.endpoint, resolve),
+    );
+    try {
+      expect(await getRuntimeSession(appA)).toMatchObject(snapshot);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+  test('removes lifecycle records for reused PIDs and outdated generations', async () => {
+    const file = getRuntimeSessionFilePath(appA);
+    const record = {
+      sessionId: 'old',
+      pid: process.pid,
+      processStart: 'previous-birth',
+      workspaceRoot: await realpath(appA),
+      browser: { lifecycle: { state: 'idle' } },
+    };
+    await writeRuntimeJson(file, record);
+    expect(await getRuntimeSession(appA)).toBeNull();
+    const owner = await acquireRuntimeOwner(appA, 'new');
+    try {
+      await writeRuntimeJson(file, {
+        ...record,
+        processStart: getRuntimeProcessStart(process.pid),
+      });
+      expect(await getRuntimeSession(appA)).toBeNull();
+    } finally {
+      await owner.release();
+    }
+  });
+  test('a missing endpoint with matching process birth fails closed with remediation', async () => {
+    await writeRuntimeJson(getRuntimeSessionFilePath(appA), {
+      sessionId: 'lost-endpoint',
+      pid: process.pid,
+      processStart: getRuntimeProcessStart(process.pid),
+      browser: { lifecycle: { state: 'idle' } },
+    });
+    await expect(getRuntimeSession(appA)).rejects.toThrow(
+      'Stop that dev process',
+    );
+  });
+  test('reclaims a launch claim whose PID has been reused', async () => {
+    await setLaunchMetadata({
+      workspaceRoot: appA,
+      pid: process.pid,
+      command: 'test',
+      claimId: 'old',
+    });
+    const file = getRuntimeLaunchFilePath(appA);
+    const old = JSON.parse(await readFile(file, 'utf8'));
+    await writeRuntimeJson(file, { ...old, processStart: 'previous-birth' });
+    expect(await getLaunchMetadata(appA)).toBeNull();
+    await writeRuntimeJson(file, { ...old, processStart: 'previous-birth' });
+    expect(
+      (
+        await claimLaunchMetadata({
+          workspaceRoot: appA,
+          pid: process.pid,
+          command: 'test',
+          claimId: 'new',
+        })
+      ).acquired,
+    ).toBe(true);
+  });
   test('registers a running session and resolves the workspace from a child directory', async () => {
     await registerRuntimeSession({
       sessionId: 'session-a',
@@ -510,6 +591,39 @@ describe('project-local runtime state', () => {
 
     expect(claims.filter((claim) => claim.acquired)).toHaveLength(1);
     expect(claims.filter((claim) => !claim.acquired)).toHaveLength(2);
+  });
+
+  test.each([
+    'empty',
+    'unique-owner',
+    'pid-reuse',
+    'empty-guard',
+    'dead-guard',
+  ])('recovers interrupted file-lock publication: %s', async (mode) => {
+    const file = getRuntimeSessionFilePath(appA);
+    const lock = getRuntimeFileLockPath(file);
+    const abandoned = mode.includes('guard') ? `${lock}.recovery` : lock;
+    await mkdir(abandoned, { recursive: true });
+    if (!mode.startsWith('empty')) {
+      const filename =
+        mode === 'dead-guard' ? 'owner.json' : 'owner-abcdef.json';
+      await writeFile(
+        path.join(abandoned, filename),
+        JSON.stringify({
+          pid: mode === 'pid-reuse' ? process.pid : 999_999_999,
+          processStart:
+            mode === 'pid-reuse' ? 'previous-process-birth' : undefined,
+        }),
+      );
+    }
+    let entered = 0;
+    await withRuntimeFileLock(file, async () => {
+      entered++;
+    });
+    expect(entered).toBe(1);
+    await expect(
+      readFile(path.join(abandoned, 'owner.json')),
+    ).rejects.toThrow();
   });
 
   test('prunes interrupted atomic-write files after taking the lock', async () => {

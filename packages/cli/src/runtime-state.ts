@@ -20,6 +20,7 @@ import {
 } from './runtime-contract.js';
 import {
   getRuntimeFilePath,
+  getRuntimeProcessStart,
   isRuntimeProcessAlive,
   normalizeWorkspaceRoot,
   readRuntimeJson,
@@ -27,6 +28,7 @@ import {
   withRuntimeFileLock,
   writeRuntimeJson,
 } from './runtime-files.js';
+import { inspectRuntimeOwner, runtimeOwnerEndpoint } from './runtime-owner.js';
 
 export { normalizeWorkspaceRoot } from './runtime-files.js';
 
@@ -167,16 +169,51 @@ export async function getRuntimeSession(
 ): Promise<RuntimeSession | null> {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
   const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
-  return withRuntimeFileLock(filePath, async () => {
-    const session = await readRuntimeJson<RuntimeSession>(filePath);
-    if (!session) {
-      return null;
+  const session = await withRuntimeFileLock(filePath, () =>
+    readRuntimeJson<RuntimeSession>(filePath),
+  );
+  if (!session) {
+    return null;
+  }
+  if (isProcessAlive(session.pid) && session.browser?.lifecycle) {
+    const endpoint = runtimeOwnerEndpoint(normalizedWorkspaceRoot);
+    const observation = await inspectRuntimeOwner(endpoint);
+    if (observation.state === 'unknown') {
+      throw new Error(
+        `Runtime ownership is unknown at ${endpoint}: ${observation.reason}. Inspect the runtime process before retrying; no PID-only action was taken.`,
+      );
     }
-    if (!isProcessAlive(session.pid)) {
-      await removeRuntimeFile(filePath);
-      return null;
+    if (observation.state === 'live') {
+      if (
+        observation.owner.sessionId === session.sessionId &&
+        observation.owner.pid === session.pid &&
+        observation.owner.workspaceRoot === normalizedWorkspaceRoot
+      ) {
+        return session;
+      }
+    } else if (session.processStart != null) {
+      const birth = getRuntimeProcessStart(session.pid);
+      if (birth == null || birth === session.processStart) {
+        throw new Error(
+          `Runtime ${session.sessionId} (pid ${session.pid}) has lost its owner endpoint at ${endpoint}, but its process may still be alive. Stop that dev process before retrying.`,
+        );
+      }
     }
+  } else if (isProcessAlive(session.pid)) {
     return session;
+  }
+  // Never hold the file lock across IPC: a runtime publishing state may need
+  // that lock before it can respond, especially with slower Windows probes.
+  return withRuntimeFileLock(filePath, async () => {
+    const current = await readRuntimeJson<RuntimeSession>(filePath);
+    if (
+      current?.sessionId === session.sessionId &&
+      current.pid === session.pid &&
+      current.processStart === session.processStart
+    ) {
+      await removeRuntimeFile(filePath);
+    }
+    return null;
   });
 }
 
@@ -191,6 +228,7 @@ function createLaunchMetadata(
     ...(input.phase == null ? {} : { phase: input.phase }),
     workspaceRoot,
     pid: input.pid,
+    processStart: getRuntimeProcessStart(input.pid),
     ...(input.launcherPid == null ? {} : { launcherPid: input.launcherPid }),
     ...(input.processGroupId == null
       ? {}
@@ -217,7 +255,7 @@ export async function claimLaunchMetadata(
   });
   return withRuntimeFileLock(filePath, async () => {
     const existing = await readRuntimeJson<LaunchMetadata>(filePath);
-    if (existing != null && isProcessAlive(existing.pid)) {
+    if (existing != null && isLaunchProcessAlive(existing)) {
       return { acquired: false, metadata: existing };
     }
     await writeRuntimeJson(filePath, metadata);
@@ -276,12 +314,21 @@ export async function getLaunchMetadata(
     if (!metadata) {
       return null;
     }
-    if (!isProcessAlive(metadata.pid)) {
+    if (!isLaunchProcessAlive(metadata)) {
       await removeRuntimeFile(filePath);
       return null;
     }
     return metadata;
   });
+}
+
+function isLaunchProcessAlive(metadata: LaunchMetadata): boolean {
+  if (!isProcessAlive(metadata.pid)) {
+    return false;
+  }
+  const birth =
+    metadata.processStart == null ? null : getRuntimeProcessStart(metadata.pid);
+  return birth == null || birth === metadata.processStart;
 }
 
 export async function getWorkspaceRuntimeState(

@@ -176,6 +176,9 @@ function normalizeValue(value, toolName) {
     for (const [key, entry] of Object.entries(value)) {
       if (key === '_tab') continue;
       if (key === 'sceneSessionId') continue;
+      // CLI and MCP run in separate workspaces with distinct owner/attempt IDs.
+      // Their readiness and lifecycle state still participate in comparison.
+      if (key === 'sessionId' || key === 'attemptId') continue;
       if (key === 'frameTimeSamplesMs') continue;
       if (key === 'durationMs') continue;
       if (key === 'profileId') continue;

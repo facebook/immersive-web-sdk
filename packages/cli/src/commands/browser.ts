@@ -11,9 +11,11 @@ import { createRequire } from 'module';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { parseIntegerOption } from '../argv.js';
+import { acquireBrowserLease } from '../browser-lease.js';
 import { createSuccess } from '../cli-results.js';
 import type { CliOptions, CliSuccess, ResolvedCliIo } from '../cli-types.js';
 import { getRuntimeSession, resolveWorkspaceRoot } from '../runtime-state.js';
+import { RuntimeCommandExecutionError } from '../runtime-transport.js';
 
 interface BrowserRunnerContext {
   browser: any;
@@ -317,6 +319,11 @@ export async function handleBrowserRun(
     }
   }
 
+  if (session.browser?.lifecycle && timeoutMs > 110000) {
+    throw new Error(
+      'Managed browser scripts are limited to 110000ms per lease.',
+    );
+  }
   const browser = await playwright.chromium.connectOverCDP(automationEndpoint, {
     timeout: Math.min(timeoutMs, 30_000),
   });
@@ -324,14 +331,26 @@ export async function handleBrowserRun(
   // the secondary CDP transport. Capture it before scripts receive protected
   // wrappers; closing the shared client connection can tear down the owner.
   const disconnectBrowser = browser.close.bind(browser);
+  let lease: Awaited<ReturnType<typeof acquireBrowserLease>> | null = null;
+  try {
+    // Connecting is read-only. Acquire exclusive ownership immediately after
+    // connection so the complete lease budget remains available to the script.
+    lease = session.browser?.lifecycle
+      ? await acquireBrowserLease(session, timeoutMs + 5000)
+      : null;
+  } catch (error) {
+    await disconnectBrowser().catch(() => {});
+    throw error;
+  }
   let cdp: any = null;
   const cleanup: { detachCdp: (() => Promise<void>) | null } = {
     detachCdp: null,
   };
   const abortController = new AbortController();
+  let runnerSettled = false;
   try {
-    return await withTimeout(
-      (async () => {
+    const runnerOperation = (async () => {
+      try {
         const managedOrigin = new URL(session.localUrl).origin;
         const selected = await selectManagedBrowserPage(
           browser,
@@ -392,10 +411,34 @@ export async function handleBrowserRun(
           script: realRelativeScriptPath.split(path.sep).join('/'),
           workspaceRoot,
         });
-      })(),
-      timeoutMs,
-      () => abortController.abort(),
+      } finally {
+        // A settled script (success or rejection) no longer owns awaited CDP
+        // work and may release normally. A timeout or lost lease leaves this
+        // false until the abandoned operation actually settles, so the server
+        // retires the browser instead of admitting overlapping commands.
+        runnerSettled = true;
+      }
+    })();
+    const execution = withTimeout(runnerOperation, timeoutMs, () =>
+      abortController.abort(),
     );
+    try {
+      return await (lease ? Promise.race([execution, lease.lost]) : execution);
+    } catch (error) {
+      abortController.abort();
+      if (error instanceof RuntimeCommandExecutionError) {
+        throw error;
+      }
+      throw new RuntimeCommandExecutionError(
+        error instanceof Error ? error.message : String(error),
+        {
+          details: {
+            code: 'browser_run_failed',
+            outcome: 'outcome_unknown',
+          },
+        },
+      );
+    }
   } finally {
     if (cleanup.detachCdp != null) {
       try {
@@ -405,5 +448,10 @@ export async function handleBrowserRun(
     try {
       await disconnectBrowser();
     } catch {}
+    if (runnerSettled) {
+      lease?.release();
+    } else {
+      lease?.abandon();
+    }
   }
 }

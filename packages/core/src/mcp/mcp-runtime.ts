@@ -56,6 +56,46 @@ export class MCPRuntime {
     installDebugHook(world);
   }
 
+  /** Release native XR before the development bridge navigates this page. */
+  async prepareForReload(): Promise<void> {
+    // Three adopts the session before World finishes reference-space setup.
+    // Reload can arrive during that interval as well as after full adoption.
+    const session = this.world.session ?? this.world.renderer.xr.getSession();
+    if (!session) {
+      return;
+    }
+    // Quest resolves end() before delivering the end event. Navigation must
+    // wait for that event so the renderer and compositor can release XR.
+    await new Promise<void>((resolve, reject) => {
+      const finish = (error?: unknown) => {
+        clearTimeout(timer);
+        session.removeEventListener('end', ended);
+        if (error !== undefined) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+      const ended = () => finish();
+      const timer = setTimeout(
+        () =>
+          finish(new Error('Native XR did not finish ending before reload.')),
+        10000,
+      );
+      session.addEventListener('end', ended, { once: true });
+      void Promise.resolve()
+        .then(() => session.end())
+        .catch((error) => {
+          // The app, device UI, or another command may already be ending XR.
+          // Chromium rejects a second end(); the pending end event remains
+          // the teardown boundary, with the same deadline as the first call.
+          if (error?.name !== 'InvalidStateError') {
+            finish(error ?? new Error('Native XR rejected session teardown.'));
+          }
+        });
+    });
+  }
+
   /**
    * Returns true if this runtime handles the given method.
    * Used by vite-plugin-dev to route requests appropriately.

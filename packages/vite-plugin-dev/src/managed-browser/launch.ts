@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import { createRequire } from 'module';
 import * as os from 'os';
@@ -27,6 +28,11 @@ import { errorMessage, parseUrl } from './internals.js';
 const MANAGED_BROWSER_STARTUP_TIMEOUT_MS = 45_000;
 
 const AUTOMATION_ENDPOINT_TIMEOUT_MS = 10_000;
+
+// Chromium ignores --app=about:blank and opens a normal tabbed window with an
+// omnibox. An inert data: page keeps app mode without loading the app before
+// the managed-access route is installed; page.goto then loads the managed URL.
+const MANAGED_APP_START_URL = 'data:text/html,';
 
 const requireFromPlugin = createRequire(import.meta.url);
 
@@ -77,21 +83,21 @@ function scrubManagedWorkspaceReferrer(value: string, token: string): string {
 async function readDevToolsActivePort(
   userDataDir: string,
   signal?: AbortSignal,
+  previousContents?: string,
 ): Promise<{ endpoint: string; websocketPath: string }> {
   const activePortPath = path.join(userDataDir, 'DevToolsActivePort');
   const deadline = Date.now() + AUTOMATION_ENDPOINT_TIMEOUT_MS;
   while (Date.now() < deadline) {
     throwIfLaunchAborted(signal);
     try {
-      const [rawPort, websocketPath] = fs
-        .readFileSync(activePortPath, 'utf8')
-        .trim()
-        .split(/\r?\n/);
+      const contents = fs.readFileSync(activePortPath, 'utf8');
+      const [rawPort, websocketPath] = contents.trim().split(/\r?\n/);
       const port = Number(rawPort);
       if (
         Number.isInteger(port) &&
         port > 0 &&
         port <= 65_535 &&
+        contents !== previousContents &&
         websocketPath?.startsWith('/devtools/browser/')
       ) {
         return {
@@ -163,6 +169,7 @@ export interface ManagedBrowserAccess {
   pathnames: readonly string[];
   topLevelPathnames?: readonly string[];
   token: string;
+  runtimeIdentity?: { sessionId: string; browserEpoch: number };
 }
 
 export function createManagedBrowserBootstrap(
@@ -184,34 +191,67 @@ export type ManagedBrowserReadiness = 'iwer' | 'workspace';
 
 let chromiumInstalled = false;
 
-let installPromise: Promise<void> | null = null;
+let installation: {
+  promise: Promise<void>;
+  child?: ChildProcess;
+  consumers: number;
+} | null = null;
 
 /**
  * Verify the Chromium binary exists and install it automatically if missing.
  * Uses a Promise guard so concurrent callers share one install attempt.
  * On install failure the flag stays unset so the next retry can try again.
  */
-async function ensureChromiumInstalled(signal?: AbortSignal): Promise<void> {
+export async function ensureChromiumInstalled(
+  signal?: AbortSignal,
+): Promise<void> {
   throwIfLaunchAborted(signal);
   if (chromiumInstalled) {
     return;
   }
-  if (installPromise) {
-    return installPromise;
-  }
-
-  if (fs.existsSync(chromium.executablePath())) {
+  if (installation == null && fs.existsSync(chromium.executablePath())) {
     chromiumInstalled = true;
     return;
   }
 
-  installPromise = doChromiumInstall(signal).finally(() => {
-    installPromise = null;
-  });
-  return installPromise;
+  if (installation == null) {
+    const job = {
+      promise: Promise.resolve(),
+      consumers: 0,
+      child: undefined as ChildProcess | undefined,
+    };
+    job.promise = doChromiumInstall((child) => {
+      job.child = child;
+    }).finally(() => {
+      installation = null;
+    });
+    installation = job;
+  }
+  const job = installation;
+  job.consumers += 1;
+  job.child?.ref();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const cancelled = () => reject(browserLaunchAbortError());
+      signal?.addEventListener('abort', cancelled, { once: true });
+      if (signal?.aborted) {
+        cancelled();
+      }
+      void job.promise.then(resolve, reject).finally(() => {
+        signal?.removeEventListener('abort', cancelled);
+      });
+    });
+  } finally {
+    job.consumers -= 1;
+    if (job.consumers === 0) {
+      job.child?.unref();
+    }
+  }
 }
 
-async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
+async function doChromiumInstall(
+  onSpawn: (child: ChildProcess) => void,
+): Promise<void> {
   console.log(
     '\n🔧 IWSDK: Chromium browser not found. Installing (first time only)...\n',
   );
@@ -221,15 +261,25 @@ async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
       process.execPath,
       [resolvePlaywrightCliPath(), 'install', 'chromium'],
       {
-        signal,
+        // Process-scoped: a Vite generation's cancellation only detaches its
+        // waiter. A replacement generation shares the in-progress download.
+        signal: AbortSignal.timeout(600000),
         stdio: 'inherit',
         shell: false,
         windowsHide: true,
       },
     );
-
+    onSpawn(child);
+    const stopOnExit = () => {
+      child.kill();
+    };
+    process.once('exit', stopOnExit);
+    let installError: Error | undefined;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     child.on('close', (code) => {
-      if (code === 0) {
+      process.off('exit', stopOnExit);
+      clearTimeout(killTimer);
+      if (code === 0 && !installError) {
         chromiumInstalled = true;
         console.log('\n✅ IWSDK: Chromium installed successfully.\n');
         resolve();
@@ -237,19 +287,16 @@ async function doChromiumInstall(signal?: AbortSignal): Promise<void> {
         reject(
           new Error(
             `Chromium installation failed (exit code ${code}). ` +
-              'Reinstall project dependencies, then restart the IWSDK dev server.',
+              `${installError ? installError.message + '. ' : ''}Run the installed Playwright CLI with "install chromium", then use runtime_recover.`,
           ),
         );
       }
     });
 
     child.on('error', (err) => {
-      reject(
-        new Error(
-          `Failed to start Chromium installer: ${err.message}. ` +
-            'Reinstall project dependencies, then restart the IWSDK dev server.',
-        ),
-      );
+      installError = err;
+      killTimer = setTimeout(() => child.kill('SIGKILL'), 2000);
+      killTimer.unref();
     });
   });
 }
@@ -349,6 +396,15 @@ function resolveGpuBackend(): GpuBackend {
   };
 }
 
+/** Persistent, private profile identity shared by every runtime generation. */
+export function managedBrowserProfilePath(workspaceRoot: string): string {
+  return path.join(
+    os.tmpdir(),
+    `.iwsdk-browser-${process.getuid?.() ?? 'user'}`,
+    createHash('sha256').update(fs.realpathSync(workspaceRoot)).digest('hex'),
+  );
+}
+
 export async function openManagedChromium({
   browserAutomation,
   headless,
@@ -356,7 +412,9 @@ export async function openManagedChromium({
   managedAccess,
   signal,
   viewport,
+  workspaceRoot,
 }: {
+  workspaceRoot?: string;
   browserAutomation: boolean;
   headless: boolean;
   launchUrl: URL;
@@ -377,9 +435,44 @@ export async function openManagedChromium({
       : `🖥️  IWSDK: Using hardware GPU (${backend.useAngle})`,
   );
 
-  const browserAutomationUserDataDir = browserAutomation
-    ? fs.mkdtempSync(path.join(os.tmpdir(), 'iwsdk-managed-browser-'))
-    : null;
+  // Chromium's own profile singleton is the last fence after abrupt owner
+  // death. Never delete this profile/lock to force an orphan out of the way.
+  const profileRoot = path.join(
+    os.tmpdir(),
+    `.iwsdk-browser-${process.getuid?.() ?? 'user'}`,
+  );
+  const ownedProfile =
+    workspaceRoot && managedAccess?.runtimeIdentity
+      ? managedBrowserProfilePath(workspaceRoot)
+      : null;
+  if (ownedProfile) {
+    fs.mkdirSync(profileRoot, { recursive: true, mode: 0o700 });
+    const info = fs.lstatSync(profileRoot);
+    if (
+      !info.isDirectory() ||
+      (process.platform !== 'win32' &&
+        (info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0))
+    ) {
+      throw new Error(
+        `Managed browser profile directory is not private: ${profileRoot}`,
+      );
+    }
+    fs.mkdirSync(ownedProfile, { recursive: true, mode: 0o700 });
+  }
+  const browserAutomationUserDataDir =
+    ownedProfile ??
+    (browserAutomation
+      ? fs.mkdtempSync(path.join(os.tmpdir(), 'iwsdk-managed-browser-'))
+      : null);
+  let previousActivePort: string | undefined;
+  if (browserAutomationUserDataDir != null) {
+    try {
+      previousActivePort = fs.readFileSync(
+        path.join(browserAutomationUserDataDir, 'DevToolsActivePort'),
+        'utf8',
+      );
+    } catch {}
+  }
   let browserAutomationUserDataDirRemoved = false;
   let browserAutomationCleanupScheduled = false;
   let processExitCleanup: (() => void) | null = null;
@@ -398,6 +491,7 @@ export async function openManagedChromium({
   };
   const scheduleBrowserAutomationCleanup = () => {
     if (
+      ownedProfile != null ||
       browserAutomationUserDataDir == null ||
       browserAutomationCleanupScheduled
     ) {
@@ -415,6 +509,7 @@ export async function openManagedChromium({
   };
   const removeBrowserAutomationUserDataDir = () => {
     if (
+      ownedProfile != null ||
       browserAutomationUserDataDir == null ||
       browserAutomationUserDataDirRemoved
     ) {
@@ -437,7 +532,7 @@ export async function openManagedChromium({
       removeProcessCleanupListeners();
     }
   };
-  if (browserAutomationUserDataDir != null) {
+  if (browserAutomationUserDataDir != null && ownedProfile == null) {
     processExitCleanup = removeBrowserAutomationUserDataDir;
     processSignalCleanup = scheduleBrowserAutomationCleanup;
     process.once('exit', processExitCleanup);
@@ -456,12 +551,35 @@ export async function openManagedChromium({
         signal?.removeEventListener('abort', handleAbort);
         handleAbort = null;
       }
+      const contextBrowser = (() => {
+        try {
+          return context?.browser() ?? null;
+        } catch {
+          return null;
+        }
+      })();
+      let contextCloseConfirmed = context == null;
+      let browserCloseConfirmed = contextBrowser == null && browser == null;
       try {
         await context?.close();
+        contextCloseConfirmed = true;
       } catch {}
+      const cleanupBrowser = browser ?? contextBrowser;
       try {
-        await browser?.close();
+        await cleanupBrowser?.close();
+        browserCloseConfirmed = true;
       } catch {}
+      const browserStillConnected = cleanupBrowser?.isConnected?.();
+      if (
+        browserStillConnected === true ||
+        (browserStillConnected == null && !browserCloseConfirmed) ||
+        (!contextCloseConfirmed && cleanupBrowser == null)
+      ) {
+        throw Object.assign(
+          new Error('Managed Chromium cleanup is unconfirmed.'),
+          { cleanupConfirmed: false },
+        );
+      }
       removeBrowserAutomationUserDataDir();
     })());
   handleAbort = () => {
@@ -487,7 +605,7 @@ export async function openManagedChromium({
     `--use-angle=${backend.useAngle}`,
     '--disable-background-timer-throttling',
     '--disable-renderer-backgrounding',
-    ...(browserAutomationUserDataDir == null
+    ...(!browserAutomation
       ? []
       : ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0']),
   ];
@@ -518,7 +636,12 @@ export async function openManagedChromium({
   } else {
     context = await chromium
       .launchPersistentContext(browserAutomationUserDataDir ?? '', {
-        args: headless ? browserArgs : [...browserArgs, '--app=about:blank'],
+        // Full Chromium implements the profile singleton in headless mode too.
+        // Playwright's default headless-shell binary does not provide that fence.
+        ...(ownedProfile ? { channel: 'chromium' } : {}),
+        args: headless
+          ? browserArgs
+          : [...browserArgs, `--app=${MANAGED_APP_START_URL}`],
         handleSIGHUP: true,
         handleSIGINT: true,
         handleSIGTERM: true,
@@ -540,158 +663,169 @@ export async function openManagedChromium({
     browser = persistentBrowser;
   }
   const browserAutomationEndpoint =
-    browserAutomationUserDataDir == null
+    !browserAutomation || browserAutomationUserDataDir == null
       ? null
       : (
           await readDevToolsActivePort(
             browserAutomationUserDataDir,
             signal,
+            previousActivePort,
           ).catch(async (error) => {
             await dispose();
             throw error;
           })
         ).endpoint;
   await disposeIfAborted();
-  let managedPageForAccess: Page | null = null;
-  let managedTopLevelAuthorized = false;
-  if (managedAccess) {
-    const managedOrigin = launchUrl.origin;
-    const normalizedAccessHeader = managedAccess.headerName.toLowerCase();
-    await context.route('**/*', async (route) => {
-      try {
-        const request = route.request();
-        const requestHeaders = request.headers();
-        const requestUrl = parseUrl(request.url());
-        let headersChanged = false;
-        const headersWithoutAccess = Object.fromEntries(
-          Object.entries(requestHeaders).flatMap(([name, value]) => {
-            const normalizedName = name.toLowerCase();
-            if (normalizedName === normalizedAccessHeader) {
-              headersChanged = true;
-              return [];
+  try {
+    let managedPageForAccess: Page | null = null;
+    let managedTopLevelAuthorized = false;
+    if (managedAccess) {
+      const managedOrigin = launchUrl.origin;
+      const normalizedAccessHeader = managedAccess.headerName.toLowerCase();
+      await context.route('**/*', async (route) => {
+        try {
+          const request = route.request();
+          const requestHeaders = request.headers();
+          const requestUrl = parseUrl(request.url());
+          let headersChanged = false;
+          const headersWithoutAccess = Object.fromEntries(
+            Object.entries(requestHeaders).flatMap(([name, value]) => {
+              const normalizedName = name.toLowerCase();
+              if (normalizedName === normalizedAccessHeader) {
+                headersChanged = true;
+                return [];
+              }
+              if (
+                normalizedName === 'referer' &&
+                requestUrl != null &&
+                requestUrl.origin !== managedOrigin
+              ) {
+                const sanitized = scrubManagedWorkspaceReferrer(
+                  value,
+                  managedAccess.token,
+                );
+                headersChanged ||= sanitized !== value;
+                return [[name, sanitized]];
+              }
+              return [[name, value]];
+            }),
+          );
+          const continueWithoutAccess = async (url?: string) => {
+            if (url != null) {
+              await route.continue(
+                headersChanged
+                  ? { headers: headersWithoutAccess, url }
+                  : { url },
+              );
+              return;
             }
-            if (
-              normalizedName === 'referer' &&
-              requestUrl != null &&
-              requestUrl.origin !== managedOrigin
-            ) {
-              const sanitized = scrubManagedWorkspaceReferrer(
-                value,
+            if (headersChanged) {
+              await route.continue({ headers: headersWithoutAccess });
+            } else {
+              await route.continue();
+            }
+          };
+          if (requestUrl == null) {
+            await continueWithoutAccess();
+            return;
+          }
+          const requestFrame = (() => {
+            try {
+              return request.frame();
+            } catch {
+              return null;
+            }
+          })();
+          const frameUrl = requestFrame?.url() ?? '';
+          const frameOrigin = parseUrl(frameUrl)?.origin ?? null;
+          const parentFrameOrigin = (() => {
+            try {
+              return (
+                parseUrl(requestFrame?.parentFrame()?.url() ?? '')?.origin ??
+                null
+              );
+            } catch {
+              return null;
+            }
+          })();
+          const trustedInitiator =
+            frameOrigin === managedOrigin ||
+            (frameUrl === 'about:blank' && parentFrameOrigin === managedOrigin);
+          if (request.isNavigationRequest()) {
+            const isManagedTopLevelPage =
+              requestFrame?.parentFrame() == null &&
+              requestFrame?.page() === managedPageForAccess;
+            const isManagedTopLevelNavigation =
+              isManagedTopLevelPage &&
+              requestUrl.origin === managedOrigin &&
+              managedAccess.topLevelPathnames?.includes(requestUrl.pathname) ===
+                true;
+            const hasBootstrapToken =
+              requestUrl.searchParams.get(MANAGED_WORKSPACE_QUERY) ===
+              managedAccess.token;
+            const canAuthorizeNavigation =
+              isManagedTopLevelNavigation &&
+              (hasBootstrapToken ||
+                (managedTopLevelAuthorized && frameOrigin === managedOrigin));
+            if (isManagedTopLevelPage) {
+              managedTopLevelAuthorized = canAuthorizeNavigation;
+            }
+            if (canAuthorizeNavigation && !hasBootstrapToken) {
+              const authorizedUrl = new URL(requestUrl);
+              authorizedUrl.searchParams.set(
+                MANAGED_WORKSPACE_QUERY,
                 managedAccess.token,
               );
-              headersChanged ||= sanitized !== value;
-              return [[name, sanitized]];
+              await continueWithoutAccess(authorizedUrl.href);
+              return;
             }
-            return [[name, value]];
-          }),
-        );
-        const continueWithoutAccess = async (url?: string) => {
-          if (url != null) {
-            await route.continue(
-              headersChanged ? { headers: headersWithoutAccess, url } : { url },
-            );
+            await continueWithoutAccess();
             return;
           }
-          if (headersChanged) {
-            await route.continue({ headers: headersWithoutAccess });
-          } else {
-            await route.continue();
-          }
-        };
-        if (requestUrl == null) {
-          await continueWithoutAccess();
-          return;
-        }
-        const requestFrame = (() => {
-          try {
-            return request.frame();
-          } catch {
-            return null;
-          }
-        })();
-        const frameUrl = requestFrame?.url() ?? '';
-        const frameOrigin = parseUrl(frameUrl)?.origin ?? null;
-        const parentFrameOrigin = (() => {
-          try {
-            return (
-              parseUrl(requestFrame?.parentFrame()?.url() ?? '')?.origin ?? null
-            );
-          } catch {
-            return null;
-          }
-        })();
-        const trustedInitiator =
-          frameOrigin === managedOrigin ||
-          (frameUrl === 'about:blank' && parentFrameOrigin === managedOrigin);
-        if (request.isNavigationRequest()) {
-          const isManagedTopLevelPage =
-            requestFrame?.parentFrame() == null &&
-            requestFrame?.page() === managedPageForAccess;
-          const isManagedTopLevelNavigation =
-            isManagedTopLevelPage &&
+          const isProtectedPath =
             requestUrl.origin === managedOrigin &&
-            managedAccess.topLevelPathnames?.includes(requestUrl.pathname) ===
-              true;
-          const hasBootstrapToken =
-            requestUrl.searchParams.get(MANAGED_WORKSPACE_QUERY) ===
-            managedAccess.token;
-          const canAuthorizeNavigation =
-            isManagedTopLevelNavigation &&
-            (hasBootstrapToken ||
-              (managedTopLevelAuthorized && frameOrigin === managedOrigin));
-          if (isManagedTopLevelPage) {
-            managedTopLevelAuthorized = canAuthorizeNavigation;
-          }
-          if (canAuthorizeNavigation && !hasBootstrapToken) {
-            const authorizedUrl = new URL(requestUrl);
-            authorizedUrl.searchParams.set(
-              MANAGED_WORKSPACE_QUERY,
-              managedAccess.token,
-            );
-            await continueWithoutAccess(authorizedUrl.href);
+            managedAccess.pathnames.includes(requestUrl.pathname);
+          const needsAccess = trustedInitiator && isProtectedPath;
+          if (!needsAccess) {
+            await continueWithoutAccess();
             return;
           }
-          await continueWithoutAccess();
-          return;
+          const headers = {
+            ...headersWithoutAccess,
+            [managedAccess.headerName]: managedAccess.token,
+          };
+          const response = await route.fetch({ headers, maxRedirects: 0 });
+          await route.fulfill({ response });
+        } catch {
+          // Never fall back to the original request after a privileged fetch
+          // fails: it may still carry the managed-access header. Abort it so the
+          // route always settles without leaking authority.
+          await route.abort('failed').catch(() => {});
         }
-        const isProtectedPath =
-          requestUrl.origin === managedOrigin &&
-          managedAccess.pathnames.includes(requestUrl.pathname);
-        const needsAccess = trustedInitiator && isProtectedPath;
-        if (!needsAccess) {
-          await continueWithoutAccess();
-          return;
-        }
-        const headers = {
-          ...headersWithoutAccess,
-          [managedAccess.headerName]: managedAccess.token,
-        };
-        const response = await route.fetch({ headers, maxRedirects: 0 });
-        await route.fulfill({ response });
-      } catch {
-        // Never fall back to the original request after a privileged fetch
-        // fails: it may still carry the managed-access header. Abort it so the
-        // route always settles without leaking authority.
-        await route.abort('failed').catch(() => {});
-      }
-    });
+      });
+    }
+    const page =
+      context.pages().find((candidate) => !candidate.isClosed()) ??
+      (await context.newPage());
+    if (managedAccess?.runtimeIdentity) {
+      await context.addInitScript((identity) => {
+        (window as any).__IWSDK_RUNTIME_IDENTITY = identity;
+      }, managedAccess.runtimeIdentity);
+    }
+    page.setDefaultTimeout(DEFAULT_BROWSER_OPERATION_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(DEFAULT_BROWSER_OPERATION_TIMEOUT_MS);
+    managedPageForAccess = page;
+    return {
+      browser,
+      browserAutomationEndpoint,
+      context,
+      dispose,
+      page,
+    };
+  } catch (error) {
+    await dispose();
+    throw error;
   }
-  const page =
-    context.pages().find((candidate) => !candidate.isClosed()) ??
-    (await context.newPage().catch(async (error) => {
-      await dispose();
-      throw error;
-    }));
-  page.setDefaultTimeout(DEFAULT_BROWSER_OPERATION_TIMEOUT_MS);
-  page.setDefaultNavigationTimeout(DEFAULT_BROWSER_OPERATION_TIMEOUT_MS);
-  managedPageForAccess = page;
-  return {
-    browser,
-    browserAutomationEndpoint,
-    context,
-    dispose,
-    page,
-  };
 }
 
 export async function navigateAndVerifyManagedPage({
@@ -700,6 +834,7 @@ export async function navigateAndVerifyManagedPage({
   managedWorkspaceToken,
   page,
   readiness,
+  waitForRuntime = true,
   signal,
   traceMcp,
   url,
@@ -709,6 +844,7 @@ export async function navigateAndVerifyManagedPage({
   managedWorkspaceToken: string | null;
   page: Page;
   readiness: ManagedBrowserReadiness;
+  waitForRuntime?: boolean;
   signal?: AbortSignal;
   traceMcp: boolean;
   url: string;
@@ -755,7 +891,7 @@ export async function navigateAndVerifyManagedPage({
   }
   const readinessDeadline = Date.now() + MANAGED_BROWSER_STARTUP_TIMEOUT_MS;
   let lastReadinessError: unknown = null;
-  while (Date.now() < readinessDeadline) {
+  while (waitForRuntime && Date.now() < readinessDeadline) {
     throwIfLaunchAborted(signal);
     try {
       const readinessFrame =

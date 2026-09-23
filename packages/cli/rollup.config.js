@@ -89,4 +89,15 @@ export default [
       inlineDynamicImports: true,
     },
   },
+  {
+    input: 'src/runtime-owner.ts',
+    external,
+    plugins,
+    output: {
+      file: 'dist/runtime-owner.js',
+      format: 'es',
+      sourcemap: true,
+      inlineDynamicImports: true,
+    },
+  },
 ];

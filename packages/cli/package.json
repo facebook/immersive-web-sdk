@@ -21,6 +21,10 @@
     "./runtime-files": {
       "types": "./dist/runtime-files.d.ts",
       "import": "./dist/runtime-files.js"
+    },
+    "./runtime-owner": {
+      "types": "./dist/runtime-owner.d.ts",
+      "import": "./dist/runtime-owner.js"
     }
   },
   "typesVersions": {
@@ -30,6 +34,9 @@
       ],
       "runtime-files": [
         "dist/runtime-files.d.ts"
+      ],
+      "runtime-owner": [
+        "dist/runtime-owner.d.ts"
       ]
     }
   },

@@ -29,11 +29,20 @@ hand-build that options object.
 
 **The dev server is CLI-managed.** Use `npx @iwsdk/cli dev up` (or `npm run dev`), not
 `vite`. It launches a managed browser that hosts the MCP command bridge.
-`--no-open` intentionally starts only the server: status reports
-`browser.status: "not_launched"`, and browser-backed commands fail with
-`browser_not_launched` unless a physical loopback app client connects. In that
-case, `browserCommandReady` becomes true and commands target that client. One
-managed window hosts two roles, editor and runtime when it is launched.
+`--no-open` starts the server with managed-browser launch disabled. Server status
+and explicitly paired physical targets remain available. A targetless managed
+browser command then fails with `browser_not_launched`; it never falls through
+to a physical page. Commands default to the managed browser. One managed
+window hosts the editor and application roles. Browser failure leaves Vite and
+HMR running. `runtime status`, `runtime targets`, and `runtime wait` do not recover
+or launch a browser; `runtime recover` explicitly retries after a failure.
+
+Pair a headset using `runtime pair-headset --input-json '{"headsetId":"ADB_SERIAL"}'`,
+open the returned URL on that exact device through ADB reverse, then copy its
+`runtimeTarget` from `runtime targets`. Include deviceClass, headsetId, pageId, and
+tabGeneration on every physical command. Reload is supported through the page
+bridge; screenshot, snapshot, interaction, profiling, console capture, and the
+managed editor are host-only. Rediscover after reload to get the new generation.
 
 The developer owns whether that managed window is headed or headless. Do not
 change modes silently: announce the change before restarting. In a visible
@@ -115,10 +124,12 @@ Nearly every capability exists both ways — `scene_render_file` and
 Discover CLI actions with the bare domain or domain help (`npx @iwsdk/cli scene` or
 `npx @iwsdk/cli scene --help`); both list that domain's actions.
 
-**The CLI is not a fallback for a dead bridge.** Both routes drive the same
-managed browser, so when `dev status` reports `browserConnected: false`,
-every scene/ecs/xr/browser/ui command fails either way. Only `dev status`,
-`dev logs` and `reference status` work without a browser.
+**CLI and MCP share the same target resolver and recovery policy.** A managed
+command can recover a missing managed browser; it then returns
+`browser_relaunched` with `outcome: "not_executed"`. Inspect the new state and issue
+a fresh command. `outcome_unknown` means a dispatched mutation may have executed;
+inspect state before retrying. Requests are never broadcast or replayed on
+reconnect. Host browser tools can remain usable while a runtime bridge is loading.
 
 Choose by the shape of the call, not by availability:
 

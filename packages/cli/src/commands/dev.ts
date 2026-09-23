@@ -34,6 +34,11 @@ import {
   type RuntimeSession,
 } from '../runtime-contract.js';
 import {
+  inspectRuntimeOwner,
+  runtimeOwnerEndpoint,
+  stopRuntimeOwner,
+} from '../runtime-owner.js';
+import {
   claimLaunchMetadata,
   clearLaunchMetadata,
   ensureRuntimeLogsDir,
@@ -41,7 +46,6 @@ import {
   getLaunchMetadata,
   getRuntimeSession,
   getWorkspaceRuntimeState,
-  isProcessAlive,
   resolveWorkspaceRoot,
   setLaunchMetadata,
 } from '../runtime-state.js';
@@ -103,6 +107,17 @@ export function describeChildExit(exit: ProcessExitResult): string {
     return `Dev server exited with code ${exit.exitCode}`;
   }
   return 'Dev server exited abnormally';
+}
+
+/** Names the port a fail-closed startup could not bind, from its launch log. */
+export async function describeStartupExit(
+  logPath: string | null,
+): Promise<string> {
+  const log = logPath ? await readFile(logPath, 'utf8').catch(() => '') : '';
+  const port = /Port (\d+) is already in use/.exec(log.slice(-16_384))?.[1];
+  return port
+    ? `Port ${port} is already in use. The runtime keeps its configured port instead of moving; stop the process using it or change server.port.`
+    : 'Dev server exited before registering a runtime session';
 }
 
 interface WaitForRuntimeSessionResult {
@@ -418,6 +433,7 @@ async function waitForRuntimeSession(
   workspaceRoot: string,
   timeoutMs: number,
   getChildExit?: () => ProcessExitResult | null,
+  attachingToOwner?: string,
 ): Promise<WaitForRuntimeSessionResult> {
   const deadline = Date.now() + timeoutMs;
   let lastSession: RuntimeSession | null = null;
@@ -425,8 +441,26 @@ async function waitForRuntimeSession(
 
   while (Date.now() < deadline) {
     const session = await getRuntimeSession(workspaceRoot);
+    if (
+      !session &&
+      attachingToOwner != null &&
+      (await inspectRuntimeOwner(runtimeOwnerEndpoint(workspaceRoot))).state ===
+        'absent'
+    ) {
+      throw new Error(
+        'The runtime stopped while this command was attaching. Retry iwsdk dev up to start a new runtime.',
+      );
+    }
     if (session) {
       lastSession = session;
+      if (session.browser?.lifecycle) {
+        return {
+          session,
+          exit: null,
+          browserReady: isRuntimeBrowserCommandReady(session),
+          browserIssue: session.browser.lastError,
+        };
+      }
       if (!session.browser || isRuntimeBrowserCommandReady(session)) {
         return { session, exit: null, browserReady: true };
       }
@@ -525,10 +559,26 @@ async function attachToRuntime(
   foreground: boolean,
   openBrowser: boolean,
   io: ResolvedCliIo,
+  attachingToOwner?: string,
 ): Promise<CliSuccess<unknown> | CliFailure | null> {
-  const waitResult = await waitForRuntimeSession(workspaceRoot, timeoutMs);
+  const waitResult = await waitForRuntimeSession(
+    workspaceRoot,
+    timeoutMs,
+    undefined,
+    attachingToOwner,
+  );
   const launch = await getLaunchMetadata(workspaceRoot);
   if (!waitResult.session) {
+    const owner = await inspectRuntimeOwner(
+      runtimeOwnerEndpoint(workspaceRoot),
+    );
+    if (owner.state === 'live') {
+      return createFailure(
+        `Runtime ${owner.owner.sessionId} owns the workspace but has not registered a session; it may be starting or finishing cleanup. Retry shortly, or stop it with iwsdk dev down. No second runtime was started.`,
+        'runtime_owner_unregistered',
+        { workspaceRoot, owner: owner.owner },
+      );
+    }
     return createFailure(
       launch == null
         ? formatMissingRuntimeMessage(workspaceRoot)
@@ -537,21 +587,7 @@ async function attachToRuntime(
       { workspaceRoot, launch },
     );
   }
-  if (!waitResult.browserReady) {
-    return createFailure(
-      waitResult.browserIssue?.message ??
-        `Managed browser did not become ready within ${timeoutMs}ms`,
-      'dev_browser_not_ready',
-      {
-        workspaceRoot,
-        logPath: launch?.logPath ?? null,
-        scriptName: launch?.scriptName,
-        session: waitResult.session,
-        browser: waitResult.session.browser ?? null,
-        cause: waitResult.browserIssue?.cause,
-      },
-    );
-  }
+
   if (shouldOpenExternalBrowser(openBrowser, waitResult.session)) {
     await openUrl(waitResult.session.localUrl);
   }
@@ -559,6 +595,11 @@ async function attachToRuntime(
   if (foreground) {
     io.stdout.write(
       `[IWSDK] Runtime already running at ${waitResult.session.localUrl}\n`,
+    );
+    io.stdout.write(
+      waitResult.browserReady
+        ? '[IWSDK] Managed browser command path is ready.\n'
+        : `[IWSDK] Managed browser command path is not ready${waitResult.browserIssue?.cause ? ` (${waitResult.browserIssue.cause})` : ''}. ${waitResult.session.browser?.lifecycle?.nextAction ?? 'Run "iwsdk dev status" and wait for browserCommandReady before issuing browser-backed commands.'}\n`,
     );
     return null;
   }
@@ -568,6 +609,15 @@ async function attachToRuntime(
     session: waitResult.session,
     launch,
     adapters,
+    browserCommandReady: waitResult.browserReady,
+    ...(waitResult.browserReady
+      ? {}
+      : {
+          browserIssue: waitResult.browserIssue ?? null,
+          browserNextAction:
+            waitResult.session.browser?.lifecycle?.nextAction ??
+            'Run "iwsdk dev status" and wait for browserCommandReady before issuing browser-backed commands.',
+        }),
   });
 }
 
@@ -640,18 +690,110 @@ async function terminateWindowsProcessTree(
   });
 }
 
+function isPosixProcessGroupAlive(processGroupId: number): boolean {
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+async function waitForSpawnedDevProcessExit(
+  child: ChildProcess,
+  childExitPromise: Promise<ProcessExitResult>,
+  processGroupId: number | undefined,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (
+      process.platform === 'win32'
+        ? child.exitCode != null || child.signalCode != null
+        : processGroupId != null
+          ? !isPosixProcessGroupAlive(processGroupId)
+          : child.exitCode != null || child.signalCode != null
+    ) {
+      return true;
+    }
+    await Promise.race([childExitPromise, sleep(50)]);
+  } while (Date.now() < deadline);
+
+  return process.platform === 'win32'
+    ? child.exitCode != null || child.signalCode != null
+    : processGroupId != null
+      ? !isPosixProcessGroupAlive(processGroupId)
+      : child.exitCode != null || child.signalCode != null;
+}
+
+async function terminateSpawnedDevProcess(
+  child: ChildProcess,
+  childExitPromise: Promise<ProcessExitResult>,
+  processGroupId: number | undefined,
+): Promise<boolean> {
+  if (typeof child.pid !== 'number') {
+    return true;
+  }
+
+  if (process.platform === 'win32') {
+    await terminateWindowsProcessTree(child.pid, false);
+  } else if (processGroupId != null) {
+    try {
+      process.kill(-processGroupId, 'SIGTERM');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        return true;
+      }
+    }
+  } else {
+    child.kill('SIGTERM');
+  }
+
+  if (
+    await waitForSpawnedDevProcessExit(
+      child,
+      childExitPromise,
+      processGroupId,
+      2_000,
+    )
+  ) {
+    return true;
+  }
+
+  if (process.platform === 'win32') {
+    await terminateWindowsProcessTree(child.pid, true);
+  } else if (processGroupId != null) {
+    try {
+      process.kill(-processGroupId, 'SIGKILL');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        return true;
+      }
+    }
+  } else {
+    child.kill('SIGKILL');
+  }
+
+  return waitForSpawnedDevProcessExit(
+    child,
+    childExitPromise,
+    processGroupId,
+    2_000,
+  );
+}
+
 async function requestRuntimeShutdown(
   session: RuntimeSession | null,
   claimId: string | undefined,
 ): Promise<boolean> {
-  if (session == null || claimId == null) {
+  if (session == null || (claimId == null && !session.browser?.lifecycle)) {
     return false;
   }
   try {
     await sendRuntimeCommand({
       port: session.port,
       method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
-      params: { claimId },
+      params: { claimId, sessionId: session.sessionId },
       timeoutMs: 3_000,
       runtimeSession: session,
     });
@@ -665,7 +807,37 @@ async function terminateRuntimeWorkspace(
   workspaceRoot: string,
 ): Promise<unknown> {
   let state = await getWorkspaceRuntimeState(workspaceRoot);
-  let launchClaimId = state.launch?.claimId;
+  const launchClaimId = state.launch?.claimId;
+  const observation = await inspectRuntimeOwner(
+    runtimeOwnerEndpoint(workspaceRoot),
+  );
+  if (observation.state === 'unknown') {
+    throw new Error(
+      `Runtime ownership is unknown: ${observation.reason}. Inspect the dev process before retrying; no PID-only termination was attempted.`,
+    );
+  }
+  if (observation.state === 'live') {
+    const owner = observation.owner;
+    const session = state.session;
+    if (
+      owner.workspaceRoot !== workspaceRoot ||
+      (session != null &&
+        (owner.sessionId !== session.sessionId || owner.pid !== session.pid))
+    ) {
+      throw new Error(
+        'The runtime owner changed during shutdown. Retry iwsdk dev down.',
+      );
+    }
+    // Startup and incomplete browser cleanup can retain the owner without a
+    // session record. The verified IPC identity still authorizes stopping it.
+    await stopRuntimeOwner(owner, () =>
+      requestRuntimeShutdown(session, launchClaimId),
+    );
+    if (launchClaimId) {
+      await clearLaunchMetadata(workspaceRoot, launchClaimId);
+    }
+    return { stopped: true, workspaceRoot, sessionId: owner.sessionId };
+  }
   if (
     state.session == null &&
     state.launch?.phase === 'starting' &&
@@ -684,126 +856,15 @@ async function terminateRuntimeWorkspace(
       };
     }
     state = await getWorkspaceRuntimeState(workspaceRoot);
-    launchClaimId = state.launch?.claimId;
   }
-  const launchHasRuntimePid = state.launch?.phase !== 'starting';
-  const pids = Array.from(
-    new Set(
-      [
-        state.session?.pid,
-        ...(launchHasRuntimePid
-          ? [state.launch?.pid, state.launch?.launcherPid]
-          : []),
-      ].filter((value): value is number => typeof value === 'number'),
-    ),
-  );
-  const processGroupId =
-    process.platform !== 'win32' &&
-    typeof state.launch?.processGroupId === 'number' &&
-    state.launch.processGroupId > 0 &&
-    state.launch.processGroupId !== process.pid
-      ? state.launch.processGroupId
-      : null;
-  const clearOriginalLaunch = async (): Promise<void> => {
-    if (state.launch == null) {
-      return;
-    }
-    if (launchClaimId != null) {
-      await clearLaunchMetadata(workspaceRoot, launchClaimId);
-      return;
-    }
-    const current = await getLaunchMetadata(workspaceRoot);
-    if (
-      current?.pid === state.launch.pid &&
-      current.createdAt === state.launch.createdAt
-    ) {
-      await clearLaunchMetadata(workspaceRoot);
-    }
-  };
-
-  if (pids.length === 0 && processGroupId == null) {
-    return {
-      stopped: false,
-      workspaceRoot,
-      session: state.session,
-      launch: state.launch,
-    };
-  }
-
-  const signalRuntime = async (signal: NodeJS.Signals): Promise<void> => {
-    if (process.platform === 'win32') {
-      const treeRoot =
-        state.launch?.launcherPid ?? state.launch?.pid ?? state.session?.pid;
-      if (treeRoot != null && isProcessAlive(treeRoot)) {
-        await terminateWindowsProcessTree(treeRoot, true);
-      }
-      return;
-    }
-    if (processGroupId != null && isProcessAlive(processGroupId)) {
-      try {
-        process.kill(-processGroupId, signal);
-      } catch {}
-    }
-    for (const pid of pids) {
-      if (!isProcessAlive(pid)) {
-        continue;
-      }
-      try {
-        process.kill(pid, signal);
-      } catch {}
-    }
-  };
-  const hasLiveRuntimeProcess = (): boolean => {
-    if (processGroupId != null && isProcessAlive(processGroupId)) {
-      try {
-        process.kill(-processGroupId, 0);
-        return true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EPERM') {
-          return true;
-        }
-      }
-    }
-    return pids.some((pid) => isProcessAlive(pid));
-  };
-
-  if (process.platform === 'win32') {
-    await requestRuntimeShutdown(state.session, launchClaimId);
-  } else {
-    await signalRuntime('SIGTERM');
-  }
-
-  const deadline = Date.now() + (process.platform === 'win32' ? 5_000 : 10_000);
-  while (Date.now() < deadline) {
-    const freshState = await getWorkspaceRuntimeState(workspaceRoot);
-    if (!freshState.session && !freshState.launch && !hasLiveRuntimeProcess()) {
-      await clearOriginalLaunch();
-      return {
-        stopped: true,
-        workspaceRoot,
-      };
-    }
-    await sleep(250);
-  }
-
-  const forced = hasLiveRuntimeProcess();
-  if (forced) {
-    await signalRuntime('SIGKILL');
-  }
-  const killDeadline = Date.now() + 2_000;
-  while (Date.now() < killDeadline && hasLiveRuntimeProcess()) {
-    await sleep(50);
-  }
-
-  const stopped = !hasLiveRuntimeProcess();
-  if (stopped) {
-    await clearOriginalLaunch();
+  if (state.session != null || state.launch != null) {
+    throw new Error(
+      'A live legacy runtime has no verifiable owner endpoint. Stop that dev process from its original terminal; no PID-only termination was attempted.',
+    );
   }
   return {
-    stopped,
+    stopped: false,
     workspaceRoot,
-    forced,
-    ...(stopped ? {} : { session: state.session, launch: state.launch }),
   };
 }
 
@@ -826,13 +887,22 @@ export async function handleDevUp(
     getRuntimeSession(workspaceRoot),
     getLaunchMetadata(workspaceRoot),
   ]);
-  if (existingSession || existingLaunch) {
+  const observation = await inspectRuntimeOwner(
+    runtimeOwnerEndpoint(workspaceRoot),
+  );
+  if (observation.state === 'unknown') {
+    throw new Error(
+      `Runtime ownership is unknown: ${observation.reason}. Inspect the dev process before retrying; no second runtime was started.`,
+    );
+  }
+  if (existingSession || existingLaunch || observation.state === 'live') {
     return attachToRuntime(
       workspaceRoot,
       timeoutMs,
       foreground,
       openBrowser,
       io,
+      observation.state === 'live' ? observation.owner.sessionId : undefined,
     );
   }
 
@@ -990,7 +1060,7 @@ export async function handleDevUp(
       if (waitResult.exit) {
         await clearLaunchMetadata(workspaceRoot, claimId);
         return createFailure(
-          'Dev server exited before registering a runtime session',
+          await describeStartupExit(logPath),
           'dev_up_exit',
           {
             workspaceRoot,
@@ -1002,13 +1072,27 @@ export async function handleDevUp(
         );
       }
 
+      const cleanupConfirmed = await terminateSpawnedDevProcess(
+        child,
+        childExitPromise,
+        processGroupId,
+      );
+      if (cleanupConfirmed) {
+        await clearLaunchMetadata(workspaceRoot, claimId);
+      }
+
       return createFailure(
-        `Dev server did not register a runtime session within ${timeoutMs}ms`,
+        cleanupConfirmed
+          ? `Dev server did not register a runtime session within ${timeoutMs}ms and the timed-out process was stopped`
+          : `Dev server did not register a runtime session within ${timeoutMs}ms, and process cleanup could not be confirmed. Run "iwsdk dev down" before retrying.`,
         'dev_up_timeout',
         {
           workspaceRoot,
           logPath,
           scriptName,
+          launcherPid: child.pid,
+          processGroupId,
+          cleanupConfirmed,
         },
       );
     }
@@ -1030,22 +1114,6 @@ export async function handleDevUp(
       claimId,
     );
 
-    if (!waitResult.browserReady) {
-      return createFailure(
-        waitResult.browserIssue?.message ??
-          `Managed browser did not become ready within ${timeoutMs}ms`,
-        'dev_browser_not_ready',
-        {
-          workspaceRoot,
-          logPath,
-          scriptName,
-          session: waitResult.session,
-          browser: waitResult.session?.browser ?? null,
-          cause: waitResult.browserIssue?.cause,
-        },
-      );
-    }
-
     const launch = await getLaunchMetadata(workspaceRoot);
     const adapters = await readAdapterStatus(workspaceRoot);
 
@@ -1056,6 +1124,11 @@ export async function handleDevUp(
     if (foreground) {
       io.stdout.write(
         `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
+      );
+      io.stdout.write(
+        waitResult.browserReady
+          ? '[IWSDK] Managed browser command path is ready.\n'
+          : `[IWSDK] Managed browser command path is not ready${waitResult.browserIssue?.cause ? ` (${waitResult.browserIssue.cause})` : ''}. ${waitResult.session.browser?.lifecycle?.nextAction ?? 'Run "iwsdk dev status" and wait for browserCommandReady before issuing browser-backed commands.'}\n`,
       );
       const exit = await childExitPromise;
       if (receivedForegroundSignal != null) {
@@ -1085,6 +1158,15 @@ export async function handleDevUp(
       launch,
       logPath,
       adapters,
+      browserCommandReady: waitResult.browserReady,
+      ...(waitResult.browserReady
+        ? {}
+        : {
+            browserIssue: waitResult.browserIssue ?? null,
+            browserNextAction:
+              waitResult.session.browser?.lifecycle?.nextAction ??
+              'Run "iwsdk dev status" and wait for browserCommandReady before issuing browser-backed commands.',
+          }),
     });
   } finally {
     removeForegroundSignalHandlers();
@@ -1094,22 +1176,8 @@ export async function handleDevUp(
           () => null,
         );
         await requestRuntimeShutdown(session, claimId);
-      } else {
-        try {
-          process.kill(-child.pid!, 'SIGTERM');
-        } catch {}
       }
-      await Promise.race([childExitPromise, sleep(2_000)]);
-      if (child.exitCode == null && child.signalCode == null) {
-        if (process.platform === 'win32' && child.pid != null) {
-          await terminateWindowsProcessTree(child.pid, true);
-        } else {
-          try {
-            process.kill(-child.pid!, 'SIGKILL');
-          } catch {}
-        }
-        await Promise.race([childExitPromise, sleep(2_000)]);
-      }
+      await terminateSpawnedDevProcess(child, childExitPromise, processGroupId);
     }
     if (foreground && (child.exitCode != null || child.signalCode != null)) {
       await clearLaunchMetadata(workspaceRoot, claimId).catch(() => {});

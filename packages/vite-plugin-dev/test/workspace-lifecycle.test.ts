@@ -5,8 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { acquireRuntimeOwner } from '@iwsdk/cli/runtime-owner';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
+
+vi.mock('@iwsdk/cli/runtime-owner', () => ({
+  acquireRuntimeOwner: vi.fn(async () => ({
+    identity: { sessionId: 'test' },
+    release: vi.fn(async () => {}),
+  })),
+}));
 
 const mocks = vi.hoisted(() => ({
   launchManagedBrowser: vi.fn(),
@@ -20,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/headless-browser.js', () => ({
+  ensureChromiumInstalled: vi.fn(async () => {}),
   launchManagedBrowser: mocks.launchManagedBrowser,
 }));
 
@@ -42,6 +51,91 @@ afterEach(() => {
 });
 
 describe('managed workspace lifecycle', () => {
+  test('cleans middleware-mode observers when owner acquisition fails', async () => {
+    vi.mocked(acquireRuntimeOwner).mockRejectedValueOnce(
+      new Error('workspace already owned'),
+    );
+    const watcher = {
+      add: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    const ws = {
+      on: vi.fn(),
+      off: vi.fn(),
+      send: vi.fn(),
+    };
+    const plugin = iwsdkDev({ ai: {} });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-middleware-owner-failure',
+      server: {},
+    } as never);
+    const server = {
+      close: vi.fn(async () => {}),
+      config: { server: { port: 4173 } },
+      httpServer: null,
+      middlewares: { use: vi.fn() },
+      watcher,
+      ws,
+    };
+
+    await expect(plugin.configureServer?.(server as never)).rejects.toThrow(
+      'workspace already owned',
+    );
+    expect(ws.off).toHaveBeenCalledWith(
+      'iwsdk:hot-client-role',
+      expect.any(Function),
+    );
+    expect(watcher.off).toHaveBeenCalledWith('add', expect.any(Function));
+    expect(watcher.off).toHaveBeenCalledWith('change', expect.any(Function));
+    expect(watcher.off).toHaveBeenCalledWith('unlink', expect.any(Function));
+  });
+
+  test('wraps only a host listen hook and releases ownership when it fails', async () => {
+    const plugin = iwsdkDev({ ai: {} });
+    plugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-listen-hook',
+      server: {},
+    } as never);
+    const hostWithoutListen = {
+      close: vi.fn(async () => {}),
+      config: { server: { port: 4173 } },
+      httpServer: null,
+      middlewares: { use: vi.fn() },
+    };
+    await plugin.configureServer?.(hostWithoutListen as never);
+    expect(hostWithoutListen).not.toHaveProperty('listen');
+    await hostWithoutListen.close();
+
+    const bindError = new Error('listen EADDRINUSE');
+    const originalClose = vi.fn(async () => {});
+    const originalListen = vi.fn(async () => {
+      throw bindError;
+    });
+    const failingPlugin = iwsdkDev({ ai: {} });
+    failingPlugin.configResolved?.({
+      command: 'serve',
+      root: '/tmp/iwsdk-listen-failure',
+      server: {},
+    } as never);
+    const server = {
+      close: originalClose,
+      config: { server: { port: 4173 } },
+      httpServer: null,
+      listen: originalListen as (port?: number) => Promise<unknown>,
+      middlewares: { use: vi.fn() },
+    };
+    await failingPlugin.configureServer?.(server as never);
+    const owner = await vi.mocked(acquireRuntimeOwner).mock.results[1]?.value;
+
+    await expect(server.listen(4173)).rejects.toBe(bindError);
+    expect(originalListen).toHaveBeenCalledWith(4173, undefined);
+    expect(originalClose).toHaveBeenCalledOnce();
+    expect(owner.release).toHaveBeenCalledOnce();
+  });
+
   test('awaits a racing browser launch and closes it during shutdown', async () => {
     const initialSigintListeners = process.listenerCount('SIGINT');
     const initialSigtermListeners = process.listenerCount('SIGTERM');
@@ -84,7 +178,8 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-browser-shutdown-race',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    const server = {
+      close: vi.fn(async () => {}),
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -92,9 +187,12 @@ describe('managed workspace lifecycle', () => {
         local: ['http://localhost:4173/'],
         network: [],
       },
-    } as never);
+    };
+    await plugin.configureServer?.(server as never);
 
     await handlers.get('listening')?.[0]?.();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(mocks.launchManagedBrowser).toHaveBeenCalledOnce();
     const launchSignal = mocks.launchManagedBrowser.mock.calls[0]?.[10] as
       | AbortSignal
@@ -107,11 +205,8 @@ describe('managed workspace lifecycle', () => {
       handler();
     }
     expect(launchSignal?.aborted).toBe(true);
-    const closeBundle = plugin.closeBundle as {
-      handler: () => Promise<void>;
-    };
     let shutdownFinished = false;
-    const shutdown = closeBundle.handler().then(() => {
+    const shutdown = server.close().then(() => {
       shutdownFinished = true;
     });
 
@@ -161,7 +256,7 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-ai-default-collaborate',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    await plugin.configureServer?.({
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -172,6 +267,8 @@ describe('managed workspace lifecycle', () => {
     } as never);
 
     await handlers.get('listening')?.[0]?.();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
       'http://localhost:4173/',
@@ -221,7 +318,7 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-ai-agent',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    await plugin.configureServer?.({
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -232,6 +329,8 @@ describe('managed workspace lifecycle', () => {
     } as never);
 
     await handlers.get('listening')?.[0]?.();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
       'http://localhost:4173/',
@@ -281,7 +380,7 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-workspace-clean-root',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    await plugin.configureServer?.({
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -292,6 +391,8 @@ describe('managed workspace lifecycle', () => {
     } as never);
 
     await handlers.get('listening')?.[0]?.();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(mocks.launchManagedBrowser).toHaveBeenCalledWith(
       'http://localhost:4173/',
       false,
@@ -337,7 +438,7 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-workspace-open-false',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    await plugin.configureServer?.({
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -407,7 +508,7 @@ describe('managed workspace lifecycle', () => {
       root: '/tmp/iwsdk-browser-automation-state',
       server: {},
     } as never);
-    plugin.configureServer?.({
+    await plugin.configureServer?.({
       config: { server: { port: 4173 } },
       httpServer,
       middlewares: { use: vi.fn() },
@@ -418,6 +519,8 @@ describe('managed workspace lifecycle', () => {
     } as never);
 
     await handlers.get('listening')?.[0]?.();
+    await Promise.resolve();
+    await Promise.resolve();
     await vi.waitFor(() =>
       expect(mocks.setRuntimeSessionBrowserAutomation).toHaveBeenCalledWith(
         '/tmp/iwsdk-browser-automation-state',

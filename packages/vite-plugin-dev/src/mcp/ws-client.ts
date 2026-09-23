@@ -22,6 +22,8 @@ interface MCPDevice {
  * The vite plugin will route requests to this runtime when available.
  */
 interface FrameworkMCPRuntime {
+  /** Release framework-owned resources that must settle before navigation. */
+  prepareForReload?(): Promise<void>;
   /**
    * Returns true if this runtime handles the given method.
    */
@@ -176,6 +178,28 @@ export class MCPWebSocketClient {
     this.tabGeneration = gen;
 
     if (typeof window !== 'undefined') {
+      // A one-use query prevents Quest's offline MHTML cache from replacing
+      // a live localhost document. Restore the app's address during bootstrap.
+      try {
+        const href = window.location.href;
+        // Work on the raw address before its fragment so app query encoding,
+        // flag parameters, and even a bare '?' survive unchanged.
+        const restored = href.replace(/^[^#]*/u, (address) => {
+          const queryStart = address.indexOf('?');
+          if (queryStart === -1) {
+            return address;
+          }
+          return (
+            address.slice(0, queryStart) +
+            address
+              .slice(queryStart)
+              .replace(/^\?__iwsdk_reload=[^&]*$|&__iwsdk_reload=[^&]*$/u, '')
+          );
+        });
+        if (restored !== href) {
+          window.history.replaceState(window.history.state, '', restored);
+        }
+      } catch {}
       window.__IWSDK_MCP_PAGE_ID = this.tabId;
       window.__IWSDK_MCP_PAGE_ROLE = this.pageRole;
       window.__IWSDK_MCP_TAB_GENERATION = this.tabGeneration;
@@ -347,6 +371,28 @@ export class MCPWebSocketClient {
       socket.send(
         JSON.stringify({
           type: 'iwsdk_browser_hello',
+          ...((window as any).__IWSDK_RUNTIME_IDENTITY ?? {}),
+          headsetToken: (() => {
+            if (this.deviceClass !== 'physical') {
+              return undefined;
+            }
+            let token: string | null = null;
+            try {
+              token = new URL(window.location.href).searchParams.get(
+                '__iwsdk_headset',
+              );
+            } catch {}
+            try {
+              if (token) {
+                window.sessionStorage.setItem('iwsdk:headset-token', token);
+              }
+              return (
+                token ?? window.sessionStorage.getItem('iwsdk:headset-token')
+              );
+            } catch {
+              return token;
+            }
+          })(),
           commandReady: window.FRAMEWORK_MCP_RUNTIME != null,
           deviceClass: this.deviceClass,
           pageId: this.tabId,
@@ -499,7 +545,19 @@ export class MCPWebSocketClient {
     // 1. Reload the page locally when native XR routing sends this request to
     // the physical browser. Defer teardown so the WebSocket response flushes.
     if (method === 'reload_page') {
-      setTimeout(() => window.location.reload(), 50);
+      // Quest can leave a blank, disconnected page when navigation tears down
+      // an active immersive session. Let its owner finish XR teardown first.
+      await window.FRAMEWORK_MCP_RUNTIME?.prepareForReload?.();
+      // Quest may serve a script-free offline MHTML snapshot even for an
+      // ordinary same-URL navigation. Request a fresh document; bootstrap
+      // removes the private query without adding a browser history entry.
+      const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const url = window.location.href.replace(
+        /^[^#]*/u,
+        (address) =>
+          `${address}${address.includes('?') ? '&' : '?'}__iwsdk_reload=${nonce}`,
+      );
+      setTimeout(() => window.location.replace(url), 50);
       return { success: true, message: 'Page reload initiated' };
     }
 
@@ -594,9 +652,16 @@ export function initMCPClient(
  * XR device methods return an explicit unsupported error.
  */
 export function initMCPBridge(
-  options: { port?: number; verbose?: boolean } = {},
+  options: {
+    port?: number;
+    verbose?: boolean;
+    deviceClass?: MCPDeviceClass;
+  } = {},
 ): MCPWebSocketClient {
-  const client = new MCPWebSocketClient(null, { verbose: options.verbose });
+  const client = new MCPWebSocketClient(null, {
+    verbose: options.verbose,
+    deviceClass: options.deviceClass,
+  });
   client.connect(options.port);
   return client;
 }

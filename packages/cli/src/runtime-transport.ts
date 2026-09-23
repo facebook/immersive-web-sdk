@@ -8,7 +8,6 @@
 import WebSocket from 'ws';
 import {
   getDefaultRuntimeCommandTimeoutMs,
-  INTERNAL_RUNTIME_SHUTDOWN_METHOD,
   isRuntimeBrowserCommandReady,
   type RuntimePageTarget,
   type RuntimeBrowserState,
@@ -70,6 +69,7 @@ class RuntimeCommandTransportError extends RuntimeCommandExecutionError {
     options: {
       issueCause?: RuntimeIssueCause;
       browser?: RuntimeBrowserState;
+      details?: Record<string, unknown>;
     } = {},
   ) {
     super(message, options);
@@ -122,6 +122,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
+const PERMISSION_FAILURE =
+  /permission|not permitted|denied|sandbox|eacces|eperm/i;
+
+function isTransportFailure(normalized: string): boolean {
+  return (
+    normalized.includes('socket hang up') ||
+    normalized.includes('closed before response') ||
+    normalized.includes('request timeout') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('econnrefused')
+  );
+}
+
+/** A headset's failures are its own; managed browser state never explains them. */
+function inferPhysicalIssueCause(
+  message: string,
+  explicitCause?: RuntimeIssueCause,
+): RuntimeIssueCause | undefined {
+  if (explicitCause) {
+    return explicitCause;
+  }
+  if (PERMISSION_FAILURE.test(message)) {
+    return 'permission_denied';
+  }
+  return isTransportFailure(message.toLowerCase())
+    ? 'connection_lost'
+    : undefined;
+}
+
 function inferRuntimeIssueCause(
   message: string,
   browser: RuntimeBrowserState | undefined,
@@ -156,18 +185,10 @@ function inferRuntimeIssueCause(
   ) {
     return 'browser_relaunched';
   }
-  if (
-    /permission|not permitted|denied|sandbox|eacces|eperm/i.test(normalized)
-  ) {
+  if (PERMISSION_FAILURE.test(normalized)) {
     return 'permission_denied';
   }
-  if (
-    normalized.includes('socket hang up') ||
-    normalized.includes('closed before response') ||
-    normalized.includes('request timeout') ||
-    normalized.includes('econnreset') ||
-    normalized.includes('econnrefused')
-  ) {
+  if (isTransportFailure(normalized)) {
     if (
       browser &&
       !isRuntimeBrowserCommandReady({
@@ -188,16 +209,27 @@ async function trySendRuntimeCommand(
   method: string,
   params: unknown,
   target: RuntimePageTarget | undefined,
-  timeoutMs: number,
+  deadline: number,
+  connectDeadline: number,
   browser: RuntimeBrowserState | undefined,
+  expectedSessionId?: string,
 ): Promise<RuntimeCommandResponse> {
+  const inferCause = (message: string, explicitCause?: RuntimeIssueCause) =>
+    target?.deviceClass === 'physical'
+      ? inferPhysicalIssueCause(message, explicitCause)
+      : inferRuntimeIssueCause(message, browser, explicitCause);
   return new Promise<RuntimeCommandResponse>((resolve, reject) => {
+    const timeoutMs = Math.max(
+      Math.min(deadline, connectDeadline) - Date.now(),
+      1,
+    );
     const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const wsUrl = `${protocol}://127.0.0.1:${port}/__iwer_mcp`;
     const ws = new WebSocket(wsUrl, {
       rejectUnauthorized: false,
     });
     let settled = false;
+    let dispatched = false;
 
     const finish = (callback: () => void) => {
       if (settled) {
@@ -233,7 +265,7 @@ async function trySendRuntimeCommand(
         : false,
     });
 
-    const timeout = setTimeout(() => {
+    const onTimeout = () => {
       const message = `Request timeout for ${method}`;
       traceTransport('timeout', {
         method,
@@ -245,15 +277,33 @@ async function trySendRuntimeCommand(
       finish(() =>
         reject(
           new RuntimeCommandTransportError(message, {
-            issueCause: inferRuntimeIssueCause(message, browser),
+            issueCause: inferCause(message),
             browser,
+            details: {
+              outcome: dispatched ? 'outcome_unknown' : 'not_executed',
+            },
           }),
         ),
       );
-    }, timeoutMs);
+    };
+    // Until the socket opens, only the connection budget applies; a probe that
+    // times out has dispatched nothing and may fall back to another protocol.
+    let timeout = setTimeout(onTimeout, timeoutMs);
 
     ws.on('open', () => {
+      // Once open, the command gets its whole original deadline, and the relay
+      // settles against that same absolute deadline, so admission time and a
+      // WSS probe never extend or shorten the caller's budget. An open that
+      // lands after the deadline dispatches nothing.
+      clearTimeout(timeout);
+      if (deadline <= Date.now()) {
+        onTimeout();
+        return;
+      }
+      timeout = setTimeout(onTimeout, deadline - Date.now());
       const payload = JSON.stringify({
+        deadline,
+        expectedSessionId,
         id: requestId,
         method,
         params: params ?? {},
@@ -265,6 +315,7 @@ async function trySendRuntimeCommand(
         protocol,
         port,
       });
+      dispatched = true;
       ws.send(payload, (error) => {
         if (!error) {
           traceTransport('send', {
@@ -285,8 +336,11 @@ async function trySendRuntimeCommand(
         finish(() =>
           reject(
             new RuntimeCommandTransportError(error.message, {
-              issueCause: inferRuntimeIssueCause(error.message, browser),
+              issueCause: inferCause(error.message),
               browser,
+              details: {
+                outcome: dispatched ? 'outcome_unknown' : 'not_executed',
+              },
             }),
           ),
         );
@@ -327,11 +381,7 @@ async function trySendRuntimeCommand(
           finish(() =>
             reject(
               new RuntimeCommandExecutionError(message, {
-                issueCause: inferRuntimeIssueCause(
-                  message,
-                  browser,
-                  explicitCause,
-                ),
+                issueCause: inferCause(message, explicitCause),
                 browser,
                 details,
               }),
@@ -357,8 +407,11 @@ async function trySendRuntimeCommand(
         finish(() =>
           reject(
             new RuntimeCommandTransportError(message, {
-              issueCause: inferRuntimeIssueCause(message, browser),
+              issueCause: inferCause(message),
               browser,
+              details: {
+                outcome: dispatched ? 'outcome_unknown' : 'not_executed',
+              },
             }),
           ),
         );
@@ -376,8 +429,11 @@ async function trySendRuntimeCommand(
       finish(() =>
         reject(
           new RuntimeCommandTransportError(error.message, {
-            issueCause: inferRuntimeIssueCause(error.message, browser),
+            issueCause: inferCause(error.message),
             browser,
+            details: {
+              outcome: dispatched ? 'outcome_unknown' : 'not_executed',
+            },
           }),
         ),
       );
@@ -406,8 +462,11 @@ async function trySendRuntimeCommand(
       finish(() =>
         reject(
           new RuntimeCommandTransportError(message, {
-            issueCause: inferRuntimeIssueCause(message, browser),
+            issueCause: inferCause(message),
             browser,
+            details: {
+              outcome: dispatched ? 'outcome_unknown' : 'not_executed',
+            },
           }),
         ),
       );
@@ -420,15 +479,18 @@ async function sendRuntimeCommandBeforeDeadline(
   deadline: number,
 ): Promise<RuntimeCommandResponse> {
   const { method, params, port, runtimeSession, target } = options;
-  const browser = runtimeSession?.browser;
+  // Managed browser state describes the host browser only, never a headset.
+  const browser =
+    target?.deviceClass === 'physical' ? undefined : runtimeSession?.browser;
   const protocolOrder = getProtocolOrder(runtimeSession);
   const firstProtocol = protocolOrder[0];
   const fallbackProtocol = protocolOrder[1];
   const remainingAtStart = Math.max(deadline - Date.now(), 1);
-  const firstAttemptTimeout =
+  // An unknown scheme probes WSS briefly; the budget covers connecting only.
+  const connectDeadline =
     fallbackProtocol && firstProtocol === 'wss'
-      ? Math.min(remainingAtStart, FAST_WSS_FALLBACK_TIMEOUT_MS)
-      : remainingAtStart;
+      ? Date.now() + FAST_WSS_FALLBACK_TIMEOUT_MS
+      : deadline;
 
   try {
     return await trySendRuntimeCommand(
@@ -437,14 +499,20 @@ async function sendRuntimeCommandBeforeDeadline(
       method,
       params,
       target,
-      firstAttemptTimeout,
+      deadline,
+      connectDeadline,
       browser,
+      runtimeSession?.sessionId,
     );
   } catch (error) {
     if (!(error instanceof RuntimeCommandTransportError)) {
       throw error;
     }
-    if (!fallbackProtocol || fallbackProtocol === firstProtocol) {
+    if (
+      error.details?.outcome === 'outcome_unknown' ||
+      !fallbackProtocol ||
+      fallbackProtocol === firstProtocol
+    ) {
       throw error;
     }
     const remainingMs = Math.max(deadline - Date.now(), 1);
@@ -469,8 +537,10 @@ async function sendRuntimeCommandBeforeDeadline(
       method,
       params,
       target,
-      remainingMs,
+      deadline,
+      deadline,
       browser,
+      runtimeSession?.sessionId,
     );
   }
 }
@@ -681,19 +751,6 @@ export async function sendRuntimeCommand({
   timeoutMs = getDefaultRuntimeCommandTimeoutMs(method),
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
-  if (
-    method !== INTERNAL_RUNTIME_SHUTDOWN_METHOD &&
-    runtimeSession?.browser?.status === 'not_launched'
-  ) {
-    throw new RuntimeCommandExecutionError(
-      runtimeSession.browser.lastError?.message ??
-        'No managed browser was launched. Run "iwsdk dev restart --open" to enable browser, scene, and runtime tools.',
-      {
-        issueCause: 'browser_not_launched',
-        browser: runtimeSession.browser,
-      },
-    );
-  }
   const deadline = Date.now() + Math.max(timeoutMs, 1);
   const options = { method, params, port, runtimeSession, target };
   const previousSceneSessionId = await captureSceneOpenSessionBaseline(

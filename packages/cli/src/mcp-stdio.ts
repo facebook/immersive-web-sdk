@@ -341,8 +341,10 @@ export async function startRuntimeMcpStdioServer({
         version,
       );
 
+      // Managed browser status would misdescribe a headset's session.
       const normalizedResponse =
-        name === 'xr_get_session_status'
+        name === 'xr_get_session_status' &&
+        command.target?.deviceClass !== 'physical'
           ? {
               ...rawResponse,
               result: withBrowserStatus(

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { EventEmitter } from 'events';
 import { createRequire } from 'module';
 import path from 'path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -142,7 +143,12 @@ describe('launchManagedBrowser', () => {
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';
     mocks.existsSync.mockReturnValue(false);
-    const child: any = { on: vi.fn() };
+    const child: any = {
+      on: vi.fn(),
+      ref: vi.fn(),
+      unref: vi.fn(),
+      kill: vi.fn(),
+    };
     child.on.mockImplementation(
       (event: string, callback: (...args: any[]) => void) => {
         if (event === 'close') {
@@ -169,12 +175,39 @@ describe('launchManagedBrowser', () => {
       process.execPath,
       [playwrightCliPath, 'install', 'chromium'],
       {
-        signal: undefined,
+        signal: expect.any(AbortSignal),
         stdio: 'inherit',
         shell: false,
         windowsHide: true,
       },
     );
+  });
+
+  test('a cancelled generation detaches from the shared first-run install', async () => {
+    vi.resetModules();
+    mocks.existsSync.mockReturnValue(false);
+    const child = Object.assign(new EventEmitter(), {
+      ref: vi.fn(),
+      unref: vi.fn(),
+      kill: vi.fn(),
+    });
+    mocks.spawn.mockReturnValueOnce(child);
+    const { ensureChromiumInstalled } = await import(
+      '../src/managed-browser/launch.js'
+    );
+    const controller = new AbortController();
+    const first = expect(
+      ensureChromiumInstalled(controller.signal),
+    ).rejects.toThrow('cancelled');
+    const second = ensureChromiumInstalled();
+    controller.abort();
+    await first;
+    expect(child.kill).not.toHaveBeenCalled();
+    const replacement = ensureChromiumInstalled();
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    child.emit('close', 0);
+    await Promise.all([second, replacement]);
+    expect(child.unref).toHaveBeenCalledTimes(1);
   });
 
   test('does not retry with system Chrome when Playwright launch fails', async () => {
@@ -373,13 +406,18 @@ describe('launchManagedBrowser', () => {
     await activeCommand;
   });
 
-  test('bounds close when Chromium disposal does not settle', async () => {
+  test('does not confirm close until Chromium disposal settles', async () => {
     vi.useFakeTimers();
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';
     const page = createMockPage();
     const { browser, context } = createMockBrowser(page);
-    context.close.mockReturnValueOnce(new Promise<void>(() => {}));
+    let finishDispose!: () => void;
+    context.close.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDispose = resolve;
+      }),
+    );
     mocks.launch.mockResolvedValueOnce(browser);
 
     const { launchManagedBrowser } = await import('../src/headless-browser.js');
@@ -396,8 +434,47 @@ describe('launchManagedBrowser', () => {
     await vi.advanceTimersByTimeAsync(1_999);
     expect(closed).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
+    expect(closed).toBe(false);
+    finishDispose();
     await close;
     expect(closed).toBe(true);
+  });
+
+  test('announces command timeout before a hung Chromium disposal completes', async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    const { browser, context } = createMockBrowser(page);
+    let dispose!: () => void;
+    context.close.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          dispose = resolve;
+        }),
+    );
+    mocks.launch.mockResolvedValueOnce(browser);
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+    const managed = await launchManagedBrowser(
+      'http://127.0.0.1:5173/',
+      true,
+      false,
+    );
+    const callback = vi.fn();
+    managed.onClose(callback);
+    const command = expect(
+      managed.runCommandExclusive(() => new Promise(() => {}), {
+        timeoutMs: 100,
+      }),
+    ).rejects.toMatchObject({
+      code: 'browser_command_timeout',
+      outcome: 'outcome_unknown',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(callback).toHaveBeenCalledOnce();
+    dispose();
+    await command;
+    await managed.close();
   });
 
   test('concurrent close waits for the in-flight unexpected-close disposal', async () => {
@@ -620,7 +697,7 @@ describe('launchManagedBrowser', () => {
       '',
       expect.objectContaining({
         args: expect.arrayContaining([
-          '--app=about:blank',
+          '--app=data:text/html,',
           '--ignore-certificate-errors',
         ]),
         headless: false,
@@ -629,6 +706,10 @@ describe('launchManagedBrowser', () => {
         viewport: null,
       }),
     );
+    // Chromium ignores --app=about:blank and shows a tabbed window with an omnibox.
+    expect(
+      mocks.launchPersistentContext.mock.calls[0]?.[1]?.args,
+    ).not.toContain('--app=about:blank');
     expect(context.newPage).not.toHaveBeenCalled();
     expect(page.goto).toHaveBeenCalledWith('http://127.0.0.1:5173/', {
       waitUntil: 'commit',
@@ -725,7 +806,7 @@ describe('launchManagedBrowser', () => {
     expect(browser.close).toHaveBeenCalledTimes(1);
   });
 
-  test('preserves the readiness error when cleanup also fails', async () => {
+  test('reports unconfirmed ownership when readiness cleanup also fails', async () => {
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';
     const page = createMockPage();
@@ -751,8 +832,40 @@ describe('launchManagedBrowser', () => {
         null,
         'workspace',
       ),
-    ).rejects.toThrow('not ready');
+    ).rejects.toMatchObject({
+      cleanupConfirmed: false,
+      message: 'Managed Chromium cleanup is unconfirmed.',
+    });
 
+    expect(context.close).toHaveBeenCalledTimes(1);
+    expect(browser.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('closes partially opened Chromium when managed route setup fails', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    const { browser, context } = createMockBrowser(page);
+    context.route.mockRejectedValueOnce(new Error('route setup failed'));
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+
+    await expect(
+      launchManagedBrowser(
+        'http://127.0.0.1:5173/',
+        true,
+        false,
+        { height: 800, width: 800 },
+        { height: 800, width: 800 },
+        false,
+        {
+          headerName: 'x-iwsdk-managed-workspace',
+          pathnames: ['/__iwsdk/workspace'],
+          token: 'managed-token',
+        },
+      ),
+    ).rejects.toThrow('route setup failed');
     expect(context.close).toHaveBeenCalledTimes(1);
     expect(browser.close).toHaveBeenCalledTimes(1);
   });
@@ -917,6 +1030,7 @@ describe('launchManagedBrowser', () => {
 
 function createMockBrowser(page: ReturnType<typeof createMockPage>) {
   const context = {
+    addInitScript: vi.fn(),
     browser: vi.fn(),
     close: vi.fn(),
     newPage: vi.fn().mockResolvedValue(page),
