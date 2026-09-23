@@ -16,6 +16,7 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { isFileServingAllowed, resolveConfig } from 'vite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { iwsdkDev } from '../src/index.js';
 
@@ -71,6 +72,139 @@ describe('manifest-first Vite integration', () => {
     );
     expect(() => iwsdkDev({ bridgeReadyTimeoutMs: 15000 })).not.toThrow();
   });
+  it('allows only the configured local example-asset directory outside the workspace', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const assetRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-assets-'));
+    const unrelatedRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-other-'));
+    try {
+      await writeFile(
+        path.join(projectRoot, 'pnpm-workspace.yaml'),
+        'packages:\n  - .\n',
+      );
+      const assetFile = path.join(assetRoot, 'environment.gltf');
+      const unrelatedFile = path.join(unrelatedRoot, 'secret.txt');
+      await writeFile(assetFile, '{}');
+      await writeFile(unrelatedFile, 'secret');
+      vi.stubEnv('VITE_IWSDK_EXAMPLE_ASSET_BASE_URL', `/@fs${assetRoot}`);
+
+      const resolvedConfig = await resolveConfig(
+        {
+          root: projectRoot,
+          logLevel: 'silent',
+          plugins: [iwsdkDev({ https: false })],
+        },
+        'serve',
+        'development',
+      );
+
+      const canonicalProjectRoot = await realpath(projectRoot);
+      const canonicalAssetRoot = await realpath(assetRoot);
+      expect(resolvedConfig.server.fs.allow).toContain(canonicalProjectRoot);
+      expect(resolvedConfig.server.fs.allow).toContain(canonicalAssetRoot);
+      expect(resolvedConfig.server.fs.allow).not.toContain(
+        path.dirname(assetRoot),
+      );
+      expect(isFileServingAllowed(resolvedConfig, `/@fs${assetFile}`)).toBe(
+        true,
+      );
+      expect(isFileServingAllowed(resolvedConfig, `/@fs${unrelatedFile}`)).toBe(
+        false,
+      );
+      expect(info).toHaveBeenCalledWith(
+        `[IWSDK Dev] Allowing local example assets from ${canonicalAssetRoot}`,
+      );
+    } finally {
+      info.mockRestore();
+      await Promise.all([
+        rm(assetRoot, { recursive: true, force: true }),
+        rm(unrelatedRoot, { recursive: true, force: true }),
+      ]);
+    }
+  });
+
+  it('loads the local asset override from a custom Vite envDir', async () => {
+    const assetRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-assets-'));
+    const envDir = path.join(projectRoot, 'config');
+    const previousAssetBaseUrl = process.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL;
+    try {
+      await mkdir(envDir, { recursive: true });
+      await writeFile(
+        path.join(envDir, '.env.development'),
+        `VITE_IWSDK_EXAMPLE_ASSET_BASE_URL=/@fs${assetRoot}\n`,
+      );
+      delete process.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL;
+
+      const resolvedConfig = await resolveConfig(
+        {
+          envDir,
+          root: projectRoot,
+          logLevel: 'silent',
+          plugins: [iwsdkDev({ https: false })],
+        },
+        'serve',
+        'development',
+      );
+
+      expect(resolvedConfig.server.fs.allow).toContain(
+        await realpath(assetRoot),
+      );
+    } finally {
+      if (previousAssetBaseUrl == null) {
+        delete process.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL;
+      } else {
+        process.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL = previousAssetBaseUrl;
+      }
+      await rm(assetRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the process override when Vite env-file loading is disabled', async () => {
+    const assetRoot = await mkdtemp(path.join(os.tmpdir(), 'iwsdk-assets-'));
+    try {
+      vi.stubEnv('VITE_IWSDK_EXAMPLE_ASSET_BASE_URL', `/@fs${assetRoot}`);
+      const resolvedConfig = await resolveConfig(
+        {
+          envDir: false,
+          root: projectRoot,
+          logLevel: 'silent',
+          plugins: [iwsdkDev({ https: false })],
+        },
+        'serve',
+        'development',
+      );
+
+      expect(resolvedConfig.server.fs.allow).toContain(
+        await realpath(assetRoot),
+      );
+    } finally {
+      await rm(assetRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses broad local asset directories', async () => {
+    const broadAlias = path.join(projectRoot, 'broad-assets');
+    await symlink(path.dirname(os.homedir()), broadAlias, 'dir');
+    for (const broadDirectory of [
+      os.homedir(),
+      path.dirname(os.homedir()),
+      broadAlias,
+    ]) {
+      vi.stubEnv('VITE_IWSDK_EXAMPLE_ASSET_BASE_URL', `/@fs${broadDirectory}`);
+      const resolvedConfig = await resolveConfig(
+        {
+          root: projectRoot,
+          logLevel: 'silent',
+          plugins: [iwsdkDev({ https: false })],
+        },
+        'serve',
+        'development',
+      );
+      expect(resolvedConfig.server.fs.allow).not.toContain(
+        await realpath(broadDirectory),
+      );
+    }
+  });
+
   it('fails a production build before bundling invalid public UIKitML', async () => {
     const publicDirectory = path.join(projectRoot, 'public');
     await mkdir(path.join(publicDirectory, 'ui'), { recursive: true });

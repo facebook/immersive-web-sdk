@@ -19,6 +19,7 @@ import {
   writeFileSync,
 } from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { homedir, tmpdir } from 'os';
 import * as path from 'path';
 import type { Duplex } from 'stream';
 import { inflateSync } from 'zlib';
@@ -55,6 +56,7 @@ import {
 } from '@iwsdk/scene-composition';
 import { getCertificate } from '@vitejs/plugin-basic-ssl';
 import open from 'open';
+import { loadEnv, searchForWorkspaceRoot } from 'vite';
 import type {
   ModuleNode,
   Plugin,
@@ -643,6 +645,63 @@ function pathsReferToSameFile(left: string, right: string): boolean {
   return canonicalFilePath(left) === canonicalFilePath(right);
 }
 
+function pathContains(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative === '' ||
+    (!path.isAbsolute(relative) &&
+      relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+const VITE_FILE_SYSTEM_PREFIX = '/@fs/';
+
+function resolveConfiguredExampleAssetDirectory(
+  assetBaseUrl: string | undefined,
+): string | null {
+  const value = assetBaseUrl?.trim();
+  if (!value?.startsWith(VITE_FILE_SYSTEM_PREFIX)) {
+    return null;
+  }
+
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURI(value.slice('/@fs'.length));
+  } catch {
+    return null;
+  }
+  if (process.platform === 'win32' && /^\/[a-z]:[\\/]/iu.test(decodedPath)) {
+    decodedPath = decodedPath.slice(1);
+  }
+  const resolvedPath = path.resolve(decodedPath);
+  if (resolvedPath === path.parse(resolvedPath).root) {
+    return null;
+  }
+
+  try {
+    const canonicalPath = realpathSync.native(resolvedPath);
+    const canonicalHome = realpathSync.native(homedir());
+    const canonicalTemp = realpathSync.native(tmpdir());
+    const canonicalRoot = path.parse(canonicalPath).root;
+    const depth = path
+      .relative(canonicalRoot, canonicalPath)
+      .split(path.sep)
+      .filter(Boolean).length;
+    if (
+      !statSync(canonicalPath).isDirectory() ||
+      depth < 2 ||
+      pathContains(canonicalPath, canonicalHome) ||
+      pathsReferToSameFile(canonicalPath, canonicalTemp)
+    ) {
+      return null;
+    }
+    return canonicalPath;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwright browser
  */
@@ -703,6 +762,42 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             publicDirectory,
             options.bundle?.fonts,
           );
+        }
+      }
+
+      // A local example-asset override is an explicit /@fs/ request. Vite's
+      // default allow-list can stop at a generated pnpm workspace boundary, so
+      // add only that configured directory while preserving the default root.
+      if (environment.command === 'serve') {
+        const assetBaseUrl =
+          userConfig.envDir === false
+            ? process.env.VITE_IWSDK_EXAMPLE_ASSET_BASE_URL
+            : loadEnv(
+                environment.mode,
+                path.resolve(projectRoot, userConfig.envDir ?? '.'),
+              ).VITE_IWSDK_EXAMPLE_ASSET_BASE_URL;
+        const configuredAssetDirectory =
+          resolveConfiguredExampleAssetDirectory(assetBaseUrl);
+        if (configuredAssetDirectory != null) {
+          userConfig.server ??= {};
+          userConfig.server.fs ??= {};
+          const allowedDirectories = [
+            ...(userConfig.server.fs.allow ?? [
+              searchForWorkspaceRoot(projectRoot),
+            ]),
+          ];
+          if (
+            !allowedDirectories.some((directory) =>
+              pathsReferToSameFile(directory, configuredAssetDirectory),
+            )
+          ) {
+            allowedDirectories.push(configuredAssetDirectory);
+            console.info(
+              '[IWSDK Dev] Allowing local example assets from ' +
+                configuredAssetDirectory,
+            );
+          }
+          userConfig.server.fs.allow = allowedDirectories;
         }
       }
 
