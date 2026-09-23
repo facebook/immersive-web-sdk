@@ -6,6 +6,7 @@
  */
 
 import {
+  BufferAttribute,
   BufferGeometry,
   Matrix4,
   Mesh,
@@ -389,7 +390,7 @@ export class Locomotor {
 
   private processEnvironment(object3D: Object3D): {
     positions: Float32Array;
-    indices: Uint32Array;
+    indices: Uint16Array | Uint32Array;
     worldMatrix: Matrix4;
   } {
     object3D.updateMatrixWorld(true);
@@ -401,13 +402,63 @@ export class Locomotor {
 
     const geometries: BufferGeometry[] = [];
     object3D.traverse((child) => {
-      if ((child as Mesh).isMesh && (child as Mesh).geometry) {
-        const geometry = (child as Mesh).geometry.clone();
-        geometry.applyMatrix4(child.matrixWorld);
-        geometries.push(geometry);
+      const mesh = child as Mesh;
+      if (!mesh.isMesh) {
+        return;
       }
+      const position = mesh.geometry?.getAttribute('position');
+      const sourceIndex = mesh.geometry?.getIndex();
+      const elementCount = sourceIndex?.count ?? position?.count ?? 0;
+      if (!position || position.count === 0 || elementCount === 0) {
+        return;
+      }
+
+      if (position.itemSize !== 3 || elementCount % 3 !== 0) {
+        throw new Error(
+          `Locomotor environment mesh "${mesh.name || mesh.uuid}" does not contain complete triangle position data.`,
+        );
+      }
+
+      // Collision uses only positions and triangle indices. Normalizing to a
+      // fresh position buffer accepts interleaved glTF attributes and prevents
+      // unrelated normals, UVs, or colors from making geometry merging fail.
+      const positions = new Float32Array(position.count * 3);
+      for (let i = 0, offset = 0; i < position.count; i++, offset += 3) {
+        positions[offset] = position.getX(i);
+        positions[offset + 1] = position.getY(i);
+        positions[offset + 2] = position.getZ(i);
+      }
+
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(positions, 3));
+      if (sourceIndex) {
+        geometry.setIndex(sourceIndex.clone());
+      } else {
+        const IndexArray = position.count > 65536 ? Uint32Array : Uint16Array;
+        const indices = new IndexArray(position.count);
+        for (let i = 0; i < position.count; i++) {
+          indices[i] = i;
+        }
+        geometry.setIndex(new BufferAttribute(indices, 1));
+      }
+      geometry.applyMatrix4(child.matrixWorld);
+      geometries.push(geometry);
     });
+    if (geometries.length === 0) {
+      throw new Error(
+        'Locomotor environment has no usable triangle mesh geometry; add at least one Mesh with vertex positions to the environment Object3D hierarchy.',
+      );
+    }
     const mergedGeometry = mergeGeometries(geometries);
+    if (
+      !mergedGeometry?.index ||
+      mergedGeometry.index.count === 0 ||
+      !mergedGeometry.getAttribute('position')?.count
+    ) {
+      throw new Error(
+        'Locomotor could not merge the environment meshes into a collision mesh; ensure every environment Mesh contains valid triangle positions and indices.',
+      );
+    }
     this.tempMatrix2.copy(this.tempMatrix).invert();
     mergedGeometry.applyMatrix4(this.tempMatrix2);
 
@@ -415,7 +466,7 @@ export class Locomotor {
 
     return {
       positions: mergedGeometry.attributes.position.array as Float32Array,
-      indices: mergedGeometry.index!.array as Uint32Array,
+      indices: mergedGeometry.index.array as Uint16Array | Uint32Array,
       worldMatrix: this.tempMatrix.clone(),
     };
   }

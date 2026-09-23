@@ -21,6 +21,11 @@ import { MovementMode } from './handles.js';
  * - Supports rotation, translation, and scaling with per‑axis constraints.
  * - Configure target position and rotation offsets relative to the input source for MoveTowardsTarget mode.
  * - Works with the {@link GrabSystem} to create specialized distance grab handles.
+ * - Grab components are mutually exclusive per entity. Choose exactly one of
+ *   {@link OneHandGrabbable}, {@link TwoHandsGrabbable}, or
+ *   {@link DistanceGrabbable}; {@link GrabSystem} creates only one handle and
+ *   ignores additional grab components. Do not rely on which component wins
+ *   when multiple modes are present.
  * - Perfect for telekinetic‑style interactions and remote object manipulation.
  *
  * @example Basic distance grabbable object

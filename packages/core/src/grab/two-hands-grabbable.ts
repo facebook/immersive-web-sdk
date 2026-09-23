@@ -17,6 +17,11 @@ import { Types, createComponent } from '../ecs/component.js';
  * - Rotation is calculated from the relative orientation between the two hands.
  * - All transformations can be independently enabled/disabled and constrained per axis.
  * - Works with the {@link GrabSystem} to automatically create multitouch interaction handles.
+ * - Grab components are mutually exclusive per entity. Choose exactly one of
+ *   {@link OneHandGrabbable}, {@link TwoHandsGrabbable}, or
+ *   {@link DistanceGrabbable}; {@link GrabSystem} creates only one handle and
+ *   ignores additional grab components. Do not rely on which component wins
+ *   when multiple modes are present.
  *
  * @example Basic two‑handed grabbable object
  * ```ts
