@@ -121,7 +121,10 @@ After each edit:
 
 1. rerender with `ui render-preview` and inspect the image;
 2. rerender the scene when placement or scale matters;
-3. inspect `browser logs` for parser, font, texture, or runtime failures.
+3. find an asset-backed panel by its authored name with `ecs find namePattern`, then
+   use `ui inspect` with its entity index and a stable element ID to verify current
+   runtime text, state, and layout; filter by `PanelDocument` only for legacy `PanelUI`;
+4. inspect `browser logs` for parser, font, texture, or runtime failures.
 
 ## 6. Connect runtime behavior
 
@@ -180,6 +183,7 @@ XR. See `docs/concepts/spatial-ui/hud.md` for the placement guidance.
 - Manifest ID resolves and `ui assets` lists it.
 - Isolated preview is nonblank, correctly laid out, and uses the intended fonts.
 - Scene preview has correct facing, transform scale, and lighting-independent color.
+- `ui inspect` confirms the expected live element state after interaction.
 - Runtime behavior resolves the placed node and required element IDs.
 - Browser logs contain no UIKitML parser, resource, or font errors.
 - No generated UI JSON, temporary ScreenSpace component, backdrop, or camera hack

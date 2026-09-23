@@ -370,4 +370,62 @@ describe('runtime contract scene tools', () => {
     });
     expect(operation?.inputSchema.required).toEqual(['assetId']);
   });
+  test('exposes bounded live UIKit inspection on the application page', () => {
+    const operation = getRuntimeOperationByToolName('ui_inspect');
+
+    expect(operation).toMatchObject({
+      cliPath: ['ui', 'inspect'],
+      execution: 'runtime',
+      physical: true,
+      target: { role: 'app' },
+      wsMethod: 'ui_inspect',
+    });
+    expect(operation?.inputSchema.required).toEqual(['entityIndex']);
+    expect(operation?.inputSchema.properties?.selector).toMatchObject({
+      maxLength: 512,
+    });
+    expect(operation?.inputSchema.properties?.properties).toMatchObject({
+      maxItems: 20,
+      minItems: 1,
+    });
+    expect(operation?.inputSchema.properties?.limit).toMatchObject({
+      maximum: 50,
+      minimum: 1,
+      type: 'integer',
+    });
+    expect(
+      resolveRuntimeOperationRequest(operation!, {
+        entityIndex: 14,
+        selector: '#counter-button',
+        properties: ['text', 'disabled'],
+        limit: 1,
+      }),
+    ).toEqual({
+      params: {
+        entityIndex: 14,
+        selector: '#counter-button',
+        properties: ['text', 'disabled'],
+        limit: 1,
+      },
+      target: { role: 'app' },
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(operation!, {
+        entityIndex: 14,
+        selector: 'x'.repeat(513),
+      }),
+    ).toThrow('ui_inspect.selector allows at most 512 characters');
+    expect(() =>
+      resolveRuntimeOperationRequest(operation!, {
+        entityIndex: 14,
+        properties: ['__proto__'],
+      }),
+    ).toThrow('ui_inspect.properties[0] must match');
+    expect(() =>
+      resolveRuntimeOperationRequest(operation!, {
+        entityIndex: 14,
+        limit: 51,
+      }),
+    ).toThrow('ui_inspect.limit must be at most 50');
+  });
 });

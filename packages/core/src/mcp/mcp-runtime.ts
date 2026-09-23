@@ -25,6 +25,7 @@ import {
   getRenderStats,
   getSceneHierarchy,
 } from './scene-tools.js';
+import { uiInspect } from './ui-debug-tools.js';
 
 const SUPPORTED_METHODS = [
   'get_scene_hierarchy',
@@ -41,6 +42,7 @@ const SUPPORTED_METHODS = [
   'ecs_set_component',
   'ecs_snapshot',
   'ecs_diff',
+  'ui_inspect',
 ] as const;
 type SupportedMethod = (typeof SUPPORTED_METHODS)[number];
 
@@ -143,6 +145,8 @@ export class MCPRuntime {
         return ecsSnapshot(this.world, params);
       case 'ecs_diff':
         return ecsDiff(this.world, params);
+      case 'ui_inspect':
+        return uiInspect(this.world, params);
       default:
         throw new Error(
           `Unknown IWSDK method '${method}'. Available methods: ${SUPPORTED_METHODS.join(', ')}`,

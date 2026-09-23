@@ -426,54 +426,55 @@ describe('managed browser WebSocket routing', () => {
     });
   });
 
-  test('pins managed runtime dispatch to the admitted browser generation', async () => {
-    const managed = createManagedBrowser();
-    const { sessionId, socket } = await createHarness(managed.browser);
-    const bridge = Object.assign(new EventEmitter(), {
-      readyState: 1,
-      send: vi.fn(),
-      close: vi.fn(),
-      terminate: vi.fn(),
-    });
-    mocks.servers.at(-1).emit('connection', bridge, {
-      socket: { remoteAddress: '127.0.0.1' },
-    });
-    bridge.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({
-          type: 'iwsdk_browser_hello',
+  test.each(['ecs_list_systems', 'ui_inspect'])(
+    'pins managed %s dispatch to the admitted browser generation',
+    async (method) => {
+      const managed = createManagedBrowser();
+      const { sessionId, socket } = await createHarness(managed.browser);
+      const bridge = Object.assign(new EventEmitter(), {
+        readyState: 1,
+        send: vi.fn(),
+        close: vi.fn(),
+        terminate: vi.fn(),
+      });
+      mocks.servers.at(-1).emit('connection', bridge, {
+        socket: { remoteAddress: '127.0.0.1' },
+      });
+      bridge.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({
+            type: 'iwsdk_browser_hello',
+            browserEpoch: 1,
+            commandReady: true,
+            deviceClass: 'managed',
+            pageId: 'runtime-app',
+            pageRole: 'app',
+            sessionId,
+            tabGeneration: 1,
+          }),
+        ),
+      );
+
+      socket.emit(
+        'message',
+        Buffer.from(JSON.stringify({ id: 'runtime-command', method })),
+      );
+
+      await vi.waitFor(() => expect(bridge.send).toHaveBeenCalledOnce());
+      expect(JSON.parse(bridge.send.mock.calls[0]![0])).toMatchObject({
+        id: expect.any(String),
+        method,
+        target: {
           browserEpoch: 1,
-          commandReady: true,
           deviceClass: 'managed',
-          pageId: 'runtime-app',
-          pageRole: 'app',
+          role: 'app',
           sessionId,
-          tabGeneration: 1,
-        }),
-      ),
-    );
-
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'systems', method: 'ecs_list_systems' }),
-      ),
-    );
-
-    await vi.waitFor(() => expect(bridge.send).toHaveBeenCalledOnce());
-    expect(JSON.parse(bridge.send.mock.calls[0]![0])).toMatchObject({
-      id: expect.any(String),
-      method: 'ecs_list_systems',
-      target: {
-        browserEpoch: 1,
-        deviceClass: 'managed',
-        role: 'app',
-        sessionId,
-      },
-    });
-    bridge.emit('close', 1000, Buffer.from('done'));
-  });
+        },
+      });
+      bridge.emit('close', 1000, Buffer.from('done'));
+    },
+  );
 
   test('reports a lazy relaunch before routing the next host command', async () => {
     const managed = createManagedBrowser();

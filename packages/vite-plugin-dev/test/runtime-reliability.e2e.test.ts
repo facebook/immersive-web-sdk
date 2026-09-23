@@ -198,10 +198,14 @@ describe('runtime reliability with real managed Chromium', () => {
       ).rejects.toMatchObject({
         details: { code: 'unsupported_on_target', outcome: 'not_executed' },
       });
+      expect(
+        (await command('ui_inspect', { entityIndex: 0 }, target)).result,
+      ).toEqual({ reloaded: true });
+      expect(requests.at(-1)).toMatchObject({ method: 'ui_inspect' });
       expect((await command('reload_page', {}, target)).result).toEqual({
         reloaded: true,
       });
-      expect(requests).toHaveLength(1);
+      expect(requests).toHaveLength(2);
       await expect(
         command('reload_page', {}, { ...target, tabGeneration: 2 }),
       ).rejects.toMatchObject({ details: { code: 'stale_browser_tab' } });

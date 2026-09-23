@@ -120,7 +120,8 @@ for the complete workflow.
 ## MCP and CLI are one surface, not two
 
 Nearly every capability exists both ways — `scene_render_file` and
-`npx @iwsdk/cli scene render-file`, `ecs_find_entities` and `npx @iwsdk/cli ecs find`.
+`npx @iwsdk/cli scene render-file`, `ecs_find_entities` and `npx @iwsdk/cli ecs find`,
+or `ui_inspect` and `npx @iwsdk/cli ui inspect`.
 Discover CLI actions with the bare domain or domain help (`npx @iwsdk/cli scene` or
 `npx @iwsdk/cli scene --help`); both list that domain's actions.
 

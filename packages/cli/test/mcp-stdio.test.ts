@@ -173,6 +173,63 @@ afterEach(async () => {
 });
 
 describe('mcp stdio interface shaping', () => {
+  test('advertises and routes live UIKit inspection to the application page', async () => {
+    let forwarded:
+      | { method: string; params?: unknown; target?: unknown }
+      | undefined;
+    const runtime = await startRuntimeFixture(appRoot, (request) => {
+      forwarded = request;
+      return {
+        result: {
+          elements: [{ id: 'save-button', text: 'Save' }],
+          limited: false,
+          panel: { entityIndex: 14, name: 'Settings Panel' },
+          total: 1,
+        },
+        _tabId: 'tab-1',
+        _tabGeneration: 1,
+      };
+    });
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const tools = await mcp.client.listTools();
+      expect(
+        tools.tools.find((tool) => tool.name === 'ui_inspect'),
+      ).toMatchObject({
+        inputSchema: {
+          required: ['entityIndex'],
+        },
+      });
+
+      const result = await mcp.client.callTool({
+        name: 'ui_inspect',
+        arguments: {
+          entityIndex: 14,
+          selector: '#save-button',
+        },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(forwarded).toEqual({
+        method: 'ui_inspect',
+        params: {
+          entityIndex: 14,
+          selector: '#save-button',
+        },
+        target: { role: 'app' },
+      });
+      expect(JSON.parse(result.content[0]?.text ?? '')).toMatchObject({
+        elements: [{ id: 'save-button', text: 'Save' }],
+        panel: { entityIndex: 14, name: 'Settings Panel' },
+        total: 1,
+      });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
   test('returns array payloads before the separate _tab metadata block', async () => {
     const runtime = await startRuntimeFixture(appRoot, ({ method }) => {
       if (method === 'get_console_logs') {

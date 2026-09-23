@@ -235,6 +235,15 @@ describe('common starter project files', () => {
           validateAuthoringWorkflow: false,
         }),
       ).toEqual({ valid: true, issues: [] });
+      const welcomePanel = scene.nodes.find(
+        (node: { id?: string }) => node.id === 'welcome-panel',
+      );
+      expect(welcomePanel).toMatchObject({
+        name: 'Welcome Panel',
+        content: { asset: 'welcome-panel', type: 'asset' },
+      });
+      expect(welcomePanel?.components).not.toHaveProperty('PanelDocument');
+
       expect(
         scene.nodes.find((node: { id?: string }) => node.id === 'webxr-banner'),
       ).toMatchObject({
@@ -344,6 +353,17 @@ describe('common starter project files', () => {
     expect(
       files.filter((file) => file.path === '.agents/skills/iwsdk-ui/SKILL.md'),
     ).toHaveLength(1);
+    for (const skillPath of [
+      '.claude/skills/iwsdk-ui/SKILL.md',
+      '.agents/skills/iwsdk-ui/SKILL.md',
+    ]) {
+      const uiSkill = textFile(files, skillPath);
+      expect(uiSkill).toContain(
+        `npx @iwsdk/cli ecs find --input-json '{"namePattern":"^Welcome Panel$"}'`,
+      );
+      expect(uiSkill).toContain('npx @iwsdk/cli ui inspect');
+      expect(uiSkill).not.toContain(`"withComponents":["PanelDocument"]`);
+    }
     expect(textFile(files, 'AGENTS.md')).toContain('# IWSDK');
     expect(textFile(files, 'CLAUDE.md')).toContain('# IWSDK project');
     const emittedPathSet = new Set(paths);

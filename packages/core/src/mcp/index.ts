@@ -32,3 +32,8 @@ export type {
   EcsDiffParams,
   EcsDiffResult,
 } from './ecs-debug-tools.js';
+export type {
+  UiElementInspection,
+  UiInspectParams,
+  UiInspectResult,
+} from './ui-debug-tools.js';

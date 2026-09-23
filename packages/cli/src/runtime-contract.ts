@@ -2345,6 +2345,49 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'ui_inspect',
+    description:
+      'Inspect live UIKitML elements owned by one ECS panel entity. Omit selector to list stable-ID elements, or use #id, .class, and descendant selectors for focused inspection. Returns bounded current text, state, layout, and selected computed properties without interacting with the UI; documents over 10,000 objects fail explicitly. Requires FRAMEWORK_MCP_RUNTIME.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        entityIndex: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Panel entity index from ecs_find_entities or scene_get_runtime_hierarchy.',
+        },
+        selector: {
+          type: 'string',
+          maxLength: 512,
+          description:
+            'Optional #id, .class, or descendant selector with at most 16 parts. Omit to list every stable-ID element in document order.',
+        },
+        properties: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: 'string',
+            maxLength: 64,
+            pattern: '^[A-Za-z][A-Za-z0-9]*$',
+            description: 'Camel-case UIKit property name.',
+          },
+          description:
+            'Optional computed UIKit property names to return. Defaults to common text, value, state, display, and pointer-event properties.',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          description: 'Maximum returned elements. Defaults to 50.',
+        },
+      },
+      required: ['entityIndex'],
+    },
+  },
+  {
     name: 'scene_compare_screenshots',
     description:
       'Capture two native scene editor screenshots and report byte identity. This is not a perceptual image comparison.',
@@ -3330,6 +3373,7 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   asset_render_preview: ['asset', 'render-preview'],
   ui_list_assets: ['ui', 'assets'],
   ui_render_preview: ['ui', 'render-preview'],
+  ui_inspect: ['ui', 'inspect'],
   scene_compare_screenshots: ['scene', 'compare-screenshots'],
   scene_begin_review: ['scene', 'begin-review'],
   scene_set_review_lens: ['scene', 'set-review-lens'],
@@ -3403,13 +3447,18 @@ const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
   ...WORKSPACE_MCP_TOOL_NAMES,
 ]);
 
-const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
+const HOST_BROWSER_MCP_TOOL_NAME_SET = new Set<string>([
   'browser_screenshot',
   'browser_snapshot',
   'browser_interact',
   'browser_profile',
   'browser_get_console_logs',
   'browser_reload_page',
+]);
+
+const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
+  ...HOST_BROWSER_MCP_TOOL_NAME_SET,
+  'ui_inspect',
 ]);
 
 export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
@@ -3440,12 +3489,12 @@ export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
       ...(target ? { target } : {}),
       execution: tool.name.startsWith('runtime_')
         ? 'server'
-        : APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name)
+        : HOST_BROWSER_MCP_TOOL_NAME_SET.has(tool.name)
           ? 'host'
           : 'runtime',
       physical:
         !EDITOR_TARGET_MCP_TOOL_NAME_SET.has(tool.name) &&
-        (!APP_TARGET_MCP_TOOL_NAME_SET.has(tool.name) ||
+        (!HOST_BROWSER_MCP_TOOL_NAME_SET.has(tool.name) ||
           tool.name === 'browser_reload_page'),
       description: tool.description,
       inputSchema: tool.inputSchema,

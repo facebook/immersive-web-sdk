@@ -206,8 +206,17 @@ session, start a second browser, or build a custom UIKit renderer.
    framing, and the PNG are checked together. Do not pipe it through
    `head`/`tail`/`grep` and rerun only to recover discarded metadata.
 
-4. Exercise each required control through real pointer or XR input and query the
-   named state or live element needed to prove the result.
+4. Find the panel entity, then inspect its live UIKitML state before and after
+   exercising each required control through real pointer or XR input:
+
+   ```bash
+   npx @iwsdk/cli ecs find --input-json '{"namePattern":"^Welcome Panel$"}'
+   npx @iwsdk/cli ui inspect --input-json '{"entityIndex":12,"selector":"#Btn_Action"}'
+   ```
+
+   Replace the example pattern with the panel's authored scene/entity name, and
+   reuse the returned entity index rather than hard-coding the example value.
+
 5. Capture one final runtime preview from the intended viewpoint. Reuse a
    required completion-state capture when it already provides that evidence.
 
@@ -220,6 +229,7 @@ npx @iwsdk/cli xr look-at --input-json '{"device":"controller-right","target":{"
 npx @iwsdk/cli xr select --input-json '{"device":"controller-right","duration":0.2}'
 npx @iwsdk/cli ecs find --input-json '{"withComponents":["ComponentName"]}'
 npx @iwsdk/cli ecs query --input-json '{"entityIndex":12}'
+npx @iwsdk/cli ui inspect --input-json '{"entityIndex":12,"selector":"#Btn_Action"}'
 npx @iwsdk/cli browser logs --input-json '{"count":30}'
 npx @iwsdk/cli browser reload --input-json '{}'
 ```

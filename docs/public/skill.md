@@ -460,6 +460,7 @@ iwsdk browser  screenshot | logs | reload
 iwsdk scene    open | render-file | flatten | state | capabilities | select |
                set-camera | screenshot | set-preview-visibility |
                measure-image-regions
+iwsdk ui       assets | render-preview | inspect
 iwsdk ecs      pause | resume | step | query | find | systems |
                components | toggle-system | set-component | snapshot | diff
 ```

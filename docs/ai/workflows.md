@@ -200,6 +200,22 @@ Compare source and render at the same aspect ratio. Treat class recognition as
 insufficient evidence: inspect silhouette, proportions, parts, negative space,
 contacts, and material response.
 
+## Runtime UIKitML Inspection
+
+UIKitML controls are live UIKit components inside a panel entity, not separate ECS
+entities or browser DOM elements:
+
+```text
+1. ecs_find_entities(namePattern="panel")
+2. ui_inspect(entityIndex=<panel index>)
+3. ui_inspect(entityIndex=<panel index>, selector="#save-button")
+```
+
+The unfiltered call lists stable element IDs. The focused call returns current text,
+visibility, interaction state, layout, and selected computed properties. Read the
+UIKitML source when authoring; use `ui_inspect` when validating code-driven runtime
+changes.
+
 ## Runtime Entity Debugging
 
 Scene hierarchy is authored in files. For live behavioral state use ECS tools:

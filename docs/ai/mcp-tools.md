@@ -159,6 +159,40 @@ Transparent/additive effects remain visible but do not control automatic camera
 framing. Use `focus` after the contact sheet exposes a suspicious part; the full
 asset remains rendered so attachment context is preserved.
 
+## Runtime UIKitML Inspection
+
+Use `ui_list_assets` and `ui_render_preview` for manifest discovery and isolated
+authoring previews. Use `ui_inspect` for the current state of a panel in the running
+application.
+
+### `ui_inspect`
+
+Inspect the live UIKitML document owned by one ECS entity. Find the panel first with
+`ecs_find_entities` or `iwsdk scene runtime-hierarchy`, then pass its entity index.
+For manifest-backed panels, search by the authored panel `namePattern`; the
+`PanelDocument` component identifies legacy `PanelUI` entities only.
+Omit `selector` to list every element with a stable ID in document order, or narrow
+the result with an existing UIKit selector: `#id`, `.class`, or descendant
+combinations of those selectors, up to 16 selector parts.
+
+| Parameter     | Type       | Required | Default           | Maximum             | Description                              |
+| ------------- | ---------- | -------- | ----------------- | ------------------- | ---------------------------------------- |
+| `entityIndex` | `integer`  | Yes      | -                 | -                   | ECS entity that owns the live panel      |
+| `selector`    | `string`   | No       | all stable IDs    | 512 chars, 16 parts | UIKit ID, class, or descendant selector  |
+| `properties`  | `string[]` | No       | common live state | 20                  | Computed UIKit property names to include |
+| `limit`       | `integer`  | No       | 50                | 50                  | Maximum matching elements                |
+
+The result includes panel identity and bounded element summaries containing IDs,
+classes, current text, visibility/interaction state, layout size and center, and the
+requested computed properties. This is observation only; it does not click or mutate
+the UI. UIKit descendants remain UIKit components rather than synthetic ECS entities.
+Inspection traverses at most 10,000 objects; oversized documents fail explicitly.
+
+```bash
+npx @iwsdk/cli ui inspect --input-json \
+  '{"entityIndex":14,"selector":"#counter-button"}'
+```
+
 ## Modular Scenes
 
 Scene roots may declare top-level imports:

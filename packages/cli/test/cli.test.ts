@@ -739,6 +739,26 @@ describe('runtime commands and project resolution', () => {
       expect(JSON.parse(uiAssets.stdout)).toMatchObject({
         method: 'ui_list_assets',
       });
+      const uiInspect = await runCli(
+        [
+          'ui',
+          'inspect',
+          '--input-json',
+          '{"entityIndex":14,"selector":"#counter-button"}',
+        ],
+        path.join(appA, 'src'),
+      );
+      expect(uiInspect.exitCode).toBe(0);
+      expect(JSON.parse(uiInspect.stdout).data).toMatchObject({
+        operation: 'ui.inspect',
+        result: {
+          method: 'ui_inspect',
+          params: {
+            entityIndex: 14,
+            selector: '#counter-button',
+          },
+        },
+      });
     } finally {
       await runtime.close();
     }
