@@ -41,7 +41,7 @@ Use `npx @iwsdk/cli dev up --ai-mode agent` for a headless agent session, or
 explicitly.
 
 ::: tip
-Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle and browser opening. A configured `server.port` (8081 in starters) fails startup when it is occupied instead of moving to another port; treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
+Starter `npm run dev` routes through `iwsdk dev restart --open --foreground`, which stops any runtime already running for the workspace and lets the CLI manage the dev-server lifecycle and browser opening. A configured `server.port` (8081 in starters) fails startup when it is occupied instead of moving to another port; treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
 :::
 
 When the server starts, several things happen automatically:

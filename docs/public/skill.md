@@ -143,7 +143,7 @@ auto-detects GPU availability first:
 3. Logs the selected backend every launch.
 
 **No manual patching required** in 0.4.x. Use the normal generated app workflow:
-`npm run dev` or `npx @iwsdk/cli dev up --open --foreground`.
+`npm run dev` or `npx @iwsdk/cli dev restart --open --foreground`.
 
 ### Environment Variable Override
 
@@ -329,7 +329,7 @@ const { scene } = AssetManager.getGLTF('myModel', { shared: true })!;
 ## 5. Dev Server
 
 ```bash
-npm run dev                    # Generated apps: dev up --open --foreground
+npm run dev                    # Generated apps: dev restart --open --foreground
 npx @iwsdk/cli dev up               # Start dev:runtime through the CLI, usually backgrounded
 npx @iwsdk/cli dev up --foreground  # Stay attached to terminal
 npx @iwsdk/cli dev down           # Stop

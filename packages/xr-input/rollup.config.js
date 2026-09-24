@@ -23,6 +23,8 @@ export default {
       declaration: true,
       declarationMap: true,
       sourceMap: true,
+      // src/ is not published, and Vite reads these maps when serving unbundled deps.
+      inlineSources: true,
       declarationDir: 'dist',
     }),
     resolve({

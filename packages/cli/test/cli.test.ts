@@ -1277,7 +1277,7 @@ describe('adapter management', () => {
         name: 'starter-app',
         private: true,
         scripts: {
-          dev: 'iwsdk dev up --open --foreground',
+          dev: 'iwsdk dev restart --open --foreground',
           'dev:runtime': 'vite',
           'dev:down': 'iwsdk dev down',
           'dev:status': 'iwsdk dev status',
@@ -1305,7 +1305,7 @@ describe('adapter management', () => {
     const parsedStarterPackageJson = JSON.parse(starterPackageJson);
 
     expect(parsedStarterPackageJson.scripts.dev).toBe(
-      'iwsdk dev up --open --foreground',
+      'iwsdk dev restart --open --foreground',
     );
     expect(parsedStarterPackageJson.scripts['dev:runtime']).toBe('vite');
     expect(parsedStarterPackageJson.scripts['dev:down']).toBe('iwsdk dev down');

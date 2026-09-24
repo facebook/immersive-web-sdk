@@ -242,7 +242,7 @@ my-iwsdk-app/
 
 Fresh starters ship the `iwsdk` CLI through `@iwsdk/cli`, so the default commands are:
 
-- `npm run dev` starts the CLI-managed dev session, opens the app, and keeps the terminal attached
+- `npm run dev` starts the CLI-managed dev session, opens the app, and keeps the terminal attached; a session already running for the project is stopped first
 - `npm run dev:runtime` is the internal runtime script the CLI launches
 - `npx @iwsdk/cli dev status` shows the current runtime URL/port and adapter state
 - `npx @iwsdk/cli dev down` stops the managed runtime if you started it in the background

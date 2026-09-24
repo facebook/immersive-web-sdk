@@ -99,7 +99,7 @@ function createProjectPackageJson(
     private: true,
     type: 'module',
     scripts: {
-      dev: 'iwsdk dev up --open --foreground',
+      dev: 'iwsdk dev restart --open --foreground',
       'dev:runtime': 'vite',
       'dev:down': 'iwsdk dev down',
       'dev:status': 'iwsdk dev status',

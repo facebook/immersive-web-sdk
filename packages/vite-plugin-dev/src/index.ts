@@ -261,6 +261,7 @@ const OPTIMIZER_EXCLUSIONS = [
   'preact/jsx-runtime',
 ];
 const OPTIMIZER_INCLUSIONS = [
+  '@iwsdk/core > elics',
   '@iwsdk/scene-composition',
   'three',
   'three-viewport-gizmo',
@@ -850,7 +851,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // started. Keep its framework dependencies out of Vite's late discovery
       // pass so opening the editor cannot invalidate the running page. The
       // MSDF generator must also stay unbundled so its relative worker and WASM
-      // URLs continue to resolve when UIKit loads a TTF font.
+      // URLs continue to resolve when UIKit loads a TTF font. @iwsdk/core is
+      // served unbundled, so pre-bundle its elics dependency through it; the
+      // nested form resolves under pnpm, where elics is not visible from the
+      // app root.
       userConfig.optimizeDeps ??= {};
       userConfig.optimizeDeps.exclude = [
         ...(userConfig.optimizeDeps.exclude ?? []),

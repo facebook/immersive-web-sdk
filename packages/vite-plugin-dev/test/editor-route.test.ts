@@ -818,6 +818,7 @@ describe('native editor route middleware', () => {
     );
     expect(userConfig.optimizeDeps?.include).toEqual([
       'existing-inclusion',
+      '@iwsdk/core > elics',
       '@iwsdk/scene-composition',
       'three',
       'three-viewport-gizmo',
