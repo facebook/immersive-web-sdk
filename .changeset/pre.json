@@ -1,0 +1,42 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@iwsdk/cli": "0.5.2",
+    "@iwsdk/core": "0.5.3",
+    "@iwsdk/create": "0.5.3",
+    "@iwsdk/example-assets": "0.4.2",
+    "@iwsdk/locomotor": "0.5.3",
+    "@iwsdk/reference": "0.5.3",
+    "@iwsdk/reference-assets": "0.5.3",
+    "@iwsdk/scene-composition": "0.5.3",
+    "@iwsdk/vite-plugin-dev": "0.5.3",
+    "@iwsdk/xr-input": "0.5.3"
+  },
+  "changesets": [
+    "calm-cursors-turn",
+    "calm-walkable-meshes",
+    "clean-camera-lifecycle",
+    "dedupe-three-optimization",
+    "eager-editor-hmr",
+    "fair-impulses-follow",
+    "harden-generated-project-dependencies",
+    "held-browser-keys",
+    "inspect-live-uikit",
+    "local-asset-mirrors",
+    "model-preview-skills",
+    "native-headsets-drive",
+    "offline-starter-fonts",
+    "physics-worker-runtime",
+    "pinned-three-runtime",
+    "quiet-hidden-meshes",
+    "robust-runtime-ownership",
+    "safe-scoped-cli",
+    "stabilize-development-release-tooling",
+    "stable-managed-browser-capture",
+    "stable-sdk-release",
+    "steady-runtime-correctness",
+    "steady-two-hand-return",
+    "swift-ui-activation"
+  ]
+}

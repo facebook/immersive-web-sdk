@@ -124,8 +124,9 @@ alias_tarball() {
     local tarball="$1"
     local dir="$(dirname "$tarball")"
     local base="$(basename "$tarball")"
-    # Strip the trailing -<version>.tgz
-    local alias_name="${base%-*.tgz}.tgz"
+    # Strip the trailing -<version>.tgz, including prerelease suffixes such as
+    # -1.0.0-rc.0.tgz
+    local alias_name="$(printf '%s' "$base" | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]*)?\.tgz$/.tgz/')"
     local alias_path="$dir/$alias_name"
     if [ "$alias_path" != "$tarball" ]; then
         mv -f "$tarball" "$alias_path"

@@ -1,5 +1,87 @@
 # @iwsdk/core
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Minor Changes
+
+- d0b24a1: Add bounded live UIKitML element inspection to the CLI and MCP runtime, including
+  current ID, class, text, layout, interaction, property, and effective visibility
+  state. Teach generated UI-agent guidance to use the inspection command for
+  runtime verification.
+- 13a5cbe: Add opt-in native Quest WebXR control sessions, session-grant launch support,
+  deterministic physical-browser routing, and generated-project guidance for
+  running IWSDK tests through an ADB-reversed localhost connection.
+- 438f10c: Existing `physics: true` projects now run Havok in a Web Worker at a fixed 60
+  Hz by default, using transferable ArrayBuffer exchanges and render
+  interpolation. Add a shared main-thread mode for debugging and compatibility,
+  plus debugger pause/step synchronization across both execution modes.
+- e18c42a: Harden the CLI-managed development runtime with one fail-closed workspace
+  owner, an explicit managed-browser lifecycle, exact managed and physical target
+  routing, bounded command execution, and runtime status/recovery tools. Dev
+  startup uses Vite's resolved application port and may return before the browser
+  command path is ready; inspect `browserCommandReady` or use `runtime wait` before
+  issuing browser-backed commands. A configured `server.port` is the runtime's
+  address, so an occupied port now fails startup instead of moving to the next
+  free port; an explicit `server.strictPort` still wins. Recovery reports `browser_relaunched` without
+  replaying the command, while failures after dispatch report `outcome_unknown`.
+
+  Managed Chromium uses a private profile in OS temporary storage that survives
+  automatic browser recovery while retained. Stop active dev processes before
+  upgrading the CLI and Vite plugin together. Native pose overrides are enabled
+  only for explicitly configured Quest sessions; other browsers continue using
+  IWER emulation.
+
+### Patch Changes
+
+- ed2a6b1: Normalize non-indexed and mixed-index locomotion environment meshes before
+  building collision geometry, report unusable environments clearly, and
+  document that grab components are mutually exclusive per entity.
+- aee9970: Stop camera tracks when sources are restarted, removed, hidden, or destroyed, and require explicit retry after camera errors.
+- 4d4efa0: Apply one-shot physics impulses independently of render cadence and preserve
+  vertical offsets for `PivotY` followers.
+- 52c7378: Pin standalone core installs to the supported super-three runtime instead of resolving an untested latest Three.js release.
+
+  Existing applications must use `"three": "npm:super-three@0.181.0"` and the
+  matching npm or pnpm override so IWSDK and application code share one Three.js
+  module instance.
+
+- 3306963: Ignore invisible objects and descendants of invisible objects during pointer hit testing.
+- 2c7b66c: Clamp distance-grab interpolation after stalled frames so position and rotation
+  cannot extrapolate into invalid transforms.
+
+  Wake locomotion after environment changes, teleports, and successful jumps,
+  allow the first jump immediately, and restart the idle timeout on static-ground
+  landings so the float spring settles before sleep.
+
+  Keep native XR composition layers aligned with player space, preserve their
+  configured full dimensions and scale, synchronize visibility and geometry, fall
+  back safely for unsupported transforms, and release resources during teardown.
+
+  Clear session-owned depth uniforms during XR exit, component removal, and system
+  teardown, and require fresh per-session depth data before re-enabling occlusion.
+
+  Refresh retained plane and mesh geometry when WebXR reports updates, compute
+  correct axis-aligned mesh bounds, and skip BVH acceleration for compatible
+  foreign Three.js geometries that do not expose the extension.
+
+- 3306963: Preserve the original DistanceGrabbable transform across two-hand grab handoffs.
+- 3306963: Forward canvas pointer events synchronously so Spatial UI actions retain browser user activation.
+- Updated dependencies [3306963]
+- Updated dependencies [ed2a6b1]
+- Updated dependencies [faf9709]
+- Updated dependencies [3306963]
+- Updated dependencies
+- Updated dependencies [2c7b66c]
+  - @iwsdk/xr-input@1.0.0-rc.0
+  - @iwsdk/locomotor@1.0.0-rc.0
+  - @iwsdk/scene-composition@1.0.0-rc.0
+
 ## 0.5.3
 
 ### Patch Changes

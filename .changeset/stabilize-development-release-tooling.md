@@ -1,7 +1,6 @@
 ---
 '@iwsdk/cli': patch
 '@iwsdk/create': patch
-'@iwsdk/example-assets': patch
 '@iwsdk/reference-assets': patch
 '@iwsdk/vite-plugin-dev': patch
 ---

@@ -1,5 +1,18 @@
 # @iwsdk/xr-input
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Patch Changes
+
+- 3306963: Keep ray cursors above and aligned with hit surfaces after the XR origin rotates.
+- 3306963: Ignore invisible objects and descendants of invisible objects during pointer hit testing.
+
 ## 0.5.3
 
 ## 0.5.2

@@ -36,7 +36,7 @@ instance:
 ```json
 {
   "dependencies": {
-    "@iwsdk/core": "^0.5.3",
+    "@iwsdk/core": "^1.0.0",
     "three": "npm:super-three@0.181.0"
   },
   "overrides": {

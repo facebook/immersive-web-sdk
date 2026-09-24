@@ -7,7 +7,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -438,9 +438,11 @@ function listTrackedTextFiles(root = ROOT) {
   }
   const gitRoot = gitRootResult.stdout.trim();
   const relativeRoot = path.relative(gitRoot, root) || '.';
+  // `^` matches every line of every text file; an empty pattern is rejected
+  // by the BSD regex engine used by git on macOS.
   const filesResult = spawnSync(
     'git',
-    ['-C', gitRoot, 'grep', '-Ilz', '-e', '', '--', relativeRoot],
+    ['-C', gitRoot, 'grep', '-Ilz', '-e', '^', '--', relativeRoot],
     { encoding: 'utf8' },
   );
   if (filesResult.status !== 0 && filesResult.status !== 1) {
@@ -455,6 +457,8 @@ function listTrackedTextFiles(root = ROOT) {
 }
 
 export function checkRepository(root = ROOT) {
+  // git reports symlink-resolved paths (for example /private/var on macOS).
+  root = realpathSync(root);
   const violations = [];
   const files = listTrackedTextFiles(root);
   for (const file of files) {
@@ -474,6 +478,7 @@ export function checkWorkspace(sdkRoot = ROOT) {
   // In the WebXR development-platform monorepo, companion templates and
   // showcases also ship this guidance. Include those directories when they
   // exist without coupling IWSDK release gates to unrelated sibling projects.
+  sdkRoot = realpathSync(sdkRoot);
   const gitRootResult = spawnSync(
     'git',
     ['-C', sdkRoot, 'rev-parse', '--show-toplevel'],

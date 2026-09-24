@@ -1,5 +1,24 @@
 # @iwsdk/reference
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Patch Changes
+
+- f80787e: Generate npm- and pnpm-installable projects with deterministic local tarball
+  overrides and pnpm 10/11 lifecycle policy, including deferred bundle installs.
+
+  Pin the compatible Sharp 0.35.4 release, refresh dependency security overrides,
+  use project-local TypeScript commands, and migrate Quest tooling guidance from
+  the legacy HzDB package to the owned `@meta-quest/metavr` package.
+
+- 9348db4: Use the owned scoped CLI package for documented and automated IWSDK commands.
+
 ## 0.5.3
 
 ## 0.5.2
