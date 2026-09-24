@@ -1,5 +1,14 @@
 # @iwsdk/xr-input
 
+## 1.0.0-rc.2
+
+### Minor Changes
+
+- d3640c2: Add configurable gaze input, gaze-driven pointer selection, native-session
+  `gaze-tracking` and `eye-tracking` feature requests, a `metaVRGlasses` desktop
+  emulator device with gaze input, and a development-only Meta VR Glasses gaze
+  preview for physical Quest headsets.
+
 ## 1.0.0-rc.1
 
 ### Patch Changes

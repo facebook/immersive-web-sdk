@@ -1,5 +1,20 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.0.0-rc.2
+
+### Minor Changes
+
+- d3640c2: Add configurable gaze input, gaze-driven pointer selection, native-session
+  `gaze-tracking` and `eye-tracking` feature requests, a `metaVRGlasses` desktop
+  emulator device with gaze input, and a development-only Meta VR Glasses gaze
+  preview for physical Quest headsets.
+
+### Patch Changes
+
+- Updated dependencies [d3640c2]
+  - @iwsdk/core@1.0.0-rc.2
+  - @iwsdk/scene-composition@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Patch Changes
