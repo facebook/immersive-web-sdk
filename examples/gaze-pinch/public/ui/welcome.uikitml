@@ -1,70 +1,268 @@
 <style>
-  .heading {
-    height: 48px;
-    text-align: center;
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 24px;
-    letter-spacing: -0.5px;
-    color: #272727;
+  .panel-root {
+    background-color: #0b0f18;
+    border-color: #303849;
+    border-radius: 20px;
+    border-width: 1px;
+    flex-direction: column;
+    padding-bottom: 20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 20px;
+    width: 408px;
   }
 
-  .heading:dark {
-    color: rgba(255, 255, 255, 0.9);
+  .eyebrow-row {
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .eyebrow {
+    color: #74d8f1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    line-height: 14px;
+  }
+
+  .live-pill {
+    align-items: center;
+    background-color: #142538;
+    border-color: #2f5d78;
+    border-radius: 12px;
+    border-width: 1px;
+    color: #9ce8fa;
+    flex-direction: row;
+    font-size: 10px;
+    font-weight: 700;
+    gap: 6px;
+    line-height: 12px;
+    padding-bottom: 5px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 5px;
+  }
+
+  .live-dot {
+    background-color: #5bc0eb;
+    border-radius: 4px;
+    height: 7px;
+    width: 7px;
+  }
+
+  .heading {
+    color: #f7f8fb;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.7px;
+    line-height: 32px;
+    margin-top: 16px;
+    text-align: left;
+    width: 100%;
   }
 
   .sub-heading {
-    color: #272727;
-    font-size: 14px;
+    color: #a7b0c0;
+    font-size: 13px;
     font-weight: 500;
     line-height: 18px;
+    margin-top: 8px;
+    text-align: left;
     width: 100%;
+  }
+
+  .steps {
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 18px;
+    width: 100%;
+  }
+
+  .step {
+    background-color: #151b28;
+    border-color: #2b3445;
+    border-radius: 12px;
+    border-width: 1px;
+    flex-direction: column;
+    flex-grow: 1;
+    padding-bottom: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+  }
+
+  .step-index {
+    color: #5bc0eb;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 12px;
+  }
+
+  .step-label {
+    color: #f7f8fb;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 16px;
+    margin-top: 4px;
+  }
+
+  .monitor {
+    background-color: #101621;
+    border-color: #293347;
+    border-radius: 12px;
+    border-width: 1px;
+    flex-direction: column;
     margin-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 10px;
+    width: 100%;
   }
 
-  .sub-heading:dark {
-    color: rgba(255, 255, 255, 0.90);
+  .section-label {
+    color: #8f9caf;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    line-height: 12px;
   }
 
-  .panel-root {
-    flex-direction: column;
-    width: 344px;
+  .status {
+    color: #a7b0c0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 17px;
+    margin-top: 4px;
   }
 
-  .panel-content {
-    align-items: center;
-    flex-direction: column;
-    padding-top: 16px;
-    padding-left: 24px;
-    padding-right: 24px;
+  .ui-heading {
+    color: #f7f8fb;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 18px;
+    margin-top: 18px;
   }
 
-  .button {
-    margin-left: 24px;
-    margin-right: 24px;
-    margin-top: 16px;
-    margin-bottom: 24px;
+  .ui-copy {
+    color: #8d98aa;
+    font-size: 11px;
+    line-height: 15px;
+    margin-top: 4px;
   }
 
+  .palette {
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 10px;
+    width: 100%;
+  }
+
+  .palette-button {
+    border-color: #50586a;
+    border-radius: 11px;
+    border-width: 1px;
+    color: #d7dce5;
+    cursor: pointer;
+    flex-grow: 1;
+    font-size: 12px;
+    font-weight: 700;
+    height: 44px;
+    justify-content: center;
+  }
+
+  .ui-status {
+    color: #a7b0c0;
+    font-size: 10px;
+    line-height: 13px;
+    margin-top: 7px;
+  }
+
+  .action-row {
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 14px;
+    width: 100%;
+  }
+
+  .secondary-button {
+    background-color: #1b2332;
+    border-color: #364259;
+    border-radius: 12px;
+    border-width: 1px;
+    color: #dbe1eb;
+    cursor: pointer;
+    flex-grow: 1;
+    font-size: 12px;
+    font-weight: 700;
+    height: 48px;
+    justify-content: center;
+  }
+
+  .primary-button {
+    background-color: #2d7ff9;
+    border-color: #78abff;
+    border-radius: 12px;
+    border-width: 1px;
+    color: #ffffff;
+    cursor: pointer;
+    flex-grow: 2;
+    font-size: 13px;
+    font-weight: 700;
+    height: 48px;
+    justify-content: center;
+  }
 </style>
-<Panel class="panel-root">
-  <div class="panel-content">
-    <div class="heading"> Gaze + Pinch </div>
-    <Divider></Divider>
-    <div class="sub-heading"> Look at a card to highlight it, then pinch with either hand to commit
-      the selection. Look at the orange cube and pinch to pull it toward you, with no hand ray
-      needed. Turn gaze off to restore ordinary hand or controller rays.</div>
+<div class="panel-root">
+  <div class="eyebrow-row">
+    <span class="eyebrow">GAZE INPUT LAB</span>
+    <div class="live-pill">
+      <div class="live-dot"></div>
+      LIVE
+    </div>
   </div>
-  <Button id="xr-button" class="button">
-    <ButtonIcon>
-      <RectangleGoggles></RectangleGoggles>
-    </ButtonIcon>
-    Enter XR
-  </Button>
-  <Button id="exit-button" class="button" style="display: none">
-    <ButtonIcon>
-      <LogIn></LogIn>
-    </ButtonIcon>
-    Exit to Browser
-  </Button>
-</Panel>
+  <div class="heading">Look. Pinch. Move.</div>
+  <div class="sub-heading">Gaze chooses the target. Your pinch confirms it. Keep holding and move your hand to translate the cube by the same delta.</div>
+  <div class="steps">
+    <div class="step">
+      <span class="step-index">01</span>
+      <span class="step-label">Look</span>
+    </div>
+    <div class="step">
+      <span class="step-index">02</span>
+      <span class="step-label">Pinch</span>
+    </div>
+    <div class="step">
+      <span class="step-index">03</span>
+      <span class="step-label">Move</span>
+    </div>
+  </div>
+  <div class="monitor">
+    <span class="section-label">SCENE TARGET</span>
+    <span id="interaction-status" class="status">Ready - look at a target</span>
+  </div>
+  <div class="ui-heading">Gaze UI</div>
+  <div class="ui-copy">Look across the choices to see hover feedback, then pinch one to recolor the cube.</div>
+  <div class="palette">
+    <Button id="theme-ember" class="palette-button">Ember</Button>
+    <Button id="theme-tide" class="palette-button">Tide</Button>
+    <Button id="theme-orchid" class="palette-button">Orchid</Button>
+  </div>
+  <span id="ui-status" class="ui-status">Look at a color, then pinch to apply</span>
+  <div class="action-row">
+    <Button id="reset-cube-button" class="secondary-button">
+      <ButtonIcon><RotateCcw></RotateCcw></ButtonIcon>
+      Reset cube
+    </Button>
+    <Button id="xr-button" class="primary-button">
+      <ButtonIcon><RectangleGoggles></RectangleGoggles></ButtonIcon>
+      Enter XR
+    </Button>
+    <Button id="exit-button" class="primary-button" style="display: none">
+      <ButtonIcon><LogIn></LogIn></ButtonIcon>
+      Exit XR
+    </Button>
+  </div>
+</div>
