@@ -1,5 +1,13 @@
 # @iwsdk/create
 
+## 1.0.0-rc.1
+
+### Patch Changes
+
+- 5384bc0: Run the starter `npm run dev` script through `iwsdk dev restart`, so starting it
+  again stops the runtime already running for the project and takes over the
+  terminal instead of attaching to the existing runtime and exiting.
+
 ## 1.0.0-rc.0
 
 ### Major Changes

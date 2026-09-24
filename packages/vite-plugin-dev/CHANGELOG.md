@@ -1,5 +1,17 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.0.0-rc.1
+
+### Patch Changes
+
+- 5384bc0: Embed TypeScript sources in the published source maps for the runtime packages,
+  and pre-bundle the elics dependency of `@iwsdk/core` in development. The Vite
+  development server no longer warns that source maps point to missing source
+  files, and browser devtools can show SDK source when stepping into it.
+- Updated dependencies [5384bc0]
+  - @iwsdk/core@1.0.0-rc.1
+  - @iwsdk/scene-composition@1.0.0-rc.1
+
 ## 1.0.0-rc.0
 
 ### Major Changes
