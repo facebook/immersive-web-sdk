@@ -144,6 +144,10 @@ gtag('config', 'G-V03QDNGKY3');`,
               text: '08 · Build & Deploy',
               link: '/guides/08-build-deploy',
             },
+            {
+              text: '08a · Host Your Web Experience',
+              link: '/guides/08a-web-hosting',
+            },
           ],
         },
         {

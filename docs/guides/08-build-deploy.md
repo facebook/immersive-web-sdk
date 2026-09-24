@@ -65,6 +65,8 @@ verify their visual quality and download size in a production build.
 
 ## Deploying to GitHub Pages
 
+This section covers GitHub Pages. For additional hosting options, see [Host Your Web Experience](/guides/08a-web-hosting).
+
 GitHub Pages provides free hosting perfect for WebXR applications.
 
 ### Step 1: Configure Base Path

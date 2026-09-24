@@ -6,6 +6,8 @@ outline: [2, 4]
 
 This guide gets you from zero to a working AI-assisted dev session in about 5 minutes.
 
+If you prefer a no-code, lightweight workflow, you can start from the [Immersive Web SDK Starter App template on V0](https://v0.app/templates/immersive-web-sdk-starter-app-1o9ZJQxDtU4).
+
 ## Prerequisites
 
 - An IWSDK project (see [Chapter 1: Project Setup](/guides/01-project-setup) if you don't have one)
