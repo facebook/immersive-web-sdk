@@ -33,6 +33,7 @@ import {
   EnvironmentRaycastSystem,
   EnvironmentRaycastTarget,
 } from '../environment-raycast/index.js';
+import { GazeSystem } from '../gaze/index.js';
 import { GrabSystem } from '../grab/index.js';
 import {
   CanvasPointerEventsOption,
@@ -186,6 +187,33 @@ export type WorldOptions = {
         };
     /** Grabbing (one/two‑hand, distance). @defaultValue false */
     grabbing?: boolean | { useHandPinchForGrab?: boolean };
+    /**
+     * Tuning for gaze + pinch input. `GazeSystem` registration is driven by the
+     * `xr.features.gazeTracking` session feature, not by this entry — this only
+     * overrides the system's defaults when gaze is already active.
+     */
+    gaze?: {
+      /** Half-angle of the gaze selection cone, in degrees. @defaultValue 5 */
+      coneAngle?: number;
+      /** Maximum gaze cone distance in meters. @defaultValue 30 */
+      maxRayLength?: number;
+      /** Dwell consensus window in seconds; `0` disables it. @defaultValue 0.15 */
+      dwellWindowSeconds?: number;
+      /** 1€ filter min cutoff. @defaultValue 1.5 */
+      filterMinCutoff?: number;
+      /** 1€ filter beta. @defaultValue 0.05 */
+      filterBeta?: number;
+      /** Yield to near touch/grab pointers when they're active. @defaultValue true */
+      suppressWhenDirectPointerActive?: boolean;
+      /** Drag from the pinching hand's ray space once selected. @defaultValue true */
+      pointerTransformFollowsHand?: boolean;
+      /** Emit `[iwsdk][gaze]` console diagnostics. @defaultValue true */
+      logDiagnostics?: boolean;
+      /** Show a developer-only gaze hit reticle. @defaultValue false */
+      showDebugReticle?: boolean;
+      /** Keep gaze mode active briefly after tracking becomes invalid. @defaultValue 5 */
+      trackingLossGraceSeconds?: number;
+    };
     /** Physics simulation (Havok). Boolean or config. @defaultValue false */
     physics?:
       | boolean
@@ -408,6 +436,7 @@ export function extractConfiguration(options: WorldOptions) {
     features: {
       locomotion: options.features?.locomotion ?? false,
       grabbing: options.features?.grabbing ?? false,
+      gaze: options.features?.gaze,
       physics: options.features?.physics ?? false,
       sceneUnderstanding: options.features?.sceneUnderstanding ?? false,
       environmentRaycast: options.features?.environmentRaycast ?? false,
@@ -730,6 +759,21 @@ async function registerFeatureSystems(
       priority: -3.5,
       configData: world.input.canvasPointerEvents,
     });
+  }
+  // GazeSystem activates when the gazeTracking feature flag is set (or its
+  // deprecated eyeTracking alias). Far rays remain active until tracked gaze
+  // is usable. Gating
+  // registration keeps the runtime cost out of apps that don't need gaze UI.
+  if (config.xr.features?.gazeTracking || config.xr.features?.eyeTracking) {
+    const gaze = config.features.gaze as
+      | Record<string, number | boolean | undefined>
+      | undefined;
+    const gazeOpts = gaze
+      ? Object.fromEntries(
+          Object.entries(gaze).filter(([, v]) => v !== undefined),
+        )
+      : undefined;
+    world.registerSystem(GazeSystem, { priority: -4, configData: gazeOpts });
   }
   if (grabbingEnabled) {
     const grabOpts =

@@ -44,6 +44,9 @@ export interface ProjectXRFeatureOptions {
   depthSensing?: ProjectDepthSensingFlag;
   layers?: ProjectXRFeatureFlag;
   unbounded?: ProjectXRFeatureFlag;
+  gazeTracking?: ProjectXRFeatureFlag;
+  /** @deprecated Alias of {@link ProjectXRFeatureOptions.gazeTracking}. */
+  eyeTracking?: ProjectXRFeatureFlag;
 }
 
 export type ProjectReferenceSpaceSpec =
@@ -125,6 +128,24 @@ export type ProjectSceneUnderstandingOptions =
   | boolean
   | { showWireFrame?: boolean };
 
+/**
+ * Tuning for gaze + pinch. `GazeSystem` registration is driven by the
+ * `xr.features.gazeTracking` session feature, not by this entry — these values
+ * only override the system's defaults when gaze is already active.
+ */
+export interface ProjectGazeOptions {
+  coneAngle?: number;
+  maxRayLength?: number;
+  dwellWindowSeconds?: number;
+  filterMinCutoff?: number;
+  filterBeta?: number;
+  suppressWhenDirectPointerActive?: boolean;
+  pointerTransformFollowsHand?: boolean;
+  logDiagnostics?: boolean;
+  showDebugReticle?: boolean;
+  trackingLossGraceSeconds?: number;
+}
+
 export type ProjectSpatialUIOptions =
   | boolean
   | {
@@ -136,6 +157,7 @@ export type ProjectSpatialUIOptions =
 export interface ProjectFeatureOptions {
   locomotion?: ProjectLocomotionOptions;
   grabbing?: ProjectGrabbingOptions;
+  gaze?: ProjectGazeOptions;
   physics?: ProjectPhysicsOptions;
   sceneUnderstanding?: ProjectSceneUnderstandingOptions;
   environmentRaycast?: boolean;
@@ -154,6 +176,7 @@ export type ProjectEmulatorDevice =
   | 'metaQuest2'
   | 'metaQuest3'
   | 'metaQuestPro'
+  | 'metaVRGlasses'
   | 'oculusQuest1';
 
 export type ProjectEmulatorEnvironment =
@@ -172,8 +195,15 @@ export interface ProjectEmulatorOptions {
   userAgentException?: ProjectRegexSpec;
 }
 
+export interface ProjectTargetDevicePreviewOptions {
+  /** Add a viewer-directed gaze source when the app requests gaze. @defaultValue 'head' */
+  gazeSimulation?: 'head' | false;
+}
+
 export interface ProjectDevOptions {
   emulator?: ProjectEmulatorOptions;
+  /** Development-only preview layered on the browser's native XR session. */
+  targetDevicePreview?: ProjectTargetDevicePreviewOptions;
 }
 
 export interface ProjectModuleDeclaration {
@@ -210,12 +240,16 @@ export interface NormalizedProjectDevOptions {
     injectOnBuild?: boolean;
     userAgentException?: RegExp;
   };
+  targetDevicePreview?: {
+    gazeSimulation: 'head' | false;
+  };
 }
 
 export type ProjectManifestValidationIssueCode =
   | 'enum'
   | 'invalid-path'
   | 'invalid-regex'
+  | 'range'
   | 'required'
   | 'type'
   | 'unknown-key';

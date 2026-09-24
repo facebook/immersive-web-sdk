@@ -28,6 +28,7 @@ const DEVICES = [
   'metaQuest2',
   'metaQuest3',
   'metaQuestPro',
+  'metaVRGlasses',
   'oculusQuest1',
 ] as const;
 const ENVIRONMENTS = [
@@ -246,6 +247,8 @@ function validateXRFeatures(
     'depthSensing',
     'layers',
     'unbounded',
+    'gazeTracking',
+    'eyeTracking',
   ] as const;
   const features = objectValue(value, path, featureNames, [], issues);
   if (features == null) {
@@ -414,6 +417,7 @@ function validateFeatures(
     [
       'locomotion',
       'grabbing',
+      'gaze',
       'physics',
       'sceneUnderstanding',
       'environmentRaycast',
@@ -436,6 +440,9 @@ function validateFeatures(
       ['useHandPinchForGrab'],
       issues,
     );
+  }
+  if ('gaze' in features) {
+    validateGaze(features.gaze, `${path}.gaze`, issues);
   }
   if ('physics' in features) {
     validatePhysics(features.physics, `${path}.physics`, issues);
@@ -584,6 +591,68 @@ function validateBrowserControls(
   }
 }
 
+const GAZE_NUMBER_KEYS = [
+  'coneAngle',
+  'maxRayLength',
+  'dwellWindowSeconds',
+  'filterMinCutoff',
+  'filterBeta',
+  'trackingLossGraceSeconds',
+] as const;
+
+const GAZE_BOOLEAN_KEYS = [
+  'suppressWhenDirectPointerActive',
+  'pointerTransformFollowsHand',
+  'logDiagnostics',
+  'showDebugReticle',
+] as const;
+
+function validateGaze(
+  value: unknown,
+  path: string,
+  issues: ProjectManifestValidationIssue[],
+): void {
+  const gaze = objectValue(
+    value,
+    path,
+    [...GAZE_NUMBER_KEYS, ...GAZE_BOOLEAN_KEYS],
+    [],
+    issues,
+  );
+  if (gaze == null) {
+    return;
+  }
+  for (const key of GAZE_NUMBER_KEYS) {
+    if (key in gaze) {
+      const property = `${path}.${key}`;
+      if (numberValue(gaze[key], property, issues)) {
+        const allowsZero =
+          key === 'dwellWindowSeconds' ||
+          key === 'filterBeta' ||
+          key === 'trackingLossGraceSeconds';
+        const number = gaze[key] as number;
+        const invalidMinimum = allowsZero ? number < 0 : number <= 0;
+        const invalidMaximum = key === 'coneAngle' && number >= 180;
+        if (invalidMinimum || invalidMaximum) {
+          addIssue(
+            issues,
+            property,
+            'range',
+            key === 'coneAngle'
+              ? 'expected a number greater than 0 and less than 180'
+              : `expected a ${allowsZero ? 'non-negative' : 'positive'} number`,
+          );
+        }
+      }
+    }
+  }
+  for (const key of GAZE_BOOLEAN_KEYS) {
+    if (key in gaze) {
+      booleanValue(gaze[key], `${path}.${key}`, issues);
+    }
+  }
+}
+
 function validateSpatialUI(
   value: unknown,
   path: string,
@@ -642,12 +711,39 @@ function validateBooleanOrObject(
   }
 }
 
+function validateTargetDevicePreview(
+  value: unknown,
+  path: string,
+  issues: ProjectManifestValidationIssue[],
+): void {
+  const preview = objectValue(value, path, ['gazeSimulation'], [], issues);
+  if (preview == null) {
+    return;
+  }
+  if ('gazeSimulation' in preview) {
+    if (preview.gazeSimulation !== false) {
+      enumValue(
+        preview.gazeSimulation,
+        `${path}.gazeSimulation`,
+        ['head'],
+        issues,
+      );
+    }
+  }
+}
+
 function validateDev(
   value: unknown,
   path: string,
   issues: ProjectManifestValidationIssue[],
 ): void {
-  const dev = objectValue(value, path, ['emulator'], [], issues);
+  const dev = objectValue(
+    value,
+    path,
+    ['emulator', 'targetDevicePreview'],
+    [],
+    issues,
+  );
   if (dev == null) {
     return;
   }
@@ -712,6 +808,13 @@ function validateDev(
         );
       }
     }
+  }
+  if ('targetDevicePreview' in dev) {
+    validateTargetDevicePreview(
+      dev.targetDevicePreview,
+      `${path}.targetDevicePreview`,
+      issues,
+    );
   }
 }
 

@@ -229,6 +229,7 @@ export class GrabSystem extends createSystem(
   getHolderHand(entity: Entity): 'left' | 'right' | null {
     const left = this.input.xr.multiPointers.left;
     const right = this.input.xr.multiPointers.right;
+    const gaze = this.input.xr.gazePointer;
     return findHolderHand(
       Handle.data.instance[entity.index] as HandleStore<unknown> | undefined,
       // Near grabs capture via the `grab` sub-pointer; distance grabs capture
@@ -237,6 +238,8 @@ export class GrabSystem extends createSystem(
       // distance-held entities don't silently report `null`.
       [left.getPointer('grab').id, left.getPointer('ray').id],
       [right.getPointer('grab').id, right.getPointer('ray').id],
+      gaze.pointer.id,
+      gaze.getHeldByHand(),
     );
   }
 

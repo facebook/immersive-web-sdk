@@ -355,6 +355,60 @@ describe('runtime contract scene tools', () => {
     ).toThrow(/must be one of/);
   });
 
+  test('exposes gaze only on pose, connection, and snapshot operations', () => {
+    for (const toolName of [
+      'xr_get_transform',
+      'xr_set_transform',
+      'xr_look_at',
+      'xr_animate_to',
+    ]) {
+      const operation = getRuntimeOperationByToolName(toolName)!;
+      expect(operation.inputSchema.properties?.device?.enum).toContain('gaze');
+    }
+
+    expect(
+      getRuntimeOperationByToolName('xr_set_connected')?.inputSchema.properties
+        ?.device?.enum,
+    ).toContain('gaze');
+
+    for (const toolName of [
+      'xr_get_select_value',
+      'xr_set_select_value',
+      'xr_select',
+      'xr_get_gamepad_state',
+      'xr_set_gamepad_state',
+    ]) {
+      const operation = getRuntimeOperationByToolName(toolName)!;
+      expect(operation.inputSchema.properties?.device?.enum).not.toContain(
+        'gaze',
+      );
+    }
+
+    expect(
+      resolveRuntimeOperationRequest(
+        getRuntimeOperationByToolName('xr_set_device_state')!,
+        {
+          state: {
+            gaze: {
+              connected: true,
+              orientation: { x: 0, y: 0, z: 0, w: 1 },
+            },
+          },
+        },
+      ),
+    ).toMatchObject({
+      params: { state: { gaze: { connected: true } } },
+    });
+    expect(() =>
+      resolveRuntimeOperationRequest(
+        getRuntimeOperationByToolName('xr_set_device_state')!,
+        {
+          state: { gaze: { position: { x: 0, y: 0, z: 0 } } },
+        },
+      ),
+    ).toThrow(/unknown parameter/i);
+  });
+
   test('exposes isolated UIKitML rendering as an editor-targeted image tool', () => {
     const assets = getRuntimeOperationByToolName('ui_list_assets');
     const operation = getRuntimeOperationByToolName('ui_render_preview');

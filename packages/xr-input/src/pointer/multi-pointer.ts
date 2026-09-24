@@ -15,6 +15,19 @@ import { TouchPointer } from './touch-pointer.js';
 
 export type PointerKind = 'ray' | 'grab' | 'touch';
 
+export interface MultiPointerInput {
+  selectStart?: boolean;
+  selectEnd?: boolean;
+  squeezeStart?: boolean;
+  squeezeEnd?: boolean;
+  /**
+   * Temporarily disable the far ray without changing its registration.
+   * Gaze mode uses this to make the hand/controller ray a fallback while
+   * leaving near touch and grab interaction available.
+   */
+  suppressRay?: boolean;
+}
+
 /**
  * Interactor state machine states
  */
@@ -90,6 +103,13 @@ export class MultiPointer {
   /** Reusable policy object for ray rendering */
   private readonly rayPolicy = { forceHideRay: false };
 
+  /**
+   * Pointers that completed the upstream library's first ready move. Mirrors
+   * its private `wasMoved` latch; neither latch is reset because MultiPointer
+   * never calls `Pointer.exit()` on these long-lived instances.
+   */
+  private readonly movedPointers = new Set<PointerKind>();
+
   /** Reusable event object for pointer down/up with button */
   private readonly buttonEvent = { timeStamp: 0, button: 0 };
 
@@ -158,18 +178,14 @@ export class MultiPointer {
     connected: boolean,
     delta: number,
     time: number,
-    input?: {
-      selectStart?: boolean;
-      selectEnd?: boolean;
-      squeezeStart?: boolean;
-      squeezeEnd?: boolean;
-    },
+    input?: MultiPointerInput,
   ) {
     // Reuse nativeEvent object to avoid allocation
     this.nativeEvent.timeStamp = time * 1000;
 
     // Phase 1: Update enabled state for all registered pointers
-    this.updatePointerEnabled(connected);
+    const rayConnected = connected && !input?.suppressRay;
+    this.updatePointerEnabled(connected, rayConnected);
 
     // Phase 2: Check selection lock - if active pointer is selecting, stay locked
     const activePointer = this.getActivePointer();
@@ -217,10 +233,9 @@ export class MultiPointer {
     }
 
     // Phase 7: Update visuals - reuse rayPolicy object
-    this.rayPolicy.forceHideRay =
-      this.activeKind !== 'ray' && this.activeKind !== null;
+    this.rayPolicy.forceHideRay = this.shouldHideRay();
     this.ray.visual.update(
-      connected && this.ray.registered,
+      rayConnected && this.ray.registered,
       delta,
       time,
       !!input?.selectStart,
@@ -246,9 +261,9 @@ export class MultiPointer {
   /**
    * Update enabled state for all registered pointers
    */
-  private updatePointerEnabled(connected: boolean) {
+  private updatePointerEnabled(connected: boolean, rayConnected: boolean) {
     // Process ray pointer
-    this.updateSinglePointerEnabled('ray', this.ray, connected);
+    this.updateSinglePointerEnabled('ray', this.ray, rayConnected);
     // Process grab pointer
     this.updateSinglePointerEnabled('grab', this.grab, connected);
     // Process touch pointer
@@ -270,8 +285,30 @@ export class MultiPointer {
     if (shouldBeEnabled && !isEnabled) {
       entry.pointer.setEnabled(true, this.nativeEvent, false);
       this.pointerStates.set(kind, InteractorState.NORMAL);
-    } else if (!shouldBeEnabled && isEnabled) {
-      entry.pointer.setEnabled(false, this.nativeEvent, true);
+    } else if (!shouldBeEnabled) {
+      // Pointer instances start enabled upstream, so also consult the pointer
+      // itself. This makes first-frame gaze suppression a real disable rather
+      // than merely skipping the ray's intersection pass.
+      if (entry.pointer.getEnabled()) {
+        const buttonsDown = [...entry.pointer.getButtonsDown()];
+        if (buttonsDown.length > 0) {
+          // Mode switches terminate an in-flight far selection instead of
+          // leaving a stale button/capture that could revive with ray fallback.
+          if (!this.movedPointers.has(kind)) {
+            // Flush an upstream down queued before the pointer's first move so
+            // its matching cancel cannot be stranded in the same queue. In
+            // normal updates move() has already run, avoiding callback
+            // re-entry on this disable path.
+            entry.pointer.commit(this.nativeEvent, false);
+            this.movedPointers.add(kind);
+          }
+          entry.pointer.cancel(this.nativeEvent);
+        }
+        entry.pointer.setEnabled(false, this.nativeEvent, true);
+        for (const button of buttonsDown) {
+          entry.pointer.up({ button, timeStamp: this.nativeEvent.timeStamp });
+        }
+      }
       this.pointerStates.set(kind, InteractorState.DISABLED);
       // Clear active if this was the active pointer
       if (this.activeKind === kind) {
@@ -295,6 +332,7 @@ export class MultiPointer {
       this.sceneWithDescendants.interactableDescendants =
         this.sceneWithDescendants.rayDescendants;
       this.ray.pointer.move(this.scene, this.nativeEvent);
+      this.markPointerMoved('ray', this.ray.pointer);
     }
 
     // Grab pointer
@@ -302,6 +340,7 @@ export class MultiPointer {
       this.sceneWithDescendants.interactableDescendants =
         this.sceneWithDescendants.grabDescendants;
       this.grab.pointer.move(this.scene, this.nativeEvent);
+      this.markPointerMoved('grab', this.grab.pointer);
     }
 
     // Touch pointer
@@ -309,6 +348,7 @@ export class MultiPointer {
       this.sceneWithDescendants.interactableDescendants =
         this.sceneWithDescendants.touchDescendants;
       this.touch.pointer.move(this.scene, this.nativeEvent);
+      this.markPointerMoved('touch', this.touch.pointer);
     }
 
     // Restore original descendants
@@ -339,7 +379,14 @@ export class MultiPointer {
     }
 
     pointer.move(this.scene, this.nativeEvent);
+    this.markPointerMoved(kind, pointer);
     this.sceneWithDescendants.interactableDescendants = originalDescendants;
+  }
+
+  private markPointerMoved(kind: PointerKind, pointer: Pointer): void {
+    if (pointer.intersector.isReady()) {
+      this.movedPointers.add(kind);
+    }
   }
 
   /**
@@ -433,12 +480,7 @@ export class MultiPointer {
   /**
    * Process lifecycle transitions based on input
    */
-  private processLifecycle(input?: {
-    selectStart?: boolean;
-    selectEnd?: boolean;
-    squeezeStart?: boolean;
-    squeezeEnd?: boolean;
-  }) {
+  private processLifecycle(input?: MultiPointerInput) {
     if (!this.activeKind) {
       return;
     }
@@ -556,10 +598,16 @@ export class MultiPointer {
    * Get the policy for ray visual rendering
    */
   getPolicyForRay() {
-    // Hide ray when touch or grab is active
-    const hideRay = this.activeKind !== 'ray' && this.activeKind !== null;
-    return { forceHideRay: hideRay };
-    // Cursor is now managed by MultiPointer, not RayPointer
+    return { forceHideRay: this.shouldHideRay() };
+  }
+
+  private shouldHideRay(): boolean {
+    // Hide the visual whenever the ray is disabled or a near pointer owns the
+    // hand, including gaze-mode suppression.
+    return (
+      this.pointerStates.get('ray') === InteractorState.DISABLED ||
+      (this.activeKind !== 'ray' && this.activeKind !== null)
+    );
   }
 
   /**

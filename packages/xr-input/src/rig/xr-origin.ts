@@ -7,6 +7,15 @@
 
 import { Group, Matrix4 } from 'three';
 
+/**
+ * Source of the gaze pose stored in {@link XROrigin.eyeSpace}.
+ *
+ * - `tracked`: a pose sourced from the `XRInputSource` whose
+ *   `targetRayMode` is `'gaze'`.
+ * - `none`: no source, or no valid pose sampled this frame.
+ */
+export type GazeOrigin = 'tracked' | 'none';
+
 export class XROrigin extends Group {
   /** Viewer pose relative to this origin, updated from XRFrame.getViewerPose. */
   public readonly head: Group;
@@ -19,6 +28,12 @@ export class XROrigin extends Group {
     left: new Group(),
     right: new Group(),
   };
+
+  /** Latest valid gaze target-ray pose. Consult {@link gazeOrigin} before use. */
+  public readonly eyeSpace: Group;
+
+  /** Reports whether {@link XROrigin.eyeSpace} has a valid gaze pose this frame. */
+  public gazeOrigin: GazeOrigin = 'none';
 
   /**
    * Primary controller grip poses copied from XRInputSource.gripSpace.
@@ -55,14 +70,18 @@ export class XROrigin extends Group {
   };
 
   private headsetMatrix = new Matrix4();
+  private eyeMatrix = new Matrix4();
 
   constructor() {
     super();
 
     this.head = new Group();
     this.head.name = 'xr-origin-head';
+    this.eyeSpace = new Group();
+    this.eyeSpace.name = 'xr-origin-eye';
     this.add(
       this.head,
+      this.eyeSpace,
       this.raySpaces.left,
       this.raySpaces.right,
       this.gripSpaces.left,
@@ -82,5 +101,30 @@ export class XROrigin extends Group {
         this.head.scale,
       );
     }
+  }
+
+  /**
+   * Overwrite {@link XROrigin.eyeSpace} with a real eye-tracking pose and flip
+   * {@link XROrigin.gazeOrigin} to `'tracked'`.
+   *
+   * @param transform Gaze target-ray transform, posed against the same
+   * reference space {@link XROrigin.updateHead} uses — i.e. this group's space.
+   */
+  applyTrackedEyePose(transform: XRRigidTransform): void {
+    this.eyeMatrix.fromArray(transform.matrix);
+    this.eyeMatrix.decompose(
+      this.eyeSpace.position,
+      this.eyeSpace.quaternion,
+      this.eyeSpace.scale,
+    );
+    this.gazeOrigin = 'tracked';
+  }
+
+  /**
+   * Reset gaze to a known-unavailable state. Called when the session ends so
+   * {@link XROrigin.gazeOrigin} doesn't report a stale tracked pose.
+   */
+  clearGaze(): void {
+    this.gazeOrigin = 'none';
   }
 }

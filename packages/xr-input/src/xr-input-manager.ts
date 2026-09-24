@@ -6,10 +6,18 @@
  */
 
 import { Signal, signal } from '@preact/signals-core';
-import { Group, PerspectiveCamera, Scene, Vector3, WebXRManager } from 'three';
+import {
+  Group,
+  Object3D,
+  PerspectiveCamera,
+  Scene,
+  Vector3,
+  WebXRManager,
+} from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { loadInputProfile } from './gamepad/input-profiles.js';
 import { StatefulGamepad } from './gamepad/stateful-gamepad.js';
+import { GazePointer, GazePointerInput } from './pointer/gaze-pointer.js';
 import { MultiPointer } from './pointer/multi-pointer.js';
 import { XROrigin } from './rig/xr-origin.js';
 import { XRInputVisualAdapter } from './visual/adapter/base-visual-adapter.js';
@@ -26,6 +34,21 @@ interface InputSourceData {
   inputSource: XRInputSource;
   isPrimary: boolean;
 }
+
+interface HandSelectEventState {
+  inputSource: XRInputSource | undefined;
+  actualActive: boolean;
+  reportedActive: boolean;
+  transitions: Array<'start' | 'end'>;
+}
+
+interface HandSelectState {
+  start: boolean;
+  end: boolean;
+  active: boolean;
+}
+
+const MAX_HAND_SELECT_TRANSITIONS = 4;
 export enum XRInputDeviceType {
   Controller = 'controller',
   Hand = 'hand',
@@ -66,6 +89,57 @@ export class XRInputManager {
 
   public readonly multiPointers: Record<'left' | 'right', MultiPointer>;
 
+  /**
+   * Single global gaze pointer — gaze has no handedness, so it sits beside
+   * {@link XRInputManager.multiPointers} rather than inside them.
+   *
+   * Constructed unconditionally so systems (`GrabSystem`, `GazeSystem`) can
+   * hold a stable reference, but idle until {@link XRInputManager.gazeEnabled}
+   * is set. Nothing here costs a frame while gaze is off.
+   */
+  public readonly gazePointer: GazePointer;
+
+  /**
+   * Master switch for the gaze pipeline, flipped on by `GazeSystem` when the
+   * project opts into the gaze XR feature. While `false`, the gaze pose is
+   * never sampled, no cone cast runs, no pointer events are dispatched, and
+   * the pointer's reticle and ray space stay out of the rig entirely.
+   */
+  public get gazeEnabled(): boolean {
+    return this.gazeEnabledFlag;
+  }
+
+  public set gazeEnabled(enabled: boolean) {
+    if (enabled === this.gazeEnabledFlag) {
+      return;
+    }
+    this.gazeEnabledFlag = enabled;
+    this.resetGazeHandSelectionArming();
+    if (!enabled) {
+      this.gazePointer.reset();
+      this.xrOrigin.clearGaze();
+    }
+    this.gazePointer.setAttached(enabled);
+  }
+
+  private gazeEnabledFlag = false;
+
+  /**
+   * Gaze-eligible Object3D roots, republished by the host every frame before
+   * {@link XRInputManager.update}. Gaze deliberately uses an explicit
+   * candidate list rather than raycasting the scene: the cone cast is
+   * O(candidates), and gaze should only consider objects that opted in.
+   */
+  public gazeCandidates: ReadonlyArray<Object3D> = [];
+
+  private readonly gazeInput: GazePointerInput = {
+    candidates: [],
+    pinchStart: { left: false, right: false },
+    pinchEnd: { left: false, right: false },
+    pinchActive: { left: false, right: false },
+    directPointerActive: { left: false, right: false },
+  };
+
   public readonly gamepads = {
     left: undefined,
     right: undefined,
@@ -105,6 +179,45 @@ export class XRInputManager {
   };
 
   private processedInputSourceKeys = new Set<string>();
+
+  private selectEventSession: XRSession | undefined;
+  private readonly handSelectEvents: Record<
+    'left' | 'right',
+    HandSelectEventState
+  > = {
+    left: {
+      inputSource: undefined,
+      actualActive: false,
+      reportedActive: false,
+      transitions: [],
+    },
+    right: {
+      inputSource: undefined,
+      actualActive: false,
+      reportedActive: false,
+      transitions: [],
+    },
+  };
+  private readonly handSelectFrameState: Record<
+    'left' | 'right',
+    HandSelectState
+  > = {
+    left: { start: false, end: false, active: false },
+    right: { start: false, end: false, active: false },
+  };
+  private readonly gazeHandSelectionArmed = {
+    left: false,
+    right: false,
+  };
+  private readonly pointerDisableWarnings = new Set<
+    'left' | 'right' | 'gaze'
+  >();
+  private readonly selectStartHandler = (event: XRInputSourceEvent) => {
+    this.updateHandSelectEvent(event, true);
+  };
+  private readonly selectEndHandler = (event: XRInputSourceEvent) => {
+    this.updateHandSelectEvent(event, false);
+  };
 
   constructor(options: XRInputOptions) {
     const { scene, camera, assetLoader } = options;
@@ -159,11 +272,14 @@ export class XRInputManager {
       left: new MultiPointer('left', this.scene, camera, this.xrOrigin),
       right: new MultiPointer('right', this.scene, camera, this.xrOrigin),
     };
+
+    this.gazePointer = new GazePointer(this.xrOrigin, this.scene, camera);
   }
 
   update(xrManager: WebXRManager, delta: number, time: number): void {
     const session = xrManager.getSession();
     if (!session) {
+      this.syncSelectEventSession(undefined);
       if (this.hadSession) {
         this.onSessionEnded();
       } else {
@@ -173,6 +289,7 @@ export class XRInputManager {
       return;
     }
     this.hadSession = true;
+    this.syncSelectEventSession(session);
 
     const refSpace = xrManager.getReferenceSpace();
     const frame = xrManager.getFrame();
@@ -189,13 +306,29 @@ export class XRInputManager {
 
     // Update controllers and hands (poses + visuals + gamepads)
     this.updateControllersAndHands(frame, refSpace, delta);
+    this.updateHandSelectFrameState();
 
     // Update head tracking
     this.xrOrigin.updateHead(frame, refSpace);
 
+    // Probe the real gaze target ray while frame/refSpace are in hand, and
+    // before the matrix flush below, so eyeSpace's world matrix is current by
+    // the time the pointer reads it.
+    if (this.gazeEnabled) {
+      this.gazePointer.sampleGazePose(time, {
+        frame,
+        referenceSpace: refSpace,
+        session,
+      });
+    }
+
     // Force matrix update for xrOrigin, and then update pointers
     this.xrOrigin.updateMatrixWorld(true);
     this.updatePointers(delta, time);
+
+    // Gaze runs after the hand pointers so it can read their active state for
+    // suppression — direct manipulation always wins over gaze.
+    this.updateGazePointer(delta, time);
   }
 
   private onSessionEnded(): void {
@@ -216,15 +349,53 @@ export class XRInputManager {
     this.visualAdapters.left.value = undefined;
     this.visualAdapters.right.value = undefined;
 
+    // Gaze has no per-frame source outside a session; drop it back to 'none'
+    // so consumers don't read a stale tracked origin.
+    this.xrOrigin.clearGaze();
+
+    // Full reset (not just disable) so the next session re-runs the gaze
+    // diagnostics from scratch instead of reporting the previous one's verdict.
+    this.gazePointer.reset();
+
     // Hide pointer visuals and disable combined pointers
     this.disablePointers();
   }
 
   private disablePointers(time = 0): void {
+    this.resetHandSelectEvents();
+    this.resetHandSelectFrameState();
+    this.resetGazeHandSelectionArming();
+    for (const handedness of ['left', 'right'] as const) {
+      try {
+        this.multiPointers[handedness].update(false, 0, time);
+        this.pointerDisableWarnings.delete(handedness);
+      } catch (error) {
+        this.warnPointerDisableFailure(handedness, error);
+      }
+    }
     try {
-      this.multiPointers.left.update(false, 0, time);
-      this.multiPointers.right.update(false, 0, time);
-    } catch {}
+      this.gazeInput.candidates = [];
+      for (const handedness of ['left', 'right'] as const) {
+        this.gazeInput.pinchStart[handedness] = false;
+        this.gazeInput.pinchEnd[handedness] = false;
+        this.gazeInput.pinchActive[handedness] = false;
+        this.gazeInput.directPointerActive[handedness] = false;
+      }
+      this.gazePointer.update(false, 0, time, this.gazeInput);
+      this.pointerDisableWarnings.delete('gaze');
+    } catch (error) {
+      this.warnPointerDisableFailure('gaze', error);
+    }
+  }
+
+  private warnPointerDisableFailure(
+    pointer: 'left' | 'right' | 'gaze',
+    error: unknown,
+  ): void {
+    if (!this.pointerDisableWarnings.has(pointer)) {
+      this.pointerDisableWarnings.add(pointer);
+      console.warn(`[IWSDK] Failed to disable ${pointer} pointer:`, error);
+    }
   }
 
   isPrimary(deviceType: 'controller' | 'hand', handedness: 'left' | 'right') {
@@ -248,6 +419,140 @@ export class XRInputManager {
     this.activeInputSources.hand.right = undefined;
     this.primaryInputSources.left = undefined;
     this.primaryInputSources.right = undefined;
+  }
+
+  private syncSelectEventSession(session: XRSession | undefined): void {
+    if (this.selectEventSession === session) {
+      return;
+    }
+    if (this.selectEventSession) {
+      this.selectEventSession.removeEventListener(
+        'selectstart',
+        this.selectStartHandler,
+      );
+      this.selectEventSession.removeEventListener(
+        'selectend',
+        this.selectEndHandler,
+      );
+    }
+    this.resetHandSelectEvents();
+    this.resetHandSelectFrameState();
+    this.resetGazeHandSelectionArming();
+    this.selectEventSession = session;
+    if (session) {
+      session.addEventListener('selectstart', this.selectStartHandler);
+      session.addEventListener('selectend', this.selectEndHandler);
+    }
+  }
+
+  private updateHandSelectEvent(
+    event: XRInputSourceEvent,
+    active: boolean,
+  ): void {
+    const inputSource = event.inputSource;
+    const handedness = inputSource.handedness;
+    if (
+      !inputSource.hand ||
+      (handedness !== 'left' && handedness !== 'right')
+    ) {
+      return;
+    }
+    const state = this.handSelectEvents[handedness];
+    if (state.inputSource !== inputSource) {
+      state.inputSource = inputSource;
+      state.actualActive = false;
+      state.reportedActive = false;
+      state.transitions.length = 0;
+    }
+    if (state.actualActive === active) {
+      return;
+    }
+    state.actualActive = active;
+    // Keep the newest complete gesture cycles if a suspended renderer lets
+    // events outrun frames. Removing two alternating edges preserves both the
+    // current reported state and the final physical state.
+    if (state.transitions.length >= MAX_HAND_SELECT_TRANSITIONS) {
+      state.transitions.splice(0, 2);
+    }
+    state.transitions.push(active ? 'start' : 'end');
+  }
+
+  private resetHandSelectEvents(handedness?: 'left' | 'right'): void {
+    const hands = handedness ? [handedness] : (['left', 'right'] as const);
+    for (const hand of hands) {
+      const state = this.handSelectEvents[hand];
+      state.inputSource = undefined;
+      state.actualActive = false;
+      state.reportedActive = false;
+      state.transitions.length = 0;
+    }
+  }
+
+  private resetHandSelectFrameState(): void {
+    for (const handedness of ['left', 'right'] as const) {
+      const state = this.handSelectFrameState[handedness];
+      state.start = false;
+      state.end = false;
+      state.active = false;
+    }
+  }
+
+  private resetGazeHandSelectionArming(): void {
+    this.gazeHandSelectionArmed.left = false;
+    this.gazeHandSelectionArmed.right = false;
+  }
+
+  /**
+   * Snapshot each hand's selection once per render frame. Native hand sources
+   * expose WebXR select events but no Gamepad, and both the hand pointer and
+   * gaze pointer must observe the same edge without consuming it twice.
+   */
+  private updateHandSelectFrameState(): void {
+    for (const handedness of ['left', 'right'] as const) {
+      const next = this.readHandSelectState(handedness);
+      const state = this.handSelectFrameState[handedness];
+      state.start = next.start;
+      state.end = next.end;
+      state.active = next.active;
+    }
+  }
+
+  private readHandSelectState(handedness: 'left' | 'right'): HandSelectState {
+    const gamepad = this.gamepads[handedness];
+    if (gamepad) {
+      this.resetHandSelectEvents(handedness);
+      return {
+        start: gamepad.getSelectStart(),
+        end: gamepad.getSelectEnd(),
+        active: gamepad.getSelecting(),
+      };
+    }
+
+    const inputSource = this.primaryInputSources[handedness];
+    const state = this.handSelectEvents[handedness];
+    const matches = Boolean(
+      inputSource?.hand && state.inputSource === inputSource,
+    );
+    if (!matches) {
+      this.resetHandSelectEvents(handedness);
+      return { start: false, end: false, active: false };
+    }
+
+    // Deliver at most one edge per render frame. A short native pinch can
+    // produce selectstart and selectend between two app frames; preserving
+    // their order guarantees a down frame followed by an up/click frame.
+    const transition = state.transitions.shift();
+    if (transition === 'start') {
+      state.reportedActive = true;
+    } else if (transition === 'end') {
+      state.reportedActive = false;
+    }
+    const result = {
+      start: transition === 'start',
+      end: transition === 'end',
+      active: state.reportedActive,
+    };
+    return result;
   }
 
   /**
@@ -397,23 +702,23 @@ export class XRInputManager {
   }
 
   private updatePointers(delta: number, time: number) {
+    // Gaze and hand/controller rays are alternative far-targeting modes in
+    // ISDK. Once gaze mode has acquired a valid source, disable far rays rather than
+    // letting their incidental hits compete with gaze. An invalid frame clears
+    // gaze hover but does not flash the ray mode; near touch/grab stays enabled.
+    const suppressFarRay =
+      this.gazeEnabled && this.gazePointer.ownsFarTargeting(time);
     (['left', 'right'] as const).forEach((handedness) => {
       const inputSource = this.primaryInputSources[handedness];
-      const hasGamepad = !!(inputSource && inputSource.gamepad);
-      const connected = !!(
-        inputSource &&
-        hasGamepad &&
-        this.gamepads[handedness]
-      );
-      const selectStart = connected
-        ? !!this.gamepads[handedness]?.getSelectStart()
-        : false;
-      const selectEnd = connected
-        ? !!this.gamepads[handedness]?.getSelectEnd()
-        : false;
+      const gp = this.gamepads[handedness];
+      // WebXR Hand Input requires hand sources to expose no Gamepad. Their
+      // select edges come from the session-level event snapshot above.
+      const connected = !!(inputSource && (gp || inputSource.hand));
+      const select = this.handSelectFrameState[handedness];
+      const selectStart = connected ? select.start : false;
+      const selectEnd = connected ? select.end : false;
 
       // First: move all registered pointers (ray + grab) via the combined pointer
-      const gp = this.gamepads[handedness];
       const squeezeStart = connected
         ? !!gp?.getButtonDown('xr-standard-squeeze')
         : false;
@@ -425,6 +730,7 @@ export class XRInputManager {
         selectEnd,
         squeezeStart,
         squeezeEnd,
+        suppressRay: suppressFarRay,
       });
 
       const touchSurfaceVisualOffset = this.multiPointers[
@@ -435,6 +741,45 @@ export class XRInputManager {
         handAdapter.applyVisualOffsetWorld(touchSurfaceVisualOffset);
       }
     });
+  }
+
+  /**
+   * Drive the global gaze pointer from this frame's candidates and pinch state.
+   *
+   * Either hand's pinch can commit a gaze selection, so both are sampled and
+   * the pointer applies its own hand mutual-exclusion. Direct touch/grab state
+   * feeds the pointer's suppression rule; it's read after
+   * {@link XRInputManager.updatePointers} so it reflects this frame, not last.
+   */
+  private updateGazePointer(delta: number, time: number): void {
+    if (!this.gazeEnabled) {
+      return;
+    }
+    const input = this.gazeInput;
+    input.candidates = this.gazeCandidates;
+    (['left', 'right'] as const).forEach((handedness) => {
+      const select = this.handSelectFrameState[handedness];
+      if (!this.gazeHandSelectionArmed[handedness]) {
+        // Enabling gaze while a pinch is held or queued must not turn input
+        // that occurred while gaze was off into a synthetic gaze click. Arm
+        // only after the event bridge reaches a fully released baseline.
+        const events = this.handSelectEvents[handedness];
+        if (!select.active && events.transitions.length === 0) {
+          this.gazeHandSelectionArmed[handedness] = true;
+        }
+        input.pinchStart[handedness] = false;
+        input.pinchEnd[handedness] = false;
+        input.pinchActive[handedness] = false;
+      } else {
+        input.pinchStart[handedness] = select.start;
+        input.pinchEnd[handedness] = select.end;
+        input.pinchActive[handedness] = select.active;
+      }
+      const activeKind = this.multiPointers[handedness].getActiveKind();
+      input.directPointerActive[handedness] =
+        activeKind === 'touch' || activeKind === 'grab';
+    });
+    this.gazePointer.update(this.gazePointer.canTarget(), delta, time, input);
   }
 }
 

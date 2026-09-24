@@ -17,6 +17,11 @@ import {
 } from './base-visual-adapter.js';
 
 const PINCH_COOLDOWN = 0.2;
+/**
+ * Distance (meters) at which pinch strength is considered fully released.
+ * Roughly the resting span between an open thumb and index finger tip.
+ */
+const PINCH_OPEN_DISTANCE = 0.05;
 
 export const defaultHandLayout: InputLayout = {
   selectComponentId: 'pinch',
@@ -83,6 +88,8 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
   private pinchThreshold = 0.008;
   private pinchCooldown = 0;
   private pinchData = { prev: false, curr: false };
+  /** Continuous 0..1 pinch strength derived from thumb-tip↔index-tip distance. */
+  private pinchStrength = 0;
   private vec3 = new Vector3();
   private visualOffsetStart = new Vector3();
   private visualOffsetEnd = new Vector3();
@@ -137,6 +144,14 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
   }
 
   disconnect(): void {
+    this.pendingCapture?.reject();
+    this.pendingCapture = undefined;
+    this.pinchStrength = 0;
+    this.pinchCooldown = 0;
+    this.pinchData.prev = false;
+    this.pinchData.curr = false;
+    this.gripXRSpace = undefined;
+
     super.disconnect();
     this.jointTransforms = undefined;
     this.jointSpaces.length = 0;
@@ -186,6 +201,27 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
 
   private updatePinch(frame: XRFrame, delta: number) {
     this.pinchData.prev = this.pinchData.curr;
+    let pinching = false;
+    this.pinchStrength = 0;
+
+    // Always compute pinch strength when joints are available; this is
+    // independent of the boolean cooldown so callers can drive continuous
+    // affordances (e.g. pinch-progress UI).
+    if (this.indexTip && this.thumbTip) {
+      const pose = frame.getPose(this.indexTip, this.thumbTip);
+      if (pose) {
+        this.vec3.copy(pose.transform.position);
+        const distance = this.vec3.length();
+        const span = PINCH_OPEN_DISTANCE - this.pinchThreshold;
+        if (span <= 0) {
+          this.pinchStrength = distance < this.pinchThreshold ? 1 : 0;
+        } else {
+          const t = (PINCH_OPEN_DISTANCE - distance) / span;
+          this.pinchStrength = Math.max(0, Math.min(1, t));
+        }
+        pinching = distance < this.pinchThreshold;
+      }
+    }
 
     if (this.pinchCooldown > 0) {
       this.pinchData.curr = true;
@@ -193,17 +229,20 @@ export class XRHandVisualAdapter extends XRInputVisualAdapter {
       return;
     }
 
-    if (this.indexTip && this.thumbTip) {
-      const pose = frame.getPose(this.indexTip, this.thumbTip);
-      if (pose) {
-        this.vec3.copy(pose.transform.position);
-        const pinching = this.vec3.length() < this.pinchThreshold;
-        if (pinching) {
-          this.pinchCooldown = PINCH_COOLDOWN;
-        }
-        this.pinchData.curr = pinching;
-      }
+    if (pinching) {
+      this.pinchCooldown = PINCH_COOLDOWN;
     }
+    this.pinchData.curr = pinching;
+  }
+
+  /**
+   * Continuous 0..1 pinch progress, where `0` is an open hand at
+   * {@link PINCH_OPEN_DISTANCE} and `1` is a closed pinch at the commit
+   * threshold. Use this to drive pre-commit affordances; use the gamepad's
+   * select state for the discrete pinch itself.
+   */
+  getPinchStrength(): number {
+    return this.pinchStrength;
   }
 
   toggleVisual(enabled: boolean): void {

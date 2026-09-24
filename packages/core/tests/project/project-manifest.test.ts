@@ -73,6 +73,18 @@ const vrManifest = {
         },
       },
       grabbing: { useHandPinchForGrab: true },
+      gaze: {
+        coneAngle: 7,
+        maxRayLength: 12,
+        dwellWindowSeconds: 0.2,
+        filterMinCutoff: 2,
+        filterBeta: 0.1,
+        trackingLossGraceSeconds: 3,
+        suppressWhenDirectPointerActive: false,
+        pointerTransformFollowsHand: false,
+        logDiagnostics: false,
+        showDebugReticle: true,
+      },
       physics: { useWorker: false, updateFrequency: 60, interpolation: true },
       sceneUnderstanding: { showWireFrame: false },
       environmentRaycast: false,
@@ -86,11 +98,14 @@ const vrManifest = {
   },
   dev: {
     emulator: {
-      device: 'metaQuest3',
+      device: 'metaVRGlasses',
       iwer: true,
       activation: 'always',
       injectOnBuild: true,
       userAgentException: { source: 'OculusBrowser', flags: 'i' },
+    },
+    targetDevicePreview: {
+      gazeSimulation: 'head',
     },
   },
 } as const satisfies IwsdkProjectManifestV1;
@@ -155,6 +170,18 @@ describe('iwsdk.project.v1 validation and normalization', () => {
           },
         },
         grabbing: { useHandPinchForGrab: true },
+        gaze: {
+          coneAngle: 7,
+          maxRayLength: 12,
+          dwellWindowSeconds: 0.2,
+          filterMinCutoff: 2,
+          filterBeta: 0.1,
+          trackingLossGraceSeconds: 3,
+          suppressWhenDirectPointerActive: false,
+          pointerTransformFollowsHand: false,
+          logDiagnostics: false,
+          showDebugReticle: true,
+        },
         physics: { useWorker: false, updateFrequency: 60, interpolation: true },
         sceneUnderstanding: { showWireFrame: false },
         environmentRaycast: false,
@@ -164,6 +191,18 @@ describe('iwsdk.project.v1 validation and normalization', () => {
           kit: 'horizon',
           preferredColorScheme: 'dark',
         },
+      },
+    });
+    expect(normalizeProjectDevOptions(vrManifest)).toEqual({
+      emulator: {
+        device: 'metaVRGlasses',
+        iwer: true,
+        activation: 'always',
+        injectOnBuild: true,
+        userAgentException: /OculusBrowser/i,
+      },
+      targetDevicePreview: {
+        gazeSimulation: 'head',
       },
     });
   });
@@ -286,12 +325,19 @@ describe('iwsdk.project.v1 validation and normalization', () => {
     invalid.world.features.spatialUI.componentSets = [];
     invalid.world.features.locomotion.browserControls.pointerLock = false;
     invalid.world.features.physics.extra = true;
+    invalid.world.features.gaze.coneAngleDeg = 5;
     invalid.dev.emulator.verbose = true;
+    invalid.dev.targetDevicePreview.fovMask = true;
+    invalid.dev.targetDevicePreview.gazeSimulation = 'cursor';
 
     const issues = validateIwsdkProjectManifest(invalid).issues;
     expect(issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: '$.extra', code: 'unknown-key' }),
+        expect.objectContaining({
+          path: '$.world.features.gaze.coneAngleDeg',
+          code: 'unknown-key',
+        }),
         expect.objectContaining({
           path: '$.world.xr.features.unrecognized',
           code: 'unknown-key',
@@ -311,6 +357,14 @@ describe('iwsdk.project.v1 validation and normalization', () => {
         expect.objectContaining({
           path: '$.dev.emulator.verbose',
           code: 'unknown-key',
+        }),
+        expect.objectContaining({
+          path: '$.dev.targetDevicePreview.fovMask',
+          code: 'unknown-key',
+        }),
+        expect.objectContaining({
+          path: '$.dev.targetDevicePreview.gazeSimulation',
+          code: 'enum',
         }),
       ]),
     );
@@ -390,6 +444,35 @@ describe('iwsdk.project.v1 validation and normalization', () => {
       ]),
     );
   });
+
+  it.each([
+    ['coneAngle', 0, 'expected a number greater than 0 and less than 180'],
+    ['coneAngle', 180, 'expected a number greater than 0 and less than 180'],
+    ['maxRayLength', -1, 'expected a positive number'],
+    ['dwellWindowSeconds', -0.1, 'expected a non-negative number'],
+    ['filterMinCutoff', 0, 'expected a positive number'],
+    ['filterBeta', -0.1, 'expected a non-negative number'],
+    ['trackingLossGraceSeconds', -1, 'expected a non-negative number'],
+  ] as const)(
+    'rejects an out-of-range gaze %s',
+    (key, value, expectedMessage) => {
+      const invalid = structuredClone(vrManifest) as unknown as Record<
+        string,
+        any
+      >;
+      invalid.world.features.gaze[key] = value;
+
+      expect(validateIwsdkProjectManifest(invalid).issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: `$.world.features.gaze.${key}`,
+            code: 'range',
+            message: expectedMessage,
+          }),
+        ]),
+      );
+    },
+  );
 
   it('throws a path-rich aggregate error before normalization', () => {
     expect(() => assertValidIwsdkProjectManifest({ version: 'wrong' })).toThrow(

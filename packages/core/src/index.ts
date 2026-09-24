@@ -19,6 +19,7 @@ export * from './ui/index.js';
 export * from './init/index.js';
 export * from './grab/index.js';
 export * from './input/index.js';
+export * from './gaze/index.js';
 export * from './environment/index.js';
 export * from './level/index.js';
 export * from './scene-understanding/index.js';

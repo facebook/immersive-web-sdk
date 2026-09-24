@@ -105,7 +105,7 @@ The `world` object covers the serializable part of `WorldOptions`:
 - `xr`: `false`, or VR/AR mode, offer policy, reference space, and features;
 - `render`: field of view, clipping planes, stencil, and nonimmersive camera;
 - `input`: canvas pointer event settings;
-- `features`: locomotion, grabbing, physics, scene understanding,
+- `features`: gaze, locomotion, grabbing, physics, scene understanding,
   environment raycast, camera access, and serializable spatial UI settings.
 
 `world.render.camera` is the browser preview pose under `world.player`.
@@ -114,9 +114,31 @@ origin in the virtual environment.
 
 ## Development configuration
 
-`dev.emulator` stores project-owned emulator behavior such as device,
+`dev.emulator` stores project-owned desktop emulator behavior such as device,
 environment, IWER, activation, and build injection. The managed editor and
 command session are always available for manifest-first development servers.
+
+`dev.targetDevicePreview` adds a development-only Meta VR Glasses gaze
+preview to a physical Quest headset while preserving its browser-owned viewer,
+hands, and controllers. With `gazeSimulation: "head"`, the default, IWER adds a
+head-directed synthetic gaze source when the application requests
+`gazeTracking`:
+
+```json
+{
+  "dev": {
+    "targetDevicePreview": {
+      "gazeSimulation": "head"
+    }
+  }
+}
+```
+
+Set `gazeSimulation` to `false` to turn the preview off without removing the
+block. Target-device preview is active only in the Vite development server and
+is never injected into a production build. The CLI's `--native-xr-control`
+mode takes precedence because it intentionally replaces native tracking for
+deterministic automation.
 
 Headed/headless launch, open behavior, AI mode, and screenshot dimensions are
 operator-session choices:

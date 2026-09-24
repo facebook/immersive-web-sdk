@@ -24,6 +24,10 @@ export interface SEMOptions {
 
 export type AiMode = 'agent' | 'collaborate';
 
+export interface TargetDevicePreviewOptions {
+  gazeSimulation: 'head' | false;
+}
+
 /**
  * AI agent tooling configuration.
  * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
@@ -93,7 +97,12 @@ export interface EmulatorOptions {
    * XR device to emulate
    * @default 'metaQuest3'
    */
-  device?: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1';
+  device?:
+    | 'metaQuest2'
+    | 'metaQuest3'
+    | 'metaQuestPro'
+    | 'metaVRGlasses'
+    | 'oculusQuest1';
 
   /**
    * When to activate the WebXR emulation
@@ -259,7 +268,12 @@ export type IWERPluginOptions = DevPluginOptions;
 export interface ProcessedDevOptions {
   assetManifest?: string;
   componentManifest?: string;
-  device: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1';
+  device:
+    | 'metaQuest2'
+    | 'metaQuest3'
+    | 'metaQuestPro'
+    | 'metaVRGlasses'
+    | 'oculusQuest1';
   sem?: {
     defaultScene: string;
   };
@@ -286,6 +300,7 @@ export interface ProcessedDevOptions {
   userAgentException?: RegExp | string;
   iwer: boolean;
   nativeXRControl?: boolean;
+  targetDevicePreview?: TargetDevicePreviewOptions;
 }
 
 /** @deprecated Use `ProcessedDevOptions` instead */

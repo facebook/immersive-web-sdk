@@ -22,6 +22,8 @@ import {
   RayInteractable,
 } from './state-tags.js';
 
+const NO_GAZE_CANDIDATES: Object3D[] = [];
+
 /**
  * Samples XR poses (hands/controllers/head) and gamepads, curates the set of
  * interactables for pointer raycasting, and attaches minimal event listeners.
@@ -69,7 +71,6 @@ export class InputSystem extends createSystem(
   private touchDescendants: Object3D[] = [];
   /** Descendants for grab pointer intersection */
   private grabDescendants: Object3D[] = [];
-
   private shouldSetIntersectables = false;
   private listeners = new WeakMap<
     Object3D,
@@ -78,8 +79,12 @@ export class InputSystem extends createSystem(
       leave: (e: any) => void;
       down: (e: any) => void;
       up: (e: any) => void;
+      cancel: (e: any) => void;
+      hovered: Set<number>;
+      pressed: Set<number>;
     }
   >();
+  private readonly listenerEntities = new Set<Entity>();
   private lastBVHUpdate = new WeakMap<Object3D, number>();
 
   init(): void {
@@ -93,6 +98,16 @@ export class InputSystem extends createSystem(
           value === VisibilityState.Visible ||
           this.config.maintainScenePointers.value;
       }),
+    );
+
+    const onSessionBoundary = () => this.clearPointerStates();
+    this.xrManager.addEventListener('sessionstart', onSessionBoundary);
+    this.xrManager.addEventListener('sessionend', onSessionBoundary);
+    this.cleanupFuncs.push(
+      () =>
+        this.xrManager.removeEventListener('sessionstart', onSessionBoundary),
+      () => this.xrManager.removeEventListener('sessionend', onSessionBoundary),
+      () => this.cleanupAllEventListeners(),
     );
 
     // Wire pointer event listeners on qualify; tear them down on disqualify.
@@ -131,6 +146,11 @@ export class InputSystem extends createSystem(
   }
 
   update(delta: number, time: number): void {
+    // Gaze and hand rays consume the exact same target snapshot this frame.
+    this.input.xr.gazeCandidates = this.shouldSetIntersectables
+      ? this.rayDescendants
+      : NO_GAZE_CANDIDATES;
+
     // Update input sampling first
     this.input.update(this.xrManager, delta, time);
 
@@ -144,7 +164,6 @@ export class InputSystem extends createSystem(
    * Update per-type descendant arrays for optimized pointer intersection
    */
   private updateDescendantArrays(): void {
-    // Clear arrays
     this.rayDescendants.length = 0;
     this.touchDescendants.length = 0;
     this.grabDescendants.length = 0;
@@ -243,16 +262,24 @@ export class InputSystem extends createSystem(
     const enter = (event: PointerEvent) => {
       event.stopPropagation();
       maybeRefreshBVH();
+      pointerState.hovered.add(event.pointerId);
       if (!entity.hasComponent(Hovered)) {
         entity.addComponent(Hovered);
       }
     };
     const leave = (event: PointerEvent) => {
       event.stopPropagation();
-      entity.removeComponent(Hovered);
+      pointerState.hovered.delete(event.pointerId);
+      if (pointerState.hovered.size === 0) {
+        entity.removeComponent(Hovered);
+      }
       // pointerleave can fire without a preceding pointerup for flat geometry
-      // (poke sphere exits intersection in one frame); clear Pressed defensively.
-      entity.removeComponent(Pressed);
+      // (poke sphere exits intersection in one frame); clear only this
+      // pointer's press defensively.
+      pointerState.pressed.delete(event.pointerId);
+      if (pointerState.pressed.size === 0) {
+        entity.removeComponent(Pressed);
+      }
     };
     const down = (event: PointerEvent) => {
       event.stopPropagation();
@@ -263,20 +290,49 @@ export class InputSystem extends createSystem(
       if (!entity.hasComponent(Hovered)) {
         entity.addComponent(Hovered);
       }
+      pointerState.hovered.add(event.pointerId);
+      pointerState.pressed.add(event.pointerId);
       if (!entity.hasComponent(Pressed)) {
         entity.addComponent(Pressed);
       }
     };
     const up = (event: PointerEvent) => {
       event.stopPropagation();
-      entity.removeComponent(Pressed);
+      pointerState.pressed.delete(event.pointerId);
+      if (pointerState.pressed.size === 0) {
+        entity.removeComponent(Pressed);
+      }
+    };
+    const cancel = (event: PointerEvent) => {
+      event.stopPropagation();
+      pointerState.hovered.delete(event.pointerId);
+      pointerState.pressed.delete(event.pointerId);
+      if (pointerState.hovered.size === 0) {
+        entity.removeComponent(Hovered);
+      }
+      if (pointerState.pressed.size === 0) {
+        entity.removeComponent(Pressed);
+      }
     };
 
-    this.listeners.set(object3D, { enter, leave, down, up });
+    const pointerState = {
+      hovered: new Set<number>(),
+      pressed: new Set<number>(),
+    };
+    this.listeners.set(object3D, {
+      enter,
+      leave,
+      down,
+      up,
+      cancel,
+      ...pointerState,
+    });
+    this.listenerEntities.add(entity);
     (object3D as any).addEventListener('pointerenter', enter);
     (object3D as any).addEventListener('pointerleave', leave);
     (object3D as any).addEventListener('pointerdown', down);
     (object3D as any).addEventListener('pointerup', up);
+    (object3D as any).addEventListener('pointercancel', cancel);
   }
 
   private computeBoundsTreeForEntity(object3D: Object3D): void {
@@ -302,7 +358,26 @@ export class InputSystem extends createSystem(
     });
   }
 
+  private clearPointerStates(): void {
+    for (const entity of this.listenerEntities) {
+      const object3D = entity.object3D;
+      const state = object3D ? this.listeners.get(object3D) : undefined;
+      state?.hovered.clear();
+      state?.pressed.clear();
+      if (entity.active) {
+        entity.removeComponent(Hovered).removeComponent(Pressed);
+      }
+    }
+  }
+
+  private cleanupAllEventListeners(): void {
+    for (const entity of [...this.listenerEntities]) {
+      this.cleanupEventListeners(entity);
+    }
+  }
+
   private cleanupEventListeners(entity: Entity): void {
+    this.listenerEntities.delete(entity);
     const object3D = entity.object3D as any;
     if (!object3D) {
       return;
@@ -313,6 +388,9 @@ export class InputSystem extends createSystem(
       object3D.removeEventListener('pointerleave', fns.leave);
       object3D.removeEventListener('pointerdown', fns.down);
       object3D.removeEventListener('pointerup', fns.up);
+      object3D.removeEventListener('pointercancel', fns.cancel);
+      fns.hovered.clear();
+      fns.pressed.clear();
       this.listeners.delete(object3D);
     }
     // A query also disqualifies an entity when it is destroyed. At that point

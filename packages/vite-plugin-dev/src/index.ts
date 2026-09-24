@@ -136,6 +136,7 @@ import type {
   InjectionBundleResult,
   AiMode,
   WorkspaceOptions,
+  TargetDevicePreviewOptions,
 } from './types.js';
 import { validateUIKitMLDirectory } from './uikitml-preflight.js';
 
@@ -180,6 +181,7 @@ export type {
   ProductionBundleOptions,
   UIKitMLBundledFontName,
   WorkspaceOptions,
+  TargetDevicePreviewOptions,
   ProcessedDevOptions,
   IWERPluginOptions,
   SEMOptions,
@@ -290,6 +292,8 @@ type ResolvedDevPluginOptions = DevPluginOptions & {
   componentManifest?: string;
   /** Operator-session switch populated only from the IWSDK CLI. */
   nativeXRControl?: boolean;
+  /** Manifest-owned, development-server-only physical headset preview. */
+  targetDevicePreview?: TargetDevicePreviewOptions;
 };
 
 /**
@@ -323,6 +327,9 @@ function processOptions(
       emulator.userAgentException || new RegExp('OculusBrowser'),
     iwer: emulator.iwer ?? true,
     nativeXRControl: options.nativeXRControl ?? false,
+    ...(options.targetDevicePreview == null
+      ? {}
+      : { targetDevicePreview: options.targetDevicePreview }),
     bridgeReadyTimeoutMs,
   };
 
@@ -336,6 +343,11 @@ function processOptions(
   if (processed.nativeXRControl && processed.iwer === false) {
     throw new Error(
       '[IWSDK] --native-xr-control requires dev.emulator.iwer to be enabled.',
+    );
+  }
+  if (processed.targetDevicePreview && processed.iwer === false) {
+    throw new Error(
+      '[IWSDK] dev.targetDevicePreview requires dev.emulator.iwer to be enabled.',
     );
   }
 
@@ -542,6 +554,9 @@ function projectManifestPluginOptions(
     ...(ai == null ? {} : { ai }),
     ...(workspace == null ? {} : { workspace }),
     ...(nativeXRControl ? { nativeXRControl } : {}),
+    ...(command === 'serve' && dev.targetDevicePreview != null
+      ? { targetDevicePreview: dev.targetDevicePreview }
+      : {}),
     ...(options.https == null ? {} : { https: options.https }),
     ...(options.verbose == null ? {} : { verbose: options.verbose }),
     ...(options.bridgeReadyTimeoutMs == null

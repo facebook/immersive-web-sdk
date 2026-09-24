@@ -57,6 +57,20 @@ export type XRFeatureOptions = {
    */
   layers?: FeatureFlag;
   unbounded?: FeatureFlag;
+  /**
+   * Eye/gaze tracking, used to drive gaze interactions. When granted, the
+   * runtime surfaces an `XRInputSource` with `targetRayMode === 'gaze'` and
+   * IWSDK drives {@link XROrigin.eyeSpace} from its target-ray pose. When
+   * unavailable, ordinary hand/controller rays remain active.
+   *
+   * Requesting this also registers `GazeSystem`.
+   */
+  gazeTracking?: FeatureFlag;
+  /**
+   * @deprecated Use {@link XRFeatureOptions.gazeTracking}. Kept as an alias
+   * for the W3C draft's `'eye-tracking'` descriptor name.
+   */
+  eyeTracking?: FeatureFlag;
 };
 
 /** Reference space configuration. @category Runtime */
@@ -140,6 +154,8 @@ export function buildSessionInit(opts: XROptions): XRSessionInit {
     depthSensing: 'depth-sensing',
     layers: 'layers',
     unbounded: 'unbounded',
+    gazeTracking: 'gaze-tracking',
+    eyeTracking: 'eye-tracking',
   } as const;
 
   const push = (
@@ -165,6 +181,24 @@ export function buildSessionInit(opts: XROptions): XRSessionInit {
   push('meshDetection', normalizeFlag(f.meshDetection));
   push('layers', normalizeFlag(f.layers));
   push('unbounded', normalizeFlag(f.unbounded));
+
+  // Eye gaze is exposed under two descriptor names: 'gaze-tracking' (what the
+  // Meta Quest Browser accepts today, and what surfaces the
+  // `targetRayMode === 'gaze'` input source) and 'eye-tracking' (the W3C
+  // draft name). Honor required/optional exactly for whichever the app named,
+  // then offer the other as *optional* so the same app works on either
+  // runtime — unrecognized optional descriptors are ignored, whereas an
+  // unrecognized required one fails the whole session request.
+  const gaze = normalizeFlag(f.gazeTracking);
+  const eye = normalizeFlag(f.eyeTracking);
+  push('gazeTracking', gaze);
+  push('eyeTracking', eye);
+  if (gaze && !eye && f.eyeTracking !== false) {
+    optionalFeatures.push(map.eyeTracking);
+  }
+  if (eye && !gaze && f.gazeTracking !== false) {
+    optionalFeatures.push(map.gazeTracking);
+  }
 
   // Depth sensing (may include preferences)
   if (f.depthSensing) {

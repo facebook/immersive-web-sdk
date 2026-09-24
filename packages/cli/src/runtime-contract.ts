@@ -803,7 +803,8 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   // =============================================================================
   {
     name: 'xr_get_transform',
-    description: 'Get position and orientation of a tracked device',
+    description:
+      'Get position and orientation of a tracked device. Gaze reports the headset-derived origin and its world orientation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -815,6 +816,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'controller-right',
             'hand-left',
             'hand-right',
+            'gaze',
           ],
           description: 'The device to query',
         },
@@ -825,7 +827,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_set_transform',
     description:
-      'Set position and/or orientation of a tracked device. Position is in meters, orientation can be quaternion or euler angles (degrees).',
+      'Set position and/or orientation of a tracked device. Position is in meters, orientation can be quaternion or euler angles (degrees). Gaze accepts orientation only; move its origin with the headset.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -837,6 +839,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'controller-right',
             'hand-left',
             'hand-right',
+            'gaze',
           ],
           description: 'The device to move',
         },
@@ -881,7 +884,8 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'xr_look_at',
-    description: 'Orient a device to look at a specific world position',
+    description:
+      'Orient a device to look at a specific world position. Gaze keeps its headset-derived origin.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -893,6 +897,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'controller-right',
             'hand-left',
             'hand-right',
+            'gaze',
           ],
           description: 'The device to orient',
         },
@@ -908,7 +913,8 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
         },
         moveToDistance: {
           type: 'number',
-          description: 'Optional: move device to this distance from target',
+          description:
+            'Optional: move device to this distance from target (not supported for gaze)',
         },
       },
       required: ['device', 'target'],
@@ -917,7 +923,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_animate_to',
     description:
-      'Smoothly animate a device to a new position/orientation over time',
+      'Smoothly animate a device to a new position/orientation over time. Gaze accepts orientation only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -929,6 +935,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'controller-right',
             'hand-left',
             'hand-right',
+            'gaze',
           ],
           description: 'The device to animate',
         },
@@ -990,7 +997,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'xr_set_connected',
-    description: 'Connect or disconnect an input device',
+    description: 'Connect or disconnect a controller, hand, or gaze source',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1001,6 +1008,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             'controller-right',
             'hand-left',
             'hand-right',
+            'gaze',
           ],
           description: 'The input device',
         },
@@ -1410,7 +1418,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_get_device_state',
     description:
-      'Get comprehensive state of the XR device including headset, controllers, and hands',
+      'Get comprehensive state of the XR device including headset, controllers, hands, and gaze',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -1507,6 +1515,24 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
                     connected: { type: 'boolean' },
                   },
                 },
+              },
+            },
+            gaze: {
+              type: 'object',
+              additionalProperties: false,
+              description:
+                'Gaze state. Its origin is derived from the headset and cannot be set independently.',
+              properties: {
+                orientation: {
+                  type: 'object',
+                  properties: {
+                    x: { type: 'number' },
+                    y: { type: 'number' },
+                    z: { type: 'number' },
+                    w: { type: 'number' },
+                  },
+                },
+                connected: { type: 'boolean' },
               },
             },
           },

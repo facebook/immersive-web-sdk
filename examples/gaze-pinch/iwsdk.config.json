@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/@iwsdk/core/dist/schemas/iwsdk-project.v1.schema.json",
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/gaze-pinch.iwsdk.scene.json",
+  "assets": { "module": "./src/assets" },
+  "world": {
+    "xr": {
+      "mode": "vr",
+      "features": {
+        "handTracking": { "required": true },
+        "gazeTracking": true
+      }
+    },
+    "render": { "camera": { "position": [0, 1.5, 0] } },
+    "features": {
+      "grabbing": true,
+      "locomotion": true,
+      "spatialUI": true
+    }
+  },
+  "dev": {
+    "emulator": {
+      "device": "metaVRGlasses",
+      "activation": "always",
+      "injectOnBuild": true
+    },
+    "targetDevicePreview": {
+      "gazeSimulation": "head"
+    }
+  }
+}

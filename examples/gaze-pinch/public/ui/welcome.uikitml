@@ -1,0 +1,70 @@
+<style>
+  .heading {
+    height: 48px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 24px;
+    letter-spacing: -0.5px;
+    color: #272727;
+  }
+
+  .heading:dark {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .sub-heading {
+    color: #272727;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 18px;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .sub-heading:dark {
+    color: rgba(255, 255, 255, 0.90);
+  }
+
+  .panel-root {
+    flex-direction: column;
+    width: 344px;
+  }
+
+  .panel-content {
+    align-items: center;
+    flex-direction: column;
+    padding-top: 16px;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .button {
+    margin-left: 24px;
+    margin-right: 24px;
+    margin-top: 16px;
+    margin-bottom: 24px;
+  }
+
+</style>
+<Panel class="panel-root">
+  <div class="panel-content">
+    <div class="heading"> Gaze + Pinch </div>
+    <Divider></Divider>
+    <div class="sub-heading"> Look at a card to highlight it, then pinch with either hand to commit
+      the selection. Look at the orange cube and pinch to pull it toward you, with no hand ray
+      needed. Turn gaze off to restore ordinary hand or controller rays.</div>
+  </div>
+  <Button id="xr-button" class="button">
+    <ButtonIcon>
+      <RectangleGoggles></RectangleGoggles>
+    </ButtonIcon>
+    Enter XR
+  </Button>
+  <Button id="exit-button" class="button" style="display: none">
+    <ButtonIcon>
+      <LogIn></LogIn>
+    </ButtonIcon>
+    Exit to Browser
+  </Button>
+</Panel>

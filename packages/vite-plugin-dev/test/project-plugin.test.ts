@@ -499,7 +499,9 @@ describe('manifest-first Vite integration', () => {
       runtimeId,
     );
     expect(runtimeSource).toContain('"nativeXRControl": true');
-    expect(runtimeSource).toContain('Native XR control is unavailable:');
+    expect(runtimeSource).toContain(
+      'Native XR control requires Meta Quest Browser',
+    );
   });
 
   it('keeps a configured port instead of moving the runtime', async () => {
@@ -540,6 +542,87 @@ describe('manifest-first Vite integration', () => {
       ),
     ).rejects.toThrow(
       '--native-xr-control requires dev.emulator.iwer to be enabled',
+    );
+  });
+
+  it('injects target-device preview only into the development server', async () => {
+    const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.dev.targetDevicePreview = { gazeSimulation: 'head' };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const servePlugin = iwsdkDev({ https: false });
+    await callHook(
+      servePlugin.config,
+      servePlugin,
+      { root: projectRoot },
+      { command: 'serve', mode: 'development' },
+    );
+    callHook(servePlugin.configResolved, servePlugin, {
+      command: 'serve',
+      root: projectRoot,
+      server: {},
+    });
+    await callHook(servePlugin.buildStart, { addWatchFile: vi.fn() });
+    const runtimeId = callHook(
+      servePlugin.resolveId,
+      servePlugin,
+      '/@iwer-injection-runtime',
+    );
+    const serveRuntime = await callHook(
+      servePlugin.load,
+      { resolve: vi.fn() },
+      runtimeId,
+    );
+    expect(serveRuntime).toContain('"gazeSimulation": "head"');
+    expect(serveRuntime).toContain('gazeSimulation:!1');
+    expect(serveRuntime).toContain('"gaze-only"');
+
+    manifest.dev.emulator.injectOnBuild = true;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const buildPlugin = iwsdkDev({ https: false });
+    await callHook(
+      buildPlugin.config,
+      buildPlugin,
+      { root: projectRoot },
+      { command: 'build', mode: 'production' },
+    );
+    callHook(buildPlugin.configResolved, buildPlugin, {
+      command: 'build',
+      root: projectRoot,
+      server: {},
+    });
+    await callHook(buildPlugin.buildStart, { addWatchFile: vi.fn() });
+    const buildRuntimeId = callHook(
+      buildPlugin.resolveId,
+      buildPlugin,
+      '/@iwer-injection-runtime',
+    );
+    const buildRuntime = await callHook(
+      buildPlugin.load,
+      { resolve: vi.fn() },
+      buildRuntimeId,
+    );
+    expect(buildRuntime).not.toContain('"targetDevicePreview": {');
+  });
+
+  it('rejects target-device preview when IWER is disabled', async () => {
+    const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.dev.emulator.iwer = false;
+    manifest.dev.targetDevicePreview = { gazeSimulation: 'head' };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const plugin = iwsdkDev({ https: false });
+
+    await expect(
+      callHook(
+        plugin.config,
+        plugin,
+        { root: projectRoot },
+        { command: 'serve', mode: 'development' },
+      ),
+    ).rejects.toThrow(
+      'dev.targetDevicePreview requires dev.emulator.iwer to be enabled',
     );
   });
 

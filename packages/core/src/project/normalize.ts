@@ -118,6 +118,13 @@ export function normalizeProjectDevOptions(
         };
   return {
     ...(emulator == null ? {} : { emulator }),
+    ...(dev.targetDevicePreview == null
+      ? {}
+      : {
+          targetDevicePreview: {
+            gazeSimulation: dev.targetDevicePreview.gazeSimulation ?? 'head',
+          },
+        }),
   };
 }
 
@@ -230,6 +237,9 @@ function normalizeFeatures(
       typeof source.grabbing === 'boolean'
         ? source.grabbing
         : { ...source.grabbing };
+  }
+  if (source.gaze != null) {
+    features.gaze = { ...source.gaze };
   }
   if (source.physics != null) {
     features.physics =

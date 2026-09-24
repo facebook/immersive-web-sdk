@@ -47,6 +47,7 @@ export async function buildInjectionBundle(
           : options.userAgentException,
       iwer: options.iwer,
       nativeXRControl: options.nativeXRControl,
+      targetDevicePreview: options.targetDevicePreview,
     };
 
     // Replace the CONFIG token with actual configuration

@@ -100,7 +100,9 @@
         "meshDetection": { "$ref": "#/$defs/featureFlag" },
         "depthSensing": { "$ref": "#/$defs/depthSensing" },
         "layers": { "$ref": "#/$defs/featureFlag" },
-        "unbounded": { "$ref": "#/$defs/featureFlag" }
+        "unbounded": { "$ref": "#/$defs/featureFlag" },
+        "gazeTracking": { "$ref": "#/$defs/featureFlag" },
+        "eyeTracking": { "$ref": "#/$defs/featureFlag" }
       }
     },
     "xr": {
@@ -224,6 +226,29 @@
         }
       ]
     },
+    "gaze": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "coneAngle": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 180
+        },
+        "maxRayLength": { "type": "number", "exclusiveMinimum": 0 },
+        "dwellWindowSeconds": { "type": "number", "minimum": 0 },
+        "filterMinCutoff": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "filterBeta": { "type": "number", "minimum": 0 },
+        "trackingLossGraceSeconds": { "type": "number", "minimum": 0 },
+        "suppressWhenDirectPointerActive": { "type": "boolean" },
+        "pointerTransformFollowsHand": { "type": "boolean" },
+        "logDiagnostics": { "type": "boolean" },
+        "showDebugReticle": { "type": "boolean" }
+      }
+    },
     "sceneUnderstanding": {
       "oneOf": [
         { "type": "boolean" },
@@ -257,6 +282,7 @@
         "locomotion": { "$ref": "#/$defs/locomotion" },
         "grabbing": { "$ref": "#/$defs/grabbing" },
         "physics": { "$ref": "#/$defs/physics" },
+        "gaze": { "$ref": "#/$defs/gaze" },
         "sceneUnderstanding": { "$ref": "#/$defs/sceneUnderstanding" },
         "environmentRaycast": { "type": "boolean" },
         "camera": { "type": "boolean" },
@@ -291,7 +317,13 @@
       "additionalProperties": false,
       "properties": {
         "device": {
-          "enum": ["metaQuest2", "metaQuest3", "metaQuestPro", "oculusQuest1"]
+          "enum": [
+            "metaQuest2",
+            "metaQuest3",
+            "metaQuestPro",
+            "metaVRGlasses",
+            "oculusQuest1"
+          ]
         },
         "iwer": { "type": "boolean" },
         "environment": {
@@ -313,11 +345,21 @@
         "userAgentException": { "$ref": "#/$defs/regex" }
       }
     },
+    "targetDevicePreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gazeSimulation": {
+          "oneOf": [{ "const": "head" }, { "const": false }]
+        }
+      }
+    },
     "dev": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "emulator": { "$ref": "#/$defs/emulator" }
+        "emulator": { "$ref": "#/$defs/emulator" },
+        "targetDevicePreview": { "$ref": "#/$defs/targetDevicePreview" }
       }
     }
   }

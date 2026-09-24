@@ -35,3 +35,7 @@ export * from './pointer/ray-pointer.js';
 export * from './pointer/multi-pointer.js';
 export * from './pointer/cursor-visual.js';
 export * from './pointer/visibility.js';
+export * from './pointer/filtered-eye-gaze.js';
+export * from './pointer/gaze-candidate-provider.js';
+export * from './pointer/gaze-conecaster.js';
+export * from './pointer/gaze-pointer.js';

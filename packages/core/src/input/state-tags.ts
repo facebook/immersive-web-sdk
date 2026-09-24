@@ -5,7 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+// Import from the leaf module rather than '../ecs/index.js': the barrel pulls
+// in builtin-components, which imports this file, forming a cycle.
 import { createComponent } from '../ecs/component.js';
+
 /**
  * Marks an entity as eligible for ray-based pointer interaction.
  *

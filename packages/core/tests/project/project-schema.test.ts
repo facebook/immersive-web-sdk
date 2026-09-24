@@ -30,6 +30,30 @@ describe('published project JSON Schema source', () => {
     expect(schema.$defs.xr.oneOf[1].required).toEqual(['mode']);
   });
 
+  it('bounds gaze tuning values that cannot be negative or zero', () => {
+    const gaze = schema.$defs.gaze.properties;
+    expect(gaze.coneAngle).toEqual({
+      type: 'number',
+      exclusiveMinimum: 0,
+      exclusiveMaximum: 180,
+    });
+    expect(gaze.maxRayLength).toEqual({
+      type: 'number',
+      exclusiveMinimum: 0,
+    });
+    expect(gaze.filterMinCutoff).toEqual({
+      type: 'number',
+      exclusiveMinimum: 0,
+    });
+    for (const key of [
+      'dwellWindowSeconds',
+      'filterBeta',
+      'trackingLossGraceSeconds',
+    ]) {
+      expect(gaze[key]).toEqual({ type: 'number', minimum: 0 });
+    }
+  });
+
   it('keeps executable and operator-only plugin values out of the schema', () => {
     const source = JSON.stringify(schema);
     expect(source).not.toContain('componentSets');

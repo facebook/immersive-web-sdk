@@ -103,6 +103,25 @@ describe('DistanceGrabHandle', () => {
     expect(pointerUpAdds).toHaveLength(0);
   });
 
+  it('releases a cancelled pointer only once if pointerup follows', () => {
+    const target = new Object3D();
+    const handle = createHandle(target);
+    const unbind = handle.bind(target);
+    const down = pointerEvent(1);
+    handle.handlers.onPointerDown(down);
+    const end = vi.spyOn((handle as any).outputState, 'end');
+
+    (target as any).dispatchEvent({
+      ...pointerEvent(1),
+      type: 'pointercancel',
+    });
+    (target as any).dispatchEvent({ ...pointerEvent(1), type: 'pointerup' });
+
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(handle.inputState.size).toBe(0);
+    unbind();
+  });
+
   it('resets isSnapped on update() once there are no active pointers', () => {
     const handle = createHandle(new Object3D());
     (handle as any).isSnapped = true;
@@ -288,5 +307,22 @@ describe('DistanceGrabHandle', () => {
     expect(target.matrix.elements.every(Number.isFinite)).toBe(true);
     expect(target.matrixWorld.elements.every(Number.isFinite)).toBe(true);
     expect(target.rotation.order).toBe('ZYX');
+  });
+
+  it('does not extrapolate past the target after a delayed frame', () => {
+    const target = new Object3D();
+    const handle = createHandle(target);
+    handle.inputState.set(1, {
+      pointerWorldOrigin: new Vector3(1, 2, 3),
+      pointerWorldQuaternion: new Quaternion(),
+    } as any);
+    (handle as any).latestMoveEvent = {};
+
+    // With moveSpeedFactor=0.1 and the internal scale=100, an unclamped
+    // one-second delta would pass alpha=10 to Vector3.lerp and overshoot 10x.
+    handle.update(1);
+
+    expect(target.position.toArray()).toEqual([1, 2, 3]);
+    expect(target.position.toArray().every(Number.isFinite)).toBe(true);
   });
 });

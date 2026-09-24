@@ -138,7 +138,7 @@ iwsdkDev();
 
 **Configuration options:**
 
-- **`device`**: Which headset to emulate (`metaQuest2`, `metaQuest3`, `metaQuestPro`, or `oculusQuest1`). More headset presets and custom headset configuration support coming soon.
+- **`device`**: Which headset to emulate (`metaQuest2`, `metaQuest3`, `metaQuestPro`, `metaVRGlasses`, or `oculusQuest1`). `metaVRGlasses` emulates Meta VR Glasses' narrower field of view and adds gaze input. More headset presets and custom headset configuration support coming soon.
 - **`activation`**: Controls when IWER activates. The default `'localhost'` is smart - it activates IWER when you access the site from localhost (typically your computer, which needs emulation), but not when accessing via IP address (typically from a headset with native WebXR support).
 - **`userAgentException`**: Adds an extra layer of protection by skipping IWER activation if the browser's user agent matches a pattern (like `OculusBrowser`). This ensures IWER won't activate on headsets even when using ADB port forwarding with localhost.
 - **`environment`**: Synthetic room data for AR scene-understanding testing, such as `living_room`

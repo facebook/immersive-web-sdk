@@ -74,6 +74,17 @@ const SMOKE_TARGETS = [
     componentIds: [
       'DistanceGrabbable',
       'LocomotionEnvironment',
+      'RayInteractable',
+    ],
+    id: 'gaze-pinch',
+    names: ['Environment', 'Gaze Card 0', 'Gaze Grab Cube', 'Welcome Panel'],
+    root: 'examples/gaze-pinch',
+  },
+  {
+    assetIds: ['environment-desk'],
+    componentIds: [
+      'DistanceGrabbable',
+      'LocomotionEnvironment',
       'OneHandGrabbable',
       'RayInteractable',
       'TwoHandsGrabbable',

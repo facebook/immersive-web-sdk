@@ -10,8 +10,8 @@ import { HandleStore } from '@pmndrs/handle';
 /**
  * Pure helpers backing {@link GrabSystem.forceRelease} and
  * {@link GrabSystem.getHolderHand}. Kept side-effect-free and dependency-light
- * so they can be unit-tested without spinning up the full ECS / xr-input
- * import chain.
+ * so they can be unit-tested without spinning up the full ECS / xr-input import
+ * chain.
  *
  * Not part of the public package API surface — `grab-system.ts` is the only
  * intended caller.
@@ -44,14 +44,17 @@ export function cancelGrabHandle(
  * object). Passing both keeps `getHolderHand` correct across both grab
  * styles without leaking pointer-kind selection into callers.
  *
- * Returns `'left'` / `'right'` for single-hand grabs, `'left'` for two-hand
- * grabs (deterministic), and `null` when the entity has no active grabs or
- * none of the candidate IDs match.
+ * A capture from the gaze ray is attributed to the hand that initiated its
+ * current select. Returns `'left'` / `'right'` for single-hand grabs, `'left'`
+ * for two-hand grabs (deterministic), and `null` when the entity has no active
+ * grabs or none of the candidate IDs match.
  */
 export function findHolderHand(
   handle: HandleStore<unknown> | undefined,
   leftPointerIds: readonly number[],
   rightPointerIds: readonly number[],
+  gazePointerId?: number,
+  gazeHand?: 'left' | 'right' | null,
 ): 'left' | 'right' | null {
   if (!handle || handle.inputState.size === 0) {
     return null;
@@ -62,5 +65,9 @@ export function findHolderHand(
   if (rightPointerIds.some((id) => handle.inputState.has(id))) {
     return 'right';
   }
-  return null;
+  return gazeHand != null && gazePointerId != null
+    ? handle.inputState.has(gazePointerId)
+      ? gazeHand
+      : null
+    : null;
 }

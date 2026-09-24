@@ -6,8 +6,18 @@
  */
 
 import { HandleOptions, HandleStore } from '@pmndrs/handle';
+import type {
+  PointerEvent as PmndrsPointerEvent,
+  PointerEventsMap,
+} from '@pmndrs/pointer-events';
 import { Types, createComponent } from '../ecs/component.js';
-import { Euler, Object3D, Quaternion, Vector3 } from '../runtime/index.js';
+import {
+  Euler,
+  Object3D,
+  type Object3DEventMap,
+  Quaternion,
+  Vector3,
+} from '../runtime/index.js';
 
 export const Handle = createComponent(
   'Handle',
@@ -63,7 +73,33 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
     this.targetQuatOffset.normalize();
   }
 
-  update(time: number) {
+  /**
+   * Bind the handle and treat pointer cancellation as an interrupted release.
+   *
+   * Older @pmndrs/handle releases only listen for pointerup. Far-ray
+   * suppression correctly emits pointercancel, so bridge that event to the
+   * handle's pointer-up path. This releases only the cancelled pointer and is
+   * harmless if a newer dependency also handles pointercancel natively.
+   */
+  override bind(handle: Object3D): () => void {
+    const unbind = super.bind(handle);
+    const pointerTarget = handle as Object3D<
+      PointerEventsMap & Object3DEventMap
+    >;
+    const onPointerCancel = (event: PmndrsPointerEvent) => {
+      if (!this.capturedObjects.has(event.pointerId)) {
+        return;
+      }
+      this.handlers.onPointerUp(event);
+    };
+    pointerTarget.addEventListener('pointercancel', onPointerCancel);
+    return () => {
+      pointerTarget.removeEventListener('pointercancel', onPointerCancel);
+      unbind();
+    };
+  }
+
+  update(delta: number) {
     const target = this.getTarget();
 
     if (this.inputState.size === 0) {
@@ -95,7 +131,7 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
       this.movementMode === MovementMode.RotateAtSource ||
       this.movementMode === MovementMode.MoveFromTarget
     ) {
-      super.update(time);
+      super.update(delta);
       return;
     }
 
@@ -112,10 +148,10 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
         const [p1] = this.inputState.values();
         const current = p1.pointerWorldOrigin;
         if (this.previousPointerOrigin != undefined) {
-          const delta = DistanceGrabHandle._tmp
+          const originDelta = DistanceGrabHandle._tmp
             .copy(current)
             .sub(this.previousPointerOrigin);
-          DistanceGrabHandle._posHelper.add(delta);
+          DistanceGrabHandle._posHelper.add(originDelta);
         } else {
           this.previousPointerOrigin = new Vector3().copy(current);
         }
@@ -143,7 +179,7 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
           DistanceGrabHandle._posHelper,
         );
         const rawInterpolationAlpha =
-          this.moveSpeedFactor * time * DistanceGrabHandle.MOVE_SPEED_SCALE;
+          this.moveSpeedFactor * delta * DistanceGrabHandle.MOVE_SPEED_SCALE;
         // Invalid timing/config input must never poison the target transform.
         // Freeze on NaN; clamp finite values and infinities to the valid lerp range.
         const interpolationAlpha = Number.isNaN(rawInterpolationAlpha)
@@ -204,7 +240,7 @@ export class DistanceGrabHandle<T> extends HandleStore<T> {
       quaternion,
       rotation,
       scale,
-      time,
+      time: delta,
     });
     this.outputState.memo = this.apply(target);
     this.latestMoveEvent = undefined;

@@ -102,6 +102,18 @@ const TARGETS = [
     componentIds: [
       'DistanceGrabbable',
       'LocomotionEnvironment',
+      'RayInteractable',
+    ],
+    id: 'gaze-pinch',
+    names: ['Environment', 'Gaze Card 0', 'Gaze Grab Cube', 'Welcome Panel'],
+    root: 'examples/gaze-pinch',
+    scene: 'public/scenes/gaze-pinch.iwsdk.scene.json',
+  },
+  {
+    assetIds: ['environment-desk'],
+    componentIds: [
+      'DistanceGrabbable',
+      'LocomotionEnvironment',
       'OneHandGrabbable',
       'RayInteractable',
       'TwoHandsGrabbable',

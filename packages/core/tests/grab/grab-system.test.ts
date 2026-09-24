@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { GazeConecaster, GazePointer, XROrigin } from '@iwsdk/xr-input';
 import type { HandleStore } from '@pmndrs/handle';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -16,11 +17,16 @@ import {
   resetGrabWarningStateForTests,
   warnIfNoRaycastableMesh,
 } from '../../src/grab/grab-warnings.js';
+import { DistanceGrabHandle, MovementMode } from '../../src/grab/handles.js';
 import {
   BoxGeometry,
   Mesh,
   MeshBasicMaterial,
   Object3D,
+  PerspectiveCamera,
+  Quaternion,
+  Scene,
+  Vector3,
 } from '../../src/runtime/three.js';
 
 interface FakeHandle {
@@ -79,6 +85,7 @@ describe('findHolderHand (backs GrabSystem.getHolderHand)', () => {
   const LEFT_RAY = 11;
   const RIGHT_GRAB = 20;
   const RIGHT_RAY = 21;
+  const GAZE_RAY = 30;
   const left = [LEFT_GRAB, LEFT_RAY];
   const right = [RIGHT_GRAB, RIGHT_RAY];
 
@@ -133,6 +140,163 @@ describe('findHolderHand (backs GrabSystem.getHolderHand)', () => {
     expect(
       findHolderHand(handle as unknown as HandleStore<unknown>, left, right),
     ).toBeNull();
+  });
+
+  it('maps a gaze ray capture back to the selecting hand', () => {
+    const handle = makeFakeHandle([GAZE_RAY]);
+    expect(
+      findHolderHand(
+        handle as unknown as HandleStore<unknown>,
+        left,
+        right,
+        GAZE_RAY,
+        'right',
+      ),
+    ).toBe('right');
+  });
+});
+
+function createGazeDistanceGrabFixture() {
+  const scene = new Scene();
+  const xrOrigin = new XROrigin();
+  scene.add(xrOrigin);
+  xrOrigin.head.position.set(0, 1.6, 0);
+  xrOrigin.raySpaces.left.position.set(-0.2, 1.2, 0);
+  xrOrigin.eyeSpace.position.copy(xrOrigin.head.position);
+  xrOrigin.gazeOrigin = 'tracked';
+
+  const target = new Mesh(
+    new BoxGeometry(0.4, 0.4, 0.4),
+    new MeshBasicMaterial(),
+  );
+  target.position.set(0, 1.6, -3);
+  target.pointerEventsType = { deny: 'grab' };
+  scene.add(target);
+  scene.updateMatrixWorld(true);
+
+  const handle = new DistanceGrabHandle(
+    target,
+    scene,
+    () => ({
+      rotate: false,
+      translate: true,
+      scale: false,
+      projectRays: false,
+    }),
+    MovementMode.MoveFromTarget,
+    false,
+    0.1,
+    new Vector3(),
+    new Quaternion(),
+    false,
+  );
+  const unbind = handle.bind(target);
+  const gaze = new GazePointer(xrOrigin, scene, new PerspectiveCamera(), {
+    diagnostics: false,
+    filter: { minCutoff: 10000 },
+  });
+  gaze.setAttached(true);
+  (gaze.provider as GazeConecaster).dwellWindowSeconds = 0;
+  const input = {
+    candidates: [target],
+    pinchStart: { left: false, right: false },
+    pinchEnd: { left: false, right: false },
+    pinchActive: { left: false, right: false },
+    directPointerActive: { left: false, right: false },
+  };
+
+  return { gaze, handle, input, scene, target, unbind, xrOrigin };
+}
+
+describe('gaze ray distance-grab integration', () => {
+  it('captures the gaze pointer directly and releases it normally', () => {
+    const { gaze, handle, input, target, unbind } =
+      createGazeDistanceGrabFixture();
+
+    gaze.update(true, 1 / 60, 0, input);
+    input.pinchStart.left = true;
+    input.pinchActive.left = true;
+    gaze.update(true, 1 / 60, 0.05, input);
+
+    const selectedPoint = gaze.pointer.getIntersection()!.point.clone();
+    expect(handle.inputState.has(gaze.pointer.id)).toBe(true);
+    expect(gaze.pointer.getPointerCapture()?.object).toBe(target);
+    expect(
+      findHolderHand(handle, [], [], gaze.pointer.id, gaze.getHeldByHand()),
+    ).toBe('left');
+
+    input.pinchStart.left = false;
+    gaze.update(true, 1 / 60, 0.1, input);
+    expect(
+      gaze.pointer.getIntersection()!.point.distanceTo(selectedPoint),
+    ).toBeLessThan(1e-5);
+
+    input.pinchEnd.left = true;
+    input.pinchActive.left = false;
+    gaze.update(true, 1 / 60, 0.15, input);
+    expect(handle.inputState.size).toBe(0);
+
+    unbind();
+    gaze.dispose();
+  });
+
+  it('releases a captured distance grab when the pointer is cancelled', () => {
+    const { gaze, handle, input, unbind } = createGazeDistanceGrabFixture();
+
+    gaze.update(true, 1 / 60, 0, input);
+    input.pinchStart.left = true;
+    input.pinchActive.left = true;
+    gaze.update(true, 1 / 60, 0.05, input);
+    expect(handle.inputState.has(gaze.pointer.id)).toBe(true);
+
+    gaze.pointer.cancel({ timeStamp: 100 });
+
+    expect(handle.inputState.size).toBe(0);
+    expect(gaze.pointer.getPointerCapture()).toBeUndefined();
+
+    unbind();
+    gaze.dispose();
+  });
+
+  it('keeps the other pointer captured when one distance-grab pointer is cancelled', () => {
+    const { gaze, handle, input, scene, unbind, xrOrigin } =
+      createGazeDistanceGrabFixture();
+    const otherGaze = new GazePointer(
+      xrOrigin,
+      scene,
+      new PerspectiveCamera(),
+      {
+        diagnostics: false,
+        filter: { minCutoff: 10000 },
+      },
+    );
+    otherGaze.setAttached(true);
+    (otherGaze.provider as GazeConecaster).dwellWindowSeconds = 0;
+    const otherInput = {
+      ...input,
+      pinchStart: { left: false, right: false },
+      pinchEnd: { left: false, right: false },
+      pinchActive: { left: false, right: false },
+    };
+
+    gaze.update(true, 1 / 60, 0, input);
+    input.pinchStart.left = true;
+    input.pinchActive.left = true;
+    gaze.update(true, 1 / 60, 0.05, input);
+    otherGaze.update(true, 1 / 60, 0, otherInput);
+    otherInput.pinchStart.right = true;
+    otherInput.pinchActive.right = true;
+    otherGaze.update(true, 1 / 60, 0.05, otherInput);
+    expect(handle.inputState.size).toBe(2);
+
+    gaze.pointer.cancel({ timeStamp: 100 });
+
+    expect(handle.inputState.has(gaze.pointer.id)).toBe(false);
+    expect(handle.inputState.has(otherGaze.pointer.id)).toBe(true);
+
+    unbind();
+    gaze.dispose();
+    otherGaze.dispose();
   });
 });
 

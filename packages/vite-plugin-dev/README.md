@@ -39,7 +39,7 @@ export default defineConfig({
 iwsdkDev({
   emulator: {
     // XR device to emulate
-    // Options: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1'
+    // Options: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'metaVRGlasses' | 'oculusQuest1'
     device: 'metaQuest3', // default
 
     // Synthetic environment for AR room simulation

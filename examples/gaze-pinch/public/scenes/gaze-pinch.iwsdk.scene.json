@@ -1,0 +1,169 @@
+{
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.2423, 0.6172, 0.8308, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.6902, 0.749, 0.7843, 1],
+      "equator": [0.6584, 0.7084, 0.7913, 1],
+      "ground": [0.807, 0.7758, 0.7454, 1],
+      "intensity": 1
+    }
+  },
+  "nodes": [
+    {
+      "components": {
+        "LocomotionEnvironment": {}
+      },
+      "content": {
+        "asset": "environment-desk",
+        "type": "asset"
+      },
+      "id": "environment",
+      "name": "Environment",
+      "transform": {
+        "position": [0, -0.106921583, 0],
+        "rotationDeg": [0, 180, 0]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-0",
+        "type": "asset"
+      },
+      "id": "gaze-card-0",
+      "name": "Gaze Card 0",
+      "transform": {
+        "position": [0.317871, 1.66, -1.568107],
+        "rotationDeg": [5.825949, -11.401522, 1.155522]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-1",
+        "type": "asset"
+      },
+      "id": "gaze-card-1",
+      "name": "Gaze Card 1",
+      "transform": {
+        "position": [0, 1.66, -1.6],
+        "rotationDeg": [5.710593, 0, 0]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-2",
+        "type": "asset"
+      },
+      "id": "gaze-card-2",
+      "name": "Gaze Card 2",
+      "transform": {
+        "position": [-0.317871, 1.66, -1.568107],
+        "rotationDeg": [5.825949, 11.401522, -1.155522]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-3",
+        "type": "asset"
+      },
+      "id": "gaze-card-3",
+      "name": "Gaze Card 3",
+      "transform": {
+        "position": [0.317871, 1.34, -1.568107],
+        "rotationDeg": [-5.825949, -11.401522, -1.155522]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-4",
+        "type": "asset"
+      },
+      "id": "gaze-card-4",
+      "name": "Gaze Card 4",
+      "transform": {
+        "position": [0, 1.34, -1.6],
+        "rotationDeg": [-5.710593, 0, 0]
+      }
+    },
+    {
+      "components": {
+        "RayInteractable": {}
+      },
+      "content": {
+        "asset": "gaze-card-5",
+        "type": "asset"
+      },
+      "id": "gaze-card-5",
+      "name": "Gaze Card 5",
+      "transform": {
+        "position": [-0.317871, 1.34, -1.568107],
+        "rotationDeg": [-5.825949, 11.401522, 1.155522]
+      }
+    },
+    {
+      "components": {
+        "DistanceGrabbable": {
+          "moveSpeedFactor": 0.2,
+          "movementMode": "MoveTowardsTarget",
+          "scale": false,
+          "targetPositionOffset": [0, 0, -0.25]
+        }
+      },
+      "content": {
+        "asset": "gaze-grab-cube",
+        "type": "asset"
+      },
+      "id": "gaze-grab-cube",
+      "name": "Gaze Grab Cube",
+      "transform": {
+        "position": [0, 1.02, -1.5],
+        "rotationDeg": [0, 22, 0]
+      }
+    },
+    {
+      "components": {
+        "PokeInteractable": {},
+        "RayInteractable": {},
+        "ScreenSpace": {
+          "height": "50%",
+          "left": "20px",
+          "top": "20px",
+          "width": "25vw"
+        }
+      },
+      "content": {
+        "asset": "gaze-welcome-panel",
+        "type": "asset"
+      },
+      "id": "welcome-panel",
+      "name": "Welcome Panel",
+      "transform": {
+        "position": [0, 2.15, -2.2],
+        "rotationDeg": [0, 0, 0],
+        "scale": 0.4
+      }
+    }
+  ],
+  "resources": {},
+  "units": "meters",
+  "version": "iwsdk.scene.v1"
+}
