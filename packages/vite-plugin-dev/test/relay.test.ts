@@ -526,6 +526,9 @@ describe('runtime relay absolute deadlines', () => {
   });
 
   test('rejects malformed and overlong deadlines without dispatch', () => {
+    // A real clock can tick between building and checking the deadline,
+    // bringing Date.now() + 2 ** 31 back inside the relay window.
+    vi.useFakeTimers();
     const f = fixture();
     const deadlines = [
       'soon',
