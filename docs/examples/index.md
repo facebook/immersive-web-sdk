@@ -16,6 +16,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 const examples = [
   { id: 'audio', name: 'Audio' },
   { id: 'environment-raycast', name: 'Environment Raycast' },
+  { id: 'gaze-pinch', name: 'Gaze + Pinch' },
   { id: 'grab', name: 'Grab Interactions' },
   { id: 'locomotion', name: 'Locomotion' },
   { id: 'physics', name: 'Physics' },

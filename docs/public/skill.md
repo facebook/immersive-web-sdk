@@ -580,12 +580,16 @@ request `captureMode: "editor"` only for editor UI diagnostics.
 | `"controller-left"` | Left controller |
 | `"hand-right"` | Right hand |
 | `"hand-left"` | Left hand |
+| `"gaze"` | Continuous gaze ray |
 
 Prefer these canonical IDs because CLI schemas and docs use them. Current IWER
 also normalizes common aliases such as `"right"`, `"right-controller"`,
 `"rightController"`, and `"controllers.right"`, but unrecognized IDs still fail.
-Allowed devices vary by command: transforms support headset/controllers/hands;
-select supports controllers/hands; gamepad commands support controllers only.
+Allowed devices vary by command: transforms support
+headset/controllers/hands/gaze; connection changes support
+controllers/hands/gaze; select supports controllers/hands; gamepad commands
+support controllers only. Gaze has a headset-derived origin, so its transform
+accepts orientation but not position.
 
 Before claiming that a pose, hand/controller alignment, or immersive
 interaction is correct, enter XR and confirm `npx @iwsdk/cli xr status` reports an
@@ -606,6 +610,10 @@ npx @iwsdk/cli xr look-at --input-json '{"device":"headset","target":{"x":0,"y":
 npx @iwsdk/cli xr animate-to --input-json '{"device":"headset","position":{"x":0,"y":1.5,"z":0},"duration":0.5}'
 npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"controller"}'
 npx @iwsdk/cli xr set-connected --input-json '{"device":"controller-right","connected":true}'
+
+# Continuous gaze (selection still comes from a controller or hand)
+npx @iwsdk/cli xr look-at --input-json '{"device":"gaze","target":{"x":0,"y":1.2,"z":-2}}'
+npx @iwsdk/cli xr set-connected --input-json '{"device":"gaze","connected":false}'
 
 # Controller input
 npx @iwsdk/cli xr select --input-json '{"device":"controller-right"}'
@@ -628,10 +636,18 @@ npx @iwsdk/cli xr set-device-state --input-json '{
         "position": {"x":0.2, "y":1.1, "z":0.3},
         "orientation": {"x":0, "y":0, "z":0, "w":1}
       }
+    },
+    "gaze": {
+      "connected": true,
+      "orientation": {"x":0, "y":0, "z":0, "w":1}
     }
   }
 }'
 ```
+
+`xr status` reports `runtimeKind` as `"emulated"` or `"native"`. Native mode
+cannot enter a session on the application's behalf; the application must start
+its browser-owned immersive session before mutating XR state.
 
 ### Recovery: Unresponsive Runtime
 

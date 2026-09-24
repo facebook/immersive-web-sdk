@@ -11,7 +11,8 @@ Now that your scene looks professional with environment and lighting, it's time 
 IWSDK provides a comprehensive input system that handles browser canvas pointers, keyboard, standard browser gamepads, XR controllers, hands, and various interaction patterns. The input stack includes:
 
 - **Browser pointer events** - Mouse/touch events from the renderer canvas when `input.canvasPointerEvents` is enabled
-- **XR pointer events** - Ray, grab, and poke interactions from controllers and hands
+- **XR pointer events** - Ray, grab, and poke interactions from controllers
+  and hands, plus gaze targeting with hand-pinch selection
 - **Keyboard and gamepad state** - `world.input.keyboard`, `world.input.browserGamepads`, and `world.input.xr.gamepads`
 - **Input actions** - `world.input.actions` maps low-level devices to framework intent such as locomotion movement and jump
 - **Built-in systems** - XR grab and locomotion work out of the box
@@ -20,6 +21,8 @@ IWSDK provides a comprehensive input system that handles browser canvas pointers
 
 ::: tip Learn More About Input
 For a deep dive into IWSDK's input architecture, see [XR Input Concepts](/concepts/xr-input/index.md).
+For gaze priority, fallback, visual feedback, and testing, see
+[Gaze and Pinch](/concepts/xr-input/gaze).
 :::
 
 ## Enabling Built-in Systems

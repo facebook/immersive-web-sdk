@@ -286,28 +286,30 @@ Useful world helpers:
 
 ## Real-World Example: Interactive VR Objects
 
-This shows how ECS handles a complete interactive VR feature — objects that glow when looked at, can be grabbed, and react to being touched:
+This shows how ECS handles a complete interactive VR feature: objects that
+react to the standard pointer hover state and can compose with grabbing.
 
 ```ts
-import { World, Types, createComponent, createSystem, lt } from '@iwsdk/core';
+import {
+  Hovered,
+  RayInteractable,
+  Types,
+  createComponent,
+  createSystem,
+} from '@iwsdk/core';
 
 // Components: pure data schemas
-export const Interactable = createComponent('Interactable', {
+export const GlowFeedback = createComponent('GlowFeedback', {
   glowIntensity: { type: Types.Float32, default: 0 },
   maxGlow: { type: Types.Float32, default: 2 },
-});
-
-export const GazeTarget = createComponent('GazeTarget', {
-  isGazedAt: { type: Types.Boolean, default: false },
 });
 
 // System: behavior that reacts to data
 export class InteractiveGlowSystem extends createSystem(
   {
-    // Entities that can glow but aren't at max intensity yet
+    // Every ray-interactable entity that owns glow feedback.
     glowable: {
-      required: [Interactable, GazeTarget],
-      where: [lt(Interactable, 'glowIntensity', 2)],
+      required: [GlowFeedback, RayInteractable],
     },
   },
   {
@@ -315,7 +317,7 @@ export class InteractiveGlowSystem extends createSystem(
   },
 ) {
   init() {
-    // React when objects start/stop being gazed at
+    // React when an interactive object first enters the query.
     this.queries.glowable.subscribe('qualify', (entity) => {
       console.log('Object can now glow:', entity.index);
     });
@@ -323,16 +325,16 @@ export class InteractiveGlowSystem extends createSystem(
 
   update(dt: number) {
     for (const entity of this.queries.glowable.entities) {
-      const isGazed = entity.getValue(GazeTarget, 'isGazedAt')!;
-      const current = entity.getValue(Interactable, 'glowIntensity')!;
-      const max = entity.getValue(Interactable, 'maxGlow')!;
+      const isHovered = entity.hasComponent(Hovered);
+      const current = entity.getValue(GlowFeedback, 'glowIntensity')!;
+      const max = entity.getValue(GlowFeedback, 'maxGlow')!;
 
-      // Glow up when gazed at, fade when not
-      const target = isGazed ? max : 0;
+      // Glow for gaze, hand rays, controllers, or browser pointers alike.
+      const target = isHovered ? max : 0;
       const newIntensity =
         current + (target - current) * this.config.glowSpeed.peek() * dt;
 
-      entity.setValue(Interactable, 'glowIntensity', newIntensity);
+      entity.setValue(GlowFeedback, 'glowIntensity', newIntensity);
 
       // Update Three.js material (IWSDK handles the binding)
       if (entity.object3D) {
@@ -345,8 +347,9 @@ export class InteractiveGlowSystem extends createSystem(
 
 **Why this showcases ECS power:**
 
-- **Composition**: Any entity can be made interactive by adding `Interactable + GazeTarget`
-- **Reactive queries**: System automatically processes objects as they enter/leave gaze
+- **Composition**: Any entity can be made interactive by adding
+  `GlowFeedback + RayInteractable`
+- **Shared state**: The same system observes hover from every pointer type
 - **Performance**: Packed arrays make iterating thousands of objects fast
 - **Tunable**: `glowSpeed` can be adjusted at runtime via config signals
 - **Decoupled**: Gaze detection, grabbing, audio feedback could be separate systems

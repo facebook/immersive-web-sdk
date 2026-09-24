@@ -109,6 +109,15 @@ Here's what your WebXR experience looks like when running on a Meta Quest 3 devi
   Your browser does not support the video tag.
 </video>
 
+#### Previewing gaze on a headset without eye tracking
+
+For development on a Quest headset without eye tracking, configure
+`dev.targetDevicePreview`. The preview preserves the headset's native viewer,
+hands, and controllers, and adds head-directed Meta VR Glasses test gaze only
+when the app requests `gazeTracking`. This development-only behavior is omitted
+from production builds; see
+[Gaze and Pinch](/concepts/xr-input/gaze#test-on-a-headset-without-eye-tracking).
+
 ### Option 2: Testing with IWER (Browser Emulation)
 
 IWER (Immersive Web Emulator Runtime) is a WebXR emulator that runs entirely in your browser, allowing you to develop and test WebXR applications without a headset. By default, it activates on localhost and skips the Quest browser, and it provides mouse/keyboard controls to simulate VR interactions.
@@ -179,13 +188,22 @@ page:
    controller's transform handle in the scene. Use **Grip** instead when testing
    a near-field grabbable. Click the handle to switch between translation and
    rotation, then release the latch to drop the object.
-7. Use **Toggle input mode** in the toolbar to switch between controllers and
-   hands. Use **Reset device transforms** to return the headset and inputs to
-   their default pose.
+7. Use **Select input mode** in the toolbar to choose controllers or hands.
+   Use **Reset device transforms** to return the headset and inputs to their
+   default pose.
 
 The default left-controller trigger and squeeze bindings are <kbd>Q</kbd> and
 <kbd>E</kbd>. The visible binding chips in each controller panel are the source
 of truth if you have remapped a control.
+
+For gaze testing, set the emulator device to `metaVRGlasses` and choose
+**Gaze + Hands** from the input menu; this selects hand
+input and **Cursor** gaze together. Cursor gaze disables Play mode: aim with
+the pointer and right-drag to look around. A pinch from the selected commit
+hand selects or grabs. **Head** is an explicit head-directed diagnostic mode.
+**Off** disconnects the gaze source so you can verify that the application
+restores ordinary hand rays. See [Gaze and Pinch](/concepts/xr-input/gaze) for
+the full interaction and fallback model.
 
 For automated interaction, use the CLI sequence in
 [AI workflows: XR Interaction](/ai/workflows#xr-interaction).

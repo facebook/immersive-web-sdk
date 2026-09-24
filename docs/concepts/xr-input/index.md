@@ -4,12 +4,13 @@ title: XR Input Overview
 
 # XR Input with IWSDK
 
-This section explains how IWSDK’s XR input stack works and how to use it in your Three.js + WebXR apps. It covers controller/hand visuals, gamepad state, ray/grab pointers, and the XR origin rig (spaces for head, ray, and grip).
+This section explains how IWSDK’s XR input stack works and how to use it in your Three.js + WebXR apps. It covers controller/hand visuals, gamepad state, gaze, ray/grab pointers, and the XR origin rig (spaces for head, ray, and grip).
 
 - If you want to jump to focused topics, see:
   - [Input Visuals](/concepts/xr-input/input-visuals)
   - [Stateful Gamepad](/concepts/xr-input/stateful-gamepad)
   - [Pointers](/concepts/xr-input/pointers)
+  - [Gaze and Pinch](/concepts/xr-input/gaze)
   - [XR Origin](/concepts/xr-input/xr-origin)
 
 ## When to Use What (Guidance)
@@ -53,7 +54,9 @@ XR Origin Spaces (where to attach tools)
 - A rig of XR spaces (head, ray, grip) updated from the XR frame each tick.
 - Visual adapters for controllers and hands that load GLTF models (WebXR Input Profiles) and animate them from live input.
 - A `StatefulGamepad` helper that exposes edge‑triggered button events, 2D axes magnitudes, and per‑direction transitions.
-- A `MultiPointer` that aggregates built‑in ray + grab pointers using `@pmndrs/pointer-events`.
+- A `MultiPointer` per hand that aggregates built-in ray + grab pointers.
+- A separate, session-wide gaze pointer. All pointers use
+  `@pmndrs/pointer-events`.
 
 ## Quick Start
 
@@ -122,10 +125,11 @@ XRSession → XRFrame → update poses
              │    • Controller (GLTF, animated via input profile)
              │    • Hand (skinned, outline, pinch helper)
              │
-             └─ MultiPointer (ray + grab via @pmndrs/pointer-events)
-                   • select → ray pointer
-                   • squeeze → grab pointer
-                   • edge events from StatefulGamepad
+             ├─ MultiPointer (ray + grab via @pmndrs/pointer-events)
+             │     • select → ray pointer
+             │     • squeeze → grab pointer
+             │     • edge events from StatefulGamepad
+             └─ GazePointer (one gaze ray + hand-pinch commit)
 ```
 
 ## When to use which piece
@@ -134,6 +138,8 @@ XRSession → XRFrame → update poses
 - Use [Input Visuals](/concepts/xr-input/input-visuals) to show hands/controllers and customize assets.
 - Use [Stateful Gamepad](/concepts/xr-input/stateful-gamepad) to read buttons/axes with edge triggers.
 - Use [Pointers](/concepts/xr-input/pointers) for ray selections and near grabbing against your Three.js scene.
+- Use [Gaze and Pinch](/concepts/xr-input/gaze) for eye-gaze targeting,
+  hand-pinch selection, fallback behavior, and testing.
 
 ## Requirements
 

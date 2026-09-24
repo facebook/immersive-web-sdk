@@ -102,11 +102,18 @@ Native scene asset IDs are validated against this complete catalog.
 
 The `world` object covers the serializable part of `WorldOptions`:
 
-- `xr`: `false`, or VR/AR mode, offer policy, reference space, and features;
+- `xr`: `false`, or VR/AR mode, offer policy, reference space, and features,
+  including the preferred `gazeTracking` feature and its deprecated
+  `eyeTracking` compatibility alias;
 - `render`: field of view, clipping planes, stencil, and nonimmersive camera;
 - `input`: canvas pointer event settings;
 - `features`: gaze, locomotion, grabbing, physics, scene understanding,
   environment raycast, camera access, and serializable spatial UI settings.
+
+Requesting `xr.features.gazeTracking` registers `GazeSystem`.
+`world.features.gaze` tunes that system but does not enable gaze by itself. See
+[Gaze and Pinch](/concepts/xr-input/gaze) for the interaction model and testing
+workflow.
 
 `world.render.camera` is the browser preview pose under `world.player`.
 Top-level scene `player.transform` is different: it authors the player/XR

@@ -1,10 +1,15 @@
 ---
-title: Pointers (Canvas, Ray & Grab)
+title: Pointers (Canvas, Ray, Grab & Gaze)
 ---
 
-# Pointers (Canvas, Ray & Grab)
+# Pointers (Canvas, Ray, Grab & Gaze)
 
-IWSDK uses pointer events as the common interaction path for browser canvas input and XR input. Browser mouse/touch events are forwarded from the renderer canvas when `input.canvasPointerEvents` is enabled, and XR uses a `MultiPointer` per hand for ray and grab interactions. Both paths dispatch Three/Object3D pointer events and drive ECS `Hovered` / `Pressed` tags for interactable entities.
+IWSDK uses pointer events as the common interaction path for browser canvas
+input and XR input. Browser mouse/touch events are forwarded from the renderer
+canvas when `input.canvasPointerEvents` is enabled. XR uses a `MultiPointer` per
+hand for ray and grab interactions, plus one session-wide `GazePointer` when
+gaze tracking is requested. Every path dispatches Three/Object3D pointer events
+and drives ECS `Hovered` / `Pressed` tags for interactable entities.
 
 ## Concepts
 
@@ -13,6 +18,8 @@ IWSDK uses pointer events as the common interaction path for browser canvas inpu
 - Built‑ins:
   - `RayPointer` — uses the XR target ray to raycast your scene. Visualizes a beam and a 2D cursor that aligns to surface normals.
   - `GrabPointer` — anchored at the grip space for near interactions (e.g., grabbing widgets at your hand).
+  - `GazePointer` — targets through a filtered gaze ray and selection cone;
+    either hand's pinch supplies the select action.
 - Event mapping from `StatefulGamepad`:
   - `select` → ray pointer (button 0)
   - `squeeze` → grab pointer (button 2)
@@ -88,6 +95,12 @@ The ray visual follows a simple policy:
 - Otherwise → show both when intersecting.
 
 This reduces clutter when, e.g., your grab pointer is manipulating something.
+
+The gaze pointer has no production cursor by default. While valid gaze is
+available, it owns far targeting and suppresses controller/hand ray pointers.
+An active near touch or grab takes priority over gaze. See
+[Gaze and Pinch](/concepts/xr-input/gaze) for configuration, fallback behavior,
+and test workflows.
 
 ## Custom pointers
 
