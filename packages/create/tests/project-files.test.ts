@@ -179,7 +179,7 @@ describe('common starter project files', () => {
     expect(
       packageJson.devDependencies['@iwsdk/example-assets'],
     ).toBeUndefined();
-    expect(packageJson.devDependencies['@meta-quest/metavr']).toBe('^1.3.2');
+    expect(packageJson.devDependencies['@meta-quest/metavr']).toBe('^1.8.0');
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
     expect(packageJson.devDependencies['@types/three']).toBe('^0.181.0');
     expect(packageJson.overrides).toEqual({

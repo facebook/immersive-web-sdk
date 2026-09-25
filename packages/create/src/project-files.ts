@@ -122,7 +122,7 @@ function createProjectPackageJson(
       '@iwsdk/reference': packageSpec('@iwsdk/reference'),
       '@iwsdk/cli': packageSpec('@iwsdk/cli'),
       '@iwsdk/vite-plugin-dev': packageSpec('@iwsdk/vite-plugin-dev'),
-      '@meta-quest/metavr': '^1.3.2',
+      '@meta-quest/metavr': '^1.8.0',
       ...(language === 'ts'
         ? { '@types/three': '^0.181.0', typescript: '^5.5.0' }
         : {}),

@@ -10,6 +10,7 @@ set -euo pipefail
 unset npm_config_verify_deps_before_run npm_config__jsr_registry
 readonly IWSDK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly EXAMPLES_DIR="$IWSDK_ROOT/examples"
+readonly NPM_REGISTRY="${IWSDK_EXAMPLE_NPM_REGISTRY:-https://registry.npmjs.org/}"
 
 # The public package script builds fresh development tarballs before invoking
 # this helper. Sandcastle invokes it after its own build phase has done so.
@@ -25,6 +26,7 @@ for example_dir in "$EXAMPLES_DIR"/*/; do
     cd "$example_dir"
     rm -rf node_modules package-lock.json
     npm install \
+      --registry "$NPM_REGISTRY" \
       --ignore-scripts \
       --no-package-lock \
       --no-audit \
