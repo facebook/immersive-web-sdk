@@ -1,5 +1,29 @@
 # @iwsdk/xr-input
 
+## 1.0.0
+
+### Major Changes
+
+- a79f1ff: Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Minor Changes
+
+- 15688e2: Add configurable gaze input, gaze-driven pointer selection, native-session
+  `gaze-tracking` and `eye-tracking` feature requests, a `metaVRGlasses` desktop
+  emulator device with gaze input, and a development-only Meta VR Glasses gaze
+  preview for physical Quest headsets.
+
+### Patch Changes
+
+- 3306963: Keep ray cursors above and aligned with hit surfaces after the XR origin rotates.
+- ce9cdad: Embed TypeScript sources in the published source maps for the runtime packages,
+  and pre-bundle the elics dependency of `@iwsdk/core` in development. The Vite
+  development server no longer warns that source maps point to missing source
+  files, and browser devtools can show SDK source when stepping into it.
+- 3306963: Ignore invisible objects and descendants of invisible objects during pointer hit testing.
+
 ## 1.0.0-rc.2
 
 ### Minor Changes

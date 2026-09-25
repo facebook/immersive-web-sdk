@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/reference-assets",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "Producer pipeline and versioned corpus payloads for @iwsdk/reference",
   "private": false,
   "type": "module",

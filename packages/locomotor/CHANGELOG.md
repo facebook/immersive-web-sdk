@@ -1,5 +1,40 @@
 # @iwsdk/locomotor
 
+## 1.0.0
+
+### Major Changes
+
+- a79f1ff: Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Patch Changes
+
+- ed2a6b1: Normalize non-indexed and mixed-index locomotion environment meshes before
+  building collision geometry, report unusable environments clearly, and
+  document that grab components are mutually exclusive per entity.
+- ce9cdad: Embed TypeScript sources in the published source maps for the runtime packages,
+  and pre-bundle the elics dependency of `@iwsdk/core` in development. The Vite
+  development server no longer warns that source maps point to missing source
+  files, and browser devtools can show SDK source when stepping into it.
+- 2c7b66c: Clamp distance-grab interpolation after stalled frames so position and rotation
+  cannot extrapolate into invalid transforms.
+
+  Wake locomotion after environment changes, teleports, and successful jumps,
+  allow the first jump immediately, and restart the idle timeout on static-ground
+  landings so the float spring settles before sleep.
+
+  Keep native XR composition layers aligned with player space, preserve their
+  configured full dimensions and scale, synchronize visibility and geometry, fall
+  back safely for unsupported transforms, and release resources during teardown.
+
+  Clear session-owned depth uniforms during XR exit, component removal, and system
+  teardown, and require fresh per-session depth data before re-enabling occlusion.
+
+  Refresh retained plane and mesh geometry when WebXR reports updates, compute
+  correct axis-aligned mesh bounds, and skip BVH acceleration for compatible
+  foreign Three.js geometries that do not expose the extension.
+
 ## 1.0.0-rc.2
 
 ## 1.0.0-rc.1

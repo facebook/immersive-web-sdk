@@ -1,5 +1,28 @@
 # @iwsdk/reference-assets
 
+## 1.0.0
+
+### Major Changes
+
+- a79f1ff: Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Patch Changes
+
+- 0ebd993: Canonicalize aliased workspace paths for browser scripts and HMR, retain the
+  UIKitML default Inter font, and make hidden-editor runtime reloads deterministic.
+
+  Install missing managed Chromium builds through the plugin-owned Playwright CLI,
+  stabilize managed test-server readiness, and compare CLI/MCP screenshots by valid
+  PNG metadata instead of timing-sensitive compressed size.
+
+  Keep generated Claude guidance aligned with the canonical AGENTS.md source
+  instead of shipping a second, drifting copy.
+
+  Keep package lifecycle scripts portable when pnpm is installed without a global
+  Corepack command.
+
 ## 1.0.0-rc.2
 
 ## 1.0.0-rc.1

@@ -1,5 +1,26 @@
 # @iwsdk/scene-composition
 
+## 1.0.0
+
+### Major Changes
+
+- a79f1ff: Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Minor Changes
+
+- faf9709: Add isolated multi-view model previews with authored-material and clay modes,
+  named-part focus, and deterministic geometry diagnostics. Split generated scene
+  guidance into `iwsdk-build-model` for object-local asset authoring and
+  `iwsdk-compose-scene` for world-relative composition and review, with a bundled
+  hard-surface starter library for efficient procedural authoring. Agent-facing
+  model previews default to a context-efficient 640 by 480 contact sheet while still
+  allowing explicit higher-resolution focused inspection. Scene-composition guidance
+  uses a smaller correction-verification render so delivery-quality captures do not
+  inflate the agent loop. Screenshot-producing MCP tools now persist PNGs locally and
+  return `screenshotPath` instead of embedding base64 image data in tool responses.
+
 ## 1.0.0-rc.2
 
 ## 1.0.0-rc.1

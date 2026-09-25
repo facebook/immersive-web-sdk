@@ -1,5 +1,85 @@
 # @iwsdk/create
 
+## 1.0.0
+
+### Major Changes
+
+- a79f1ff: Release IWSDK 1.0, the first stable release of the Immersive Web SDK runtime
+  and tooling packages. The SDK packages continue to share one fixed version, and
+  breaking API changes now require a new major version.
+
+### Minor Changes
+
+- d0b24a1: Add bounded live UIKitML element inspection to the CLI and MCP runtime, including
+  current ID, class, text, layout, interaction, property, and effective visibility
+  state. Teach generated UI-agent guidance to use the inspection command for
+  runtime verification.
+- faf9709: Add isolated multi-view model previews with authored-material and clay modes,
+  named-part focus, and deterministic geometry diagnostics. Split generated scene
+  guidance into `iwsdk-build-model` for object-local asset authoring and
+  `iwsdk-compose-scene` for world-relative composition and review, with a bundled
+  hard-surface starter library for efficient procedural authoring. Agent-facing
+  model previews default to a context-efficient 640 by 480 contact sheet while still
+  allowing explicit higher-resolution focused inspection. Scene-composition guidance
+  uses a smaller correction-verification render so delivery-quality captures do not
+  inflate the agent loop. Screenshot-producing MCP tools now persist PNGs locally and
+  return `screenshotPath` instead of embedding base64 image data in tool responses.
+- 13a5cbe: Add opt-in native Quest WebXR control sessions, session-grant launch support,
+  deterministic physical-browser routing, and generated-project guidance for
+  running IWSDK tests through an ADB-reversed localhost connection.
+- e18c42a: Harden the CLI-managed development runtime with one fail-closed workspace
+  owner, an explicit managed-browser lifecycle, exact managed and physical target
+  routing, bounded command execution, and runtime status/recovery tools. Dev
+  startup uses Vite's resolved application port and may return before the browser
+  command path is ready; inspect `browserCommandReady` or use `runtime wait` before
+  issuing browser-backed commands. A configured `server.port` is the runtime's
+  address, so an occupied port now fails startup instead of moving to the next
+  free port; an explicit `server.strictPort` still wins. Recovery reports `browser_relaunched` without
+  replaying the command, while failures after dispatch report `outcome_unknown`.
+
+  Managed Chromium uses a private profile in OS temporary storage that survives
+  automatic browser recovery while retained. Stop active dev processes before
+  upgrading the CLI and Vite plugin together. Native pose overrides are enabled
+  only for explicitly configured Quest sessions; other browsers continue using
+  IWER emulation.
+
+### Patch Changes
+
+- b853e70: Pre-optimize the application-owned Three.js entry in generated projects and
+  development servers so the runtime and UIKit dependencies share one Three.js
+  module instance.
+- ce9cdad: Run the starter `npm run dev` script through `iwsdk dev restart`, so starting it
+  again stops the runtime already running for the project and takes over the
+  terminal instead of attaching to the existing runtime and exiting.
+- f80787e: Generate npm- and pnpm-installable projects with deterministic local tarball
+  overrides and pnpm 10/11 lifecycle policy, including deferred bundle installs.
+
+  Pin the compatible Sharp 0.35.4 release, refresh dependency security overrides,
+  use project-local TypeScript commands, and migrate Quest tooling guidance from
+  the legacy HzDB package to the owned `@meta-quest/metavr` package.
+
+- ef2c68c: Generate new projects with `@meta-quest/metavr` `^1.8.0`.
+- 9a1f046: Use the bundled UIKit default font in generated starter panels instead of
+  requiring runtime downloads from Google Fonts. Canonical examples now follow
+  the same network-font-free pattern.
+- 438f10c: Existing `physics: true` projects now run Havok in a Web Worker at a fixed 60
+  Hz by default, using transferable ArrayBuffer exchanges and render
+  interpolation. Add a shared main-thread mode for debugging and compatibility,
+  plus debugger pause/step synchronization across both execution modes.
+- 9348db4: Use the owned scoped CLI package for documented and automated IWSDK commands.
+- 0ebd993: Canonicalize aliased workspace paths for browser scripts and HMR, retain the
+  UIKitML default Inter font, and make hidden-editor runtime reloads deterministic.
+
+  Install missing managed Chromium builds through the plugin-owned Playwright CLI,
+  stabilize managed test-server readiness, and compare CLI/MCP screenshots by valid
+  PNG metadata instead of timing-sensitive compressed size.
+
+  Keep generated Claude guidance aligned with the canonical AGENTS.md source
+  instead of shipping a second, drifting copy.
+
+  Keep package lifecycle scripts portable when pnpm is installed without a global
+  Corepack command.
+
 ## 1.0.0-rc.2
 
 ## 1.0.0-rc.1
