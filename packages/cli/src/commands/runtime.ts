@@ -19,6 +19,7 @@ import {
   RUNTIME_OPERATIONS,
   getRuntimeOperationByCliPath,
   resolveRuntimeOperationRequest,
+  type RuntimeOperationDefinition,
   type RuntimeSession,
 } from '../runtime-contract.js';
 import {
@@ -26,6 +27,11 @@ import {
   getRuntimeSession,
   resolveWorkspaceRoot,
 } from '../runtime-state.js';
+import {
+  getRuntimeFailureReason,
+  startRuntimeOperationTelemetry,
+  type RuntimeOperationTelemetry,
+} from '../runtime-telemetry.js';
 import {
   RuntimeCommandExecutionError,
   sendRuntimeCommand,
@@ -193,8 +199,35 @@ export async function handleRuntimeOperation(
     );
   }
 
-  const parsedParams = resolveRuntimeParams(operation.mcpName, options);
-  const command = resolveRuntimeOperationRequest(operation, parsedParams);
+  const telemetry = startRuntimeOperationTelemetry(operation);
+  try {
+    return await runRuntimeOperation(operation, options, io, telemetry);
+  } catch (error) {
+    telemetry.fail(getRuntimeFailureReason(error));
+    throw error;
+  }
+}
+
+async function runRuntimeOperation(
+  operation: RuntimeOperationDefinition,
+  options: CliOptions,
+  io: ResolvedCliIo,
+  telemetry: RuntimeOperationTelemetry,
+): Promise<CliSuccess<unknown> | CliRawOutput> {
+  let command: ReturnType<typeof resolveRuntimeOperationRequest>;
+  let timeoutMs: number;
+  try {
+    const parsedParams = resolveRuntimeParams(operation.mcpName, options);
+    command = resolveRuntimeOperationRequest(operation, parsedParams);
+    timeoutMs = parseIntegerOption(
+      options.timeout,
+      '--timeout',
+      getDefaultRuntimeCommandTimeoutMs(operation.wsMethod),
+    );
+  } catch (error) {
+    telemetry.fail('invalid_input');
+    throw error;
+  }
 
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
@@ -204,25 +237,24 @@ export async function handleRuntimeOperation(
   });
   const session = await getRuntimeSession(workspaceRoot);
   if (!session) {
+    telemetry.fail('no_runtime');
     throw new Error(formatMissingRuntimeMessage(workspaceRoot));
   }
+  telemetry.attachSession(session);
 
   const sendOptions = {
     port: session.port,
     method: operation.wsMethod,
     params: command.params,
     target: command.target,
-    timeoutMs: parseIntegerOption(
-      options.timeout,
-      '--timeout',
-      getDefaultRuntimeCommandTimeoutMs(operation.wsMethod),
-    ),
+    timeoutMs,
     runtimeSession: session,
   };
   let rawResult;
   try {
     rawResult = await sendRuntimeCommand(sendOptions);
   } catch (error) {
+    telemetry.fail(getRuntimeFailureReason(error));
     if (
       operation.mcpName === 'xr_accept_session' &&
       error instanceof RuntimeCommandExecutionError
@@ -231,6 +263,7 @@ export async function handleRuntimeOperation(
     }
     throw error;
   }
+  telemetry.succeed();
 
   // Managed browser status would misdescribe a headset's session.
   let result: unknown =

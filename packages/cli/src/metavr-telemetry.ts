@@ -57,7 +57,9 @@ export function reportToolCall(
     args.push('--failure');
   }
   if (error) {
-    args.push('--error', error);
+    // Attached, so MetaVR accepts messages that start with "-", such as
+    // "--input-json must be valid JSON".
+    args.push(`--error=${error}`);
   }
   if (sessionId) {
     args.push('--session-id', sessionId);

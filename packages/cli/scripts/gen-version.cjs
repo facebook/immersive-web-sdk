@@ -15,5 +15,6 @@ const engine = pkg.engines?.node ?? '>=20.19.0';
 
 fs.writeFileSync(
   outPath,
-  `export const NODE_ENGINE = ${JSON.stringify(engine)};\n`,
+  `export const NODE_ENGINE = ${JSON.stringify(engine)};\n` +
+    `export const CLI_VERSION = ${JSON.stringify(pkg.version)};\n`,
 );

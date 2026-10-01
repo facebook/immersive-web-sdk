@@ -65,6 +65,35 @@ describe('MetaVR telemetry launcher', () => {
     expect(mocks.child.unref).toHaveBeenCalledOnce();
   });
 
+  test('attaches the error so messages that start with a dash still parse', () => {
+    reportToolCall(
+      'browser_screenshot',
+      false,
+      3,
+      '--input-json must be valid JSO',
+      undefined,
+      '0.5.0',
+    );
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '/workspace/node_modules/@meta-quest/metavr/bin.js',
+        'xxiwsdk',
+        '--client-version',
+        '0.5.0',
+        'tool-call',
+        '--tool-name',
+        'browser_screenshot',
+        '--duration-ms',
+        '3',
+        '--failure',
+        '--error=--input-json must be valid JSO',
+      ],
+      { stdio: 'ignore', windowsHide: true },
+    );
+  });
+
   test('silently skips telemetry when MetaVR is not installed', () => {
     mocks.resolve.mockImplementationOnce(() => {
       throw new Error('not installed');

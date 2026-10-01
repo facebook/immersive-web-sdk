@@ -64,7 +64,6 @@ export async function handleMcpStdio(
 ): Promise<null> {
   await startRuntimeMcpStdioServer({
     serverName: 'iwsdk-runtime',
-    version: '1.0.0',
     resolveSession: async () => {
       const workspaceRoot = await resolveWorkspaceRoot({
         cwd: io.cwd,

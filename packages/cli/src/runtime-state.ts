@@ -364,6 +364,17 @@ export function getRuntimeUrls(session: RuntimeSession | null): {
   };
 }
 
+/** Thrown when a command finds no IWSDK app, or no runtime running for it. */
+export class WorkspaceResolutionError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'no_app' | 'no_runtime',
+  ) {
+    super(message);
+    this.name = 'WorkspaceResolutionError';
+  }
+}
+
 export function formatMissingRuntimeMessage(workspaceRoot: string): string {
   return `No running IWSDK runtime found for ${workspaceRoot}. Start the dev server with "iwsdk dev up".`;
 }
@@ -376,8 +387,9 @@ export async function resolveWorkspaceRoot({
   const basePath = workspace ?? cwd;
   const workspaceRoot = findNearestIwsdkAppRoot(basePath);
   if (!workspaceRoot) {
-    throw new Error(
+    throw new WorkspaceResolutionError(
       `No IWSDK app found at or above: ${workspace ?? cwd}. Run this command inside an IWSDK app.`,
+      'no_app',
     );
   }
 
@@ -387,7 +399,10 @@ export async function resolveWorkspaceRoot({
 
   const session = await getRuntimeSession(workspaceRoot);
   if (!session) {
-    throw new Error(formatMissingRuntimeMessage(workspaceRoot));
+    throw new WorkspaceResolutionError(
+      formatMissingRuntimeMessage(workspaceRoot),
+      'no_runtime',
+    );
   }
 
   return workspaceRoot;

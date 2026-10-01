@@ -11,7 +11,6 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { reportToolCall } from './metavr-telemetry.js';
 import {
   isRuntimeBrowserCommandReady,
   RUNTIME_MCP_TOOLS,
@@ -20,11 +19,16 @@ import {
   type RuntimeSession,
 } from './runtime-contract.js';
 import {
+  getRuntimeFailureReason,
+  startRuntimeOperationTelemetry,
+} from './runtime-telemetry.js';
+import {
   RuntimeCommandExecutionError,
   sendRuntimeCommand,
   type RuntimeCommandResponse,
 } from './runtime-transport.js';
 import { isScreenshotResult, saveScreenshot } from './screenshot-output.js';
+import { CLI_VERSION } from './version.js';
 
 type JsonObject = Record<string, unknown>;
 type McpTextContent = { type: 'text'; text: string };
@@ -248,7 +252,7 @@ function createErrorContent(
 
 export async function startRuntimeMcpStdioServer({
   serverName = 'iwsdk',
-  version = '1.0.0',
+  version = CLI_VERSION,
   resolveSession,
 }: StartRuntimeMcpStdioServerOptions): Promise<void> {
   const tabTracker = createTabTracker();
@@ -273,11 +277,25 @@ export async function startRuntimeMcpStdioServer({
     const operation = RUNTIME_OPERATIONS.find(
       (entry) => entry.mcpName === name,
     );
-    const startTime = Date.now();
 
     if (!operation) {
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+        isError: true,
+      };
+    }
+
+    const telemetry = startRuntimeOperationTelemetry(operation);
+    // Validate before looking up the runtime, as the CLI does, so invalid
+    // input fails the same way whether or not a runtime is running.
+    let command: ReturnType<typeof resolveRuntimeOperationRequest>;
+    try {
+      command = resolveRuntimeOperationRequest(operation, args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      telemetry.fail('invalid_input');
+      return {
+        content: createErrorContent(message),
         isError: true,
       };
     }
@@ -287,14 +305,7 @@ export async function startRuntimeMcpStdioServer({
       session = await resolveSession();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      reportToolCall(
-        name,
-        false,
-        Date.now() - startTime,
-        message.slice(0, 30),
-        undefined,
-        version,
-      );
+      telemetry.fail(getRuntimeFailureReason(error));
       return {
         content: [
           { type: 'text', text: `Failed to resolve IWSDK runtime: ${message}` },
@@ -304,14 +315,7 @@ export async function startRuntimeMcpStdioServer({
     }
 
     if (!session) {
-      reportToolCall(
-        name,
-        false,
-        Date.now() - startTime,
-        'no active runtime',
-        undefined,
-        version,
-      );
+      telemetry.fail('no_runtime');
       return {
         content: [
           {
@@ -323,8 +327,8 @@ export async function startRuntimeMcpStdioServer({
       };
     }
 
+    telemetry.attachSession(session);
     try {
-      const command = resolveRuntimeOperationRequest(operation, args);
       const rawResponse = await sendRuntimeCommand({
         port: session.port,
         method: operation.wsMethod,
@@ -332,14 +336,7 @@ export async function startRuntimeMcpStdioServer({
         target: command.target,
         runtimeSession: session,
       });
-      reportToolCall(
-        name,
-        true,
-        Date.now() - startTime,
-        undefined,
-        session.sessionId,
-        version,
-      );
+      telemetry.succeed();
 
       // Managed browser status would misdescribe a headset's session.
       const normalizedResponse =
@@ -421,14 +418,7 @@ export async function startRuntimeMcpStdioServer({
       return tabTracker.processResponse(normalizedResponse);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      reportToolCall(
-        name,
-        false,
-        Date.now() - startTime,
-        message.slice(0, 30),
-        session.sessionId,
-        version,
-      );
+      telemetry.fail(getRuntimeFailureReason(error));
       if (error instanceof RuntimeCommandExecutionError) {
         return {
           content: createErrorContent(message, {
