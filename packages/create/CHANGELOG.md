@@ -1,5 +1,11 @@
 # @iwsdk/create
 
+## 1.0.1
+
+### Patch Changes
+
+- 3ddfa9c: Generate new projects with `@meta-quest/metavr` `^1.8.1`, and explain before the next steps what metavr CLI does, that it collects essential usage data under the Meta Platform Technologies SDK License, and how to uninstall it.
+
 ## 1.0.0
 
 ### Major Changes

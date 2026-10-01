@@ -1,5 +1,13 @@
 # @iwsdk/core
 
+## 1.0.1
+
+### Patch Changes
+
+- @iwsdk/locomotor@1.0.1
+- @iwsdk/scene-composition@1.0.1
+- @iwsdk/xr-input@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
