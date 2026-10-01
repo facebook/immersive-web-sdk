@@ -152,6 +152,8 @@ export async function installDependenciesFromBundle(
 const DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS = 120_000;
 const IWER_CONTROLS_URL =
   'https://iwsdk.dev/guides/02-testing-experience.html#iwer-controls';
+const MPT_SDK_LICENSE_URL =
+  'https://developers.meta.com/horizon/licenses/oculussdk/';
 
 /**
  * Initialize the optional reference cache without making project creation
@@ -247,6 +249,17 @@ function printReferenceWarmupGuidance() {
   );
 }
 
+function printMetavrNotice() {
+  console.log('\nAbout metavr CLI:');
+  console.log(
+    '  Your new Immersive Web SDK starter app includes metavr CLI as a project-scoped dev dependency (@meta-quest/metavr). metavr lets you control a connected Meta Quest headset from the command line, so you can build, deploy, and test on device in one loop. It also searches the Horizon OS documentation for platform and SDK features, and offers a catalog of ready-made 3D assets.',
+  );
+  console.log(
+    `\n  metavr collects essential usage data, as described in the Meta Platform Technologies SDK License (${MPT_SDK_LICENSE_URL}). If you don't want to use metavr, uninstall it from your project:`,
+  );
+  console.log(stdoutColor.gray('    npm uninstall @meta-quest/metavr'));
+}
+
 export function printNextSteps(
   appName: string,
   installed: boolean,
@@ -256,6 +269,7 @@ export function printNextSteps(
   xrEnabled = true,
 ) {
   const startCmd = 'npm run dev';
+  printMetavrNotice();
   console.log('\nNext steps:');
   // Choose the best stream for colored action items
   const itemStream = process.stdout.isTTY

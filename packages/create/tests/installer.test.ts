@@ -366,6 +366,22 @@ describe('printNextSteps', () => {
     log.mockRestore();
   });
 
+  it('prints the metavr notice before the next steps', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    printNextSteps('example-app', true, [], false, true, true);
+
+    const lines = log.mock.calls.map(([line]) => String(line));
+    const noticeIndex = lines.indexOf('\nAbout metavr CLI:');
+    expect(noticeIndex).toBeGreaterThanOrEqual(0);
+    expect(noticeIndex).toBeLessThan(lines.indexOf('\nNext steps:'));
+    expect(lines.join('\n')).toContain(
+      'https://developers.meta.com/horizon/licenses/oculussdk/',
+    );
+    expect(lines.join('\n')).toContain('npm uninstall @meta-quest/metavr');
+    log.mockRestore();
+  });
+
   it('does not show IWER controls for browser-first projects', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
